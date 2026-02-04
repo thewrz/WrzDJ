@@ -212,6 +212,11 @@ export default function KioskDisplayPage() {
           grid-template-columns: 1fr 1fr;
           gap: 2rem;
         }
+        .kiosk-main-single {
+          grid-template-columns: 1fr;
+          max-width: 600px;
+          margin: 0 auto;
+        }
         .now-playing-section {
           background: rgba(255,255,255,0.1);
           border-radius: 1.5rem;
@@ -530,41 +535,34 @@ export default function KioskDisplayPage() {
           </div>
         </div>
 
-        <div className="kiosk-main">
-          <div className="now-playing-section">
-            <div className="now-playing-label">Now Playing</div>
-            <div className="now-playing-content">
-              {display.now_playing ? (
-                <>
-                  {display.now_playing.artwork_url ? (
-                    <img
-                      src={display.now_playing.artwork_url}
-                      alt={display.now_playing.title}
-                      className="now-playing-art"
-                    />
-                  ) : (
-                    <div className="now-playing-placeholder">🎵</div>
-                  )}
-                  <h2 className="now-playing-title">{display.now_playing.title}</h2>
-                  <p className="now-playing-artist">{display.now_playing.artist}</p>
-                  <div className="spectrum-bars">
-                    {[...Array(12)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="spectrum-bar"
-                        style={{ animationDelay: `${i * 0.1}s` }}
-                      />
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <>
+        <div className={`kiosk-main ${display.now_playing ? '' : 'kiosk-main-single'}`}>
+          {display.now_playing && (
+            <div className="now-playing-section">
+              <div className="now-playing-label">Now Playing</div>
+              <div className="now-playing-content">
+                {display.now_playing.artwork_url ? (
+                  <img
+                    src={display.now_playing.artwork_url}
+                    alt={display.now_playing.title}
+                    className="now-playing-art"
+                  />
+                ) : (
                   <div className="now-playing-placeholder">🎵</div>
-                  <p className="now-playing-artist">No song playing</p>
-                </>
-              )}
+                )}
+                <h2 className="now-playing-title">{display.now_playing.title}</h2>
+                <p className="now-playing-artist">{display.now_playing.artist}</p>
+                <div className="spectrum-bars">
+                  {[...Array(12)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="spectrum-bar"
+                      style={{ animationDelay: `${i * 0.1}s` }}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="queue-section">
             <div className="queue-label">Accepted Requests</div>
