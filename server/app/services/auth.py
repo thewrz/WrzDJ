@@ -1,0 +1,65 @@
+from datetime import datetime, timedelta
+
+import bcrypt
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
+
+from app.core.config import get_settings
+from app.models.user import User
+from app.schemas.auth import TokenData
+
+settings = get_settings()
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+    )
+
+
+def get_password_hash(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=settings.jwt_expire_minutes)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return encoded_jwt
+
+
+def decode_token(token: str) -> TokenData | None:
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        username: str = payload.get("sub")
+        if username is None:
+            return None
+        return TokenData(username=username)
+    except JWTError:
+        return None
+
+
+def authenticate_user(db: Session, username: str, password: str) -> User | None:
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        return None
+    if not verify_password(password, user.password_hash):
+        return None
+    return user
+
+
+def get_user_by_username(db: Session, username: str) -> User | None:
+    return db.query(User).filter(User.username == username).first()
+
+
+def create_user(db: Session, username: str, password: str) -> User:
+    hashed_password = get_password_hash(password)
+    user = User(username=username, password_hash=hashed_password)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
