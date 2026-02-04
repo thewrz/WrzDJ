@@ -132,7 +132,8 @@ export default function KioskDisplayPage() {
         selectedSong.artist,
         selectedSong.title,
         note || undefined,
-        selectedSong.url || undefined
+        selectedSong.url || undefined,
+        selectedSong.album_art || undefined
       );
       setSubmitted(true);
       // Auto-close after 2.5 seconds
