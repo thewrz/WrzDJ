@@ -3,21 +3,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-def test_health_check():
+def test_health_check(client: TestClient):
     """Test that the health endpoint works."""
-    from app.main import app
-
-    client = TestClient(app)
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-def test_login_invalid_credentials():
+def test_login_invalid_credentials(client: TestClient):
     """Test that login fails with invalid credentials."""
-    from app.main import app
-
-    client = TestClient(app)
     response = client.post(
         "/api/auth/login",
         data={"username": "nonexistent", "password": "wrong"},
@@ -25,19 +19,13 @@ def test_login_invalid_credentials():
     assert response.status_code == 401
 
 
-def test_events_requires_auth():
+def test_events_requires_auth(client: TestClient):
     """Test that events endpoint requires authentication."""
-    from app.main import app
-
-    client = TestClient(app)
     response = client.get("/api/events")
     assert response.status_code == 401
 
 
-def test_search_requires_query():
+def test_search_requires_query(client: TestClient):
     """Test that search requires a query parameter."""
-    from app.main import app
-
-    client = TestClient(app)
     response = client.get("/api/search")
     assert response.status_code == 422  # Validation error
