@@ -39,6 +39,10 @@ services:
         value: https://app.wrzdj.com
       - key: PUBLIC_URL
         value: https://app.wrzdj.com
+      - key: BOOTSTRAP_ADMIN_USERNAME
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
 
   # Next.js Frontend
   - type: web

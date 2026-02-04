@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     # Cache durations (1 hour for Spotify since popularity changes)
     search_cache_hours: int = 1
 
+    # Bootstrap admin user (created on first startup if no users exist)
+    bootstrap_admin_username: str | None = None
+    bootstrap_admin_password: str | None = None
+
     @property
     def is_production(self) -> bool:
         return self.env == "production"

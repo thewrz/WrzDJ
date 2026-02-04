@@ -30,6 +30,10 @@ done
 echo "Running database migrations..."
 alembic upgrade head
 
+# Bootstrap admin user if configured
+echo "Checking bootstrap admin..."
+python -m app.scripts.bootstrap
+
 # Start the server
 PORT=${PORT:-8000}
 echo "Starting server on port $PORT..."

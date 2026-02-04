@@ -39,6 +39,8 @@ services:
       SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://app.wrzdj.com}
       PUBLIC_URL: ${PUBLIC_URL:-https://app.wrzdj.com}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
