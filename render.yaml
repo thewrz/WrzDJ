@@ -4,8 +4,11 @@
 # Deploy: Connect repo to Render and it will auto-detect this file
 #
 # After deployment, add custom domains:
-#   - api service: api.wrzdj.com
-#   - web service: app.wrzdj.com
+#   - api service: api.yourdomain.com
+#   - web service: app.yourdomain.com
+#
+# Then update CORS_ORIGINS, PUBLIC_URL, and NEXT_PUBLIC_API_URL
+# in Render dashboard to match your domain.
 
 databases:
   - name: wrzdj-db
@@ -36,9 +39,9 @@ services:
       - key: SPOTIFY_CLIENT_SECRET
         sync: false # Set manually in Render dashboard
       - key: CORS_ORIGINS
-        value: https://app.wrzdj.com,https://wrzdj-web.onrender.com
+        value: https://wrzdj-web.onrender.com  # Add your custom domain after setup
       - key: PUBLIC_URL
-        value: https://app.wrzdj.com
+        value: https://wrzdj-web.onrender.com  # Update to your custom domain
       - key: BOOTSTRAP_ADMIN_USERNAME
         sync: false
       - key: BOOTSTRAP_ADMIN_PASSWORD
@@ -57,4 +60,4 @@ services:
         - dashboard/**
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        value: https://api.wrzdj.com
+        value: https://wrzdj-api.onrender.com  # Update to your custom domain

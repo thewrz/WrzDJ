@@ -2,8 +2,6 @@
 
 A song request system for DJs. Guests scan a QR code to join an event and submit song requests. DJs manage requests via a web dashboard.
 
-> **Note:** This is the `spotify-search` branch which uses the Spotify API for song search. For the free MusicBrainz-based search, use the `muiscbrainz-search` branch.
-
 ## Quick Start (Local Development)
 
 ### Prerequisites
@@ -18,7 +16,6 @@ A song request system for DJs. Guests scan a QR code to join an event and submit
 ```bash
 git clone https://github.com/yourusername/WrzDJ.git
 cd WrzDJ
-git checkout spotify-search
 cp .env.example .env
 ```
 
@@ -92,8 +89,8 @@ Access at http://localhost:3000 (frontend) and http://localhost:8000 (API).
 3. Render auto-detects `render.yaml` and creates services
 4. Set Spotify credentials in Render dashboard (Environment tab)
 5. Add custom domains:
-   - `wrzdj-api` service → `api.wrzdj.com`
-   - `wrzdj-web` service → `app.wrzdj.com`
+   - `wrzdj-api` service → `api.yourdomain.com`
+   - `wrzdj-web` service → `app.yourdomain.com`
 6. Configure DNS with CNAME records pointing to Render
 
 #### Railway
@@ -107,7 +104,7 @@ Access at http://localhost:3000 (frontend) and http://localhost:8000 (API).
 4. Deploy frontend:
    - New Service → GitHub Repo → Select `dashboard` folder
    - Set root directory to `dashboard`
-   - Set build arg: `NEXT_PUBLIC_API_URL=https://api.wrzdj.com`
+   - Set build arg: `NEXT_PUBLIC_API_URL=https://api.yourdomain.com`
 5. Add custom domains in Railway settings
 
 **Required Environment Variables (Backend):**
@@ -117,8 +114,8 @@ DATABASE_URL=<from Railway PostgreSQL>
 JWT_SECRET=<generate with: openssl rand -hex 32>
 SPOTIFY_CLIENT_ID=<your Spotify client ID>
 SPOTIFY_CLIENT_SECRET=<your Spotify client secret>
-CORS_ORIGINS=https://app.wrzdj.com
-PUBLIC_URL=https://app.wrzdj.com
+CORS_ORIGINS=https://app.yourdomain.com
+PUBLIC_URL=https://app.yourdomain.com
 ```
 
 ### Option 3: VPS (Docker Compose)
@@ -129,7 +126,7 @@ For full control on your own server (DigitalOcean, Linode, Hetzner, etc.):
 - Ubuntu VPS with Docker and Docker Compose
 - nginx installed
 - Certbot for SSL certificates
-- DNS A records: `app.wrzdj.com` and `api.wrzdj.com` → your server IP
+- DNS A records: `app.yourdomain.com` and `api.yourdomain.com` → your server IP
 
 #### Deployment Steps
 
@@ -146,15 +143,16 @@ nano deploy/.env  # Fill in secure values
 # Generate JWT secret
 openssl rand -hex 32
 
-# Set up SSL certificates
-sudo certbot certonly --nginx -d app.wrzdj.com
-sudo certbot certonly --nginx -d api.wrzdj.com
+# Set up SSL certificates (replace yourdomain.com with your actual domain)
+sudo certbot certonly --nginx -d app.yourdomain.com
+sudo certbot certonly --nginx -d api.yourdomain.com
 
-# Configure nginx
-sudo cp deploy/nginx/app.wrzdj.com.conf /etc/nginx/sites-available/
-sudo cp deploy/nginx/api.wrzdj.com.conf /etc/nginx/sites-available/
-sudo ln -s /etc/nginx/sites-available/app.wrzdj.com.conf /etc/nginx/sites-enabled/
-sudo ln -s /etc/nginx/sites-available/api.wrzdj.com.conf /etc/nginx/sites-enabled/
+# Configure nginx (copy and rename the example configs for your domain)
+sudo cp deploy/nginx/app.wrzdj.com.conf /etc/nginx/sites-available/app.yourdomain.com.conf
+sudo cp deploy/nginx/api.wrzdj.com.conf /etc/nginx/sites-available/api.yourdomain.com.conf
+# Edit both files to replace wrzdj.com with your domain
+sudo ln -s /etc/nginx/sites-available/app.yourdomain.com.conf /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/api.yourdomain.com.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 
 # Build and start services
@@ -248,8 +246,8 @@ WrzDJ/
 
 ## Branches
 
-- **`main`** - Uses MusicBrainz for song search (free, no API key required)
-- **`spotify-search`** - Uses Spotify API for song search (requires credentials, includes album art)
+- **`main`** - Uses Spotify API for song search (requires credentials, includes album art and popularity)
+- **`musicbrainz-search`** - Uses MusicBrainz for song search (free, no API key required)
 
 ---
 

@@ -1,8 +1,8 @@
 # WrzDJ VPS Deployment Guide
 
 This guide covers deploying WrzDJ on a VPS using Docker Compose with the subdomain model:
-- **Frontend**: `https://app.wrzdj.com`
-- **Backend**: `https://api.wrzdj.com`
+- **Frontend**: `https://app.yourdomain.com`
+- **Backend**: `https://api.yourdomain.com`
 
 ## Prerequisites
 
@@ -11,8 +11,8 @@ This guide covers deploying WrzDJ on a VPS using Docker Compose with the subdoma
   - nginx installed and running
   - Certbot for SSL certificates
 - DNS A records pointing to your server:
-  - `app.wrzdj.com` → `<your-server-ip>`
-  - `api.wrzdj.com` → `<your-server-ip>`
+  - `app.yourdomain.com` → `<your-server-ip>`
+  - `api.yourdomain.com` → `<your-server-ip>`
 
 ## Deployment Steps
 
@@ -46,22 +46,22 @@ Fill in all required values in `deploy/.env`:
 
 ```bash
 # Frontend
-sudo certbot certonly --nginx -d app.wrzdj.com
+sudo certbot certonly --nginx -d app.yourdomain.com
 
 # Backend
-sudo certbot certonly --nginx -d api.wrzdj.com
+sudo certbot certonly --nginx -d api.yourdomain.com
 ```
 
 ### 4. Configure nginx
 
 ```bash
 # Copy configs
-sudo cp deploy/nginx/app.wrzdj.com.conf /etc/nginx/sites-available/
-sudo cp deploy/nginx/api.wrzdj.com.conf /etc/nginx/sites-available/
+sudo cp deploy/nginx/app.yourdomain.com.conf /etc/nginx/sites-available/
+sudo cp deploy/nginx/api.yourdomain.com.conf /etc/nginx/sites-available/
 
 # Enable sites
-sudo ln -s /etc/nginx/sites-available/app.wrzdj.com.conf /etc/nginx/sites-enabled/
-sudo ln -s /etc/nginx/sites-available/api.wrzdj.com.conf /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/app.yourdomain.com.conf /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/api.yourdomain.com.conf /etc/nginx/sites-enabled/
 
 # Test and reload
 sudo nginx -t
@@ -83,9 +83,9 @@ docker compose -f deploy/docker-compose.yml exec api \
 
 ### 7. Verify deployment
 
-- Frontend: https://app.wrzdj.com
-- API health: https://api.wrzdj.com/health
-- API docs: https://api.wrzdj.com/docs
+- Frontend: https://app.yourdomain.com
+- API health: https://api.yourdomain.com/health
+- API docs: https://api.yourdomain.com/docs
 - Login with admin credentials
 
 ## Maintenance
@@ -152,7 +152,7 @@ Common issues:
 
 Verify `CORS_ORIGINS` in `deploy/.env` matches your frontend domain exactly:
 ```
-CORS_ORIGINS=https://app.wrzdj.com
+CORS_ORIGINS=https://app.yourdomain.com
 ```
 
 ### 502 Bad Gateway
