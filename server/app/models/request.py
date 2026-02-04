@@ -40,4 +40,6 @@ class Request(Base):
     client_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     dedupe_key: Mapped[str] = mapped_column(String(64), index=True)
 
-    event: Mapped["Event"] = relationship("Event", back_populates="requests")
+    event: Mapped["Event"] = relationship(
+        "Event", back_populates="requests", foreign_keys=[event_id]
+    )
