@@ -162,6 +162,7 @@ a {
   padding: 1rem;
   background: #1a1a1a;
   border-radius: 8px;
+  color: inherit;
 }
 
 .request-info {
