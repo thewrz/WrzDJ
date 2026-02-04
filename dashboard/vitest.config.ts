@@ -1,5 +1,4 @@
 import { defineConfig } from 'vitest/config';
-import react from 'next/dist/compiled/react';
 import path from 'path';
 
 export default defineConfig({

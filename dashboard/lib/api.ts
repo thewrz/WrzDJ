@@ -70,13 +70,18 @@ class ApiClient {
   }
 
   private async fetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const headers: HeadersInit = {
+    const headers = new Headers({
       'Content-Type': 'application/json',
-      ...options.headers,
-    };
+    });
+
+    if (options.headers) {
+      new Headers(options.headers).forEach((value, key) => {
+        headers.set(key, value);
+      });
+    }
 
     if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+      headers.set('Authorization', `Bearer ${this.token}`);
     }
 
     const response = await fetch(`${getApiUrl()}${path}`, {
@@ -139,9 +144,9 @@ class ApiClient {
   }
 
   async deleteEvent(code: string): Promise<void> {
-    const headers: HeadersInit = {};
+    const headers = new Headers();
     if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+      headers.set('Authorization', `Bearer ${this.token}`);
     }
     const response = await fetch(`${getApiUrl()}/api/events/${code}`, {
       method: 'DELETE',
