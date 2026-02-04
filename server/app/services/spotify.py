@@ -108,6 +108,7 @@ def _call_spotify_api(query: str) -> list[SearchResult]:
                 album_art = images[0].get("url")
 
         if title and artist:
+            url = f"https://open.spotify.com/track/{spotify_id}" if spotify_id else None
             results.append(
                 SearchResult(
                     artist=artist,
@@ -117,6 +118,7 @@ def _call_spotify_api(query: str) -> list[SearchResult]:
                     spotify_id=spotify_id,
                     album_art=album_art,
                     preview_url=preview_url,
+                    url=url,
                 )
             )
 

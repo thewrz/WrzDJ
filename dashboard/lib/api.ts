@@ -32,6 +32,7 @@ export interface SearchResult {
   spotify_id: string | null;
   album_art: string | null;
   preview_url: string | null;
+  url: string | null;
 }
 
 class ApiClient {
@@ -126,11 +127,12 @@ class ApiClient {
     code: string,
     artist: string,
     title: string,
-    note?: string
+    note?: string,
+    sourceUrl?: string
   ): Promise<SongRequest> {
     return this.fetch(`/api/events/${code}/requests`, {
       method: 'POST',
-      body: JSON.stringify({ artist, title, note, source: 'manual' }),
+      body: JSON.stringify({ artist, title, note, source: 'spotify', source_url: sourceUrl }),
     });
   }
 

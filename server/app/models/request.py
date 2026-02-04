@@ -17,6 +17,7 @@ class RequestStatus(str, Enum):
 class RequestSource(str, Enum):
     MANUAL = "manual"
     MUSICBRAINZ = "musicbrainz"
+    SPOTIFY = "spotify"
     SHARE_LINK = "share_link"
 
 

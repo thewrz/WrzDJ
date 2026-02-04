@@ -232,7 +232,19 @@ export default function EventQueuePage() {
           {filteredRequests.map((request) => (
             <div key={request.id} className="request-item">
               <div className="request-info">
-                <h3>{request.song_title}</h3>
+                <h3>
+                  {request.song_title}
+                  {request.source_url && (
+                    <a
+                      href={request.source_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ marginLeft: '0.5rem', fontSize: '0.75rem' }}
+                    >
+                      ↗
+                    </a>
+                  )}
+                </h3>
                 <p>{request.artist}</p>
                 {request.note && <div className="note">{request.note}</div>}
                 <p style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>

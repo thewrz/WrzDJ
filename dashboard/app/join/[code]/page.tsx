@@ -57,7 +57,7 @@ export default function JoinEventPage() {
 
     setSubmitting(true);
     try {
-      await api.submitRequest(code, selectedSong.artist, selectedSong.title, note || undefined);
+      await api.submitRequest(code, selectedSong.artist, selectedSong.title, note || undefined, selectedSong.url || undefined);
       setSubmitted(true);
     } catch (err) {
       console.error('Submit failed:', err);
