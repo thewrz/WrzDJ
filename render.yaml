@@ -41,7 +41,7 @@ services:
       - key: CORS_ORIGINS
         value: https://app.wrzdj.com,https://wrzdj-web.onrender.com  # Add your custom domain after setup
       - key: PUBLIC_URL
-        value: https://app.wrzdj.com,https://wrzdj-web.onrender.com  # Update to your custom domain
+        value: https://app.wrzdj.com  # Update to your custom domain
       - key: BOOTSTRAP_ADMIN_USERNAME
         sync: false
       - key: BOOTSTRAP_ADMIN_PASSWORD
