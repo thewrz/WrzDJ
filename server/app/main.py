@@ -13,6 +13,10 @@ app = FastAPI(
     title="WrzDJ API",
     description="Song request system for DJs",
     version="0.1.0",
+    # Disable API docs in production
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
 
 # Rate limiting
