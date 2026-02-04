@@ -1,11 +1,18 @@
-# WrzDJ Deployment Guide
+# WrzDJ VPS Deployment Guide
+
+This guide covers deploying WrzDJ on a VPS using Docker Compose with the subdomain model:
+- **Frontend**: `https://app.wrzdj.com`
+- **Backend**: `https://api.wrzdj.com`
 
 ## Prerequisites
 
-- Ubuntu VPS with Docker and Docker Compose
-- nginx installed and running
-- Certbot for SSL certificates
-- Domain pointing to your server (e.g., wrzdj.wrzonance.com)
+- Ubuntu 22.04+ VPS with:
+  - Docker and Docker Compose
+  - nginx installed and running
+  - Certbot for SSL certificates
+- DNS A records pointing to your server:
+  - `app.wrzdj.com` → `<your-server-ip>`
+  - `api.wrzdj.com` → `<your-server-ip>`
 
 ## Deployment Steps
 
@@ -20,9 +27,8 @@ cd WrzDJ
 ### 2. Configure environment
 
 ```bash
-cp deploy/.env.example .env
-# Edit .env with secure values
-nano .env
+cp deploy/.env.example deploy/.env
+nano deploy/.env
 ```
 
 Generate a secure JWT secret:
@@ -30,17 +36,34 @@ Generate a secure JWT secret:
 openssl rand -hex 32
 ```
 
-### 3. Set up SSL certificate
+Fill in all required values in `deploy/.env`:
+- `POSTGRES_PASSWORD` - secure database password
+- `JWT_SECRET` - generated secret above
+- `SPOTIFY_CLIENT_ID` - from Spotify Developer Dashboard
+- `SPOTIFY_CLIENT_SECRET` - from Spotify Developer Dashboard
+
+### 3. Set up SSL certificates
 
 ```bash
-sudo certbot certonly --nginx -d wrzdj.wrzonance.com
+# Frontend
+sudo certbot certonly --nginx -d app.wrzdj.com
+
+# Backend
+sudo certbot certonly --nginx -d api.wrzdj.com
 ```
 
 ### 4. Configure nginx
 
 ```bash
-sudo cp deploy/nginx.conf /etc/nginx/sites-available/wrzdj.wrzonance.com
-sudo ln -s /etc/nginx/sites-available/wrzdj.wrzonance.com /etc/nginx/sites-enabled/
+# Copy configs
+sudo cp deploy/nginx/app.wrzdj.com.conf /etc/nginx/sites-available/
+sudo cp deploy/nginx/api.wrzdj.com.conf /etc/nginx/sites-available/
+
+# Enable sites
+sudo ln -s /etc/nginx/sites-available/app.wrzdj.com.conf /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/api.wrzdj.com.conf /etc/nginx/sites-enabled/
+
+# Test and reload
 sudo nginx -t
 sudo systemctl reload nginx
 ```
@@ -48,19 +71,21 @@ sudo systemctl reload nginx
 ### 5. Build and start services
 
 ```bash
-docker compose -f deploy/docker-compose.prod.yml up -d --build
+docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
 ### 6. Create admin user
 
 ```bash
-docker compose -f deploy/docker-compose.prod.yml exec api python -m app.scripts.create_user --username admin --password your-secure-password
+docker compose -f deploy/docker-compose.yml exec api \
+  python -m app.scripts.create_user --username admin --password your-secure-password
 ```
 
 ### 7. Verify deployment
 
-- Visit https://wrzdj.wrzonance.com
-- Check API health: https://wrzdj.wrzonance.com/health
+- Frontend: https://app.wrzdj.com
+- API health: https://api.wrzdj.com/health
+- API docs: https://api.wrzdj.com/docs
 - Login with admin credentials
 
 ## Maintenance
@@ -68,24 +93,82 @@ docker compose -f deploy/docker-compose.prod.yml exec api python -m app.scripts.
 ### View logs
 
 ```bash
-docker compose -f deploy/docker-compose.prod.yml logs -f
+# All services
+docker compose -f deploy/docker-compose.yml logs -f
+
+# Specific service
+docker compose -f deploy/docker-compose.yml logs -f api
+docker compose -f deploy/docker-compose.yml logs -f web
+docker compose -f deploy/docker-compose.yml logs -f db
 ```
 
 ### Restart services
 
 ```bash
-docker compose -f deploy/docker-compose.prod.yml restart
+docker compose -f deploy/docker-compose.yml restart
 ```
 
 ### Update deployment
 
 ```bash
 git pull
-docker compose -f deploy/docker-compose.prod.yml up -d --build
+docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
 ### Database backup
 
 ```bash
-docker compose -f deploy/docker-compose.prod.yml exec db pg_dump -U wrzdj wrzdj > backup.sql
+# Create backup
+docker compose -f deploy/docker-compose.yml exec db \
+  pg_dump -U wrzdj wrzdj > backup-$(date +%Y%m%d).sql
+
+# Restore backup
+cat backup.sql | docker compose -f deploy/docker-compose.yml exec -T db \
+  psql -U wrzdj wrzdj
 ```
+
+### SSL certificate renewal
+
+Certbot auto-renews certificates. To manually renew:
+```bash
+sudo certbot renew
+sudo systemctl reload nginx
+```
+
+## Troubleshooting
+
+### Container won't start
+
+Check logs:
+```bash
+docker compose -f deploy/docker-compose.yml logs api
+```
+
+Common issues:
+- Database not ready: container restarts until DB is healthy
+- Missing env vars: check `deploy/.env` has all required values
+
+### CORS errors
+
+Verify `CORS_ORIGINS` in `deploy/.env` matches your frontend domain exactly:
+```
+CORS_ORIGINS=https://app.wrzdj.com
+```
+
+### 502 Bad Gateway
+
+Check if containers are running:
+```bash
+docker compose -f deploy/docker-compose.yml ps
+```
+
+Ensure nginx is proxying to correct ports (api: 8000, web: 3000).
+
+## Security Checklist
+
+- [ ] Strong `JWT_SECRET` (use `openssl rand -hex 32`)
+- [ ] Strong `POSTGRES_PASSWORD`
+- [ ] HTTPS enabled (certbot)
+- [ ] `CORS_ORIGINS` set to specific domain (not `*`)
+- [ ] Firewall configured (only 80, 443, 22 open)
+- [ ] Database not exposed externally (127.0.0.1 only)

@@ -1,0 +1,56 @@
+# Render Blueprint for WrzDJ
+# https://render.com/docs/blueprint-spec
+#
+# Deploy: Connect repo to Render and it will auto-detect this file
+#
+# After deployment, add custom domains:
+#   - api service: api.wrzdj.com
+#   - web service: app.wrzdj.com
+
+databases:
+  - name: wrzdj-db
+    databaseName: wrzdj
+    user: wrzdj
+    plan: free # or starter for production
+
+services:
+  # FastAPI Backend
+  - type: web
+    name: wrzdj-api
+    runtime: docker
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    plan: free # or starter for production
+    healthCheckPath: /health
+    envVars:
+      - key: ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: wrzdj-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SPOTIFY_CLIENT_ID
+        sync: false # Set manually in Render dashboard
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false # Set manually in Render dashboard
+      - key: CORS_ORIGINS
+        value: https://app.wrzdj.com
+      - key: PUBLIC_URL
+        value: https://app.wrzdj.com
+
+  # Next.js Frontend
+  - type: web
+    name: wrzdj-web
+    runtime: docker
+    dockerfilePath: ./dashboard/Dockerfile
+    dockerContext: ./dashboard
+    plan: free # or starter for production
+    healthCheckPath: /api/health
+    buildFilter:
+      paths:
+        - dashboard/**
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://api.wrzdj.com
