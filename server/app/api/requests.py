@@ -31,6 +31,10 @@ def update_request(
     # Auto-set now_playing when a request is set to "playing"
     if update_data.status == RequestStatus.PLAYING:
         set_now_playing(db, request.event, request.id)
+    # Clear now_playing when the current song is marked as "played"
+    elif update_data.status == RequestStatus.PLAYED:
+        if request.event.now_playing_request_id == request.id:
+            set_now_playing(db, request.event, None)
 
     return RequestOut(
         id=updated.id,
