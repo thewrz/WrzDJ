@@ -10,6 +10,7 @@ from app.schemas.event import EventCreate, EventOut, EventUpdate
 from app.schemas.request import RequestCreate, RequestOut
 from app.services.event import (
     create_event,
+    delete_event,
     get_event_by_code,
     get_event_by_code_for_owner,
     get_events_for_user,
@@ -85,6 +86,19 @@ def update_event_endpoint(
         expires_at=event_data.expires_at,
     )
     return _event_to_out(updated, request)
+
+
+@router.delete("/{code}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_event_endpoint(
+    code: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """Delete an event and all its requests."""
+    event = get_event_by_code_for_owner(db, code, current_user)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    delete_event(db, event)
 
 
 @router.post("/{code}/requests", response_model=RequestOut)

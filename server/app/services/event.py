@@ -87,3 +87,12 @@ def get_event_by_code_for_owner(db: Session, code: str, user: User) -> Event | N
         )
         .first()
     )
+
+
+def delete_event(db: Session, event: Event) -> None:
+    """Delete an event and all its associated requests."""
+    # Requests are deleted via cascade, but let's be explicit
+    from app.models.request import Request
+    db.query(Request).filter(Request.event_id == event.id).delete()
+    db.delete(event)
+    db.commit()

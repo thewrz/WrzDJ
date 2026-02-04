@@ -122,6 +122,21 @@ class ApiClient {
     });
   }
 
+  async deleteEvent(code: string): Promise<void> {
+    const headers: HeadersInit = {};
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+    const response = await fetch(`${getApiUrl()}/api/events/${code}`, {
+      method: 'DELETE',
+      headers,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Delete failed' }));
+      throw new Error(error.detail || 'Delete failed');
+    }
+  }
+
   async getRequests(code: string, status?: string): Promise<SongRequest[]> {
     const params = status ? `?status=${status}` : '';
     return this.fetch(`/api/events/${code}/requests${params}`);

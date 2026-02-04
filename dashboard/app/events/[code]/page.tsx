@@ -29,6 +29,8 @@ export default function EventQueuePage() {
   const [editingExpiry, setEditingExpiry] = useState(false);
   const [newExpiryDate, setNewExpiryDate] = useState('');
   const [updatingExpiry, setUpdatingExpiry] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -95,6 +97,18 @@ export default function EventQueuePage() {
       console.error('Failed to update expiry:', err);
     } finally {
       setUpdatingExpiry(false);
+    }
+  };
+
+  const handleDeleteEvent = async () => {
+    setDeleting(true);
+    try {
+      await api.deleteEvent(code);
+      router.push('/events');
+    } catch (err) {
+      console.error('Failed to delete event:', err);
+      setDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -189,6 +203,13 @@ export default function EventQueuePage() {
                   onClick={handleEditExpiry}
                 >
                   Edit
+                </button>
+                <button
+                  className="btn btn-danger btn-sm"
+                  style={{ padding: '0.25rem 0.5rem' }}
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  Delete
                 </button>
               </div>
             )}
@@ -285,6 +306,53 @@ export default function EventQueuePage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => !deleting && setShowDeleteConfirm(false)}
+        >
+          <div
+            className="card"
+            style={{ maxWidth: '400px', margin: '1rem' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginBottom: '1rem' }}>Delete Event?</h2>
+            <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>
+              This will permanently delete "{event.name}" and all {requests.length} song requests. This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button
+                className="btn btn-danger"
+                onClick={handleDeleteEvent}
+                disabled={deleting}
+                style={{ flex: 1 }}
+              >
+                {deleting ? 'Deleting...' : 'Delete Event'}
+              </button>
+              <button
+                className="btn"
+                style={{ background: '#333' }}
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
