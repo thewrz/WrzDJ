@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.core.config import get_settings
+from app.core.rate_limit import limiter
 from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.event import EventCreate, EventOut, EventUpdate
@@ -108,6 +109,7 @@ def delete_event_endpoint(
 
 
 @router.post("/{code}/requests", response_model=RequestOut)
+@limiter.limit(lambda: f"{settings.request_rate_limit_per_minute}/minute")
 def submit_request(
     code: str,
     request_data: RequestCreate,

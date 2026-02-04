@@ -16,6 +16,7 @@ dependencies = [
     "httpx>=0.26.0",
     "python-multipart>=0.0.6",
     "spotipy>=2.23.0",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]

@@ -1,8 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
 
 from app.api import api_router
 from app.core.config import get_settings
+from app.core.rate_limit import limiter, rate_limit_exceeded_handler
+from app.core.security_headers import SecurityHeadersMiddleware
 
 settings = get_settings()
 
@@ -11,6 +14,13 @@ app = FastAPI(
     description="Song request system for DJs",
     version="0.1.0",
 )
+
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+# Security headers (added first, runs last in middleware chain)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # CORS
 if settings.cors_origins.strip() == "*":

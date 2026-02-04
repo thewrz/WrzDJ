@@ -172,3 +172,8 @@ Ensure nginx is proxying to correct ports (api: 8000, web: 3000).
 - [ ] `CORS_ORIGINS` set to specific domain (not `*`)
 - [ ] Firewall configured (only 80, 443, 22 open)
 - [ ] Database not exposed externally (127.0.0.1 only)
+- [ ] Rate limiting enabled (auto-enabled in production)
+- [ ] Login lockout enabled (auto-enabled in production)
+- [ ] Security headers verified (check browser dev tools)
+
+See `docs/security/manual-checklist.md` for the complete security checklist.

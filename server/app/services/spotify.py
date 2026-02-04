@@ -1,7 +1,10 @@
 import json
+import logging
+import time
 from datetime import datetime, timedelta
 
 import spotipy
+from requests.exceptions import ReadTimeout, Timeout
 from spotipy.oauth2 import SpotifyClientCredentials
 from sqlalchemy.orm import Session
 
@@ -10,6 +13,12 @@ from app.models.search_cache import SearchCache
 from app.schemas.search import SearchResult
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+# Timeout settings (connect, read)
+SPOTIFY_TIMEOUT = (5, 10)  # 5s connect, 10s read
+MAX_RETRIES = 2
+INITIAL_BACKOFF = 0.5  # seconds
 
 # Initialize Spotify client with client credentials flow
 _sp: spotipy.Spotify | None = None
@@ -28,7 +37,10 @@ def _get_spotify_client() -> spotipy.Spotify:
             client_id=settings.spotify_client_id,
             client_secret=settings.spotify_client_secret,
         )
-        _sp = spotipy.Spotify(auth_manager=auth_manager)
+        _sp = spotipy.Spotify(
+            auth_manager=auth_manager,
+            requests_timeout=SPOTIFY_TIMEOUT,
+        )
     return _sp
 
 
@@ -72,12 +84,33 @@ async def search_songs(db: Session, query: str) -> list[SearchResult]:
 
 
 def _call_spotify_api(query: str) -> list[SearchResult]:
-    """Make the actual API call to Spotify."""
+    """Make the actual API call to Spotify with retry logic."""
     sp = _get_spotify_client()
 
-    try:
-        response = sp.search(q=query, type="track", limit=20)
-    except Exception:
+    response = None
+    last_exception = None
+
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            response = sp.search(q=query, type="track", limit=20)
+            break
+        except (Timeout, ReadTimeout) as e:
+            last_exception = e
+            if attempt < MAX_RETRIES:
+                backoff = INITIAL_BACKOFF * (2**attempt)
+                logger.warning(
+                    f"Spotify API timeout (attempt {attempt + 1}/{MAX_RETRIES + 1}), "
+                    f"retrying in {backoff}s: {e}"
+                )
+                time.sleep(backoff)
+            else:
+                logger.error(f"Spotify API timeout after {MAX_RETRIES + 1} attempts: {e}")
+        except Exception as e:
+            logger.error(f"Spotify API error: {e}")
+            return []
+
+    if response is None:
+        logger.error(f"Spotify API failed after retries: {last_exception}")
         return []
 
     results = []

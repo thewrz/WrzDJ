@@ -48,9 +48,28 @@ class Settings(BaseSettings):
     # Public URL for QR codes/links (e.g., https://app.wrzdj.com)
     public_url: str = ""
 
-    # Rate limiting
+    # Rate limiting (disabled by default in dev, enable in prod)
+    rate_limit_enabled: bool | None = None  # None = auto (disabled in dev, enabled in prod)
+    login_rate_limit_per_minute: int = 5
     search_rate_limit_per_minute: int = 30
     request_rate_limit_per_minute: int = 10
+
+    # Login lockout (disabled by default in dev, enable in prod)
+    lockout_enabled: bool | None = None  # None = auto (disabled in dev, enabled in prod)
+
+    @property
+    def is_rate_limit_enabled(self) -> bool:
+        """Check if rate limiting is enabled (auto-detect based on env if not set)."""
+        if self.rate_limit_enabled is not None:
+            return self.rate_limit_enabled
+        return self.is_production
+
+    @property
+    def is_lockout_enabled(self) -> bool:
+        """Check if lockout is enabled (auto-detect based on env if not set)."""
+        if self.lockout_enabled is not None:
+            return self.lockout_enabled
+        return self.is_production
 
     # Cache durations (1 hour for Spotify since popularity changes)
     search_cache_hours: int = 1
