@@ -9,6 +9,7 @@ from app.models.base import Base
 
 class RequestStatus(str, Enum):
     NEW = "new"
+    ACCEPTED = "accepted"
     PLAYING = "playing"
     PLAYED = "played"
     REJECTED = "rejected"

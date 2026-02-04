@@ -567,7 +567,7 @@ export default function KioskDisplayPage() {
           </div>
 
           <div className="queue-section">
-            <div className="queue-label">Up Next</div>
+            <div className="queue-label">Accepted Requests</div>
             {display.accepted_queue.length > 0 ? (
               <div className="queue-list">
                 {display.accepted_queue.map((item) => (

@@ -30,7 +30,7 @@ export interface SongRequest {
   source_url: string | null;
   artwork_url: string | null;
   note: string | null;
-  status: 'new' | 'playing' | 'played' | 'rejected';
+  status: 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
   created_at: string;
   updated_at: string;
   is_duplicate?: boolean;

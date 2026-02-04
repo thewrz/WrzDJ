@@ -7,7 +7,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/auth';
 import { api, Event, SongRequest } from '@/lib/api';
 
-type StatusFilter = 'all' | 'new' | 'playing' | 'played' | 'rejected';
+type StatusFilter = 'all' | 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
 
 function toLocalDateTimeString(date: Date): string {
   const pad = (n: number) => n.toString().padStart(2, '0');
@@ -119,6 +119,7 @@ export default function EventQueuePage() {
   const statusCounts = {
     all: requests.length,
     new: requests.filter((r) => r.status === 'new').length,
+    accepted: requests.filter((r) => r.status === 'accepted').length,
     playing: requests.filter((r) => r.status === 'playing').length,
     played: requests.filter((r) => r.status === 'played').length,
     rejected: requests.filter((r) => r.status === 'rejected').length,
@@ -229,7 +230,7 @@ export default function EventQueuePage() {
       </div>
 
       <div className="tabs">
-        {(['all', 'new', 'playing', 'played', 'rejected'] as StatusFilter[]).map((status) => (
+        {(['all', 'new', 'accepted', 'playing', 'played', 'rejected'] as StatusFilter[]).map((status) => (
           <button
             key={status}
             className={`tab ${filter === status ? 'active' : ''}`}
@@ -279,6 +280,24 @@ export default function EventQueuePage() {
                     <>
                       <button
                         className="btn btn-success btn-sm"
+                        onClick={() => updateStatus(request.id, 'accepted')}
+                        disabled={updating === request.id}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => updateStatus(request.id, 'rejected')}
+                        disabled={updating === request.id}
+                      >
+                        Reject
+                      </button>
+                    </>
+                  )}
+                  {request.status === 'accepted' && (
+                    <>
+                      <button
+                        className="btn btn-primary btn-sm"
                         onClick={() => updateStatus(request.id, 'playing')}
                         disabled={updating === request.id}
                       >
@@ -299,7 +318,7 @@ export default function EventQueuePage() {
                       onClick={() => updateStatus(request.id, 'played')}
                       disabled={updating === request.id}
                     >
-                      Mark Played
+                      Played
                     </button>
                   )}
                 </div>

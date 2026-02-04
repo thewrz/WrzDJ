@@ -52,12 +52,12 @@ def get_kiosk_display(
         base_url = str(request.base_url).rstrip("/")
     qr_join_url = f"{base_url}/join/{event.code}"
 
-    # Get accepted requests (status = 'playing') ordered by updated_at
+    # Get accepted requests (status = 'accepted') ordered by updated_at
     accepted_requests = [
         r for r in event.requests
-        if r.status == RequestStatus.PLAYING.value
+        if r.status == RequestStatus.ACCEPTED.value
     ]
-    accepted_requests.sort(key=lambda r: r.updated_at, reverse=True)
+    accepted_requests.sort(key=lambda r: r.updated_at)
 
     accepted_queue = [
         PublicRequestInfo(
