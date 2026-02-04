@@ -178,11 +178,12 @@ export default function KioskDisplayPage() {
           overflow: hidden;
         }
         .kiosk-container {
-          min-height: 100vh;
+          height: 100vh;
           background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
           padding: 2rem;
           display: flex;
           flex-direction: column;
+          overflow: hidden;
         }
         .kiosk-header {
           display: flex;
@@ -212,6 +213,7 @@ export default function KioskDisplayPage() {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 2rem;
+          min-height: 0;
         }
         .kiosk-main-single {
           grid-template-columns: 1fr;
@@ -292,7 +294,10 @@ export default function KioskDisplayPage() {
           background: rgba(255,255,255,0.05);
           border-radius: 1.5rem;
           padding: 2rem;
-          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          max-height: 100%;
         }
         .queue-label {
           color: #3b82f6;
@@ -300,11 +305,15 @@ export default function KioskDisplayPage() {
           text-transform: uppercase;
           letter-spacing: 0.1em;
           margin-bottom: 1rem;
+          flex-shrink: 0;
         }
         .queue-list {
           display: flex;
           flex-direction: column;
           gap: 0.75rem;
+          overflow-y: auto;
+          flex: 1;
+          min-height: 0;
         }
         .queue-item {
           display: flex;
