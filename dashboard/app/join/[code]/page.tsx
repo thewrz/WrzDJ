@@ -118,9 +118,21 @@ export default function JoinEventPage() {
       <div className="container" style={{ maxWidth: '500px' }}>
         <div className="card">
           <h2 style={{ marginBottom: '1rem' }}>Confirm Request</h2>
-          <div style={{ marginBottom: '1rem' }}>
-            <h3>{selectedSong.title}</h3>
-            <p style={{ color: '#9ca3af' }}>{selectedSong.artist}</p>
+          <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            {selectedSong.album_art && (
+              <img
+                src={selectedSong.album_art}
+                alt={selectedSong.album || selectedSong.title}
+                style={{ width: '80px', height: '80px', borderRadius: '8px', objectFit: 'cover' }}
+              />
+            )}
+            <div>
+              <h3 style={{ margin: 0 }}>{selectedSong.title}</h3>
+              <p style={{ color: '#9ca3af', margin: '0.25rem 0 0 0' }}>{selectedSong.artist}</p>
+              {selectedSong.album && (
+                <p style={{ color: '#6b7280', margin: '0.25rem 0 0 0', fontSize: '0.875rem' }}>{selectedSong.album}</p>
+              )}
+            </div>
           </div>
           <div className="form-group">
             <label htmlFor="note">Add a note (optional)</label>
@@ -185,19 +197,54 @@ export default function JoinEventPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {searchResults.map((result, index) => (
               <button
-                key={index}
+                key={result.spotify_id || index}
                 className="request-item"
                 style={{
                   cursor: 'pointer',
                   border: 'none',
                   textAlign: 'left',
-                  width: '100%'
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem'
                 }}
                 onClick={() => setSelectedSong(result)}
               >
-                <div className="request-info">
-                  <h3 style={{ fontSize: '1rem' }}>{result.title}</h3>
-                  <p>{result.artist}</p>
+                {result.album_art && (
+                  <img
+                    src={result.album_art}
+                    alt={result.album || result.title}
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '4px',
+                      objectFit: 'cover',
+                      flexShrink: 0
+                    }}
+                  />
+                )}
+                <div className="request-info" style={{ flex: 1, minWidth: 0 }}>
+                  <h3 style={{ fontSize: '1rem', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.title}</h3>
+                  <p style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.artist}</p>
+                  {result.album && (
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.album}</p>
+                  )}
+                </div>
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    background: `conic-gradient(#22c55e ${result.popularity}%, #333 ${result.popularity}%)`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.65rem',
+                    flexShrink: 0
+                  }}
+                  title={`Popularity: ${result.popularity}%`}
+                >
+                  {result.popularity}
                 </div>
               </button>
             ))}

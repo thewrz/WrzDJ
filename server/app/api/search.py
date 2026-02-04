@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.schemas.search import SearchResult
-from app.services.musicbrainz import search_songs
+from app.services.spotify import search_songs
 
 router = APIRouter()
 

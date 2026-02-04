@@ -15,6 +15,7 @@ dependencies = [
     "bcrypt>=4.0.0",
     "httpx>=0.26.0",
     "python-multipart>=0.0.6",
+    "spotipy>=2.23.0",
 ]
 
 [project.optional-dependencies]

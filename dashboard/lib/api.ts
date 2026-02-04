@@ -27,8 +27,11 @@ export interface SongRequest {
 export interface SearchResult {
   artist: string;
   title: string;
-  mbid: string | null;
-  score: number;
+  album: string | null;
+  popularity: number;
+  spotify_id: string | null;
+  album_art: string | null;
+  preview_url: string | null;
 }
 
 class ApiClient {
