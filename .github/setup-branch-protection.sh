@@ -6,17 +6,23 @@ REPO="thewrz/WrzDJ"
 
 echo "Setting up branch protection for $REPO..."
 
-# Create branch protection rule for main
 gh api repos/$REPO/branches/main/protection \
   --method PUT \
-  --field required_status_checks=null \
-  --field enforce_admins=false \
-  --field required_pull_request_reviews='{"required_approving_review_count":1,"require_code_owner_reviews":true,"dismiss_stale_reviews":true}' \
-  --field restrictions=null \
-  --field allow_force_pushes=false \
-  --field allow_deletions=false \
-  --field block_creations=false \
-  --field required_conversation_resolution=true
+  --input - << 'EOF'
+{
+  "required_status_checks": null,
+  "enforce_admins": false,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 1,
+    "require_code_owner_reviews": true,
+    "dismiss_stale_reviews": true
+  },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "required_conversation_resolution": true
+}
+EOF
 
 if [ $? -eq 0 ]; then
   echo "Branch protection enabled successfully!"
