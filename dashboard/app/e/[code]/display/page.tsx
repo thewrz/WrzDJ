@@ -660,13 +660,22 @@ export default function KioskDisplayPage() {
                   <div className="search-results">
                     {searchResults.map((result, index) => (
                       <button
-                        key={result.mbid || index}
+                        key={result.spotify_id || index}
                         className="search-result-item"
                         onClick={() => setSelectedSong(result)}
                       >
-                        <div>
-                          <div style={{ fontWeight: 500 }}>{result.title}</div>
-                          <div style={{ color: '#9ca3af', fontSize: '0.875rem' }}>{result.artist}</div>
+                        {result.album_art ? (
+                          <img
+                            src={result.album_art}
+                            alt={result.title}
+                            style={{ width: 48, height: 48, borderRadius: 4, objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <div style={{ width: 48, height: 48, borderRadius: 4, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🎵</div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.title}</div>
+                          <div style={{ color: '#9ca3af', fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.artist}</div>
                         </div>
                       </button>
                     ))}
