@@ -46,6 +46,12 @@ htmlcov/
 *.log
 logs/
 
+# Cache
+.cache/
+
 # Database
 *.db
 *.sqlite3
+
+# LLM plan files
+llm-plans*.md

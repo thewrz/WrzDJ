@@ -9,8 +9,8 @@ from app.models import Base
 config = context.config
 settings = get_settings()
 
-# Override sqlalchemy.url from settings
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Override sqlalchemy.url from settings (convert postgres:// to postgresql+psycopg://)
+config.set_main_option("sqlalchemy.url", settings.database_url_sync)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
