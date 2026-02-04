@@ -96,3 +96,12 @@ def delete_event(db: Session, event: Event) -> None:
     db.query(Request).filter(Request.event_id == event.id).delete()
     db.delete(event)
     db.commit()
+
+
+def set_now_playing(db: Session, event: Event, request_id: int | None) -> Event:
+    """Set the now playing request for an event."""
+    event.now_playing_request_id = request_id
+    event.now_playing_updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(event)
+    return event

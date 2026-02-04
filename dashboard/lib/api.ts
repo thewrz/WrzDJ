@@ -28,11 +28,27 @@ export interface SongRequest {
   artist: string;
   source: string;
   source_url: string | null;
+  artwork_url: string | null;
   note: string | null;
   status: 'new' | 'playing' | 'played' | 'rejected';
   created_at: string;
   updated_at: string;
   is_duplicate?: boolean;
+}
+
+export interface PublicRequestInfo {
+  id: number;
+  title: string;
+  artist: string;
+  artwork_url: string | null;
+}
+
+export interface KioskDisplay {
+  event: { code: string; name: string };
+  qr_join_url: string;
+  accepted_queue: PublicRequestInfo[];
+  now_playing: PublicRequestInfo | null;
+  updated_at: string;
 }
 
 export interface SearchResult {
@@ -154,16 +170,34 @@ class ApiClient {
     artist: string,
     title: string,
     note?: string,
-    sourceUrl?: string
+    sourceUrl?: string,
+    artworkUrl?: string
   ): Promise<SongRequest> {
     return this.fetch(`/api/events/${code}/requests`, {
       method: 'POST',
-      body: JSON.stringify({ artist, title, note, source: 'spotify', source_url: sourceUrl }),
+      body: JSON.stringify({
+        artist,
+        title,
+        note,
+        source: 'spotify',
+        source_url: sourceUrl,
+        artwork_url: artworkUrl,
+      }),
     });
   }
 
   async search(query: string): Promise<SearchResult[]> {
     return this.fetch(`/api/search?q=${encodeURIComponent(query)}`);
+  }
+
+  async getKioskDisplay(code: string): Promise<KioskDisplay> {
+    // Public endpoint, no auth needed
+    const response = await fetch(`${getApiUrl()}/api/public/events/${code}/display`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+      throw new Error(error.detail || 'Request failed');
+    }
+    return response.json();
   }
 }
 

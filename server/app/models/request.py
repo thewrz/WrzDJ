@@ -30,6 +30,7 @@ class Request(Base):
     artist: Mapped[str] = mapped_column(String(255))
     source: Mapped[str] = mapped_column(String(20), default=RequestSource.MANUAL.value)
     source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    artwork_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default=RequestStatus.NEW.value, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

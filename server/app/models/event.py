@@ -16,6 +16,15 @@ class Event(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    now_playing_request_id: Mapped[int | None] = mapped_column(
+        ForeignKey("requests.id", ondelete="SET NULL"), nullable=True
+    )
+    now_playing_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     created_by: Mapped["User"] = relationship("User", back_populates="events")
-    requests: Mapped[list["Request"]] = relationship("Request", back_populates="event")
+    requests: Mapped[list["Request"]] = relationship(
+        "Request", back_populates="event", foreign_keys="Request.event_id"
+    )
+    now_playing: Mapped["Request | None"] = relationship(
+        "Request", foreign_keys=[now_playing_request_id], post_update=True
+    )

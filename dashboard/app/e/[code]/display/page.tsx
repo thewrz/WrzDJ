@@ -1,0 +1,683 @@
+'use client';
+
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useParams } from 'next/navigation';
+import { QRCodeSVG } from 'qrcode.react';
+import { api, KioskDisplay, SearchResult } from '@/lib/api';
+
+const INACTIVITY_TIMEOUT = 60000; // 60 seconds
+
+export default function KioskDisplayPage() {
+  const params = useParams();
+  const code = params.code as string;
+
+  const [display, setDisplay] = useState<KioskDisplay | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // Request modal state
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedSong, setSelectedSong] = useState<SearchResult | null>(null);
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  // Inactivity timer
+  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load kiosk display data
+  const loadDisplay = useCallback(async () => {
+    try {
+      const data = await api.getKioskDisplay(code);
+      setDisplay(data);
+      setError('');
+    } catch (err) {
+      setError('Event not found or expired');
+    } finally {
+      setLoading(false);
+    }
+  }, [code]);
+
+  // Poll for updates every 3 seconds
+  useEffect(() => {
+    loadDisplay();
+    const interval = setInterval(loadDisplay, 3000);
+    return () => clearInterval(interval);
+  }, [loadDisplay]);
+
+  // Inactivity timeout
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+    if (showRequestModal) {
+      inactivityTimerRef.current = setTimeout(() => {
+        closeModal();
+      }, INACTIVITY_TIMEOUT);
+    }
+  }, [showRequestModal]);
+
+  useEffect(() => {
+    const handleActivity = () => resetInactivityTimer();
+    window.addEventListener('touchstart', handleActivity);
+    window.addEventListener('pointerdown', handleActivity);
+    window.addEventListener('pointermove', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+    return () => {
+      window.removeEventListener('touchstart', handleActivity);
+      window.removeEventListener('pointerdown', handleActivity);
+      window.removeEventListener('pointermove', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+    };
+  }, [resetInactivityTimer]);
+
+  useEffect(() => {
+    resetInactivityTimer();
+  }, [showRequestModal, resetInactivityTimer]);
+
+  // Kiosk mode protections
+  useEffect(() => {
+    const preventDefaults = (e: Event) => {
+      e.preventDefault();
+      return false;
+    };
+    document.addEventListener('contextmenu', preventDefaults);
+    document.addEventListener('selectstart', preventDefaults);
+    document.addEventListener('dragstart', preventDefaults);
+    return () => {
+      document.removeEventListener('contextmenu', preventDefaults);
+      document.removeEventListener('selectstart', preventDefaults);
+      document.removeEventListener('dragstart', preventDefaults);
+    };
+  }, []);
+
+  const closeModal = () => {
+    setShowRequestModal(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    setSelectedSong(null);
+    setNote('');
+    setSubmitted(false);
+  };
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    setSearching(true);
+    setSearchResults([]);
+    try {
+      const results = await api.search(searchQuery);
+      setSearchResults(results);
+    } catch (err) {
+      console.error('Search failed:', err);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedSong) return;
+
+    setSubmitting(true);
+    try {
+      await api.submitRequest(
+        code,
+        selectedSong.artist,
+        selectedSong.title,
+        note || undefined,
+        selectedSong.url || undefined
+      );
+      setSubmitted(true);
+      // Auto-close after 2.5 seconds
+      setTimeout(() => {
+        closeModal();
+      }, 2500);
+    } catch (err) {
+      console.error('Submit failed:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="kiosk-container">
+        <div className="loading">Loading...</div>
+      </div>
+    );
+  }
+
+  if (error || !display) {
+    return (
+      <div className="kiosk-container">
+        <div className="kiosk-error">
+          <h1>Event Not Found</h1>
+          <p>{error || 'This event may have expired.'}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <style jsx global>{`
+        * {
+          user-select: none;
+          -webkit-user-select: none;
+          -webkit-touch-callout: none;
+        }
+        body {
+          overflow: hidden;
+        }
+        .kiosk-container {
+          min-height: 100vh;
+          background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+          padding: 2rem;
+          display: flex;
+          flex-direction: column;
+        }
+        .kiosk-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 2rem;
+        }
+        .kiosk-event-name {
+          font-size: 2.5rem;
+          font-weight: bold;
+          color: #fff;
+          margin: 0;
+        }
+        .kiosk-qr {
+          background: #fff;
+          padding: 1rem;
+          border-radius: 1rem;
+        }
+        .kiosk-qr-label {
+          text-align: center;
+          color: #333;
+          font-size: 0.75rem;
+          margin-top: 0.5rem;
+        }
+        .kiosk-main {
+          flex: 1;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 2rem;
+        }
+        .now-playing-section {
+          background: rgba(255,255,255,0.1);
+          border-radius: 1.5rem;
+          padding: 2rem;
+          display: flex;
+          flex-direction: column;
+        }
+        .now-playing-label {
+          color: #22c55e;
+          font-size: 1rem;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          margin-bottom: 1rem;
+        }
+        .now-playing-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+        }
+        .now-playing-art {
+          width: 200px;
+          height: 200px;
+          border-radius: 1rem;
+          object-fit: cover;
+          margin-bottom: 1.5rem;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+        }
+        .now-playing-placeholder {
+          width: 200px;
+          height: 200px;
+          border-radius: 1rem;
+          background: rgba(255,255,255,0.1);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 1.5rem;
+          font-size: 4rem;
+        }
+        .now-playing-title {
+          font-size: 1.75rem;
+          font-weight: bold;
+          color: #fff;
+          text-align: center;
+          margin: 0 0 0.5rem;
+        }
+        .now-playing-artist {
+          font-size: 1.25rem;
+          color: #9ca3af;
+          text-align: center;
+          margin: 0;
+        }
+        .spectrum-bars {
+          display: flex;
+          gap: 4px;
+          height: 60px;
+          align-items: flex-end;
+          margin-top: 1.5rem;
+        }
+        .spectrum-bar {
+          width: 8px;
+          background: linear-gradient(to top, #22c55e, #4ade80);
+          border-radius: 4px;
+          animation: spectrum 0.5s ease-in-out infinite alternate;
+        }
+        @keyframes spectrum {
+          from { height: 20%; }
+          to { height: 100%; }
+        }
+        .queue-section {
+          background: rgba(255,255,255,0.05);
+          border-radius: 1.5rem;
+          padding: 2rem;
+          overflow-y: auto;
+        }
+        .queue-label {
+          color: #3b82f6;
+          font-size: 1rem;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          margin-bottom: 1rem;
+        }
+        .queue-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .queue-item {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          background: rgba(255,255,255,0.05);
+          padding: 0.75rem;
+          border-radius: 0.75rem;
+        }
+        .queue-item-art {
+          width: 48px;
+          height: 48px;
+          border-radius: 0.5rem;
+          object-fit: cover;
+        }
+        .queue-item-placeholder {
+          width: 48px;
+          height: 48px;
+          border-radius: 0.5rem;
+          background: rgba(255,255,255,0.1);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .queue-item-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .queue-item-title {
+          color: #fff;
+          font-weight: 500;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .queue-item-artist {
+          color: #9ca3af;
+          font-size: 0.875rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .queue-empty {
+          color: #6b7280;
+          text-align: center;
+          padding: 2rem;
+        }
+        .request-button {
+          position: fixed;
+          bottom: 2rem;
+          left: 50%;
+          transform: translateX(-50%);
+          background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+          color: #fff;
+          border: none;
+          padding: 1.5rem 3rem;
+          font-size: 1.5rem;
+          font-weight: bold;
+          border-radius: 2rem;
+          cursor: pointer;
+          box-shadow: 0 10px 40px rgba(59, 130, 246, 0.4);
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .request-button:hover {
+          transform: translateX(-50%) scale(1.05);
+          box-shadow: 0 15px 50px rgba(59, 130, 246, 0.5);
+        }
+        .request-button:active {
+          transform: translateX(-50%) scale(0.98);
+        }
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0,0,0,0.9);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 2rem;
+        }
+        .modal-content {
+          background: #1f2937;
+          border-radius: 1.5rem;
+          padding: 2rem;
+          width: 100%;
+          max-width: 500px;
+          max-height: 80vh;
+          overflow-y: auto;
+        }
+        .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 1.5rem;
+        }
+        .modal-title {
+          font-size: 1.5rem;
+          font-weight: bold;
+          color: #fff;
+          margin: 0;
+        }
+        .modal-close {
+          background: transparent;
+          border: none;
+          color: #9ca3af;
+          font-size: 2rem;
+          cursor: pointer;
+          line-height: 1;
+        }
+        .search-form {
+          display: flex;
+          gap: 0.5rem;
+          margin-bottom: 1rem;
+        }
+        .search-input {
+          flex: 1;
+          background: #374151;
+          border: none;
+          border-radius: 0.5rem;
+          padding: 1rem;
+          color: #fff;
+          font-size: 1rem;
+        }
+        .search-button {
+          background: #3b82f6;
+          border: none;
+          border-radius: 0.5rem;
+          padding: 1rem 1.5rem;
+          color: #fff;
+          font-weight: 500;
+          cursor: pointer;
+        }
+        .search-results {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          max-height: 300px;
+          overflow-y: auto;
+        }
+        .search-result-item {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          background: #374151;
+          padding: 0.75rem;
+          border-radius: 0.5rem;
+          border: none;
+          cursor: pointer;
+          text-align: left;
+          width: 100%;
+          color: #fff;
+        }
+        .search-result-item:hover {
+          background: #4b5563;
+        }
+        .confirm-section {
+          text-align: center;
+        }
+        .confirm-song {
+          margin-bottom: 1.5rem;
+        }
+        .confirm-title {
+          font-size: 1.25rem;
+          font-weight: bold;
+          color: #fff;
+          margin: 0 0 0.25rem;
+        }
+        .confirm-artist {
+          color: #9ca3af;
+          margin: 0;
+        }
+        .note-input {
+          width: 100%;
+          background: #374151;
+          border: none;
+          border-radius: 0.5rem;
+          padding: 1rem;
+          color: #fff;
+          font-size: 1rem;
+          margin-bottom: 1rem;
+        }
+        .confirm-buttons {
+          display: flex;
+          gap: 1rem;
+        }
+        .confirm-submit {
+          flex: 1;
+          background: #22c55e;
+          border: none;
+          border-radius: 0.5rem;
+          padding: 1rem;
+          color: #fff;
+          font-weight: bold;
+          font-size: 1.1rem;
+          cursor: pointer;
+        }
+        .confirm-back {
+          background: #374151;
+          border: none;
+          border-radius: 0.5rem;
+          padding: 1rem 1.5rem;
+          color: #fff;
+          cursor: pointer;
+        }
+        .success-message {
+          text-align: center;
+          padding: 2rem;
+        }
+        .success-icon {
+          font-size: 4rem;
+          margin-bottom: 1rem;
+        }
+        .success-text {
+          font-size: 1.5rem;
+          color: #22c55e;
+          font-weight: bold;
+        }
+      `}</style>
+
+      <div className="kiosk-container">
+        <div className="kiosk-header">
+          <h1 className="kiosk-event-name">{display.event.name}</h1>
+          <div className="kiosk-qr">
+            <QRCodeSVG value={display.qr_join_url} size={120} />
+            <p className="kiosk-qr-label">Scan to request from phone</p>
+          </div>
+        </div>
+
+        <div className="kiosk-main">
+          <div className="now-playing-section">
+            <div className="now-playing-label">Now Playing</div>
+            <div className="now-playing-content">
+              {display.now_playing ? (
+                <>
+                  {display.now_playing.artwork_url ? (
+                    <img
+                      src={display.now_playing.artwork_url}
+                      alt={display.now_playing.title}
+                      className="now-playing-art"
+                    />
+                  ) : (
+                    <div className="now-playing-placeholder">🎵</div>
+                  )}
+                  <h2 className="now-playing-title">{display.now_playing.title}</h2>
+                  <p className="now-playing-artist">{display.now_playing.artist}</p>
+                  <div className="spectrum-bars">
+                    {[...Array(12)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="spectrum-bar"
+                        style={{ animationDelay: `${i * 0.1}s` }}
+                      />
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="now-playing-placeholder">🎵</div>
+                  <p className="now-playing-artist">No song playing</p>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="queue-section">
+            <div className="queue-label">Up Next</div>
+            {display.accepted_queue.length > 0 ? (
+              <div className="queue-list">
+                {display.accepted_queue.map((item) => (
+                  <div key={item.id} className="queue-item">
+                    {item.artwork_url ? (
+                      <img src={item.artwork_url} alt={item.title} className="queue-item-art" />
+                    ) : (
+                      <div className="queue-item-placeholder">🎵</div>
+                    )}
+                    <div className="queue-item-info">
+                      <div className="queue-item-title">{item.title}</div>
+                      <div className="queue-item-artist">{item.artist}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="queue-empty">
+                <p>No songs in queue yet.</p>
+                <p>Be the first to request!</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <button className="request-button" onClick={() => setShowRequestModal(true)}>
+          🎵 Request a Song
+        </button>
+      </div>
+
+      {showRequestModal && (
+        <div className="modal-overlay" onClick={() => !submitting && closeModal()}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">
+                {submitted ? 'Success!' : selectedSong ? 'Confirm Request' : 'Request a Song'}
+              </h2>
+              {!submitted && (
+                <button className="modal-close" onClick={closeModal}>&times;</button>
+              )}
+            </div>
+
+            {submitted ? (
+              <div className="success-message">
+                <div className="success-icon">✓</div>
+                <p className="success-text">Request Submitted!</p>
+              </div>
+            ) : selectedSong ? (
+              <div className="confirm-section">
+                <div className="confirm-song">
+                  <h3 className="confirm-title">{selectedSong.title}</h3>
+                  <p className="confirm-artist">{selectedSong.artist}</p>
+                </div>
+                <input
+                  type="text"
+                  className="note-input"
+                  placeholder="Add a note (optional)"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  maxLength={500}
+                />
+                <div className="confirm-buttons">
+                  <button
+                    className="confirm-submit"
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                  >
+                    {submitting ? 'Submitting...' : 'Submit Request'}
+                  </button>
+                  <button className="confirm-back" onClick={() => setSelectedSong(null)}>
+                    Back
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <form onSubmit={handleSearch} className="search-form">
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder="Search for a song..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    autoFocus
+                  />
+                  <button type="submit" className="search-button" disabled={searching}>
+                    {searching ? '...' : 'Search'}
+                  </button>
+                </form>
+                {searchResults.length > 0 && (
+                  <div className="search-results">
+                    {searchResults.map((result, index) => (
+                      <button
+                        key={result.mbid || index}
+                        className="search-result-item"
+                        onClick={() => setSelectedSong(result)}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 500 }}>{result.title}</div>
+                          <div style={{ color: '#9ca3af', fontSize: '0.875rem' }}>{result.artist}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

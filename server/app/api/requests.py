@@ -2,8 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.request import RequestOut, RequestUpdate
+from app.services.event import set_now_playing
 from app.services.request import get_request_by_id, update_request_status
 
 router = APIRouter()
@@ -25,6 +27,11 @@ def update_request(
         raise HTTPException(status_code=403, detail="Not authorized to update this request")
 
     updated = update_request_status(db, request, update_data.status)
+
+    # Auto-set now_playing when a request is set to "playing"
+    if update_data.status == RequestStatus.PLAYING:
+        set_now_playing(db, request.event, request.id)
+
     return RequestOut(
         id=updated.id,
         event_id=updated.event_id,
@@ -32,6 +39,7 @@ def update_request(
         artist=updated.artist,
         source=updated.source,
         source_url=updated.source_url,
+        artwork_url=updated.artwork_url,
         note=updated.note,
         status=updated.status,
         created_at=updated.created_at,

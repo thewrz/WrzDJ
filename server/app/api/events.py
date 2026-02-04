@@ -129,6 +129,7 @@ def submit_request(
         note=request_data.note,
         source=request_data.source.value,
         source_url=request_data.source_url,
+        artwork_url=request_data.artwork_url,
         client_fingerprint=client_ip,
     )
 
@@ -139,6 +140,7 @@ def submit_request(
         artist=song_request.artist,
         source=song_request.source,
         source_url=song_request.source_url,
+        artwork_url=song_request.artwork_url,
         note=song_request.note,
         status=song_request.status,
         created_at=song_request.created_at,
@@ -173,6 +175,7 @@ def get_event_requests(
             artist=r.artist,
             source=r.source,
             source_url=r.source_url,
+            artwork_url=r.artwork_url,
             note=r.note,
             status=r.status,
             created_at=r.created_at,

@@ -21,6 +21,7 @@ def create_request(
     note: str | None = None,
     source: str = "manual",
     source_url: str | None = None,
+    artwork_url: str | None = None,
     client_fingerprint: str | None = None,
 ) -> tuple[Request, bool]:
     """
@@ -51,6 +52,7 @@ def create_request(
         note=note,
         source=source,
         source_url=source_url,
+        artwork_url=artwork_url,
         client_fingerprint=client_fingerprint,
         dedupe_key=dedupe_key,
     )

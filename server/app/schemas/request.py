@@ -11,6 +11,7 @@ class RequestCreate(BaseModel):
     note: str | None = Field(default=None, max_length=500)
     source: RequestSource = RequestSource.MANUAL
     source_url: str | None = Field(default=None, max_length=500)
+    artwork_url: str | None = Field(default=None, max_length=500)
 
 
 class RequestUpdate(BaseModel):
@@ -24,6 +25,7 @@ class RequestOut(BaseModel):
     artist: str
     source: str
     source_url: str | None
+    artwork_url: str | None
     note: str | None
     status: str
     created_at: datetime
