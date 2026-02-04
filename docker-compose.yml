@@ -1,3 +1,6 @@
+# Local development docker-compose
+# For full deployment, use: docker compose -f deploy/docker-compose.yml up -d --build
+
 services:
   db:
     image: postgres:16-alpine
@@ -20,24 +23,25 @@ services:
       context: ./server
       dockerfile: Dockerfile
     environment:
+      ENV: development
       DATABASE_URL: postgresql+psycopg://wrzdj:wrzdj@db:5432/wrzdj
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      MUSICBRAINZ_USER_AGENT: ${MUSICBRAINZ_USER_AGENT:-WrzDJ/0.1 (admin@wrzonance.com)}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-in-production}
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      PUBLIC_URL: http://localhost:3000
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
-    command: >
-      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
   dashboard:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
       - "3000:3000"
     depends_on:
