@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     spotify_client_id: str = ""
     spotify_client_secret: str = ""
     cors_origins: str = "*"  # Allow all origins for local dev; restrict in production via .env
+    public_url: str = ""  # Public URL for QR codes/links (e.g., https://dj.example.com)
 
     # Rate limiting
     search_rate_limit_per_minute: int = 30

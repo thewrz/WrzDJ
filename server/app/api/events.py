@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.core.config import get_settings
 from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.event import EventCreate, EventOut, EventUpdate
@@ -19,14 +20,19 @@ from app.services.event import (
 from app.services.request import create_request, get_requests_for_event
 
 router = APIRouter()
+settings = get_settings()
 
 
 def _event_to_out(event, request: Request | None = None) -> EventOut:
     """Convert Event model to EventOut schema with join_url."""
-    join_url = None
-    if request:
+    # Use configured PUBLIC_URL if set, otherwise fall back to request base_url
+    if settings.public_url:
+        base_url = settings.public_url.rstrip("/")
+    elif request:
         base_url = str(request.base_url).rstrip("/")
-        join_url = f"{base_url}/join/{event.code}"
+    else:
+        base_url = None
+    join_url = f"{base_url}/join/{event.code}" if base_url else None
     return EventOut(
         id=event.id,
         code=event.code,
