@@ -36,7 +36,7 @@ services:
       - key: SPOTIFY_CLIENT_SECRET
         sync: false # Set manually in Render dashboard
       - key: CORS_ORIGINS
-        value: https://app.wrzdj.com
+        value: https://app.wrzdj.com,https://wrzdj-web.onrender.com
       - key: PUBLIC_URL
         value: https://app.wrzdj.com
       - key: BOOTSTRAP_ADMIN_USERNAME
