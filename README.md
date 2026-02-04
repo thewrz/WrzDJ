@@ -2,7 +2,7 @@
 
 A song request system for DJs. Guests scan a QR code to join an event and submit song requests. DJs manage requests via a web dashboard.
 
-> **Note:** This is the `spotify-search` branch which uses the Spotify API for song search. For the free MusicBrainz-based search, use the `main` branch.
+> **Note:** This is the `spotify-search` branch which uses the Spotify API for song search. For the free MusicBrainz-based search, use the `muiscbrainz-search` branch.
 
 ## Quick Start (Local Development)
 
@@ -70,8 +70,8 @@ npm run dev
 ## Deployment
 
 WrzDJ supports three deployment methods. All use a **subdomain model** in production:
-- **Frontend**: `https://app.wrzdj.com`
-- **Backend**: `https://api.wrzdj.com`
+- **Frontend**: `https://app.your-domain.example`
+- **Backend**: `https://api.your-domain.example`
 
 ### Option 1: Docker Compose (Local Full Stack)
 
