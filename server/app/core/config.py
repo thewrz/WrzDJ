@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
     spotify_client_id: str = ""
     spotify_client_secret: str = ""
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "*"  # Allow all origins for local dev; restrict in production via .env
 
     # Rate limiting
     search_rate_limit_per_minute: int = 30
