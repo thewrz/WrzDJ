@@ -362,15 +362,14 @@ export default function KioskDisplayPage() {
           padding: 2rem;
         }
         .request-button {
-          position: fixed;
-          bottom: 2rem;
-          left: 50%;
-          transform: translateX(-50%);
+          margin-top: 1.5rem;
+          align-self: center;
+          flex-shrink: 0;
           background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
           color: #fff;
           border: none;
-          padding: 1.5rem 3rem;
-          font-size: 1.5rem;
+          padding: 1.25rem 2.5rem;
+          font-size: 1.25rem;
           font-weight: bold;
           border-radius: 2rem;
           cursor: pointer;
@@ -378,11 +377,11 @@ export default function KioskDisplayPage() {
           transition: transform 0.2s, box-shadow 0.2s;
         }
         .request-button:hover {
-          transform: translateX(-50%) scale(1.05);
+          transform: scale(1.05);
           box-shadow: 0 15px 50px rgba(59, 130, 246, 0.5);
         }
         .request-button:active {
-          transform: translateX(-50%) scale(0.98);
+          transform: scale(0.98);
         }
         .modal-overlay {
           position: fixed;
