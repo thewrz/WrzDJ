@@ -139,7 +139,8 @@ export default function EventQueuePage() {
     );
   }
 
-  const joinUrl = event.join_url || `${window.location.origin}/join/${event.code}`;
+  // Always use dashboard origin for join URL (not API's join_url)
+  const joinUrl = `${window.location.origin}/join/${event.code}`;
   const isExpired = new Date(event.expires_at) < new Date();
 
   return (
