@@ -1,7 +1,7 @@
 """NowPlaying model - mutable singleton per event for current track."""
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -41,7 +41,9 @@ class NowPlaying(Base):
     )
     bridge_connected: Mapped[bool] = mapped_column(Boolean, default=False)
     bridge_device_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    bridge_last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    bridge_last_seen: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Relationships
     event: Mapped["Event"] = relationship("Event", foreign_keys=[event_id])

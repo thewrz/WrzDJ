@@ -101,7 +101,12 @@ def get_event_by_code_with_status(
 
 def get_events_for_user(db: Session, user: User) -> list[Event]:
     """Get all events created by a user."""
-    return db.query(Event).filter(Event.created_by_user_id == user.id).order_by(Event.created_at.desc()).all()
+    return (
+        db.query(Event)
+        .filter(Event.created_by_user_id == user.id)
+        .order_by(Event.created_at.desc())
+        .all()
+    )
 
 
 def update_event(

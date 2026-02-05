@@ -6,7 +6,7 @@
     "dev": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint app/ lib/",
     "test": "vitest",
     "test:coverage": "vitest run --coverage"
   },
@@ -17,9 +17,18 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.3",
+    "@eslint/js": "^9.39.2",
     "@testing-library/jest-dom": "^6.4.0",
     "@types/node": "^20",
     "@types/react": "^18",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "^16.1.6",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "globals": "^17.3.0",
     "jsdom": "^24.0.0",
     "typescript": "^5",
     "vitest": "^4.0.18"

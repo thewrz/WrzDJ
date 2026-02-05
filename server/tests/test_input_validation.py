@@ -1,5 +1,4 @@
 """Tests for input validation and sanitization."""
-import pytest
 
 from app.core.validation import (
     is_safe_string,

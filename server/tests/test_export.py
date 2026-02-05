@@ -1,8 +1,6 @@
 """Unit tests for export service."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
-
-import pytest
 
 from app.services.export import (
     export_requests_to_csv,
@@ -74,7 +72,7 @@ class TestGenerateExportFilename:
         event.name = "Test"
 
         filename = generate_export_filename(event)
-        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+        date_str = datetime.now(UTC).strftime("%Y%m%d")
         assert date_str in filename
 
     def test_ends_with_csv_extension(self):

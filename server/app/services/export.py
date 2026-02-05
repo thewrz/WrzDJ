@@ -2,7 +2,7 @@
 import csv
 import io
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.models.event import Event
 from app.models.request import Request
@@ -36,7 +36,7 @@ def sanitize_filename(name: str) -> str:
 def generate_export_filename(event: Event) -> str:
     """Generate a sanitized filename for CSV export."""
     sanitized_name = sanitize_filename(event.name)
-    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    date_str = datetime.now(UTC).strftime("%Y%m%d")
     return f"{event.code}_{sanitized_name}_{date_str}.csv"
 
 

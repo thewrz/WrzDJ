@@ -20,7 +20,7 @@ export default function LoginPage() {
     try {
       await login(username, password);
       router.push('/events');
-    } catch (err) {
+    } catch (_err) {
       setError('Invalid username or password');
     } finally {
       setLoading(false);

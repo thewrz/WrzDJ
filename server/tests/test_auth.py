@@ -1,7 +1,5 @@
 """Tests for authentication endpoints."""
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 
 from app.models.user import User
 
@@ -28,7 +26,8 @@ class TestLogin:
         )
         assert response.status_code == 401
         # Error message should be generic (prevent user enumeration)
-        assert "password" in response.json()["detail"].lower() or "incorrect" in response.json()["detail"].lower()
+        detail = response.json()["detail"].lower()
+        assert "password" in detail or "incorrect" in detail
 
     def test_login_nonexistent_user(self, client: TestClient):
         """Test login with nonexistent user fails."""
@@ -38,7 +37,8 @@ class TestLogin:
         )
         assert response.status_code == 401
         # Error message should be same as wrong password (prevent user enumeration)
-        assert "password" in response.json()["detail"].lower() or "incorrect" in response.json()["detail"].lower()
+        detail = response.json()["detail"].lower()
+        assert "password" in detail or "incorrect" in detail
 
     def test_login_empty_username(self, client: TestClient):
         """Test login with empty username fails."""

@@ -10,7 +10,7 @@ from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.models.request import RequestStatus
 from app.models.user import User
-from app.schemas.event import EventCreate, EventOut, EventStatus, EventUpdate
+from app.schemas.event import EventCreate, EventOut, EventUpdate
 from app.schemas.request import RequestCreate, RequestOut
 from app.services.event import (
     EventLookupResult,
@@ -19,7 +19,6 @@ from app.services.event import (
     create_event,
     delete_event,
     get_archived_events_for_user,
-    get_event_by_code,
     get_event_by_code_for_owner,
     get_event_by_code_with_status,
     get_events_for_user,
@@ -223,12 +222,14 @@ def export_event_csv(
     safe_filename = filename.replace('"', '\\"')
     ascii_filename = quote(filename, safe="")
 
+    content_disposition = (
+        f'attachment; filename="{safe_filename}"; '
+        f"filename*=UTF-8''{ascii_filename}"
+    )
     return StreamingResponse(
         iter([csv_content]),
         media_type="text/csv",
-        headers={
-            "Content-Disposition": f'attachment; filename="{safe_filename}"; filename*=UTF-8\'\'{ascii_filename}'
-        },
+        headers={"Content-Disposition": content_disposition},
     )
 
 

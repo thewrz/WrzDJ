@@ -1,7 +1,6 @@
 """Tests for event endpoints."""
 from datetime import datetime, timedelta
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 

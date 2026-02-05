@@ -94,11 +94,18 @@ def validate_settings(settings: Settings) -> None:
         if settings.jwt_secret == "change-me-in-production":
             errors.append("JWT_SECRET must be set to a secure value in production")
         if settings.cors_origins == "*":
-            errors.append("CORS_ORIGINS should not be '*' in production - set to your frontend domain (e.g., https://app.wrzdj.com)")
+            errors.append(
+                "CORS_ORIGINS should not be '*' in production - "
+                "set to your frontend domain (e.g., https://app.wrzdj.com)"
+            )
 
     if not settings.spotify_client_id or not settings.spotify_client_secret:
         # Warning only, not fatal
-        print("WARNING: SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET not set - song search will not work", file=sys.stderr)
+        print(
+            "WARNING: SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET not set - "
+            "song search will not work",
+            file=sys.stderr,
+        )
 
     if errors:
         print("Configuration errors:", file=sys.stderr)

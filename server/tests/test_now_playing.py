@@ -119,7 +119,9 @@ class TestFuzzyMatchAcceptedRequest:
         assert result is not None
         assert result.id == accepted_request.id
 
-    def test_no_match_below_threshold(self, db: Session, test_event: Event, accepted_request: Request):
+    def test_no_match_below_threshold(
+        self, db: Session, test_event: Event, accepted_request: Request
+    ):
         """Returns None when no match above threshold."""
         result = fuzzy_match_accepted_request(
             db, test_event.id, "Sandstorm", "Darude"
@@ -204,7 +206,9 @@ class TestArchiveToHistory:
         assert history.play_order == 1
         assert history.ended_at is not None
 
-    def test_preserves_matched_request_id(self, db: Session, test_event: Event, accepted_request: Request):
+    def test_preserves_matched_request_id(
+        self, db: Session, test_event: Event, accepted_request: Request
+    ):
         """Preserves matched_request_id in history."""
         now_playing = NowPlaying(
             event_id=test_event.id,
@@ -260,7 +264,9 @@ class TestHandleNowPlayingUpdate:
         assert items[0].ended_at is not None
 
     @patch("app.services.now_playing.lookup_spotify_album_art")
-    def test_auto_matches_request(self, mock_spotify, db: Session, test_event: Event, accepted_request: Request):
+    def test_auto_matches_request(
+        self, mock_spotify, db: Session, test_event: Event, accepted_request: Request
+    ):
         """Auto-matches accepted requests."""
         mock_spotify.return_value = None
 
@@ -274,7 +280,9 @@ class TestHandleNowPlayingUpdate:
         assert result.matched_request_id == accepted_request.id
 
     @patch("app.services.now_playing.lookup_spotify_album_art")
-    def test_transitions_request_to_played(self, mock_spotify, db: Session, test_event: Event, accepted_request: Request):
+    def test_transitions_request_to_played(
+        self, mock_spotify, db: Session, test_event: Event, accepted_request: Request
+    ):
         """Transitions matched request to played when next track arrives."""
         mock_spotify.return_value = None
 
