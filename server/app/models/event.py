@@ -20,6 +20,7 @@ class Event(Base):
         ForeignKey("requests.id", ondelete="SET NULL"), nullable=True
     )
     now_playing_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     created_by: Mapped["User"] = relationship("User", back_populates="events")
     requests: Mapped[list["Request"]] = relationship(
