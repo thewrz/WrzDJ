@@ -91,7 +91,8 @@ def validate_settings(settings: Settings) -> None:
     errors = []
 
     if settings.is_production:
-        if settings.jwt_secret == "change-me-in-production":
+        # nosec B105 - We're checking if the default value is still set (a security check)
+        if settings.jwt_secret == "change-me-in-production":  # nosec B105
             errors.append("JWT_SECRET must be set to a secure value in production")
         if settings.cors_origins == "*":
             errors.append(
