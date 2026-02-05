@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api import auth, events, public, requests, search
+from app.api import auth, bridge, events, public, requests, search
 
 api_router = APIRouter()
 
@@ -16,3 +16,4 @@ api_router.include_router(events.router, prefix="/events", tags=["events"])
 api_router.include_router(requests.router, prefix="/requests", tags=["requests"])
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(public.router, prefix="/public", tags=["public"])
+api_router.include_router(bridge.router, tags=["bridge"])

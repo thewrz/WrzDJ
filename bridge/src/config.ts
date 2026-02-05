@@ -1,0 +1,48 @@
+/**
+ * Bridge configuration from environment variables.
+ */
+export const config = {
+  /** WrzDJ API base URL */
+  apiUrl: process.env.WRZDJ_API_URL || "http://localhost:8000",
+
+  /** API key for authenticating with the backend */
+  apiKey: process.env.WRZDJ_BRIDGE_API_KEY || "",
+
+  /** Event code this bridge is serving */
+  eventCode: process.env.WRZDJ_EVENT_CODE || "",
+
+  /** Minimum seconds before reporting a new track (debounce threshold) */
+  minPlaySeconds: parseInt(process.env.MIN_PLAY_SECONDS || "5", 10),
+};
+
+/**
+ * Validate required configuration at startup.
+ * Throws if required env vars are missing.
+ * Warns about insecure HTTP connections to remote servers.
+ */
+export function validateConfig(): void {
+  if (!config.apiKey) {
+    throw new Error(
+      "WRZDJ_BRIDGE_API_KEY is required. Generate one with: openssl rand -hex 32"
+    );
+  }
+  if (!config.eventCode) {
+    throw new Error(
+      "WRZDJ_EVENT_CODE is required. This is the event code from the DJ dashboard."
+    );
+  }
+
+  // Warn if using HTTP with a non-localhost URL
+  try {
+    const url = new URL(config.apiUrl);
+    const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+    if (url.protocol === "http:" && !isLocalhost) {
+      console.warn(
+        "[Bridge] WARNING: Using HTTP with a remote server. " +
+        "Consider using HTTPS for production deployments to protect API keys."
+      );
+    }
+  } catch {
+    // Invalid URL format - will fail later when making requests
+  }
+}

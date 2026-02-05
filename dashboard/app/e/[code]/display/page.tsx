@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
-import { api, ApiError, KioskDisplay, SearchResult } from '@/lib/api';
+import { api, ApiError, KioskDisplay, SearchResult, NowPlayingInfo, PlayHistoryItem } from '@/lib/api';
 
 const INACTIVITY_TIMEOUT = 60000; // 60 seconds
 
@@ -14,6 +14,10 @@ export default function KioskDisplayPage() {
   const [display, setDisplay] = useState<KioskDisplay | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ message: string; status: number } | null>(null);
+
+  // StageLinQ data
+  const [stagelinqNowPlaying, setStagelinqNowPlaying] = useState<NowPlayingInfo | null>(null);
+  const [playHistory, setPlayHistory] = useState<PlayHistoryItem[]>([]);
 
   // Request modal state
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -28,11 +32,17 @@ export default function KioskDisplayPage() {
   // Inactivity timer
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load kiosk display data
+  // Load kiosk display data and StageLinQ data
   const loadDisplay = useCallback(async (): Promise<boolean> => {
     try {
-      const data = await api.getKioskDisplay(code);
-      setDisplay(data);
+      const [kioskData, nowPlayingData, historyData] = await Promise.all([
+        api.getKioskDisplay(code),
+        api.getNowPlaying(code).catch(() => null),
+        api.getPlayHistory(code, 10).catch(() => ({ items: [], total: 0 })),
+      ]);
+      setDisplay(kioskData);
+      setStagelinqNowPlaying(nowPlayingData);
+      setPlayHistory(historyData.items);
       setError(null);
       return true; // Continue polling
     } catch (err) {
@@ -277,6 +287,22 @@ export default function KioskDisplayPage() {
           text-transform: uppercase;
           letter-spacing: 0.1em;
           margin-bottom: 1rem;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        .live-badge {
+          background: #ef4444;
+          color: #fff;
+          font-size: 0.65rem;
+          padding: 0.2rem 0.5rem;
+          border-radius: 0.25rem;
+          font-weight: bold;
+          animation: pulse-live 2s ease-in-out infinite;
+        }
+        @keyframes pulse-live {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
         }
         .now-playing-content {
           flex: 1;
@@ -404,6 +430,74 @@ export default function KioskDisplayPage() {
           color: #6b7280;
           text-align: center;
           padding: 2rem;
+        }
+        .history-section {
+          background: rgba(255,255,255,0.03);
+          border-radius: 1.5rem;
+          padding: 1.5rem;
+          margin-top: 1.5rem;
+        }
+        .history-label {
+          color: #a855f7;
+          font-size: 0.875rem;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          margin-bottom: 0.75rem;
+        }
+        .history-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        .history-item {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          background: rgba(255,255,255,0.03);
+          padding: 0.5rem;
+          border-radius: 0.5rem;
+        }
+        .history-item-art {
+          width: 36px;
+          height: 36px;
+          border-radius: 0.375rem;
+          object-fit: cover;
+        }
+        .history-item-placeholder {
+          width: 36px;
+          height: 36px;
+          border-radius: 0.375rem;
+          background: rgba(255,255,255,0.05);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.875rem;
+        }
+        .history-item-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .history-item-title {
+          color: #d1d5db;
+          font-size: 0.875rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .history-item-artist {
+          color: #6b7280;
+          font-size: 0.75rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .requested-badge {
+          background: #22c55e;
+          color: #fff;
+          font-size: 0.6rem;
+          padding: 0.15rem 0.4rem;
+          border-radius: 0.25rem;
+          white-space: nowrap;
         }
         .request-button {
           margin-top: 1.5rem;
@@ -588,61 +682,102 @@ export default function KioskDisplayPage() {
           </div>
         </div>
 
-        <div className={`kiosk-main ${display.now_playing ? '' : 'kiosk-main-single'}`}>
-          {display.now_playing && (
-            <div className="now-playing-section">
-              <div className="now-playing-label">Now Playing</div>
-              <div className="now-playing-content">
-                {display.now_playing.artwork_url ? (
-                  <img
-                    src={display.now_playing.artwork_url}
-                    alt={display.now_playing.title}
-                    className="now-playing-art"
-                  />
-                ) : (
-                  <div className="now-playing-placeholder">🎵</div>
-                )}
-                <h2 className="now-playing-title">{display.now_playing.title}</h2>
-                <p className="now-playing-artist">{display.now_playing.artist}</p>
-                <div className="spectrum-bars">
-                  {[...Array(12)].map((_, i) => (
-                    <div
-                      key={i}
-                      className="spectrum-bar"
-                      style={{ animationDelay: `${i * 0.1}s` }}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+        {/* Use StageLinQ now-playing if available, else fall back to request-based now_playing */}
+        {(() => {
+          const nowPlaying = stagelinqNowPlaying || (display.now_playing ? {
+            title: display.now_playing.title,
+            artist: display.now_playing.artist,
+            album_art_url: display.now_playing.artwork_url,
+            source: 'request',
+          } : null);
+          const isStageLinQ = stagelinqNowPlaying?.source === 'stagelinq';
 
-          <div className="queue-section">
-            <div className="queue-label">Accepted Requests</div>
-            {display.accepted_queue.length > 0 ? (
-              <div className="queue-list">
-                {display.accepted_queue.map((item) => (
-                  <div key={item.id} className="queue-item">
-                    {item.artwork_url ? (
-                      <img src={item.artwork_url} alt={item.title} className="queue-item-art" />
+          return (
+            <div className={`kiosk-main ${nowPlaying ? '' : 'kiosk-main-single'}`}>
+              {nowPlaying && (
+                <div className="now-playing-section">
+                  <div className="now-playing-label">
+                    Now Playing
+                    {isStageLinQ && <span className="live-badge">LIVE</span>}
+                  </div>
+                  <div className="now-playing-content">
+                    {nowPlaying.album_art_url ? (
+                      <img
+                        src={nowPlaying.album_art_url}
+                        alt={nowPlaying.title}
+                        className="now-playing-art"
+                      />
                     ) : (
-                      <div className="queue-item-placeholder">🎵</div>
+                      <div className="now-playing-placeholder">🎵</div>
                     )}
-                    <div className="queue-item-info">
-                      <div className="queue-item-title">{item.title}</div>
-                      <div className="queue-item-artist">{item.artist}</div>
+                    <h2 className="now-playing-title">{nowPlaying.title}</h2>
+                    <p className="now-playing-artist">{nowPlaying.artist}</p>
+                    <div className="spectrum-bars">
+                      {[...Array(12)].map((_, i) => (
+                        <div
+                          key={i}
+                          className="spectrum-bar"
+                          style={{ animationDelay: `${i * 0.1}s` }}
+                        />
+                      ))}
                     </div>
                   </div>
-                ))}
+                </div>
+              )}
+
+              <div className="queue-section">
+                <div className="queue-label">Accepted Requests</div>
+                {display.accepted_queue.length > 0 ? (
+                  <div className="queue-list">
+                    {display.accepted_queue.map((item) => (
+                      <div key={item.id} className="queue-item">
+                        {item.artwork_url ? (
+                          <img src={item.artwork_url} alt={item.title} className="queue-item-art" />
+                        ) : (
+                          <div className="queue-item-placeholder">🎵</div>
+                        )}
+                        <div className="queue-item-info">
+                          <div className="queue-item-title">{item.title}</div>
+                          <div className="queue-item-artist">{item.artist}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="queue-empty">
+                    <p>No songs in queue yet.</p>
+                    <p>Be the first to request!</p>
+                  </div>
+                )}
+
+                {/* Play History Section */}
+                {playHistory.length > 0 && (
+                  <div className="history-section">
+                    <div className="history-label">Recently Played</div>
+                    <div className="history-list">
+                      {playHistory.slice(0, 5).map((item) => (
+                        <div key={item.id} className="history-item">
+                          {item.album_art_url ? (
+                            <img src={item.album_art_url} alt={item.title} className="history-item-art" />
+                          ) : (
+                            <div className="history-item-placeholder">🎵</div>
+                          )}
+                          <div className="history-item-info">
+                            <div className="history-item-title">{item.title}</div>
+                            <div className="history-item-artist">{item.artist}</div>
+                          </div>
+                          {item.matched_request_id && (
+                            <span className="requested-badge">Requested</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="queue-empty">
-                <p>No songs in queue yet.</p>
-                <p>Be the first to request!</p>
-              </div>
-            )}
-          </div>
-        </div>
+            </div>
+          );
+        })()}
 
         <button className="request-button" onClick={() => setShowRequestModal(true)}>
           🎵 Request a Song

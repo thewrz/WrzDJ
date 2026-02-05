@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     spotify_client_id: str = ""
     spotify_client_secret: str = ""
 
+    # StageLinQ Bridge
+    bridge_api_key: str = ""
+
     # CORS - comma-separated origins or "*" for all (dev only)
     # Production: https://app.wrzdj.com
     cors_origins: str = "*"

@@ -77,6 +77,40 @@ export interface SearchResult {
   url: string | null;
 }
 
+/** StageLinQ now-playing track info */
+export interface NowPlayingInfo {
+  title: string;
+  artist: string;
+  album: string | null;
+  album_art_url: string | null;
+  spotify_uri: string | null;
+  started_at: string;
+  source: string;
+  matched_request_id: number | null;
+  bridge_connected: boolean;
+}
+
+/** Single entry in play history */
+export interface PlayHistoryItem {
+  id: number;
+  title: string;
+  artist: string;
+  album: string | null;
+  album_art_url: string | null;
+  spotify_uri: string | null;
+  matched_request_id: number | null;
+  source: string;
+  started_at: string;
+  ended_at: string | null;
+  play_order: number;
+}
+
+/** Paginated play history response */
+export interface PlayHistoryResponse {
+  items: PlayHistoryItem[];
+  total: number;
+}
+
 class ApiClient {
   private token: string | null = null;
 
@@ -243,6 +277,36 @@ class ApiClient {
   async getKioskDisplay(code: string): Promise<KioskDisplay> {
     // Public endpoint, no auth needed
     const response = await fetch(`${getApiUrl()}/api/public/events/${code}/display`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+      throw new ApiError(error.detail || 'Request failed', response.status);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get current now-playing track from StageLinQ.
+   * Returns null if no track is playing.
+   */
+  async getNowPlaying(code: string): Promise<NowPlayingInfo | null> {
+    const response = await fetch(`${getApiUrl()}/api/public/e/${code}/nowplaying`);
+    if (!response.ok) {
+      if (response.status === 404 || response.status === 410) {
+        throw new ApiError('Event not found', response.status);
+      }
+      return null;
+    }
+    const data = await response.json();
+    return data || null;
+  }
+
+  /**
+   * Get play history for an event.
+   */
+  async getPlayHistory(code: string, limit: number = 10, offset: number = 0): Promise<PlayHistoryResponse> {
+    const response = await fetch(
+      `${getApiUrl()}/api/public/e/${code}/history?limit=${limit}&offset=${offset}`
+    );
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Request failed' }));
       throw new ApiError(error.detail || 'Request failed', response.status);
