@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 class EventStatus(str, Enum):
@@ -36,3 +36,13 @@ class EventOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_serializer("created_at", "expires_at")
+    def serialize_datetime(self, dt: datetime) -> str:
+        return dt.isoformat() + "Z"
+
+    @field_serializer("archived_at")
+    def serialize_datetime_optional(self, dt: datetime | None) -> str | None:
+        if dt is None:
+            return None
+        return dt.isoformat() + "Z"
