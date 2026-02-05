@@ -53,14 +53,6 @@ def get_events_for_user(db: Session, user: User) -> list[Event]:
     return db.query(Event).filter(Event.created_by_user_id == user.id).order_by(Event.created_at.desc()).all()
 
 
-def deactivate_event(db: Session, event: Event) -> Event:
-    """Deactivate an event."""
-    event.is_active = False
-    db.commit()
-    db.refresh(event)
-    return event
-
-
 def update_event(
     db: Session,
     event: Event,
