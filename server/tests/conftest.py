@@ -1,4 +1,5 @@
 """Pytest configuration and fixtures for WrzDJ tests."""
+
 from collections.abc import Generator
 from datetime import datetime, timedelta
 
@@ -42,6 +43,7 @@ def db() -> Generator[Session, None, None]:
 @pytest.fixture(scope="function")
 def client(db: Session) -> Generator[TestClient, None, None]:
     """Create a test client with database override."""
+
     def override_get_db():
         try:
             yield db

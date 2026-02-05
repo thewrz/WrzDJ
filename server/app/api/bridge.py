@@ -1,4 +1,5 @@
 """Bridge API endpoints for StageLinQ integration."""
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from sqlalchemy.orm import Session
 
@@ -69,9 +70,7 @@ def post_bridge_status(
     Called when bridge connects/disconnects from DJ equipment.
     Rate limited to 30 requests per minute.
     """
-    success = update_bridge_status(
-        db, payload.event_code, payload.connected, payload.device_name
-    )
+    success = update_bridge_status(db, payload.event_code, payload.connected, payload.device_name)
     if not success:
         raise HTTPException(status_code=404, detail="Event not found")
     return {"status": "ok"}

@@ -1,4 +1,5 @@
 """Export service for generating CSV files from event data."""
+
 import csv
 import io
 import re
@@ -55,30 +56,34 @@ def export_requests_to_csv(event: Event, requests: list[Request]) -> str:
     writer = csv.writer(output)
 
     # Write header
-    writer.writerow([
-        "Request ID",
-        "Song Title",
-        "Artist",
-        "Status",
-        "Note",
-        "Source",
-        "Source URL",
-        "Created At",
-        "Updated At",
-    ])
+    writer.writerow(
+        [
+            "Request ID",
+            "Song Title",
+            "Artist",
+            "Status",
+            "Note",
+            "Source",
+            "Source URL",
+            "Created At",
+            "Updated At",
+        ]
+    )
 
     # Write data rows with sanitization to prevent CSV formula injection
     for req in requests:
-        writer.writerow([
-            req.id,
-            sanitize_csv_value(req.song_title),
-            sanitize_csv_value(req.artist),
-            req.status,
-            sanitize_csv_value(req.note),
-            sanitize_csv_value(req.source),
-            sanitize_csv_value(req.source_url),
-            req.created_at.isoformat() if req.created_at else "",
-            req.updated_at.isoformat() if req.updated_at else "",
-        ])
+        writer.writerow(
+            [
+                req.id,
+                sanitize_csv_value(req.song_title),
+                sanitize_csv_value(req.artist),
+                req.status,
+                sanitize_csv_value(req.note),
+                sanitize_csv_value(req.source),
+                sanitize_csv_value(req.source_url),
+                req.created_at.isoformat() if req.created_at else "",
+                req.updated_at.isoformat() if req.updated_at else "",
+            ]
+        )
 
     return output.getvalue()

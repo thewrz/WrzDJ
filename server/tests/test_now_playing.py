@@ -1,4 +1,5 @@
 """Tests for now_playing service functions."""
+
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 def utcnow() -> datetime:
     """Return current UTC datetime (timezone-aware)."""
     return datetime.now(UTC)
+
 
 from app.models.event import Event
 from app.models.now_playing import NowPlaying
@@ -105,9 +107,7 @@ class TestFuzzyMatchAcceptedRequest:
 
     def test_exact_match(self, db: Session, test_event: Event, accepted_request: Request):
         """Finds exact match in accepted requests."""
-        result = fuzzy_match_accepted_request(
-            db, test_event.id, "Blue Monday", "New Order"
-        )
+        result = fuzzy_match_accepted_request(db, test_event.id, "Blue Monday", "New Order")
         assert result is not None
         assert result.id == accepted_request.id
 
@@ -123,9 +123,7 @@ class TestFuzzyMatchAcceptedRequest:
         self, db: Session, test_event: Event, accepted_request: Request
     ):
         """Returns None when no match above threshold."""
-        result = fuzzy_match_accepted_request(
-            db, test_event.id, "Sandstorm", "Darude"
-        )
+        result = fuzzy_match_accepted_request(db, test_event.id, "Sandstorm", "Darude")
         assert result is None
 
     def test_only_matches_accepted(self, db: Session, test_event: Event):
@@ -141,9 +139,7 @@ class TestFuzzyMatchAcceptedRequest:
         db.add(playing_request)
         db.commit()
 
-        result = fuzzy_match_accepted_request(
-            db, test_event.id, "Sandstorm", "Darude"
-        )
+        result = fuzzy_match_accepted_request(db, test_event.id, "Sandstorm", "Darude")
         assert result is None  # Should not match playing request
 
 
@@ -270,9 +266,7 @@ class TestHandleNowPlayingUpdate:
         """Auto-matches accepted requests."""
         mock_spotify.return_value = None
 
-        result = handle_now_playing_update(
-            db, "TEST01", "Blue Monday", "New Order"
-        )
+        result = handle_now_playing_update(db, "TEST01", "Blue Monday", "New Order")
 
         # Check request was matched
         db.refresh(accepted_request)

@@ -1,4 +1,5 @@
 """Tests for event endpoints."""
+
 from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
@@ -94,9 +95,7 @@ class TestGetEvent:
 class TestUpdateEvent:
     """Tests for PATCH /api/events/{code} endpoint."""
 
-    def test_update_event_name(
-        self, client: TestClient, auth_headers: dict, test_event: Event
-    ):
+    def test_update_event_name(self, client: TestClient, auth_headers: dict, test_event: Event):
         """Test updating event name."""
         response = client.patch(
             f"/api/events/{test_event.code}",
@@ -106,9 +105,7 @@ class TestUpdateEvent:
         assert response.status_code == 200
         assert response.json()["name"] == "Updated Name"
 
-    def test_update_event_expiry(
-        self, client: TestClient, auth_headers: dict, test_event: Event
-    ):
+    def test_update_event_expiry(self, client: TestClient, auth_headers: dict, test_event: Event):
         """Test updating event expiry."""
         new_expiry = (datetime.utcnow() + timedelta(hours=12)).isoformat()
         response = client.patch(
@@ -161,9 +158,7 @@ class TestDeleteEvent:
 class TestExpiredEvents:
     """Tests for expired event handling with 410 Gone status."""
 
-    def test_get_expired_event_returns_410(
-        self, client: TestClient, db: Session, test_user: User
-    ):
+    def test_get_expired_event_returns_410(self, client: TestClient, db: Session, test_user: User):
         """Test that getting an expired event returns 410 Gone."""
         # Create an expired event
         expired_event = Event(
@@ -235,9 +230,7 @@ class TestExpiredEvents:
         assert response.status_code == 410
         assert response.json()["detail"] == "Event has expired"
 
-    def test_404_vs_410_distinction(
-        self, client: TestClient, db: Session, test_user: User
-    ):
+    def test_404_vs_410_distinction(self, client: TestClient, db: Session, test_user: User):
         """Test that 404 is for not found and 410 is for expired."""
         # Non-existent event should be 404
         response = client.get("/api/events/NOEXST")
@@ -262,9 +255,7 @@ class TestExpiredEvents:
 class TestArchiveEvents:
     """Tests for event archiving functionality."""
 
-    def test_archive_event_success(
-        self, client: TestClient, auth_headers: dict, test_event: Event
-    ):
+    def test_archive_event_success(self, client: TestClient, auth_headers: dict, test_event: Event):
         """Test archiving an event."""
         response = client.post(
             f"/api/events/{test_event.code}/archive",

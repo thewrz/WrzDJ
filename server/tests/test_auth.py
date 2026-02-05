@@ -1,4 +1,5 @@
 """Tests for authentication endpoints."""
+
 from fastapi.testclient import TestClient
 
 from app.models.user import User

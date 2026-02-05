@@ -1,4 +1,5 @@
 """Bootstrap script to create initial admin user if configured."""
+
 import sys
 
 from app.core.config import get_settings
@@ -22,9 +23,7 @@ def bootstrap_admin() -> None:
             print(f"Bootstrap: {user_count} user(s) already exist, skipping.")
             return
 
-        user = create_user(
-            db, settings.bootstrap_admin_username, settings.bootstrap_admin_password
-        )
+        user = create_user(db, settings.bootstrap_admin_username, settings.bootstrap_admin_password)
         print(f"Bootstrap: Created admin user '{user.username}' with ID {user.id}")
     finally:
         db.close()

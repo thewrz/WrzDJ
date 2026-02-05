@@ -1,4 +1,5 @@
 """API key authentication for StageLinQ bridge service."""
+
 import logging
 import secrets
 

@@ -1,4 +1,5 @@
 """NowPlaying model - mutable singleton per event for current track."""
+
 from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String

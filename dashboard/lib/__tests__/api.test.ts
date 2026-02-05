@@ -57,7 +57,8 @@ describe('ApiClient', () => {
       expect(events[0].code).toBe('ABC123');
 
       const [, options] = mockFetch.mock.calls[0];
-      expect(options.headers['Authorization']).toBe('Bearer test-token');
+      // Headers is a Headers object, use .get() to retrieve values
+      expect(options.headers.get('Authorization')).toBe('Bearer test-token');
     });
   });
 

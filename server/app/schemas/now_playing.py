@@ -1,4 +1,5 @@
 """Schemas for StageLinQ now-playing and play history."""
+
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_serializer

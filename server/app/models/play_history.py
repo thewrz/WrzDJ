@@ -1,4 +1,5 @@
 """PlayHistory model - append-only log of all tracks played during an event."""
+
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String
@@ -16,9 +17,7 @@ class PlayHistory(Base):
     __tablename__ = "play_history"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    event_id: Mapped[int] = mapped_column(
-        ForeignKey("events.id", ondelete="CASCADE"), index=True
-    )
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
     title: Mapped[str] = mapped_column(String(255))
     artist: Mapped[str] = mapped_column(String(255))
     album: Mapped[str | None] = mapped_column(String(255), nullable=True)

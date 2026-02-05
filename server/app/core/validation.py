@@ -1,4 +1,5 @@
 """Input validation and sanitization utilities."""
+
 import re
 import unicodedata
 

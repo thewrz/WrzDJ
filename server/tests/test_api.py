@@ -1,4 +1,5 @@
 """Basic API tests."""
+
 from fastapi.testclient import TestClient
 
 

@@ -1,4 +1,5 @@
 """Public API endpoints for kiosk display (no authentication required)."""
+
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -60,10 +61,7 @@ def get_kiosk_display(
     qr_join_url = f"{base_url}/join/{event.code}"
 
     # Get accepted requests (status = 'accepted') ordered by updated_at
-    accepted_requests = [
-        r for r in event.requests
-        if r.status == RequestStatus.ACCEPTED.value
-    ]
+    accepted_requests = [r for r in event.requests if r.status == RequestStatus.ACCEPTED.value]
     accepted_requests.sort(key=lambda r: r.updated_at)
 
     accepted_queue = [

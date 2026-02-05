@@ -223,8 +223,7 @@ def export_event_csv(
     ascii_filename = quote(filename, safe="")
 
     content_disposition = (
-        f'attachment; filename="{safe_filename}"; '
-        f"filename*=UTF-8''{ascii_filename}"
+        f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{ascii_filename}"
     )
     return StreamingResponse(
         iter([csv_content]),

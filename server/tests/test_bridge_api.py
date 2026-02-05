@@ -1,4 +1,5 @@
 """Integration tests for bridge API endpoints."""
+
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 def utcnow() -> datetime:
     """Return current UTC datetime (timezone-aware)."""
     return datetime.now(UTC)
+
 
 from app.models.event import Event
 from app.models.now_playing import NowPlaying

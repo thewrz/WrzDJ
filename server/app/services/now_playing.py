@@ -1,4 +1,5 @@
 """Service for StageLinQ now-playing and play history management."""
+
 import logging
 from datetime import UTC, datetime
 from difflib import SequenceMatcher
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 def utcnow() -> datetime:
     """Return current UTC datetime (timezone-aware)."""
     return datetime.now(UTC)
+
 
 from app.models.event import Event
 from app.models.now_playing import NowPlaying
@@ -156,11 +158,7 @@ def handle_now_playing_update(
 
         # Step 2: Transition matched request from "playing" → "played"
         if existing.matched_request_id:
-            request = (
-                db.query(Request)
-                .filter(Request.id == existing.matched_request_id)
-                .first()
-            )
+            request = db.query(Request).filter(Request.id == existing.matched_request_id).first()
             if request and request.status == RequestStatus.PLAYING.value:
                 request.status = RequestStatus.PLAYED.value
                 request.updated_at = utcnow()
@@ -255,11 +253,7 @@ def clear_now_playing(db: Session, event_code: str) -> bool:
 
         # Mark matched request as played if exists
         if existing.matched_request_id:
-            request = (
-                db.query(Request)
-                .filter(Request.id == existing.matched_request_id)
-                .first()
-            )
+            request = db.query(Request).filter(Request.id == existing.matched_request_id).first()
             if request and request.status == RequestStatus.PLAYING.value:
                 request.status = RequestStatus.PLAYED.value
                 request.updated_at = utcnow()
@@ -285,10 +279,5 @@ def get_play_history(
     """Get play history for an event, newest first."""
     query = db.query(PlayHistory).filter(PlayHistory.event_id == event_id)
     total = query.count()
-    items = (
-        query.order_by(PlayHistory.play_order.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    items = query.order_by(PlayHistory.play_order.desc()).offset(offset).limit(limit).all()
     return items, total

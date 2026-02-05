@@ -1,4 +1,5 @@
 """Tests for song request endpoints."""
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 

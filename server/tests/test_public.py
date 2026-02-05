@@ -1,4 +1,5 @@
 """Tests for public/kiosk endpoints."""
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -26,9 +27,7 @@ class TestKioskDisplay:
         response = client.get("/api/public/events/NOTFOUND/display")
         assert response.status_code == 404
 
-    def test_kiosk_display_accepted_queue(
-        self, client: TestClient, test_event: Event, db: Session
-    ):
+    def test_kiosk_display_accepted_queue(self, client: TestClient, test_event: Event, db: Session):
         """Test that accepted requests appear in queue."""
         # Create an accepted request
         request = Request(
@@ -49,9 +48,7 @@ class TestKioskDisplay:
         assert data["accepted_queue"][0]["title"] == "Accepted Song"
         assert data["accepted_queue"][0]["artist"] == "Queue Artist"
 
-    def test_kiosk_display_now_playing(
-        self, client: TestClient, test_event: Event, db: Session
-    ):
+    def test_kiosk_display_now_playing(self, client: TestClient, test_event: Event, db: Session):
         """Test that now_playing shows the current song."""
         # Create a playing request and set as now_playing
         request = Request(
