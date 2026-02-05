@@ -121,6 +121,11 @@ a {
   color: white;
 }
 
+.badge-accepted {
+  background: #8b5cf6;
+  color: white;
+}
+
 .badge-playing {
   background: #22c55e;
   color: white;

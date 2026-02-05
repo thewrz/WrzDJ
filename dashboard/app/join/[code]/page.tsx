@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { api, Event, SearchResult } from '@/lib/api';
+import { api, ApiError, Event, SearchResult } from '@/lib/api';
 
 export default function JoinEventPage() {
   const params = useParams();
@@ -10,7 +10,7 @@ export default function JoinEventPage() {
 
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<{ message: string; status: number } | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -20,6 +20,7 @@ export default function JoinEventPage() {
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   useEffect(() => {
     loadEvent();
@@ -29,8 +30,13 @@ export default function JoinEventPage() {
     try {
       const data = await api.getEvent(code);
       setEvent(data);
+      setError(null);
     } catch (err) {
-      setError('Event not found or has expired.');
+      if (err instanceof ApiError) {
+        setError({ message: err.message, status: err.status });
+      } else {
+        setError({ message: 'Event not found or has expired.', status: 0 });
+      }
     } finally {
       setLoading(false);
     }
@@ -56,12 +62,13 @@ export default function JoinEventPage() {
     if (!selectedSong) return;
 
     setSubmitting(true);
+    setSubmitError('');
     try {
       await api.submitRequest(code, selectedSong.artist, selectedSong.title, note || undefined, selectedSong.url || undefined, selectedSong.album_art || undefined);
       setSubmitted(true);
     } catch (err) {
       console.error('Submit failed:', err);
-      setError('Failed to submit request. Please try again.');
+      setSubmitError('Failed to submit request. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -84,11 +91,22 @@ export default function JoinEventPage() {
   }
 
   if (error || !event) {
+    const is410 = error?.status === 410;
+    const is404 = error?.status === 404;
+
     return (
       <div className="container" style={{ maxWidth: '500px' }}>
         <div className="card" style={{ textAlign: 'center' }}>
-          <h1 style={{ marginBottom: '1rem' }}>Oops!</h1>
-          <p style={{ color: '#9ca3af' }}>{error || 'Event not found.'}</p>
+          <h1 style={{ marginBottom: '1rem' }}>
+            {is410 ? 'Event Expired' : is404 ? 'Event Not Found' : 'Oops!'}
+          </h1>
+          <p style={{ color: '#9ca3af' }}>
+            {is410
+              ? 'This event has ended and is no longer accepting requests.'
+              : is404
+                ? 'This event does not exist.'
+                : error?.message || 'Event not found.'}
+          </p>
         </div>
       </div>
     );
@@ -146,6 +164,9 @@ export default function JoinEventPage() {
               maxLength={500}
             />
           </div>
+          {submitError && (
+            <p style={{ color: '#ef4444', marginBottom: '1rem' }}>{submitError}</p>
+          )}
           <div style={{ display: 'flex', gap: '1rem' }}>
             <button
               className="btn btn-primary"

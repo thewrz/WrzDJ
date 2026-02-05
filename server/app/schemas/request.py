@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 from app.models.request import RequestSource, RequestStatus
 
@@ -34,3 +34,7 @@ class RequestOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_datetime(self, dt: datetime) -> str:
+        return dt.isoformat() + "Z"

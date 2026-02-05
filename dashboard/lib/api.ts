@@ -1,3 +1,12 @@
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 function getApiUrl(): string {
   // Use explicit env var if set
   if (process.env.NEXT_PUBLIC_API_URL) {
@@ -19,6 +28,12 @@ export interface Event {
   expires_at: string;
   is_active: boolean;
   join_url: string | null;
+}
+
+export interface ArchivedEvent extends Event {
+  status: 'expired' | 'archived';
+  request_count: number;
+  archived_at: string | null;
 }
 
 export interface SongRequest {
@@ -91,7 +106,7 @@ class ApiClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Request failed' }));
-      throw new Error(error.detail || 'Request failed');
+      throw new ApiError(error.detail || 'Request failed', response.status);
     }
 
     return response.json();
@@ -195,12 +210,42 @@ class ApiClient {
     return this.fetch(`/api/search?q=${encodeURIComponent(query)}`);
   }
 
+  async getArchivedEvents(): Promise<ArchivedEvent[]> {
+    return this.fetch('/api/events/archived');
+  }
+
+  async exportEventCsv(code: string): Promise<void> {
+    const headers = new Headers();
+    if (this.token) {
+      headers.set('Authorization', `Bearer ${this.token}`);
+    }
+
+    const response = await fetch(`${getApiUrl()}/api/events/${code}/export/csv`, {
+      headers,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Export failed' }));
+      throw new ApiError(error.detail || 'Export failed', response.status);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const contentDisposition = response.headers.get('Content-Disposition');
+    const filenameMatch = contentDisposition?.match(/filename=([^;]+)/);
+    a.download = filenameMatch ? filenameMatch[1].replace(/"/g, '') : `${code}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   async getKioskDisplay(code: string): Promise<KioskDisplay> {
     // Public endpoint, no auth needed
     const response = await fetch(`${getApiUrl()}/api/public/events/${code}/display`);
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Request failed' }));
-      throw new Error(error.detail || 'Request failed');
+      throw new ApiError(error.detail || 'Request failed', response.status);
     }
     return response.json();
   }

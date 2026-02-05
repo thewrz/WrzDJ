@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
-import { api, KioskDisplay, SearchResult } from '@/lib/api';
+import { api, ApiError, KioskDisplay, SearchResult } from '@/lib/api';
 
 const INACTIVITY_TIMEOUT = 60000; // 60 seconds
 
@@ -13,7 +13,7 @@ export default function KioskDisplayPage() {
 
   const [display, setDisplay] = useState<KioskDisplay | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<{ message: string; status: number } | null>(null);
 
   // Request modal state
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -29,13 +29,23 @@ export default function KioskDisplayPage() {
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load kiosk display data
-  const loadDisplay = useCallback(async () => {
+  const loadDisplay = useCallback(async (): Promise<boolean> => {
     try {
       const data = await api.getKioskDisplay(code);
       setDisplay(data);
-      setError('');
+      setError(null);
+      return true; // Continue polling
     } catch (err) {
-      setError('Event not found or expired');
+      if (err instanceof ApiError) {
+        setError({ message: err.message, status: err.status });
+        // Stop polling on terminal errors (404, 410)
+        if (err.status === 404 || err.status === 410) {
+          return false;
+        }
+      } else {
+        setError({ message: 'Event not found or expired', status: 0 });
+      }
+      return true; // Continue polling for transient errors
     } finally {
       setLoading(false);
     }
@@ -43,9 +53,34 @@ export default function KioskDisplayPage() {
 
   // Poll for updates every 3 seconds
   useEffect(() => {
-    loadDisplay();
-    const interval = setInterval(loadDisplay, 3000);
-    return () => clearInterval(interval);
+    let intervalId: NodeJS.Timeout | null = null;
+    let stopped = false;
+
+    const poll = async () => {
+      const shouldContinue = await loadDisplay();
+      if (!shouldContinue) {
+        stopped = true;
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+      }
+    };
+
+    poll();
+
+    // Poll every 3 seconds unless stopped
+    intervalId = setInterval(() => {
+      if (!stopped) {
+        poll();
+      }
+    }, 3000);
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
   }, [loadDisplay]);
 
   // Inactivity timeout
@@ -156,11 +191,20 @@ export default function KioskDisplayPage() {
   }
 
   if (error || !display) {
+    const is410 = error?.status === 410;
+    const is404 = error?.status === 404;
+
     return (
       <div className="kiosk-container">
         <div className="kiosk-error">
-          <h1>Event Not Found</h1>
-          <p>{error || 'This event may have expired.'}</p>
+          <h1>{is410 ? 'Event Expired' : is404 ? 'Event Not Found' : 'Error'}</h1>
+          <p>
+            {is410
+              ? 'This event has ended and is no longer accepting requests.'
+              : is404
+                ? 'This event does not exist.'
+                : error?.message || 'This event may have expired.'}
+          </p>
         </div>
       </div>
     );

@@ -1,11 +1,24 @@
 import secrets
 import string
 from datetime import datetime, timedelta
+from enum import Enum
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.event import Event
+from app.models.request import Request
 from app.models.user import User
+from app.schemas.event import EventStatus
+
+
+class EventLookupResult(str, Enum):
+    """Result of looking up an event by code."""
+
+    FOUND = "found"
+    NOT_FOUND = "not_found"
+    EXPIRED = "expired"
+    ARCHIVED = "archived"
 
 
 def generate_event_code(length: int = 6) -> str:
@@ -14,6 +27,15 @@ def generate_event_code(length: int = 6) -> str:
     # Remove confusing characters
     alphabet = alphabet.replace("0", "").replace("O", "").replace("I", "").replace("1", "")
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def compute_event_status(event: Event) -> EventStatus:
+    """Compute the status of an event based on its state."""
+    if event.archived_at is not None:
+        return EventStatus.ARCHIVED
+    if event.expires_at <= datetime.utcnow() or not event.is_active:
+        return EventStatus.EXPIRED
+    return EventStatus.ACTIVE
 
 
 def create_event(db: Session, name: str, user: User, expires_hours: int = 6) -> Event:
@@ -43,22 +65,43 @@ def get_event_by_code(db: Session, code: str) -> Event | None:
             Event.code == code.upper(),
             Event.is_active == True,
             Event.expires_at > datetime.utcnow(),
+            Event.archived_at == None,
         )
         .first()
     )
 
 
+def get_event_by_code_with_status(
+    db: Session, code: str
+) -> tuple[Event | None, EventLookupResult]:
+    """
+    Get an event by code and return lookup result status.
+
+    Returns:
+        Tuple of (event, lookup_result) where lookup_result indicates
+        if the event was found, not found, expired, or archived.
+    """
+    event = (
+        db.query(Event)
+        .filter(Event.code == code.upper())
+        .first()
+    )
+
+    if not event:
+        return None, EventLookupResult.NOT_FOUND
+
+    if event.archived_at is not None:
+        return event, EventLookupResult.ARCHIVED
+
+    if event.expires_at <= datetime.utcnow() or not event.is_active:
+        return event, EventLookupResult.EXPIRED
+
+    return event, EventLookupResult.FOUND
+
+
 def get_events_for_user(db: Session, user: User) -> list[Event]:
     """Get all events created by a user."""
     return db.query(Event).filter(Event.created_by_user_id == user.id).order_by(Event.created_at.desc()).all()
-
-
-def deactivate_event(db: Session, event: Event) -> Event:
-    """Deactivate an event."""
-    event.is_active = False
-    db.commit()
-    db.refresh(event)
-    return event
 
 
 def update_event(
@@ -92,7 +135,6 @@ def get_event_by_code_for_owner(db: Session, code: str, user: User) -> Event | N
 def delete_event(db: Session, event: Event) -> None:
     """Delete an event and all its associated requests."""
     # Requests are deleted via cascade, but let's be explicit
-    from app.models.request import Request
     db.query(Request).filter(Request.event_id == event.id).delete()
     db.delete(event)
     db.commit()
@@ -105,3 +147,62 @@ def set_now_playing(db: Session, event: Event, request_id: int | None) -> Event:
     db.commit()
     db.refresh(event)
     return event
+
+
+def archive_event(db: Session, event: Event) -> Event:
+    """Archive an event by setting archived_at timestamp."""
+    event.archived_at = datetime.utcnow()
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+def unarchive_event(db: Session, event: Event) -> Event:
+    """Unarchive an event by clearing archived_at timestamp."""
+    event.archived_at = None
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+def get_archived_events_for_user(db: Session, user: User) -> list[tuple[Event, int]]:
+    """
+    Get all archived events for a user with request counts.
+
+    Returns:
+        List of (event, request_count) tuples for archived events.
+    """
+    results = (
+        db.query(Event, func.count(Request.id).label("request_count"))
+        .outerjoin(Request, Request.event_id == Event.id)
+        .filter(
+            Event.created_by_user_id == user.id,
+            Event.archived_at != None,
+        )
+        .group_by(Event.id)
+        .order_by(Event.archived_at.desc())
+        .all()
+    )
+    return [(event, count) for event, count in results]
+
+
+def get_expired_events_for_user(db: Session, user: User) -> list[tuple[Event, int]]:
+    """
+    Get all expired (but not archived) events for a user with request counts.
+
+    Returns:
+        List of (event, request_count) tuples for expired events.
+    """
+    results = (
+        db.query(Event, func.count(Request.id).label("request_count"))
+        .outerjoin(Request, Request.event_id == Event.id)
+        .filter(
+            Event.created_by_user_id == user.id,
+            Event.archived_at == None,
+            (Event.expires_at <= datetime.utcnow()) | (Event.is_active == False),
+        )
+        .group_by(Event.id)
+        .order_by(Event.expires_at.desc())
+        .all()
+    )
+    return [(event, count) for event, count in results]

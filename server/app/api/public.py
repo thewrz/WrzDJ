@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.core.config import get_settings
 from app.models.request import RequestStatus
-from app.services.event import get_event_by_code
+from app.services.event import EventLookupResult, get_event_by_code_with_status
 
 router = APIRouter()
 settings = get_settings()
@@ -41,9 +41,16 @@ def get_kiosk_display(
     db: Session = Depends(get_db),
 ) -> KioskDisplayResponse:
     """Get public kiosk display data for an event."""
-    event = get_event_by_code(db, code)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found or expired")
+    event, lookup_result = get_event_by_code_with_status(db, code)
+
+    if lookup_result == EventLookupResult.NOT_FOUND:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if lookup_result == EventLookupResult.EXPIRED:
+        raise HTTPException(status_code=410, detail="Event has expired")
+
+    if lookup_result == EventLookupResult.ARCHIVED:
+        raise HTTPException(status_code=410, detail="Event has been archived")
 
     # Build join URL using PUBLIC_URL if set, otherwise use request base
     if settings.public_url:
