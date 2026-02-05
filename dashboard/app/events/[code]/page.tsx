@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/auth';
-import { api, Event, SongRequest } from '@/lib/api';
+import { api, ApiError, Event, ArchivedEvent, SongRequest } from '@/lib/api';
 
 type StatusFilter = 'all' | 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
 
@@ -20,11 +20,15 @@ export default function EventQueuePage() {
   const params = useParams();
   const code = params.code as string;
 
-  const [event, setEvent] = useState<Event | null>(null);
+  const [event, setEvent] = useState<Event | ArchivedEvent | null>(null);
   const [requests, setRequests] = useState<SongRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [updating, setUpdating] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const [eventStatus, setEventStatus] = useState<'active' | 'expired' | 'archived'>('active');
+  const [error, setError] = useState<{ message: string; status: number } | null>(null);
 
   const [editingExpiry, setEditingExpiry] = useState(false);
   const [newExpiryDate, setNewExpiryDate] = useState('');
@@ -38,7 +42,7 @@ export default function EventQueuePage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (): Promise<boolean> => {
     try {
       const [eventData, requestsData] = await Promise.all([
         api.getEvent(code),
@@ -46,8 +50,41 @@ export default function EventQueuePage() {
       ]);
       setEvent(eventData);
       setRequests(requestsData);
+      setEventStatus('active');
+      setError(null);
+      return true; // Continue polling
     } catch (err) {
-      console.error('Failed to load data:', err);
+      if (err instanceof ApiError && err.status === 410) {
+        // Event is expired/archived - try to get from archived list
+        try {
+          const [archivedEvents, requestsData] = await Promise.all([
+            api.getArchivedEvents(),
+            api.getRequests(code), // Still works for owners
+          ]);
+          const archivedEvent = archivedEvents.find((e) => e.code === code);
+          if (archivedEvent) {
+            setEvent(archivedEvent);
+            setRequests(requestsData);
+            setEventStatus(archivedEvent.status);
+            setError(null);
+            return false; // Stop polling - event is expired
+          }
+        } catch {
+          // Fall through to error handling
+        }
+        setError({ message: err.message, status: err.status });
+        return false;
+      }
+
+      if (err instanceof ApiError) {
+        setError({ message: err.message, status: err.status });
+        if (err.status === 404) {
+          return false; // Stop polling on 404
+        }
+      } else {
+        setError({ message: 'Failed to load event', status: 0 });
+      }
+      return true; // Continue polling for transient errors
     } finally {
       setLoading(false);
     }
@@ -55,11 +92,34 @@ export default function EventQueuePage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      loadData();
+      let intervalId: NodeJS.Timeout | null = null;
+      let stopped = false;
 
-      // Poll every 3 seconds
-      const interval = setInterval(loadData, 3000);
-      return () => clearInterval(interval);
+      const poll = async () => {
+        const shouldContinue = await loadData();
+        if (!shouldContinue) {
+          stopped = true;
+          if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
+        }
+      };
+
+      poll();
+
+      // Poll every 3 seconds unless stopped
+      intervalId = setInterval(() => {
+        if (!stopped) {
+          poll();
+        }
+      }, 3000);
+
+      return () => {
+        if (intervalId) {
+          clearInterval(intervalId);
+        }
+      };
     }
   }, [isAuthenticated, loadData]);
 
@@ -112,6 +172,17 @@ export default function EventQueuePage() {
     }
   };
 
+  const handleExportCsv = async () => {
+    setExporting(true);
+    try {
+      await api.exportEventCsv(code);
+    } catch (err) {
+      console.error('Failed to export:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const filteredRequests = requests.filter((r) =>
     filter === 'all' ? true : r.status === filter
   );
@@ -141,11 +212,23 @@ export default function EventQueuePage() {
     );
   }
 
-  if (!event) {
+  if (error || !event) {
+    const is410 = error?.status === 410;
+    const is404 = error?.status === 404;
+
     return (
       <div className="container">
         <div className="card" style={{ textAlign: 'center' }}>
-          <p>Event not found or expired.</p>
+          <h2 style={{ marginBottom: '1rem' }}>
+            {is410 ? 'Event Expired' : is404 ? 'Event Not Found' : 'Error'}
+          </h2>
+          <p style={{ color: '#9ca3af', marginBottom: '1rem' }}>
+            {is410
+              ? 'This event has expired and is no longer accepting requests.'
+              : is404
+                ? 'This event does not exist.'
+                : error?.message || 'Event not found or expired.'}
+          </p>
           <Link href="/events" className="btn btn-primary" style={{ marginTop: '1rem' }}>
             Back to Events
           </Link>
@@ -156,7 +239,7 @@ export default function EventQueuePage() {
 
   // Use API's join_url if configured, otherwise use current origin
   const joinUrl = event.join_url || `${window.location.origin}/join/${event.code}`;
-  const isExpired = new Date(event.expires_at) < new Date();
+  const isExpiredOrArchived = eventStatus === 'expired' || eventStatus === 'archived';
 
   return (
     <div className="container">
@@ -167,7 +250,41 @@ export default function EventQueuePage() {
           </Link>
           <h1 style={{ marginTop: '0.5rem' }}>{event.name}</h1>
           <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>
-            {editingExpiry ? (
+            {isExpiredOrArchived ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span
+                  className="badge"
+                  style={{
+                    background: eventStatus === 'archived' ? '#6b7280' : '#ef4444',
+                    color: '#fff',
+                    padding: '0.25rem 0.5rem',
+                    borderRadius: '0.25rem',
+                    textTransform: 'uppercase',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  {eventStatus}
+                </span>
+                <span style={{ color: '#9ca3af' }}>
+                  {new Date(event.expires_at).toLocaleString()}
+                </span>
+                <button
+                  className="btn btn-sm"
+                  style={{ background: '#3b82f6', padding: '0.25rem 0.5rem' }}
+                  onClick={handleExportCsv}
+                  disabled={exporting}
+                >
+                  {exporting ? 'Exporting...' : 'Export CSV'}
+                </button>
+                <button
+                  className="btn btn-danger btn-sm"
+                  style={{ padding: '0.25rem 0.5rem' }}
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  Delete
+                </button>
+              </div>
+            ) : editingExpiry ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <span style={{ color: '#9ca3af' }}>Expires:</span>
                 <input
@@ -194,9 +311,8 @@ export default function EventQueuePage() {
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ color: isExpired ? '#ef4444' : '#9ca3af' }}>
-                  {isExpired ? 'Expired: ' : 'Expires: '}
-                  {new Date(event.expires_at).toLocaleString()}
+                <span style={{ color: '#9ca3af' }}>
+                  Expires: {new Date(event.expires_at).toLocaleString()}
                 </span>
                 <button
                   className="btn btn-sm"
@@ -217,15 +333,19 @@ export default function EventQueuePage() {
           </div>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div className="code" style={{ fontSize: '2rem', color: '#3b82f6' }}>
+          <div className="code" style={{ fontSize: '2rem', color: isExpiredOrArchived ? '#6b7280' : '#3b82f6' }}>
             {event.code}
           </div>
-          <div className="qr-container">
-            <QRCodeSVG value={joinUrl} size={150} />
-          </div>
-          <p style={{ color: '#9ca3af', fontSize: '0.75rem', marginTop: '0.5rem' }}>
-            Scan to join
-          </p>
+          {!isExpiredOrArchived && (
+            <>
+              <div className="qr-container">
+                <QRCodeSVG value={joinUrl} size={150} />
+              </div>
+              <p style={{ color: '#9ca3af', fontSize: '0.75rem', marginTop: '0.5rem' }}>
+                Scan to join
+              </p>
+            </>
+          )}
         </div>
       </div>
 
@@ -275,53 +395,55 @@ export default function EventQueuePage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <span className={`badge badge-${request.status}`}>{request.status}</span>
-                <div className="request-actions">
-                  {request.status === 'new' && (
-                    <>
+                {!isExpiredOrArchived && (
+                  <div className="request-actions">
+                    {request.status === 'new' && (
+                      <>
+                        <button
+                          className="btn btn-success btn-sm"
+                          onClick={() => updateStatus(request.id, 'accepted')}
+                          disabled={updating === request.id}
+                        >
+                          Accept
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => updateStatus(request.id, 'rejected')}
+                          disabled={updating === request.id}
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+                    {request.status === 'accepted' && (
+                      <>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => updateStatus(request.id, 'playing')}
+                          disabled={updating === request.id}
+                        >
+                          Playing
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => updateStatus(request.id, 'rejected')}
+                          disabled={updating === request.id}
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+                    {request.status === 'playing' && (
                       <button
-                        className="btn btn-success btn-sm"
-                        onClick={() => updateStatus(request.id, 'accepted')}
+                        className="btn btn-warning btn-sm"
+                        onClick={() => updateStatus(request.id, 'played')}
                         disabled={updating === request.id}
                       >
-                        Accept
+                        Played
                       </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => updateStatus(request.id, 'rejected')}
-                        disabled={updating === request.id}
-                      >
-                        Reject
-                      </button>
-                    </>
-                  )}
-                  {request.status === 'accepted' && (
-                    <>
-                      <button
-                        className="btn btn-primary btn-sm"
-                        onClick={() => updateStatus(request.id, 'playing')}
-                        disabled={updating === request.id}
-                      >
-                        Playing
-                      </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => updateStatus(request.id, 'rejected')}
-                        disabled={updating === request.id}
-                      >
-                        Reject
-                      </button>
-                    </>
-                  )}
-                  {request.status === 'playing' && (
-                    <button
-                      className="btn btn-warning btn-sm"
-                      onClick={() => updateStatus(request.id, 'played')}
-                      disabled={updating === request.id}
-                    >
-                      Played
-                    </button>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}
