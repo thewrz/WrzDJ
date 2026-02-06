@@ -753,8 +753,8 @@ export default function KioskDisplayPage() {
                   </div>
                 ) : (
                   <div className="queue-empty">
-                    <p>No songs in queue yet.</p>
-                    <p>Be the first to request!</p>
+                    <p>No songs in queue.</p>
+                    <p>Request one!</p>
                   </div>
                 )}
 
