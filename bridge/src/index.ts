@@ -29,6 +29,7 @@ import type { DeckLiveEvent } from "./deck-state.js";
 const deckManager = new DeckStateManager({
   liveThresholdSeconds: config.liveThresholdSeconds,
   pauseGraceSeconds: config.pauseGraceSeconds,
+  nowPlayingPauseSeconds: config.nowPlayingPauseSeconds,
   useFaderDetection: config.useFaderDetection,
   masterDeckPriority: config.masterDeckPriority,
 });
@@ -42,6 +43,7 @@ async function main(): Promise<void> {
   console.log(`[Bridge] Event Code: ${config.eventCode}`);
   console.log(`[Bridge] Live Threshold: ${config.liveThresholdSeconds}s`);
   console.log(`[Bridge] Pause Grace: ${config.pauseGraceSeconds}s`);
+  console.log(`[Bridge] Now Playing Pause: ${config.nowPlayingPauseSeconds}s`);
   console.log(`[Bridge] Fader Detection: ${config.useFaderDetection}`);
   console.log(`[Bridge] Master Deck Priority: ${config.masterDeckPriority}`);
 
@@ -84,7 +86,7 @@ async function main(): Promise<void> {
       currentState.track.artist !== artist;
 
     if (isNewTrack) {
-      // New track loaded - update info and start playing
+      // New track loaded - update info
       deckManager.updateTrackInfo(deckId, {
         title,
         artist,
@@ -92,31 +94,36 @@ async function main(): Promise<void> {
       });
     }
 
-    // The nowPlaying event implies the track is playing
-    // Use explicit isPlaying if provided, otherwise assume true
-    const isPlaying = status.isPlaying !== false;
-    deckManager.updatePlayState(deckId, isPlaying);
+    // Use EXPLICIT play state - don't assume true
+    // The play/playState booleans indicate actual play state
+    const isPlaying = status.play === true || status.playState === true;
+
+    // Only update play state if we have explicit info
+    if (typeof status.play === "boolean" || typeof status.playState === "boolean") {
+      deckManager.updatePlayState(deckId, isPlaying);
+    }
   });
 
-  // Handle state map events (play state, faders, master deck)
-  // Note: stagelinq v3 may emit these - if not, we fall back to timing-only detection
-  StageLinq.devices.on("stateMap", (state) => {
-    if (!state.deck) return;
+  // Handle state changed events (play state, faders, master deck)
+  // stagelinq v3 emits stateChanged for real-time state updates
+  StageLinq.devices.on("stateChanged", (status) => {
+    if (!status.deck) return;
 
-    const deckId = state.deck;
+    const deckId = status.deck;
 
     // Update play state if provided
-    if (typeof state.isPlaying === "boolean") {
-      deckManager.updatePlayState(deckId, state.isPlaying);
+    if (typeof status.play === "boolean" || typeof status.playState === "boolean") {
+      const isPlaying = status.play === true || status.playState === true;
+      deckManager.updatePlayState(deckId, isPlaying);
     }
 
     // Update fader level if provided
-    if (typeof state.faderLevel === "number") {
-      deckManager.updateFaderLevel(deckId, state.faderLevel);
+    if (typeof status.faderLevel === "number") {
+      deckManager.updateFaderLevel(deckId, status.faderLevel);
     }
 
     // Update master deck if provided
-    if (state.isMaster === true) {
+    if (status.masterStatus === true) {
       deckManager.setMasterDeck(deckId);
     }
   });
@@ -155,5 +162,6 @@ async function main(): Promise<void> {
 // Run the bridge
 main().catch((err: Error) => {
   console.error("[Bridge] Fatal error:", err.message);
+  deckManager.destroy();
   process.exit(1);
 });

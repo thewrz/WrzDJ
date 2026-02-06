@@ -32,6 +32,8 @@ export interface DeckStateManagerConfig {
   liveThresholdSeconds: number;
   /** Seconds of pause before resetting accumulated play time */
   pauseGraceSeconds: number;
+  /** Seconds current "now playing" deck must pause before switching to another */
+  nowPlayingPauseSeconds: number;
   /** Whether to require fader > 0 for live detection */
   useFaderDetection: boolean;
   /** Whether to only report from master deck */

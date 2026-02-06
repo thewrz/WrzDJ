@@ -51,6 +51,12 @@ export class DeckStateManager extends EventEmitter {
   private readonly decks: Map<string, DeckState>;
   private readonly timers: Map<string, NodeJS.Timeout>;
 
+  /** The deck currently reported as "now playing" - has priority over other decks */
+  private currentNowPlayingDeckId: string | null = null;
+
+  /** Timer for switching away from current now-playing deck after pause */
+  private nowPlayingSwitchTimer: NodeJS.Timeout | null = null;
+
   constructor(config: DeckStateManagerConfig) {
     super();
     this.config = config;
@@ -168,6 +174,11 @@ export class DeckStateManager extends EventEmitter {
       lastPauseTime: null,
     });
 
+    // If this is the current now-playing deck resuming, cancel the switch timer
+    if (deckId === this.currentNowPlayingDeckId) {
+      this.clearNowPlayingSwitchTimer();
+    }
+
     // If CUEING, start the threshold timer
     if (newState === "CUEING") {
       this.startThresholdTimer(deckId, accumulatedTime);
@@ -196,6 +207,12 @@ export class DeckStateManager extends EventEmitter {
       newState = "PLAYING";
       // Start grace period timer
       this.startGracePeriodTimer(deckId);
+
+      // If this is the current now-playing deck, start the switch timer
+      // This allows switching to another deck if this one stays paused
+      if (deckId === this.currentNowPlayingDeckId) {
+        this.startNowPlayingSwitchTimer();
+      }
     } else {
       // CUEING -> LOADED
       newState = "LOADED";
@@ -342,6 +359,7 @@ export class DeckStateManager extends EventEmitter {
 
   /**
    * Check if a track should be reported and emit event if so.
+   * Implements "now playing priority" - current now-playing deck has priority.
    */
   private checkAndReport(deckId: string): void {
     const state = this.getDeckState(deckId);
@@ -367,12 +385,28 @@ export class DeckStateManager extends EventEmitter {
       return;
     }
 
+    // Now Playing Priority: if another deck is currently "now playing" and still active,
+    // don't switch to this deck yet
+    if (this.currentNowPlayingDeckId !== null && this.currentNowPlayingDeckId !== deckId) {
+      const currentNowPlaying = this.getDeckState(this.currentNowPlayingDeckId);
+      // If current now-playing deck is still playing or only briefly paused, don't switch
+      if (currentNowPlaying.isPlaying || currentNowPlaying.state === "PLAYING") {
+        return;
+      }
+    }
+
     // All conditions met - report!
     if (state.track) {
       this.decks.set(deckId, {
         ...state,
         hasBeenReported: true,
       });
+
+      // Cancel any pending switch timer since we're now switching to this deck
+      this.clearNowPlayingSwitchTimer();
+
+      // This deck is now the "now playing" deck
+      this.currentNowPlayingDeckId = deckId;
 
       const event: DeckLiveEvent = {
         deckId,
@@ -381,6 +415,84 @@ export class DeckStateManager extends EventEmitter {
 
       this.emit("deckLive", event);
     }
+  }
+
+  /**
+   * Start the now-playing switch timer when the current now-playing deck pauses.
+   * If timer expires and another deck is playing, switch to that deck.
+   */
+  private startNowPlayingSwitchTimer(): void {
+    this.clearNowPlayingSwitchTimer();
+
+    const pauseMs = this.config.nowPlayingPauseSeconds * 1000;
+
+    this.nowPlayingSwitchTimer = setTimeout(() => {
+      this.onNowPlayingSwitchTimerExpired();
+    }, pauseMs);
+  }
+
+  /**
+   * Clear the now-playing switch timer.
+   */
+  private clearNowPlayingSwitchTimer(): void {
+    if (this.nowPlayingSwitchTimer) {
+      clearTimeout(this.nowPlayingSwitchTimer);
+      this.nowPlayingSwitchTimer = null;
+    }
+  }
+
+  /**
+   * Called when the now-playing switch timer expires.
+   * Finds another playing deck to switch to (sorted by deck ID for deterministic order).
+   */
+  private onNowPlayingSwitchTimerExpired(): void {
+    this.nowPlayingSwitchTimer = null;
+
+    // Sort deck IDs numerically for deterministic behavior
+    const sortedDeckIds = [...this.decks.keys()].sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true })
+    );
+
+    // Find another deck that is in PLAYING state and currently playing
+    for (const deckId of sortedDeckIds) {
+      if (deckId === this.currentNowPlayingDeckId) {
+        continue;
+      }
+
+      const state = this.decks.get(deckId)!;
+
+      if (state.state === "PLAYING" && state.isPlaying && !state.hasBeenReported) {
+        // Check fader if enabled
+        if (this.config.useFaderDetection && state.faderLevel === 0) {
+          continue;
+        }
+
+        // Check master deck priority if enabled
+        if (this.config.masterDeckPriority && this.hasMasterDeck() && !state.isMaster) {
+          continue;
+        }
+
+        // Found a candidate - report it
+        this.decks.set(deckId, {
+          ...state,
+          hasBeenReported: true,
+        });
+
+        this.currentNowPlayingDeckId = deckId;
+
+        if (state.track) {
+          const event: DeckLiveEvent = {
+            deckId,
+            track: { ...state.track },
+          };
+          this.emit("deckLive", event);
+        }
+        return;
+      }
+    }
+
+    // No other deck found - clear current now playing
+    this.currentNowPlayingDeckId = null;
   }
 
   /**
@@ -420,11 +532,19 @@ export class DeckStateManager extends EventEmitter {
   }
 
   /**
+   * Get the current now-playing deck ID.
+   * Exposed for testing purposes.
+   */
+  getCurrentNowPlayingDeckId(): string | null {
+    return this.currentNowPlayingDeckId;
+  }
+
+  /**
    * Clean up all resources. MUST be called when the manager is no longer needed
    * to prevent memory leaks from active timers.
    *
    * This method:
-   * - Clears all pending timers (threshold and grace period)
+   * - Clears all pending timers (threshold, grace period, and now-playing switch)
    * - Removes all event listeners
    *
    * @example
@@ -437,6 +557,7 @@ export class DeckStateManager extends EventEmitter {
       clearTimeout(timer);
     }
     this.timers.clear();
+    this.clearNowPlayingSwitchTimer();
     this.removeAllListeners();
   }
 }

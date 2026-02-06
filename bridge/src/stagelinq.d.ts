@@ -17,19 +17,34 @@ declare module "stagelinq" {
     artist?: string;
     album?: string;
     deck?: string;
+    /** Explicit play state from PlayerStatus.play */
+    play?: boolean;
+    /** Alternative play state from PlayerStatus.playState */
+    playState?: boolean;
+    /** Master deck status from PlayerStatus.masterStatus */
+    masterStatus?: boolean;
+    /** Fader level (0-1) */
+    faderLevel?: number;
+    /** @deprecated Use play or playState instead */
     isPlaying?: boolean;
   }
 
-  interface StateMapData {
+  interface StateChangedData {
     deck?: string;
-    isPlaying?: boolean;
+    /** Explicit play state */
+    play?: boolean;
+    /** Alternative play state */
+    playState?: boolean;
+    /** Fader level (0-1) */
     faderLevel?: number;
-    isMaster?: boolean;
+    /** Master deck status */
+    masterStatus?: boolean;
   }
 
   interface DevicesEmitter extends EventEmitter {
     on(event: "nowPlaying", listener: (status: NowPlayingStatus) => void): this;
-    on(event: "stateMap", listener: (state: StateMapData) => void): this;
+    on(event: "stateChanged", listener: (status: StateChangedData) => void): this;
+    on(event: "trackLoaded", listener: (status: NowPlayingStatus) => void): this;
     on(event: "ready", listener: (info: DeviceInfo) => void): this;
     on(event: "disconnect", listener: () => void): this;
   }
