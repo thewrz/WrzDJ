@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/auth';
-import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem } from '@/lib/api';
+import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem, TidalStatus, TidalSearchResult } from '@/lib/api';
 
 // Removed 'played' from filter since played tracks appear in Play History section
 type StatusFilter = 'all' | 'new' | 'accepted' | 'playing' | 'rejected';
@@ -44,6 +44,23 @@ export default function EventQueuePage() {
   const [nowPlayingHidden, setNowPlayingHidden] = useState(false);
   const [togglingNowPlaying, setTogglingNowPlaying] = useState(false);
 
+  // Tidal sync state
+  const [tidalStatus, setTidalStatus] = useState<TidalStatus | null>(null);
+  const [tidalSyncEnabled, setTidalSyncEnabled] = useState(false);
+  const [togglingTidalSync, setTogglingTidalSync] = useState(false);
+  const [syncingRequest, setSyncingRequest] = useState<number | null>(null);
+  const [showTidalPicker, setShowTidalPicker] = useState<number | null>(null);
+  const [tidalSearchQuery, setTidalSearchQuery] = useState('');
+  const [tidalSearchResults, setTidalSearchResults] = useState<TidalSearchResult[]>([]);
+  const [searchingTidal, setSearchingTidal] = useState(false);
+  const [linkingTrack, setLinkingTrack] = useState(false);
+
+  // Tidal device login state
+  const [showTidalLogin, setShowTidalLogin] = useState(false);
+  const [tidalLoginUrl, setTidalLoginUrl] = useState('');
+  const [tidalLoginCode, setTidalLoginCode] = useState('');
+  const [tidalLoginPolling, setTidalLoginPolling] = useState(false);
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
@@ -52,17 +69,20 @@ export default function EventQueuePage() {
 
   const loadData = useCallback(async (): Promise<boolean> => {
     try {
-      const [eventData, requestsData, historyData, displaySettings] = await Promise.all([
+      const [eventData, requestsData, historyData, displaySettings, tidalStatusData] = await Promise.all([
         api.getEvent(code),
         api.getRequests(code),
         api.getPlayHistory(code).catch(() => ({ items: [], total: 0 })),
         api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false })),
+        api.getTidalStatus().catch(() => ({ linked: false, user_id: null, expires_at: null })),
       ]);
       setEvent(eventData);
       setRequests(requestsData);
       setPlayHistory(historyData.items);
       setPlayHistoryTotal(historyData.total);
       setNowPlayingHidden(displaySettings.now_playing_hidden);
+      setTidalStatus(tidalStatusData);
+      setTidalSyncEnabled(eventData.tidal_sync_enabled ?? false);
       setEventStatus('active');
       setError(null);
       return true; // Continue polling
@@ -217,6 +237,137 @@ export default function EventQueuePage() {
       console.error('Failed to toggle now playing visibility:', err);
     } finally {
       setTogglingNowPlaying(false);
+    }
+  };
+
+  const handleToggleTidalSync = async () => {
+    if (!event) return;
+    setTogglingTidalSync(true);
+    try {
+      const newEnabled = !tidalSyncEnabled;
+      await api.updateTidalEventSettings(event.id, { tidal_sync_enabled: newEnabled });
+      setTidalSyncEnabled(newEnabled);
+    } catch (err) {
+      console.error('Failed to toggle Tidal sync:', err);
+    } finally {
+      setTogglingTidalSync(false);
+    }
+  };
+
+  const handleConnectTidal = async () => {
+    try {
+      const { verification_url, user_code } = await api.startTidalAuth();
+      setTidalLoginUrl(verification_url);
+      setTidalLoginCode(user_code);
+      setShowTidalLogin(true);
+      setTidalLoginPolling(true);
+
+      // Start polling for completion
+      const pollInterval = setInterval(async () => {
+        try {
+          const result = await api.checkTidalAuth();
+          if (result.complete) {
+            clearInterval(pollInterval);
+            setTidalLoginPolling(false);
+            setShowTidalLogin(false);
+            setTidalStatus({ linked: true, user_id: result.user_id || null, expires_at: null });
+          } else if (result.error) {
+            clearInterval(pollInterval);
+            setTidalLoginPolling(false);
+            alert(`Tidal login failed: ${result.error}`);
+          }
+        } catch (err) {
+          console.error('Failed to check Tidal auth:', err);
+        }
+      }, 2000);
+
+      // Stop polling after 10 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setTidalLoginPolling(false);
+      }, 10 * 60 * 1000);
+    } catch (err) {
+      console.error('Failed to start Tidal auth:', err);
+    }
+  };
+
+  const handleCancelTidalLogin = async () => {
+    try {
+      await api.cancelTidalAuth();
+    } catch (err) {
+      console.error('Failed to cancel Tidal auth:', err);
+    }
+    setShowTidalLogin(false);
+    setTidalLoginPolling(false);
+  };
+
+  const handleDisconnectTidal = async () => {
+    try {
+      await api.disconnectTidal();
+      setTidalStatus({ linked: false, user_id: null, expires_at: null });
+      setTidalSyncEnabled(false);
+    } catch (err) {
+      console.error('Failed to disconnect Tidal:', err);
+    }
+  };
+
+  const handleSyncToTidal = async (requestId: number) => {
+    setSyncingRequest(requestId);
+    try {
+      const result = await api.syncRequestToTidal(requestId);
+      // Update the request in the list
+      setRequests((prev) =>
+        prev.map((r) =>
+          r.id === requestId
+            ? { ...r, tidal_track_id: result.tidal_track_id, tidal_sync_status: result.status }
+            : r
+        )
+      );
+    } catch (err) {
+      console.error('Failed to sync to Tidal:', err);
+    } finally {
+      setSyncingRequest(null);
+    }
+  };
+
+  const handleOpenTidalPicker = (requestId: number) => {
+    const request = requests.find((r) => r.id === requestId);
+    if (request) {
+      setTidalSearchQuery(`${request.artist} ${request.song_title}`);
+      setShowTidalPicker(requestId);
+      setTidalSearchResults([]);
+    }
+  };
+
+  const handleSearchTidal = async () => {
+    if (!tidalSearchQuery.trim()) return;
+    setSearchingTidal(true);
+    try {
+      const results = await api.searchTidal(tidalSearchQuery);
+      setTidalSearchResults(results);
+    } catch (err) {
+      console.error('Failed to search Tidal:', err);
+    } finally {
+      setSearchingTidal(false);
+    }
+  };
+
+  const handleLinkTidalTrack = async (requestId: number, tidalTrackId: string) => {
+    setLinkingTrack(true);
+    try {
+      const result = await api.linkTidalTrack(requestId, tidalTrackId);
+      setRequests((prev) =>
+        prev.map((r) =>
+          r.id === requestId
+            ? { ...r, tidal_track_id: result.tidal_track_id, tidal_sync_status: result.status }
+            : r
+        )
+      );
+      setShowTidalPicker(null);
+    } catch (err) {
+      console.error('Failed to link Tidal track:', err);
+    } finally {
+      setLinkingTrack(false);
     }
   };
 
@@ -419,6 +570,63 @@ export default function EventQueuePage() {
         </div>
       )}
 
+      {/* Tidal Sync Settings */}
+      {!isExpiredOrArchived && (
+        <div
+          className="card"
+          style={{
+            marginBottom: '1rem',
+            padding: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div>
+            <span style={{ fontWeight: 500 }}>Tidal Playlist Sync</span>
+            <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
+              Auto-add accepted requests to a Tidal playlist for SC6000
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {tidalStatus?.linked ? (
+              <>
+                <span style={{ color: '#10b981', fontSize: '0.875rem' }}>
+                  Tidal Connected
+                </span>
+                <button
+                  className={`btn btn-sm ${tidalSyncEnabled ? 'btn-success' : ''}`}
+                  style={{
+                    minWidth: '100px',
+                    background: tidalSyncEnabled ? undefined : '#333',
+                  }}
+                  onClick={handleToggleTidalSync}
+                  disabled={togglingTidalSync}
+                >
+                  {togglingTidalSync ? '...' : tidalSyncEnabled ? 'Enabled' : 'Disabled'}
+                </button>
+                <button
+                  className="btn btn-sm"
+                  style={{ background: '#666', fontSize: '0.75rem' }}
+                  onClick={handleDisconnectTidal}
+                  title="Disconnect Tidal account"
+                >
+                  Disconnect
+                </button>
+              </>
+            ) : (
+              <button
+                className="btn btn-sm"
+                style={{ background: '#0066ff' }}
+                onClick={handleConnectTidal}
+              >
+                Connect Tidal
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="tabs">
         {(['all', 'new', 'accepted', 'playing', 'rejected'] as StatusFilter[]).map((status) => (
           <button
@@ -464,6 +672,66 @@ export default function EventQueuePage() {
                 </p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                {/* Tidal Sync Status */}
+                {tidalSyncEnabled && request.status === 'accepted' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {request.tidal_sync_status === 'synced' && (
+                      <span
+                        title="Synced to Tidal"
+                        style={{
+                          color: '#10b981',
+                          fontSize: '1rem',
+                          cursor: 'default',
+                        }}
+                      >
+                        T
+                      </span>
+                    )}
+                    {request.tidal_sync_status === 'pending' && (
+                      <span
+                        title="Syncing..."
+                        style={{
+                          color: '#f59e0b',
+                          fontSize: '0.875rem',
+                        }}
+                      >
+                        ...
+                      </span>
+                    )}
+                    {request.tidal_sync_status === 'not_found' && (
+                      <button
+                        className="btn btn-sm"
+                        style={{ background: '#f59e0b', padding: '0.125rem 0.375rem', fontSize: '0.75rem' }}
+                        onClick={() => handleOpenTidalPicker(request.id)}
+                        title="Track not found - click to link manually"
+                      >
+                        Link
+                      </button>
+                    )}
+                    {request.tidal_sync_status === 'error' && (
+                      <button
+                        className="btn btn-sm"
+                        style={{ background: '#ef4444', padding: '0.125rem 0.375rem', fontSize: '0.75rem' }}
+                        onClick={() => handleSyncToTidal(request.id)}
+                        disabled={syncingRequest === request.id}
+                        title="Sync failed - click to retry"
+                      >
+                        {syncingRequest === request.id ? '...' : 'Retry'}
+                      </button>
+                    )}
+                    {!request.tidal_sync_status && (
+                      <button
+                        className="btn btn-sm"
+                        style={{ background: '#0066ff', padding: '0.125rem 0.375rem', fontSize: '0.75rem' }}
+                        onClick={() => handleSyncToTidal(request.id)}
+                        disabled={syncingRequest === request.id}
+                        title="Sync to Tidal"
+                      >
+                        {syncingRequest === request.id ? '...' : 'Sync'}
+                      </button>
+                    )}
+                  </div>
+                )}
                 <span className={`badge badge-${request.status}`}>{request.status}</span>
                 {!isExpiredOrArchived && (
                   <div className="request-actions">
@@ -663,6 +931,189 @@ export default function EventQueuePage() {
                 style={{ background: '#333' }}
                 onClick={() => setShowDeleteConfirm(false)}
                 disabled={deleting}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tidal Device Login Modal */}
+      {showTidalLogin && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            className="card"
+            style={{ maxWidth: '400px', margin: '1rem', textAlign: 'center' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginBottom: '1rem' }}>Connect Tidal</h2>
+            <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>
+              Visit the link below and enter the code to connect your Tidal account:
+            </p>
+            <a
+              href={tidalLoginUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'block',
+                padding: '0.75rem',
+                background: '#0066ff',
+                color: 'white',
+                borderRadius: '0.5rem',
+                textDecoration: 'none',
+                marginBottom: '1rem',
+                fontWeight: 500,
+              }}
+            >
+              Open Tidal Login
+            </a>
+            <div
+              style={{
+                padding: '1rem',
+                background: '#1a1a1a',
+                borderRadius: '0.5rem',
+                marginBottom: '1.5rem',
+              }}
+            >
+              <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                Your code:
+              </p>
+              <p style={{ fontSize: '1.5rem', fontWeight: 'bold', letterSpacing: '0.25rem' }}>
+                {tidalLoginCode}
+              </p>
+            </div>
+            {tidalLoginPolling && (
+              <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                Waiting for authorization...
+              </p>
+            )}
+            <button
+              className="btn"
+              style={{ background: '#333' }}
+              onClick={handleCancelTidalLogin}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tidal Track Picker Modal */}
+      {showTidalPicker !== null && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => !linkingTrack && setShowTidalPicker(null)}
+        >
+          <div
+            className="card"
+            style={{ maxWidth: '500px', maxHeight: '80vh', margin: '1rem', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginBottom: '1rem' }}>Link Tidal Track</h2>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+              <input
+                type="text"
+                className="input"
+                placeholder="Search Tidal..."
+                value={tidalSearchQuery}
+                onChange={(e) => setTidalSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearchTidal()}
+                style={{ flex: 1 }}
+              />
+              <button
+                className="btn btn-primary"
+                onClick={handleSearchTidal}
+                disabled={searchingTidal}
+              >
+                {searchingTidal ? '...' : 'Search'}
+              </button>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {tidalSearchResults.length === 0 ? (
+                <p style={{ color: '#9ca3af', textAlign: 'center' }}>
+                  {searchingTidal ? 'Searching...' : 'Search for a track to link'}
+                </p>
+              ) : (
+                tidalSearchResults.map((track) => (
+                  <div
+                    key={track.track_id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.75rem',
+                      borderBottom: '1px solid #333',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => handleLinkTidalTrack(showTidalPicker, track.track_id)}
+                  >
+                    {track.cover_url ? (
+                      <img
+                        src={track.cover_url}
+                        alt={track.title}
+                        style={{ width: '48px', height: '48px', borderRadius: '4px' }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: '48px',
+                          height: '48px',
+                          borderRadius: '4px',
+                          background: '#333',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#9ca3af',
+                        }}
+                      >
+                        <span style={{ fontSize: '1.5rem' }}>T</span>
+                      </div>
+                    )}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 500 }}>{track.title}</div>
+                      <div style={{ color: '#9ca3af', fontSize: '0.875rem' }}>{track.artist}</div>
+                      {track.album && (
+                        <div style={{ color: '#6b7280', fontSize: '0.75rem' }}>{track.album}</div>
+                      )}
+                    </div>
+                    {linkingTrack && (
+                      <span style={{ color: '#9ca3af' }}>...</span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+            <div style={{ marginTop: '1rem' }}>
+              <button
+                className="btn"
+                style={{ background: '#333', width: '100%' }}
+                onClick={() => setShowTidalPicker(null)}
+                disabled={linkingTrack}
               >
                 Cancel
               </button>

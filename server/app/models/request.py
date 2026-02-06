@@ -20,6 +20,14 @@ class RequestSource(str, Enum):
     MUSICBRAINZ = "musicbrainz"
     SPOTIFY = "spotify"
     SHARE_LINK = "share_link"
+    TIDAL = "tidal"
+
+
+class TidalSyncStatus(str, Enum):
+    PENDING = "pending"
+    SYNCED = "synced"
+    NOT_FOUND = "not_found"
+    ERROR = "error"
 
 
 class Request(Base):
@@ -40,6 +48,10 @@ class Request(Base):
     )
     client_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     dedupe_key: Mapped[str] = mapped_column(String(64), index=True)
+
+    # Tidal sync tracking
+    tidal_track_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    tidal_sync_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     event: Mapped["Event"] = relationship(
         "Event", back_populates="requests", foreign_keys=[event_id]

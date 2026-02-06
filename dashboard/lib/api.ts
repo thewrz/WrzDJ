@@ -28,6 +28,9 @@ export interface Event {
   expires_at: string;
   is_active: boolean;
   join_url: string | null;
+  // Tidal sync settings
+  tidal_sync_enabled: boolean;
+  tidal_playlist_id: string | null;
 }
 
 export interface ArchivedEvent extends Event {
@@ -49,6 +52,9 @@ export interface SongRequest {
   created_at: string;
   updated_at: string;
   is_duplicate?: boolean;
+  // Tidal sync status
+  tidal_track_id: string | null;
+  tidal_sync_status: 'pending' | 'synced' | 'not_found' | 'error' | null;
 }
 
 export interface PublicRequestInfo {
@@ -115,6 +121,44 @@ export interface PlayHistoryItem {
 export interface PlayHistoryResponse {
   items: PlayHistoryItem[];
   total: number;
+}
+
+/** Tidal account status */
+export interface TidalStatus {
+  linked: boolean;
+  user_id: string | null;
+  expires_at: string | null;
+}
+
+/** Tidal OAuth URL response */
+export interface TidalAuthUrl {
+  auth_url: string;
+  state: string;
+}
+
+/** Tidal search result */
+export interface TidalSearchResult {
+  track_id: string;
+  title: string;
+  artist: string;
+  album: string | null;
+  duration_seconds: number | null;
+  cover_url: string | null;
+  tidal_url: string | null;
+}
+
+/** Tidal event settings */
+export interface TidalEventSettings {
+  tidal_sync_enabled: boolean;
+  tidal_playlist_id: string | null;
+}
+
+/** Tidal sync result */
+export interface TidalSyncResult {
+  request_id: number;
+  status: 'pending' | 'synced' | 'not_found' | 'error';
+  tidal_track_id: string | null;
+  error: string | null;
 }
 
 class ApiClient {
@@ -363,6 +407,88 @@ class ApiClient {
    */
   async getDisplaySettings(code: string): Promise<DisplaySettingsResponse> {
     return this.fetch(`/api/events/${code}/display-settings`);
+  }
+
+  // ========== Tidal Integration ==========
+
+  /**
+   * Get Tidal account status for current user.
+   */
+  async getTidalStatus(): Promise<TidalStatus> {
+    return this.fetch('/api/tidal/status');
+  }
+
+  /**
+   * Start Tidal device login flow.
+   * Returns URL and code for user to visit.
+   */
+  async startTidalAuth(): Promise<{ verification_url: string; user_code: string; message: string }> {
+    return this.fetch('/api/tidal/auth/start', { method: 'POST' });
+  }
+
+  /**
+   * Check if Tidal device login is complete.
+   */
+  async checkTidalAuth(): Promise<{ complete: boolean; pending?: boolean; error?: string; verification_url?: string; user_code?: string }> {
+    return this.fetch('/api/tidal/auth/check');
+  }
+
+  /**
+   * Cancel pending Tidal device login.
+   */
+  async cancelTidalAuth(): Promise<{ status: string; message: string }> {
+    return this.fetch('/api/tidal/auth/cancel', { method: 'POST' });
+  }
+
+  /**
+   * Disconnect Tidal account.
+   */
+  async disconnectTidal(): Promise<{ status: string; message: string }> {
+    return this.fetch('/api/tidal/disconnect', { method: 'POST' });
+  }
+
+  /**
+   * Get Tidal sync settings for an event.
+   */
+  async getTidalEventSettings(eventId: number): Promise<TidalEventSettings> {
+    return this.fetch(`/api/tidal/events/${eventId}/settings`);
+  }
+
+  /**
+   * Update Tidal sync settings for an event.
+   */
+  async updateTidalEventSettings(
+    eventId: number,
+    settings: { tidal_sync_enabled: boolean }
+  ): Promise<TidalEventSettings> {
+    return this.fetch(`/api/tidal/events/${eventId}/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  /**
+   * Search Tidal for tracks (for manual linking).
+   */
+  async searchTidal(query: string, limit: number = 10): Promise<TidalSearchResult[]> {
+    return this.fetch(`/api/tidal/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+  }
+
+  /**
+   * Manually sync a request to Tidal.
+   */
+  async syncRequestToTidal(requestId: number): Promise<TidalSyncResult> {
+    return this.fetch(`/api/tidal/requests/${requestId}/sync`, { method: 'POST' });
+  }
+
+  /**
+   * Manually link a Tidal track to a request.
+   */
+  async linkTidalTrack(requestId: number, tidalTrackId: string): Promise<TidalSyncResult> {
+    return this.fetch(`/api/tidal/requests/${requestId}/link`, {
+      method: 'POST',
+      body: JSON.stringify({ tidal_track_id: tidalTrackId }),
+    });
   }
 }
 

@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     spotify_client_id: str = ""
     spotify_client_secret: str = ""
 
+    # Tidal API (for playlist sync to SC6000)
+    tidal_client_id: str = ""
+    tidal_client_secret: str = ""
+    tidal_redirect_uri: str = ""
+
     # StageLinQ Bridge
     bridge_api_key: str = ""
 

@@ -46,6 +46,9 @@ class EventOut(BaseModel):
     status: EventStatus | None = None
     join_url: str | None = None
     request_count: int | None = None
+    # Tidal sync settings
+    tidal_sync_enabled: bool = False
+    tidal_playlist_id: str | None = None
 
     class Config:
         from_attributes = True
