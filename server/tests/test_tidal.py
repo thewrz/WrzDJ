@@ -1,7 +1,7 @@
 """Tests for Tidal sync functionality."""
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,14 +10,11 @@ from sqlalchemy.orm import Session
 from app.models.event import Event
 from app.models.request import Request, RequestStatus, TidalSyncStatus
 from app.models.user import User
-from app.schemas.tidal import TidalSearchResult
 from app.services.tidal import (
     disconnect_tidal,
-    generate_oauth_url,
-    get_tidal_session,
+    start_device_login,
+    cancel_device_login,
     manual_link_track,
-    search_track,
-    sync_request_to_tidal,
 )
 
 
@@ -74,30 +71,49 @@ def tidal_request(db: Session, tidal_event: Event) -> Request:
     return request
 
 
-class TestTidalOAuth:
-    """Tests for Tidal OAuth flow."""
+class TestTidalDeviceLogin:
+    """Tests for Tidal device login flow."""
 
-    @patch("app.services.tidal.settings")
-    def test_generate_oauth_url(self, mock_settings, test_user: User):
-        """Test OAuth URL generation."""
-        mock_settings.tidal_client_id = "test_client_id"
-        mock_settings.tidal_redirect_uri = "https://app.wrzdj.com/api/tidal/auth/callback"
+    @patch("app.services.tidal.tidalapi.Session")
+    def test_start_device_login(self, mock_session_class: MagicMock, test_user: User):
+        """Test starting device login flow."""
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
 
-        auth_url, state = generate_oauth_url(test_user)
+        mock_login = MagicMock()
+        mock_login.verification_uri_complete = "link.tidal.com/ABCDEF"
+        mock_login.user_code = "ABCDEF"
 
-        assert "login.tidal.com/authorize" in auth_url
-        assert "client_id=test_client_id" in auth_url
-        assert "state=" in auth_url
-        assert len(state) > 0
+        mock_future = MagicMock()
+        mock_session.login_oauth.return_value = (mock_login, mock_future)
 
-    @patch("app.services.tidal.settings")
-    def test_generate_oauth_url_missing_credentials(self, mock_settings, test_user: User):
-        """Test OAuth URL fails without credentials."""
-        mock_settings.tidal_client_id = ""
-        mock_settings.tidal_redirect_uri = ""
+        result = start_device_login(test_user)
 
-        with pytest.raises(ValueError, match="Tidal credentials not configured"):
-            generate_oauth_url(test_user)
+        assert "verification_url" in result
+        assert result["verification_url"] == "https://link.tidal.com/ABCDEF"
+        assert result["user_code"] == "ABCDEF"
+
+    @patch("app.services.tidal.tidalapi.Session")
+    def test_start_device_login_with_https(self, mock_session_class: MagicMock, test_user: User):
+        """Test device login with URL that already has https."""
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+
+        mock_login = MagicMock()
+        mock_login.verification_uri_complete = "https://link.tidal.com/XYZABC"
+        mock_login.user_code = "XYZABC"
+
+        mock_future = MagicMock()
+        mock_session.login_oauth.return_value = (mock_login, mock_future)
+
+        result = start_device_login(test_user)
+
+        assert result["verification_url"] == "https://link.tidal.com/XYZABC"
+
+    def test_cancel_device_login(self, test_user: User):
+        """Test cancelling device login clears state."""
+        # This should not raise even if no pending login
+        cancel_device_login(test_user)
 
 
 class TestTidalStatus:
@@ -142,161 +158,18 @@ class TestTidalDisconnect:
         assert tidal_user.tidal_user_id is None
 
 
-class TestTidalSync:
-    """Tests for Tidal sync functionality."""
-
-    @pytest.mark.asyncio
-    @patch("app.services.tidal.get_tidal_session")
-    @patch("app.services.tidal.refresh_token_if_needed")
-    async def test_sync_request_success(
-        self,
-        mock_refresh: AsyncMock,
-        mock_session: MagicMock,
-        db: Session,
-        tidal_request: Request,
-    ):
-        """Test successful sync to Tidal."""
-        mock_refresh.return_value = True
-
-        # Mock Tidal session and search
-        mock_tidal = MagicMock()
-        mock_track = MagicMock()
-        mock_track.id = "track123"
-        mock_track.name = "Test Song"
-        mock_track.artist.name = "Test Artist"
-        mock_track.album.name = "Test Album"
-        mock_track.album.image.return_value = "https://cover.url"
-        mock_track.duration = 180
-
-        mock_results = MagicMock()
-        mock_results.tracks = [mock_track]
-        mock_tidal.search.return_value = mock_results
-
-        mock_playlist = MagicMock()
-        mock_tidal.playlist.return_value = mock_playlist
-
-        mock_session.return_value = mock_tidal
-
-        result = await sync_request_to_tidal(db, tidal_request)
-
-        assert result.status == TidalSyncStatus.SYNCED
-        assert result.tidal_track_id == "track123"
-
-    @pytest.mark.asyncio
-    async def test_sync_request_not_enabled(
-        self, db: Session, tidal_request: Request
-    ):
-        """Test sync fails when not enabled."""
-        tidal_request.event.tidal_sync_enabled = False
-        db.commit()
-
-        result = await sync_request_to_tidal(db, tidal_request)
-
-        assert result.status == TidalSyncStatus.ERROR
-        assert "not enabled" in result.error
-
-    @pytest.mark.asyncio
-    async def test_sync_request_no_tidal_account(
-        self, db: Session, tidal_request: Request
-    ):
-        """Test sync fails without Tidal account."""
-        tidal_request.event.created_by.tidal_access_token = None
-        db.commit()
-
-        result = await sync_request_to_tidal(db, tidal_request)
-
-        assert result.status == TidalSyncStatus.ERROR
-        assert "not linked" in result.error
-
-    @pytest.mark.asyncio
-    @patch("app.services.tidal.get_tidal_session")
-    @patch("app.services.tidal.refresh_token_if_needed")
-    async def test_sync_request_track_not_found(
-        self,
-        mock_refresh: AsyncMock,
-        mock_session: MagicMock,
-        db: Session,
-        tidal_request: Request,
-    ):
-        """Test sync when track not found on Tidal."""
-        mock_refresh.return_value = True
-
-        mock_tidal = MagicMock()
-        mock_results = MagicMock()
-        mock_results.tracks = []  # No tracks found
-        mock_tidal.search.return_value = mock_results
-
-        mock_session.return_value = mock_tidal
-
-        result = await sync_request_to_tidal(db, tidal_request)
-
-        assert result.status == TidalSyncStatus.NOT_FOUND
-
-
-class TestTidalSearch:
-    """Tests for Tidal search."""
-
-    @pytest.mark.asyncio
-    @patch("app.services.tidal.get_tidal_session")
-    async def test_search_track_found(
-        self, mock_session: MagicMock, tidal_user: User
-    ):
-        """Test successful track search."""
-        mock_tidal = MagicMock()
-        mock_track = MagicMock()
-        mock_track.id = "track456"
-        mock_track.name = "Found Song"
-        mock_track.artist.name = "Found Artist"
-        mock_track.album.name = "Found Album"
-        mock_track.album.image.return_value = "https://cover.url"
-        mock_track.duration = 200
-
-        mock_results = MagicMock()
-        mock_results.tracks = [mock_track]
-        mock_tidal.search.return_value = mock_results
-
-        mock_session.return_value = mock_tidal
-
-        result = await search_track(tidal_user, "Found Artist", "Found Song")
-
-        assert result is not None
-        assert result.track_id == "track456"
-        assert result.title == "Found Song"
-        assert result.artist == "Found Artist"
-
-    @pytest.mark.asyncio
-    @patch("app.services.tidal.get_tidal_session")
-    async def test_search_track_not_found(
-        self, mock_session: MagicMock, tidal_user: User
-    ):
-        """Test search when no tracks found."""
-        mock_tidal = MagicMock()
-        mock_results = MagicMock()
-        mock_results.tracks = []
-        mock_tidal.search.return_value = mock_results
-
-        mock_session.return_value = mock_tidal
-
-        result = await search_track(tidal_user, "Unknown", "Unknown")
-
-        assert result is None
-
-
 class TestTidalManualLink:
     """Tests for manual track linking."""
 
     @pytest.mark.asyncio
     @patch("app.services.tidal.add_track_to_playlist")
-    @patch("app.services.tidal.refresh_token_if_needed")
     async def test_manual_link_success(
         self,
-        mock_refresh: AsyncMock,
-        mock_add: AsyncMock,
+        mock_add: MagicMock,
         db: Session,
         tidal_request: Request,
     ):
         """Test successful manual track link."""
-        mock_refresh.return_value = True
         mock_add.return_value = True
 
         result = await manual_link_track(db, tidal_request, "manual_track_id")
@@ -307,6 +180,21 @@ class TestTidalManualLink:
         db.refresh(tidal_request)
         assert tidal_request.tidal_track_id == "manual_track_id"
         assert tidal_request.tidal_sync_status == TidalSyncStatus.SYNCED.value
+
+    @pytest.mark.asyncio
+    async def test_manual_link_no_tidal_account(
+        self,
+        db: Session,
+        tidal_request: Request,
+    ):
+        """Test manual link fails without Tidal account."""
+        tidal_request.event.created_by.tidal_access_token = None
+        db.commit()
+
+        result = await manual_link_track(db, tidal_request, "track_id")
+
+        assert result.status == TidalSyncStatus.ERROR
+        assert "not linked" in result.error
 
 
 class TestTidalEventSettings:

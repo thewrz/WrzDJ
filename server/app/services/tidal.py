@@ -1,296 +1,189 @@
 """Tidal API integration for playlist sync to SC6000 decks.
 
-Uses tidalapi library for OAuth and playlist management.
-Accepted song requests are synced to an event-specific Tidal playlist.
+Uses tidalapi with device code OAuth flow for full API access.
+Third-party OAuth scopes don't have access to playlist creation,
+so we use tidalapi's device login which has first-party credentials.
 """
 
-import base64
-import hashlib
 import logging
-import secrets
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
-from urllib.parse import urlencode
+from typing import Any
 
+import tidalapi
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.models.event import Event
 from app.models.request import Request, TidalSyncStatus
 from app.models.user import User
 from app.schemas.tidal import TidalSearchResult, TidalSyncResult
 
-if TYPE_CHECKING:
-    import tidalapi
-
-settings = get_settings()
 logger = logging.getLogger(__name__)
 
-# OAuth state expiration (10 minutes)
-OAUTH_STATE_TTL_MINUTES = 10
+# Device login state expiration (10 minutes)
+DEVICE_LOGIN_TTL_MINUTES = 10
 
 
 @dataclass
-class TidalOAuthState:
-    """State for OAuth PKCE flow."""
+class DeviceLoginState:
+    """State for device OAuth flow."""
 
-    state: str
-    code_verifier: str
     user_id: int
+    session: tidalapi.Session
+    login_info: Any  # tidalapi.LinkLogin
+    future: Any  # concurrent.futures.Future
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
-# In-memory state storage with TTL cleanup
-# TODO: Use Redis or database storage for multi-instance production deployments
-_oauth_states: dict[str, TidalOAuthState] = {}
+# In-memory device login storage
+_device_logins: dict[int, DeviceLoginState] = {}
+_login_lock = threading.Lock()
 
 
-def _cleanup_expired_oauth_states() -> None:
-    """Remove OAuth states older than TTL."""
-    cutoff = datetime.now(UTC) - timedelta(minutes=OAUTH_STATE_TTL_MINUTES)
-    expired = [state for state, data in _oauth_states.items() if data.created_at < cutoff]
-    for state in expired:
-        del _oauth_states[state]
+def _cleanup_expired_device_logins() -> None:
+    """Remove device logins older than TTL."""
+    cutoff = datetime.now(UTC) - timedelta(minutes=DEVICE_LOGIN_TTL_MINUTES)
+    with _login_lock:
+        expired = [uid for uid, state in _device_logins.items() if state.created_at < cutoff]
+        for uid in expired:
+            del _device_logins[uid]
 
 
-def generate_oauth_url(user: User) -> tuple[str, str]:
-    """Generate Tidal OAuth URL with PKCE (S256).
+def start_device_login(user: User) -> dict[str, str]:
+    """Start Tidal device login flow.
 
-    Returns:
-        Tuple of (auth_url, state)
+    Returns dict with verification_url and user_code for the user to visit.
     """
-    if not settings.tidal_client_id or not settings.tidal_redirect_uri:
-        raise ValueError("Tidal credentials not configured")
+    _cleanup_expired_device_logins()
 
-    # Cleanup expired states before adding new one
-    _cleanup_expired_oauth_states()
+    session = tidalapi.Session()
+    login, future = session.login_oauth()
 
-    # Generate PKCE values
-    state = secrets.token_urlsafe(32)
-    code_verifier = secrets.token_urlsafe(64)
-
-    # Generate S256 code challenge from verifier
-    code_challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(code_verifier.encode()).digest()
-    ).rstrip(b"=").decode()
-
-    # Store state for callback verification
-    _oauth_states[state] = TidalOAuthState(
-        state=state,
-        code_verifier=code_verifier,
-        user_id=user.id,
-    )
-
-    # Build OAuth URL
-    params = {
-        "response_type": "code",
-        "client_id": settings.tidal_client_id,
-        "redirect_uri": settings.tidal_redirect_uri,
-        "scope": "playlists.write playlists.read",
-        "state": state,
-        "code_challenge": code_challenge,
-        "code_challenge_method": "S256",
-    }
-
-    auth_url = f"https://login.tidal.com/authorize?{urlencode(params)}"
-    return auth_url, state
-
-
-def get_oauth_state(state: str) -> TidalOAuthState | None:
-    """Retrieve and remove OAuth state."""
-    return _oauth_states.pop(state, None)
-
-
-async def exchange_code_for_tokens(
-    db: Session,
-    code: str,
-    state: str,
-) -> User | None:
-    """Exchange OAuth code for tokens and save to user.
-
-    Args:
-        db: Database session
-        code: Authorization code from callback
-        state: State parameter from callback
-
-    Returns:
-        Updated User or None if state invalid
-    """
-    try:
-        import tidalapi
-    except ImportError:
-        logger.error("tidalapi not installed")
-        return None
-
-    oauth_state = get_oauth_state(state)
-    if not oauth_state:
-        logger.warning(f"Invalid OAuth state: {state}")
-        return None
-
-    user = db.query(User).filter(User.id == oauth_state.user_id).first()
-    if not user:
-        logger.warning(f"User not found for OAuth: {oauth_state.user_id}")
-        return None
-
-    try:
-        # Create session and exchange code
-        session = tidalapi.Session()
-        session.login_oauth_simple(
-            client_id=settings.tidal_client_id,
-            client_secret=settings.tidal_client_secret,
+    with _login_lock:
+        _device_logins[user.id] = DeviceLoginState(
+            user_id=user.id,
+            session=session,
+            login_info=login,
+            future=future,
         )
 
-        # Exchange authorization code for tokens
-        token_response = session.token_refresh(code)
+    # Ensure URL has https:// prefix (tidalapi may omit it)
+    url = login.verification_uri_complete
+    if url and not url.startswith("http"):
+        url = f"https://{url}"
 
-        # Update user with tokens
-        user.tidal_access_token = token_response.get("access_token")
-        user.tidal_refresh_token = token_response.get("refresh_token")
-        user.tidal_user_id = str(session.user.id)
+    return {
+        "verification_url": url,
+        "user_code": login.user_code,
+    }
 
-        # Calculate expiry
-        expires_in = token_response.get("expires_in", 3600)
-        user.tidal_token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
+
+def check_device_login(db: Session, user: User) -> dict[str, Any]:
+    """Check if device login is complete.
+
+    Returns status dict with 'complete' bool and optionally 'error'.
+    """
+    with _login_lock:
+        state = _device_logins.get(user.id)
+
+    if not state:
+        return {"complete": False, "error": "No pending login"}
+
+    # Check if future is done
+    if not state.future.done():
+        url = state.login_info.verification_uri_complete
+        if url and not url.startswith("http"):
+            url = f"https://{url}"
+        return {
+            "complete": False,
+            "pending": True,
+            "verification_url": url,
+            "user_code": state.login_info.user_code,
+        }
+
+    try:
+        # Future completed - check result
+        state.future.result(timeout=0)
+
+        # Login succeeded - save tokens
+        session = state.session
+        user.tidal_access_token = session.access_token
+        user.tidal_refresh_token = session.refresh_token
+        user.tidal_token_expires_at = session.expiry_time
+        user.tidal_user_id = str(session.user.id) if session.user else ""
 
         db.commit()
-        db.refresh(user)
+        logger.info(f"Tidal device login completed for user {user.id}")
 
-        logger.info(f"Tidal OAuth completed for user {user.id}")
-        return user
+        # Cleanup
+        with _login_lock:
+            _device_logins.pop(user.id, None)
+
+        return {"complete": True, "user_id": user.tidal_user_id}
 
     except Exception as e:
-        logger.error(f"Tidal OAuth exchange failed: {e}")
-        return None
+        logger.error(f"Tidal device login failed: {e}")
+        with _login_lock:
+            _device_logins.pop(user.id, None)
+        return {"complete": False, "error": str(e)}
 
 
-def get_tidal_session(user: User) -> "tidalapi.Session | None":
-    """Get authenticated Tidal session for user.
+def cancel_device_login(user: User) -> None:
+    """Cancel a pending device login."""
+    with _login_lock:
+        _device_logins.pop(user.id, None)
 
-    Returns None if user has no linked Tidal account.
-    Auto-refreshes token if expired.
-    """
-    try:
-        import tidalapi
-    except ImportError:
-        logger.error("tidalapi not installed")
-        return None
 
+def get_tidal_session(db: Session, user: User) -> tidalapi.Session | None:
+    """Get authenticated tidalapi session for user."""
     if not user.tidal_access_token:
         return None
 
     session = tidalapi.Session()
 
-    # Load existing tokens
-    session.load_oauth_session(
-        token_type="Bearer",
-        access_token=user.tidal_access_token,
-        refresh_token=user.tidal_refresh_token,
-    )
-
-    return session
-
-
-async def refresh_token_if_needed(db: Session, user: User) -> bool:
-    """Refresh Tidal token if expired.
-
-    Returns True if token is valid (refreshed or not expired).
-    """
-    if not user.tidal_access_token:
-        return False
-
-    # Check if token is expired (with 5 min buffer)
-    if user.tidal_token_expires_at:
-        buffer = timedelta(minutes=5)
-        now = datetime.now(UTC)
-        # Handle both naive and aware datetimes from database
-        expires_at = user.tidal_token_expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=UTC)
-        if now + buffer < expires_at:
-            return True  # Token still valid
-
     try:
-        import tidalapi
-    except ImportError:
-        return False
+        # Load tokens into session
+        session.load_oauth_session(
+            token_type="Bearer",
+            access_token=user.tidal_access_token,
+            refresh_token=user.tidal_refresh_token,
+            expiry_time=user.tidal_token_expires_at,
+        )
 
-    if not user.tidal_refresh_token:
-        return False
+        # Check if session needs refresh
+        if not session.check_login():
+            if session.token_refresh(user.tidal_refresh_token):
+                # Save new tokens
+                user.tidal_access_token = session.access_token
+                user.tidal_refresh_token = session.refresh_token
+                user.tidal_token_expires_at = session.expiry_time
+                db.commit()
+                logger.info(f"Tidal token refreshed for user {user.id}")
+            else:
+                logger.error("Failed to refresh Tidal session")
+                return None
 
-    try:
-        session = tidalapi.Session()
-        token_response = session.token_refresh(user.tidal_refresh_token)
-
-        user.tidal_access_token = token_response.get("access_token")
-        if "refresh_token" in token_response:
-            user.tidal_refresh_token = token_response.get("refresh_token")
-
-        expires_in = token_response.get("expires_in", 3600)
-        user.tidal_token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
-
-        db.commit()
-        logger.info(f"Tidal token refreshed for user {user.id}")
-        return True
+        return session
 
     except Exception as e:
-        logger.error(f"Tidal token refresh failed: {e}")
-        return False
-
-
-async def search_track(
-    user: User,
-    artist: str,
-    title: str,
-) -> TidalSearchResult | None:
-    """Search Tidal for a track.
-
-    Tries exact match first, then fuzzy search.
-
-    Returns:
-        Best matching track or None if not found
-    """
-    session = get_tidal_session(user)
-    if not session:
-        return None
-
-    try:
-        # Try exact search first
-        query = f"{artist} {title}"
-        results = session.search(query, models=[session.track_type], limit=10)
-
-        if not results.tracks:
-            return None
-
-        # Find best match (prefer exact artist/title match)
-        artist_lower = artist.lower()
-        title_lower = title.lower()
-
-        for track in results.tracks:
-            track_artist = track.artist.name.lower() if track.artist else ""
-            track_title = track.name.lower()
-
-            if artist_lower in track_artist and title_lower in track_title:
-                return _track_to_result(track)
-
-        # Return first result if no exact match
-        track = results.tracks[0]
-        return _track_to_result(track)
-
-    except Exception as e:
-        logger.error(f"Tidal search failed: {e}")
+        logger.error(f"Failed to load Tidal session: {e}")
         return None
 
 
-def _track_to_result(track) -> TidalSearchResult:
+def _track_to_result(track: tidalapi.Track) -> TidalSearchResult:
     """Convert tidalapi Track to TidalSearchResult."""
     cover_url = None
-    if track.album and track.album.image:
-        cover_url = track.album.image(640)
+    try:
+        if track.album:
+            cover_url = track.album.image(640)
+    except Exception:
+        pass
 
     return TidalSearchResult(
         track_id=str(track.id),
-        title=track.name,
+        title=track.name or "Unknown",
         artist=track.artist.name if track.artist else "Unknown",
         album=track.album.name if track.album else None,
         duration_seconds=track.duration if track.duration else None,
@@ -299,19 +192,53 @@ def _track_to_result(track) -> TidalSearchResult:
     )
 
 
+async def search_track(
+    db: Session,
+    user: User,
+    artist: str,
+    title: str,
+) -> TidalSearchResult | None:
+    """Search Tidal for a track."""
+    session = get_tidal_session(db, user)
+    if not session:
+        return None
+
+    try:
+        query = f"{artist} {title}"
+        results = session.search(query, models=[tidalapi.media.Track], limit=10)
+
+        tracks = results.get("tracks", [])
+        if not tracks:
+            return None
+
+        # Find best match
+        artist_lower = artist.lower()
+        title_lower = title.lower()
+
+        for track in tracks:
+            track_artist = track.artist.name.lower() if track.artist else ""
+            track_title = track.name.lower() if track.name else ""
+
+            if artist_lower in track_artist and title_lower in track_title:
+                return _track_to_result(track)
+
+        return _track_to_result(tracks[0])
+
+    except Exception as e:
+        logger.error(f"Tidal search failed: {e}")
+        return None
+
+
 async def create_event_playlist(
     db: Session,
     user: User,
     event: Event,
 ) -> str | None:
-    """Create a Tidal playlist for an event.
-
-    Returns playlist ID or None on failure.
-    """
+    """Create a Tidal playlist for an event."""
     if event.tidal_playlist_id:
         return event.tidal_playlist_id
 
-    session = get_tidal_session(user)
+    session = get_tidal_session(db, user)
     if not session:
         return None
 
@@ -333,15 +260,13 @@ async def create_event_playlist(
 
 
 async def add_track_to_playlist(
+    db: Session,
     user: User,
     playlist_id: str,
     track_id: str,
 ) -> bool:
-    """Add a track to a Tidal playlist.
-
-    Returns True on success.
-    """
-    session = get_tidal_session(user)
+    """Add a track to a Tidal playlist."""
+    session = get_tidal_session(db, user)
     if not session:
         return False
 
@@ -360,25 +285,13 @@ async def sync_request_to_tidal(
     db: Session,
     request: Request,
 ) -> TidalSyncResult:
-    """Sync an accepted request to Tidal playlist.
-
-    This is the main entry point called when a request is accepted.
-
-    Args:
-        db: Database session
-        request: The accepted request to sync
-
-    Returns:
-        TidalSyncResult with status and track info
-    """
+    """Sync an accepted request to Tidal playlist."""
     event = request.event
     user = event.created_by
 
-    # Mark as pending
     request.tidal_sync_status = TidalSyncStatus.PENDING.value
     db.commit()
 
-    # Check if sync is enabled
     if not event.tidal_sync_enabled:
         return TidalSyncResult(
             request_id=request.id,
@@ -386,7 +299,6 @@ async def sync_request_to_tidal(
             error="Tidal sync not enabled for this event",
         )
 
-    # Check if user has Tidal linked
     if not user.tidal_access_token:
         return TidalSyncResult(
             request_id=request.id,
@@ -394,17 +306,6 @@ async def sync_request_to_tidal(
             error="Tidal account not linked",
         )
 
-    # Refresh token if needed
-    if not await refresh_token_if_needed(db, user):
-        request.tidal_sync_status = TidalSyncStatus.ERROR.value
-        db.commit()
-        return TidalSyncResult(
-            request_id=request.id,
-            status=TidalSyncStatus.ERROR,
-            error="Tidal token refresh failed",
-        )
-
-    # Ensure playlist exists
     playlist_id = await create_event_playlist(db, user, event)
     if not playlist_id:
         request.tidal_sync_status = TidalSyncStatus.ERROR.value
@@ -415,8 +316,7 @@ async def sync_request_to_tidal(
             error="Failed to create Tidal playlist",
         )
 
-    # Search for track
-    track = await search_track(user, request.artist, request.song_title)
+    track = await search_track(db, user, request.artist, request.song_title)
     if not track:
         request.tidal_sync_status = TidalSyncStatus.NOT_FOUND.value
         db.commit()
@@ -426,8 +326,7 @@ async def sync_request_to_tidal(
             error="Track not found on Tidal",
         )
 
-    # Add to playlist
-    if await add_track_to_playlist(user, playlist_id, track.track_id):
+    if await add_track_to_playlist(db, user, playlist_id, track.track_id):
         request.tidal_track_id = track.track_id
         request.tidal_sync_status = TidalSyncStatus.SYNCED.value
         db.commit()
@@ -451,10 +350,7 @@ async def manual_link_track(
     request: Request,
     tidal_track_id: str,
 ) -> TidalSyncResult:
-    """Manually link a Tidal track to a request.
-
-    Used when auto-search fails and DJ manually selects the correct track.
-    """
+    """Manually link a Tidal track to a request."""
     event = request.event
     user = event.created_by
 
@@ -463,13 +359,6 @@ async def manual_link_track(
             request_id=request.id,
             status=TidalSyncStatus.ERROR,
             error="Tidal account not linked",
-        )
-
-    if not await refresh_token_if_needed(db, user):
-        return TidalSyncResult(
-            request_id=request.id,
-            status=TidalSyncStatus.ERROR,
-            error="Tidal token refresh failed",
         )
 
     playlist_id = event.tidal_playlist_id
@@ -482,7 +371,7 @@ async def manual_link_track(
                 error="Failed to create Tidal playlist",
             )
 
-    if await add_track_to_playlist(user, playlist_id, tidal_track_id):
+    if await add_track_to_playlist(db, user, playlist_id, tidal_track_id):
         request.tidal_track_id = tidal_track_id
         request.tidal_sync_status = TidalSyncStatus.SYNCED.value
         db.commit()
@@ -500,27 +389,19 @@ async def manual_link_track(
 
 
 async def search_tidal_tracks(
+    db: Session,
     user: User,
     query: str,
     limit: int = 10,
 ) -> list[TidalSearchResult]:
-    """Search Tidal for tracks (for manual linking).
-
-    Args:
-        user: User with linked Tidal account
-        query: Search query
-        limit: Max results to return
-
-    Returns:
-        List of matching tracks
-    """
-    session = get_tidal_session(user)
+    """Search Tidal for tracks."""
+    session = get_tidal_session(db, user)
     if not session:
         return []
 
     try:
-        results = session.search(query, models=[session.track_type], limit=limit)
-        return [_track_to_result(track) for track in results.tracks]
+        results = session.search(query, models=[tidalapi.media.Track], limit=limit)
+        return [_track_to_result(track) for track in results.get("tracks", [])]
 
     except Exception as e:
         logger.error(f"Tidal search failed: {e}")
@@ -534,4 +415,9 @@ def disconnect_tidal(db: Session, user: User) -> None:
     user.tidal_token_expires_at = None
     user.tidal_user_id = None
     db.commit()
+
+    # Cancel any pending device login
+    with _login_lock:
+        _device_logins.pop(user.id, None)
+
     logger.info(f"Tidal disconnected for user {user.id}")

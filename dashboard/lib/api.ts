@@ -419,10 +419,25 @@ class ApiClient {
   }
 
   /**
-   * Get Tidal OAuth authorization URL.
+   * Start Tidal device login flow.
+   * Returns URL and code for user to visit.
    */
-  async getTidalAuthUrl(): Promise<TidalAuthUrl> {
-    return this.fetch('/api/tidal/auth/url');
+  async startTidalAuth(): Promise<{ verification_url: string; user_code: string; message: string }> {
+    return this.fetch('/api/tidal/auth/start', { method: 'POST' });
+  }
+
+  /**
+   * Check if Tidal device login is complete.
+   */
+  async checkTidalAuth(): Promise<{ complete: boolean; pending?: boolean; error?: string; verification_url?: string; user_code?: string }> {
+    return this.fetch('/api/tidal/auth/check');
+  }
+
+  /**
+   * Cancel pending Tidal device login.
+   */
+  async cancelTidalAuth(): Promise<{ status: string; message: string }> {
+    return this.fetch('/api/tidal/auth/cancel', { method: 'POST' });
   }
 
   /**

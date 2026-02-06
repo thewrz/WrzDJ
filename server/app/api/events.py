@@ -82,6 +82,8 @@ def _event_to_out(
         status=event_status,
         join_url=join_url,
         request_count=request_count,
+        tidal_sync_enabled=event.tidal_sync_enabled,
+        tidal_playlist_id=event.tidal_playlist_id,
     )
 
 

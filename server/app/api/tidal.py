@@ -1,7 +1,10 @@
-"""Tidal OAuth and sync API endpoints."""
+"""Tidal OAuth and sync API endpoints.
+
+Uses device code OAuth flow for authentication since third-party OAuth
+doesn't have access to playlist creation scopes.
+"""
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
-from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -11,7 +14,6 @@ from app.models.event import Event
 from app.models.request import Request as SongRequest
 from app.models.user import User
 from app.schemas.tidal import (
-    TidalAuthUrl,
     TidalEventSettings,
     TidalEventSettingsUpdate,
     TidalManualLink,
@@ -20,12 +22,12 @@ from app.schemas.tidal import (
     TidalSyncResult,
 )
 from app.services.tidal import (
+    cancel_device_login,
+    check_device_login,
     disconnect_tidal,
-    exchange_code_for_tokens,
-    generate_oauth_url,
     manual_link_track,
-    refresh_token_if_needed,
     search_tidal_tracks,
+    start_device_login,
     sync_request_to_tidal,
 )
 
@@ -34,52 +36,45 @@ settings = get_settings()
 router = APIRouter()
 
 
-@router.get("/auth/url", response_model=TidalAuthUrl)
-def get_auth_url(
+@router.post("/auth/start")
+def start_auth(
     current_user: User = Depends(get_current_user),
-) -> TidalAuthUrl:
-    """Generate Tidal OAuth authorization URL.
+) -> dict:
+    """Start Tidal device login flow.
 
-    Returns a URL to redirect the user to for Tidal account linking.
+    Returns a URL and code for the user to visit and authorize.
+    The frontend should poll /auth/check to wait for completion.
     """
-    try:
-        auth_url, state = generate_oauth_url(current_user)
-        return TidalAuthUrl(auth_url=auth_url, state=state)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
-        )
+    result = start_device_login(current_user)
+    return {
+        "verification_url": result["verification_url"],
+        "user_code": result["user_code"],
+        "message": "Visit the URL and enter the code to link your Tidal account",
+    }
 
 
-@router.get("/auth/callback")
-async def auth_callback(
-    code: str = Query(None),
-    state: str = Query(...),
-    error: str = Query(None),
-    error_description: str = Query(None),
+@router.get("/auth/check")
+def check_auth(
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> RedirectResponse:
-    """Handle OAuth callback from Tidal.
+) -> dict:
+    """Check if device login is complete.
 
-    Exchanges authorization code for tokens and redirects to dashboard.
+    Returns:
+    - complete: true if login succeeded
+    - pending: true if still waiting for user
+    - error: error message if login failed
     """
-    # Get frontend URL for redirects
-    frontend_url = settings.public_url or "http://localhost:3000"
+    return check_device_login(db, current_user)
 
-    # Handle OAuth errors from Tidal
-    if error:
-        error_msg = error_description or error
-        return RedirectResponse(url=f"{frontend_url}/events?tidal_error={error_msg}")
 
-    if not code:
-        return RedirectResponse(url=f"{frontend_url}/events?tidal_error=missing_code")
-
-    user = await exchange_code_for_tokens(db, code, state)
-    if not user:
-        return RedirectResponse(url=f"{frontend_url}/events?tidal_error=invalid_state")
-
-    return RedirectResponse(url=f"{frontend_url}/events?tidal_connected=true")
+@router.post("/auth/cancel")
+def cancel_auth(
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Cancel pending device login."""
+    cancel_device_login(current_user)
+    return {"status": "ok", "message": "Login cancelled"}
 
 
 @router.get("/status", response_model=TidalStatus)
@@ -90,9 +85,6 @@ async def get_status(
     """Check if current user has linked Tidal account."""
     if not current_user.tidal_access_token:
         return TidalStatus(linked=False)
-
-    # Check if token needs refresh
-    await refresh_token_if_needed(db, current_user)
 
     expires_at = None
     if current_user.tidal_token_expires_at:
@@ -124,18 +116,13 @@ async def search(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[TidalSearchResult]:
-    """Search Tidal for tracks.
-
-    Used for manual track linking when auto-match fails.
-    """
+    """Search Tidal for tracks."""
     if not current_user.tidal_access_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tidal account not linked",
         )
-
-    await refresh_token_if_needed(db, current_user)
-    return await search_tidal_tracks(current_user, q, limit)
+    return await search_tidal_tracks(db, current_user, q, limit)
 
 
 @router.get("/events/{event_id}/settings", response_model=TidalEventSettings)
@@ -161,7 +148,7 @@ def get_event_settings(
 @router.put("/events/{event_id}/settings", response_model=TidalEventSettings)
 def update_event_settings(
     event_id: int,
-    settings: TidalEventSettingsUpdate,
+    settings_update: TidalEventSettingsUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> TidalEventSettings:
@@ -174,13 +161,13 @@ def update_event_settings(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     # Check if user has Tidal linked before enabling sync
-    if settings.tidal_sync_enabled and not current_user.tidal_access_token:
+    if settings_update.tidal_sync_enabled and not current_user.tidal_access_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot enable Tidal sync without linked Tidal account",
         )
 
-    event.tidal_sync_enabled = settings.tidal_sync_enabled
+    event.tidal_sync_enabled = settings_update.tidal_sync_enabled
     db.commit()
     db.refresh(event)
 
@@ -216,10 +203,7 @@ async def link_track(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> TidalSyncResult:
-    """Manually link a Tidal track to a request.
-
-    Used when auto-search fails and DJ manually selects the correct track.
-    """
+    """Manually link a Tidal track to a request."""
     song_request = db.query(SongRequest).filter(SongRequest.id == request_id).first()
     if not song_request:
         raise HTTPException(status_code=404, detail="Request not found")
