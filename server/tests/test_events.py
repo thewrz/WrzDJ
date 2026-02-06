@@ -644,9 +644,7 @@ class TestDisplaySettings:
 class TestKioskDisplayNowPlayingHidden:
     """Tests for now_playing_hidden field in kiosk display response."""
 
-    def test_kiosk_display_includes_now_playing_hidden(
-        self, client: TestClient, test_event: Event
-    ):
+    def test_kiosk_display_includes_now_playing_hidden(self, client: TestClient, test_event: Event):
         """Test that kiosk display includes now_playing_hidden field."""
         response = client.get(f"/api/public/events/{test_event.code}/display")
         assert response.status_code == 200

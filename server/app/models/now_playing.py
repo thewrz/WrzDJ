@@ -47,9 +47,7 @@ class NowPlaying(Base):
     )
     # Visibility controls for kiosk display
     manual_hide_now_playing: Mapped[bool] = mapped_column(Boolean, default=False)
-    last_shown_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_shown_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     event: Mapped["Event"] = relationship("Event", foreign_keys=[event_id])
