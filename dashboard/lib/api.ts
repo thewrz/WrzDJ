@@ -63,7 +63,13 @@ export interface KioskDisplay {
   qr_join_url: string;
   accepted_queue: PublicRequestInfo[];
   now_playing: PublicRequestInfo | null;
+  now_playing_hidden: boolean;
   updated_at: string;
+}
+
+export interface DisplaySettingsResponse {
+  status: string;
+  now_playing_hidden: boolean;
 }
 
 export interface SearchResult {
@@ -329,7 +335,7 @@ class ApiClient {
   /**
    * Get play history for an event.
    */
-  async getPlayHistory(code: string, limit: number = 10, offset: number = 0): Promise<PlayHistoryResponse> {
+  async getPlayHistory(code: string, limit: number = 100, offset: number = 0): Promise<PlayHistoryResponse> {
     const response = await fetch(
       `${getApiUrl()}/api/public/e/${code}/history?limit=${limit}&offset=${offset}`
     );
@@ -338,6 +344,25 @@ class ApiClient {
       throw new ApiError(error.detail || 'Request failed', response.status);
     }
     return response.json();
+  }
+
+  /**
+   * Set now playing visibility on kiosk display.
+   * When hidden=true, the now playing section will be hidden on the kiosk.
+   * When hidden=false, the now playing section will be shown and the 60-minute timer resets.
+   */
+  async setNowPlayingVisibility(code: string, hidden: boolean): Promise<DisplaySettingsResponse> {
+    return this.fetch(`/api/events/${code}/display-settings`, {
+      method: 'PATCH',
+      body: JSON.stringify({ now_playing_hidden: hidden }),
+    });
+  }
+
+  /**
+   * Get current display settings for an event.
+   */
+  async getDisplaySettings(code: string): Promise<DisplaySettingsResponse> {
+    return this.fetch(`/api/events/${code}/display-settings`);
   }
 }
 

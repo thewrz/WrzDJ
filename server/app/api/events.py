@@ -10,7 +10,13 @@ from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.models.request import RequestStatus
 from app.models.user import User
-from app.schemas.event import EventCreate, EventOut, EventUpdate
+from app.schemas.event import (
+    DisplaySettingsResponse,
+    DisplaySettingsUpdate,
+    EventCreate,
+    EventOut,
+    EventUpdate,
+)
 from app.schemas.request import RequestCreate, RequestOut
 from app.services.event import (
     EventLookupResult,
@@ -32,7 +38,11 @@ from app.services.export import (
     generate_export_filename,
     generate_play_history_export_filename,
 )
-from app.services.now_playing import get_play_history
+from app.services.now_playing import (
+    get_play_history,
+    is_now_playing_hidden,
+    set_now_playing_visibility,
+)
 from app.services.request import create_request, get_requests_for_event
 
 router = APIRouter()
@@ -204,6 +214,45 @@ def unarchive_event_endpoint(
 
     unarchived = unarchive_event(db, event)
     return _event_to_out(unarchived, request, include_status=True)
+
+
+@router.patch("/{code}/display-settings", response_model=DisplaySettingsResponse)
+def update_display_settings(
+    code: str,
+    settings: DisplaySettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DisplaySettingsResponse:
+    """Update display settings for an event (e.g., hide/show now playing on kiosk)."""
+    event = get_event_by_code_for_owner(db, code, current_user)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    set_now_playing_visibility(db, event.id, settings.now_playing_hidden)
+
+    return DisplaySettingsResponse(
+        status="ok",
+        now_playing_hidden=settings.now_playing_hidden,
+    )
+
+
+@router.get("/{code}/display-settings", response_model=DisplaySettingsResponse)
+def get_display_settings(
+    code: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DisplaySettingsResponse:
+    """Get current display settings for an event."""
+    event = get_event_by_code_for_owner(db, code, current_user)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    hidden = is_now_playing_hidden(db, event.id)
+
+    return DisplaySettingsResponse(
+        status="ok",
+        now_playing_hidden=hidden,
+    )
 
 
 @router.get("/{code}/export/csv")

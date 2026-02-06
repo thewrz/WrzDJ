@@ -40,6 +40,10 @@ export default function EventQueuePage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Now playing visibility toggle
+  const [nowPlayingHidden, setNowPlayingHidden] = useState(false);
+  const [togglingNowPlaying, setTogglingNowPlaying] = useState(false);
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
@@ -48,15 +52,17 @@ export default function EventQueuePage() {
 
   const loadData = useCallback(async (): Promise<boolean> => {
     try {
-      const [eventData, requestsData, historyData] = await Promise.all([
+      const [eventData, requestsData, historyData, displaySettings] = await Promise.all([
         api.getEvent(code),
         api.getRequests(code),
-        api.getPlayHistory(code, 30).catch(() => ({ items: [], total: 0 })),
+        api.getPlayHistory(code).catch(() => ({ items: [], total: 0 })),
+        api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false })),
       ]);
       setEvent(eventData);
       setRequests(requestsData);
       setPlayHistory(historyData.items);
       setPlayHistoryTotal(historyData.total);
+      setNowPlayingHidden(displaySettings.now_playing_hidden);
       setEventStatus('active');
       setError(null);
       return true; // Continue polling
@@ -198,6 +204,19 @@ export default function EventQueuePage() {
       console.error('Failed to export play history:', err);
     } finally {
       setExportingHistory(false);
+    }
+  };
+
+  const handleToggleNowPlaying = async () => {
+    setTogglingNowPlaying(true);
+    try {
+      const newHidden = !nowPlayingHidden;
+      await api.setNowPlayingVisibility(code, newHidden);
+      setNowPlayingHidden(newHidden);
+    } catch (err) {
+      console.error('Failed to toggle now playing visibility:', err);
+    } finally {
+      setTogglingNowPlaying(false);
     }
   };
 
@@ -365,6 +384,40 @@ export default function EventQueuePage() {
           )}
         </div>
       </div>
+
+      {/* Kiosk Display Settings */}
+      {!isExpiredOrArchived && (
+        <div
+          className="card"
+          style={{
+            marginBottom: '1rem',
+            padding: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div>
+            <span style={{ fontWeight: 500 }}>Kiosk Display Settings</span>
+            <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
+              Control what guests see on the kiosk display
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+              Now Playing:
+            </span>
+            <button
+              className={`btn btn-sm ${nowPlayingHidden ? 'btn-danger' : 'btn-success'}`}
+              style={{ minWidth: '100px' }}
+              onClick={handleToggleNowPlaying}
+              disabled={togglingNowPlaying}
+            >
+              {togglingNowPlaying ? '...' : nowPlayingHidden ? 'Hidden' : 'Visible'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="tabs">
         {(['all', 'new', 'accepted', 'playing', 'rejected'] as StatusFilter[]).map((status) => (

@@ -10,6 +10,7 @@ from app.api.deps import get_db
 from app.core.config import get_settings
 from app.models.request import RequestStatus
 from app.services.event import EventLookupResult, get_event_by_code_with_status
+from app.services.now_playing import is_now_playing_hidden
 
 router = APIRouter()
 settings = get_settings()
@@ -32,6 +33,7 @@ class KioskDisplayResponse(BaseModel):
     qr_join_url: str
     accepted_queue: list[PublicRequestInfo]
     now_playing: PublicRequestInfo | None
+    now_playing_hidden: bool
     updated_at: datetime
 
 
@@ -84,10 +86,14 @@ def get_kiosk_display(
             artwork_url=event.now_playing.artwork_url,
         )
 
+    # Check if now playing should be hidden
+    now_playing_is_hidden = is_now_playing_hidden(db, event.id)
+
     return KioskDisplayResponse(
         event=PublicEventInfo(code=event.code, name=event.name),
         qr_join_url=qr_join_url,
         accepted_queue=accepted_queue,
         now_playing=now_playing,
+        now_playing_hidden=now_playing_is_hidden,
         updated_at=datetime.utcnow(),
     )
