@@ -2,14 +2,6 @@
  * TypeScript interfaces for bridge data structures.
  */
 
-/** Track information from StageLinQ */
-export interface TrackInfo {
-  title: string;
-  artist: string;
-  album?: string;
-  deck?: string;
-}
-
 /** Payload sent to POST /api/bridge/nowplaying */
 export interface NowPlayingPayload {
   event_code: string;

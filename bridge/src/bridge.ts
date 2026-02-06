@@ -16,7 +16,7 @@ let lastPostTime = 0;
 /**
  * Generate a unique key for a track (used for deduplication).
  */
-export function makeTrackKey(artist: string, title: string): string {
+function makeTrackKey(artist: string, title: string): string {
   return `${artist.toLowerCase().trim()}::${title.toLowerCase().trim()}`;
 }
 

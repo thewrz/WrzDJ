@@ -3,13 +3,6 @@ from pydantic import BaseModel, Field
 from app.models.request import TidalSyncStatus
 
 
-class TidalAuthUrl(BaseModel):
-    """OAuth authorization URL for Tidal linking."""
-
-    auth_url: str
-    state: str
-
-
 class TidalStatus(BaseModel):
     """Current Tidal account linking status."""
 
