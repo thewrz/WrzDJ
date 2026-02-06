@@ -1,6 +1,36 @@
 # WrzDJ
 
-A song request system for DJs. Guests scan a QR code to join an event and submit song requests. DJs manage requests via a web dashboard.
+A modern song request system for DJs. Guests scan a QR code to join an event and submit song requests. DJs manage requests via a web dashboard with real-time StageLinQ integration.
+
+---
+
+## Features at a Glance
+
+| Guest Experience | DJ Dashboard | Live Integration |
+|------------------|--------------|------------------|
+| Scan QR to join | Accept/reject requests | Auto-detect playing tracks |
+| Search via Spotify | Mark songs as played | Real-time "Now Playing" |
+| No login required | View play history | Fuzzy request matching |
+| See queue on kiosk | Toggle kiosk visibility | Album art enrichment |
+
+### Kiosk Display
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Event Name                       [QR]  │
+├─────────────────┬─────────────────┬─────────────────────────┤
+│   Now Playing   │    Up Next      │   Recently Played       │
+│                 │                 │                         │
+│   Track Title   │  1. Song A      │  1. Song X  [Requested] │
+│   Artist Name   │  2. Song B      │  2. Song Y              │
+│   [Album Art]   │  3. Song C      │  3. Song Z  [Requested] │
+│                 │                 │                         │
+└─────────────────┴─────────────────┴─────────────────────────┘
+```
+
+**Smart Visibility**: Now Playing auto-hides after 60 minutes of inactivity. DJs can manually show/hide from the dashboard.
+
+---
 
 ## Quick Start (Local Development)
 
@@ -226,16 +256,19 @@ WrzDJ/
 
 ### Kiosk Display
 - [x] Public kiosk view at `/e/{code}/display`
+- [x] Three-column layout: Now Playing | Up Next | Recently Played
 - [x] Shows "Now Playing" with album art and animated visualizer
 - [x] Scrollable "Accepted Requests" queue
+- [x] Play history with "Requested" badges for matched songs
 - [x] Built-in song request modal
-- [x] Auto-hides "Now Playing" when no song is active
+- [x] Auto-hides "Now Playing" after 60 minutes of inactivity
 - [x] Kiosk mode protections (disabled right-click, selection)
 - [x] 60-second inactivity timeout on request modal
 
 ### DJ Dashboard
 - [x] Accept/Reject incoming requests
 - [x] Mark songs as Playing/Played
+- [x] Toggle "Now Playing" visibility on kiosk (show/hide)
 - [x] Edit event expiry time
 - [x] Delete events
 - [x] Links to song source (Spotify)
@@ -404,6 +437,8 @@ docker run --network host \
 | `POST /api/auth/login` | DJ authentication |
 | `GET /api/events` | List DJ's events |
 | `POST /api/events` | Create event |
+| `GET /api/events/{code}/display-settings` | Get kiosk display settings |
+| `PATCH /api/events/{code}/display-settings` | Toggle now playing visibility |
 | `GET /api/public/e/{code}` | Get event info (public) |
 | `GET /api/search` | Search songs |
 | `POST /api/requests` | Submit song request |
