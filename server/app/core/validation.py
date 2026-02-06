@@ -1,7 +1,7 @@
 """Input validation and sanitization utilities."""
+
 import re
 import unicodedata
-
 
 # Control characters to remove (except newline, tab)
 CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")

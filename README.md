@@ -199,6 +199,9 @@ WrzDJ/
     app/               # App router pages
     lib/               # Utilities
     Dockerfile
+  bridge/              # StageLinQ bridge service (Node.js)
+    src/               # TypeScript source
+    Dockerfile
   deploy/              # Deployment configs
     docker-compose.yml # Production compose
     nginx/             # Nginx configs
@@ -237,10 +240,150 @@ WrzDJ/
 - [x] Delete events
 - [x] Links to song source (Spotify)
 
+### StageLinQ Integration
+- [x] Auto-detect tracks from Denon DJ equipment (SC6000, Prime 4, etc.)
+- [x] Real-time "Now Playing" with LIVE badge
+- [x] Play history log (append-only)
+- [x] Automatic request matching via fuzzy search
+- [x] Request auto-transition: accepted -> playing -> played
+- [x] Spotify album art enrichment for played tracks
+- [x] Bridge connection status indicator
+
 ### Planned
 - [ ] Mobile app for guests
 - [ ] Share-to-app from Spotify/Apple Music
-- [ ] EngineDJ/Lexicon integration
+
+---
+
+## StageLinQ Integration
+
+WrzDJ supports automatic track detection from Denon DJ equipment via the StageLinQ protocol. When enabled, the system automatically:
+
+1. Detects what track the DJ is playing in real-time
+2. Displays it on the kiosk with a "LIVE" badge
+3. Logs all played tracks to a play history
+4. Auto-matches played tracks to guest requests (fuzzy matching)
+5. Transitions matched requests through the workflow automatically
+
+### Architecture
+
+```
+[SC6000 / Prime 4]
+        | StageLinQ (Ethernet/LAN)
+        v
+[Bridge Service]  -- Node.js, runs on DJ's network
+        | HTTP POST (API key auth)
+        v
+[FastAPI Backend]  -- Cloud or local
+        | Polling
+        v
+[Next.js Frontend] -- Kiosk display + DJ dashboard
+```
+
+### Supported Hardware
+
+- Denon SC6000 / SC6000M
+- Denon SC5000 / SC5000M
+- Denon Prime 4 / Prime 4+
+- Denon Prime 2 / Prime Go
+- Denon X1850 / X1800 mixer (for network hub)
+
+### Setup
+
+#### 1. Generate a Bridge API Key
+
+```bash
+openssl rand -hex 32
+```
+
+Save this key - you'll need it for both the backend and bridge.
+
+#### 2. Configure the Backend
+
+Add to your backend `.env`:
+
+```env
+BRIDGE_API_KEY=your_generated_key_here
+```
+
+Run the database migration:
+
+```bash
+cd server
+source .venv/bin/activate
+alembic upgrade head
+```
+
+#### 3. Set Up the Bridge Service
+
+The bridge must run on the same local network as your DJ equipment (StageLinQ uses UDP broadcast discovery).
+
+```bash
+cd bridge
+npm install
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```env
+WRZDJ_API_URL=https://api.yourdomain.com  # Your backend URL
+WRZDJ_BRIDGE_API_KEY=your_generated_key_here
+WRZDJ_EVENT_CODE=ABC123  # Event code from DJ dashboard
+MIN_PLAY_SECONDS=5  # Debounce threshold (optional)
+```
+
+#### 4. Run the Bridge
+
+```bash
+npm start
+```
+
+You should see:
+```
+[Bridge] WrzDJ StageLinQ Bridge starting...
+[Bridge] API URL: https://api.yourdomain.com
+[Bridge] Event Code: ABC123
+[Bridge] Connecting to StageLinQ network...
+[Bridge] Listening for DJ equipment...
+[Bridge] Device ready: SC6000
+```
+
+#### 5. Verify It Works
+
+1. Load a track on your DJ equipment
+2. Check the kiosk display - you should see the track with a "LIVE" badge
+3. The DJ dashboard will show bridge connection status
+
+### Docker Deployment
+
+For production, run the bridge in Docker (must use host networking for StageLinQ discovery):
+
+```bash
+cd bridge
+docker build -t wrzdj-bridge .
+docker run --network host \
+  -e WRZDJ_API_URL=https://api.yourdomain.com \
+  -e WRZDJ_BRIDGE_API_KEY=your_key \
+  -e WRZDJ_EVENT_CODE=ABC123 \
+  wrzdj-bridge
+```
+
+### Network Requirements
+
+- Bridge machine must be on the same LAN as DJ equipment
+- DJ equipment connected via Ethernet (not WiFi)
+- Backend can be local or cloud-hosted (bridge only needs outbound HTTP/HTTPS)
+- If using HTTPS (recommended), ensure valid SSL certificates
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Bridge not detecting equipment | Ensure bridge is on same LAN, equipment connected via Ethernet |
+| "Authentication failed" | Check BRIDGE_API_KEY matches in backend and bridge |
+| Tracks not appearing | Check event code is correct and event is active |
+| High latency | Bridge should be on same network, not over VPN |
 
 ---
 
@@ -264,5 +407,20 @@ WrzDJ/
 | `GET /api/search` | Search songs |
 | `POST /api/requests` | Submit song request |
 | `PATCH /api/requests/{id}` | Update request status |
+
+### StageLinQ Bridge Endpoints (API Key Auth)
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/bridge/nowplaying` | Report new track playing |
+| `POST /api/bridge/status` | Report bridge connection status |
+| `DELETE /api/bridge/nowplaying/{code}` | Signal track ended/deck cleared |
+
+### StageLinQ Public Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/public/e/{code}/nowplaying` | Get current now-playing track |
+| `GET /api/public/e/{code}/history` | Get play history (paginated) |
 
 Full API documentation available at `/docs` when running the backend.

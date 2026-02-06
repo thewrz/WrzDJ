@@ -6,7 +6,7 @@ from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.request import RequestOut, RequestUpdate
 from app.services.event import set_now_playing
-from app.services.play_history import add_manual_play
+from app.services.now_playing import add_manual_play
 from app.services.request import get_request_by_id, update_request_status
 
 router = APIRouter()

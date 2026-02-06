@@ -41,6 +41,7 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:-https://app.wrzdj.com}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BRIDGE_API_KEY: ${BRIDGE_API_KEY:-}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

@@ -1,4 +1,5 @@
 """Script to create an admin user."""
+
 import argparse
 import sys
 

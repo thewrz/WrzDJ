@@ -48,9 +48,7 @@ def create_event(db: Session, name: str, user: User, expires_hours: int = 6) -> 
             break
 
     expires_at = datetime.utcnow() + timedelta(hours=expires_hours)
-    event = Event(
-        code=code, name=name, created_by_user_id=user.id, expires_at=expires_at
-    )
+    event = Event(code=code, name=name, created_by_user_id=user.id, expires_at=expires_at)
     db.add(event)
     db.commit()
     db.refresh(event)
@@ -71,9 +69,7 @@ def get_event_by_code(db: Session, code: str) -> Event | None:
     )
 
 
-def get_event_by_code_with_status(
-    db: Session, code: str
-) -> tuple[Event | None, EventLookupResult]:
+def get_event_by_code_with_status(db: Session, code: str) -> tuple[Event | None, EventLookupResult]:
     """
     Get an event by code and return lookup result status.
 
@@ -81,11 +77,7 @@ def get_event_by_code_with_status(
         Tuple of (event, lookup_result) where lookup_result indicates
         if the event was found, not found, expired, or archived.
     """
-    event = (
-        db.query(Event)
-        .filter(Event.code == code.upper())
-        .first()
-    )
+    event = db.query(Event).filter(Event.code == code.upper()).first()
 
     if not event:
         return None, EventLookupResult.NOT_FOUND
@@ -101,7 +93,12 @@ def get_event_by_code_with_status(
 
 def get_events_for_user(db: Session, user: User) -> list[Event]:
     """Get all events created by a user."""
-    return db.query(Event).filter(Event.created_by_user_id == user.id).order_by(Event.created_at.desc()).all()
+    return (
+        db.query(Event)
+        .filter(Event.created_by_user_id == user.id)
+        .order_by(Event.created_at.desc())
+        .all()
+    )
 
 
 def update_event(

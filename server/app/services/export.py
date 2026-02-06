@@ -1,8 +1,9 @@
 """Export service for generating CSV files from event data."""
+
 import csv
 import io
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.models.event import Event
 from app.models.request import Request
@@ -36,7 +37,7 @@ def sanitize_filename(name: str) -> str:
 def generate_export_filename(event: Event) -> str:
     """Generate a sanitized filename for CSV export."""
     sanitized_name = sanitize_filename(event.name)
-    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    date_str = datetime.now(UTC).strftime("%Y%m%d")
     return f"{event.code}_{sanitized_name}_{date_str}.csv"
 
 
@@ -55,30 +56,34 @@ def export_requests_to_csv(event: Event, requests: list[Request]) -> str:
     writer = csv.writer(output)
 
     # Write header
-    writer.writerow([
-        "Request ID",
-        "Song Title",
-        "Artist",
-        "Status",
-        "Note",
-        "Source",
-        "Source URL",
-        "Created At",
-        "Updated At",
-    ])
+    writer.writerow(
+        [
+            "Request ID",
+            "Song Title",
+            "Artist",
+            "Status",
+            "Note",
+            "Source",
+            "Source URL",
+            "Created At",
+            "Updated At",
+        ]
+    )
 
     # Write data rows with sanitization to prevent CSV formula injection
     for req in requests:
-        writer.writerow([
-            req.id,
-            sanitize_csv_value(req.song_title),
-            sanitize_csv_value(req.artist),
-            req.status,
-            sanitize_csv_value(req.note),
-            sanitize_csv_value(req.source),
-            sanitize_csv_value(req.source_url),
-            req.created_at.isoformat() if req.created_at else "",
-            req.updated_at.isoformat() if req.updated_at else "",
-        ])
+        writer.writerow(
+            [
+                req.id,
+                sanitize_csv_value(req.song_title),
+                sanitize_csv_value(req.artist),
+                req.status,
+                sanitize_csv_value(req.note),
+                sanitize_csv_value(req.source),
+                sanitize_csv_value(req.source_url),
+                req.created_at.isoformat() if req.created_at else "",
+                req.updated_at.isoformat() if req.updated_at else "",
+            ]
+        )
 
     return output.getvalue()

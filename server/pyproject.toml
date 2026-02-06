@@ -43,6 +43,17 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+# F821: Allow forward references in SQLAlchemy models (string annotations)
+# UP042: Keep (str, Enum) pattern for compatibility with existing code
+# E711/E712: SQLAlchemy requires == None/True syntax for SQL column comparisons
+ignore = ["UP042", "E711", "E712"]
+
+[tool.ruff.lint.per-file-ignores]
+# Allow forward references (F821) in SQLAlchemy models
+"app/models/*.py" = ["F821"]
+# Allow imports after helper function definitions in test files and services
+"tests/*.py" = ["E402"]
+"app/services/now_playing.py" = ["E402"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

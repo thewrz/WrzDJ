@@ -74,9 +74,7 @@ async def search_songs(db: Session, query: str) -> list[SearchResult]:
         existing.expires_at = expires_at
         existing.created_at = datetime.utcnow()
     else:
-        cache_entry = SearchCache(
-            query=query, results_json=results_json, expires_at=expires_at
-        )
+        cache_entry = SearchCache(query=query, results_json=results_json, expires_at=expires_at)
         db.add(cache_entry)
     db.commit()
 

@@ -1,8 +1,7 @@
 """Unit tests for export service."""
-from datetime import datetime, timezone
-from unittest.mock import MagicMock
 
-import pytest
+from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 from app.services.export import (
     export_requests_to_csv,
@@ -74,7 +73,7 @@ class TestGenerateExportFilename:
         event.name = "Test"
 
         filename = generate_export_filename(event)
-        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+        date_str = datetime.now(UTC).strftime("%Y%m%d")
         assert date_str in filename
 
     def test_ends_with_csv_extension(self):
@@ -206,7 +205,7 @@ class TestSanitizeCsvValue:
 
     def test_sanitizes_equals_sign(self):
         """Test that values starting with = are escaped."""
-        result = sanitize_csv_value("=HYPERLINK(\"http://evil.com\")")
+        result = sanitize_csv_value('=HYPERLINK("http://evil.com")')
         assert result.startswith("'")
         assert "=HYPERLINK" in result
 
@@ -255,7 +254,7 @@ class TestSanitizeCsvValue:
 
         request = MagicMock()
         request.id = 1
-        request.song_title = "=HYPERLINK(\"http://evil.com\",\"Click\")"
+        request.song_title = '=HYPERLINK("http://evil.com","Click")'
         request.artist = "+cmd|' /C calc'!A0"
         request.status = "new"
         request.note = "-2+3+cmd"

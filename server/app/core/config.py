@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     spotify_client_id: str = ""
     spotify_client_secret: str = ""
 
+    # StageLinQ Bridge
+    bridge_api_key: str = ""
+
     # CORS - comma-separated origins or "*" for all (dev only)
     # Production: https://app.wrzdj.com
     cors_origins: str = "*"
@@ -88,14 +91,22 @@ def validate_settings(settings: Settings) -> None:
     errors = []
 
     if settings.is_production:
-        if settings.jwt_secret == "change-me-in-production":
+        # nosec B105 - We're checking if the default value is still set (a security check)
+        if settings.jwt_secret == "change-me-in-production":  # nosec B105
             errors.append("JWT_SECRET must be set to a secure value in production")
         if settings.cors_origins == "*":
-            errors.append("CORS_ORIGINS should not be '*' in production - set to your frontend domain (e.g., https://app.wrzdj.com)")
+            errors.append(
+                "CORS_ORIGINS should not be '*' in production - "
+                "set to your frontend domain (e.g., https://app.wrzdj.com)"
+            )
 
     if not settings.spotify_client_id or not settings.spotify_client_secret:
         # Warning only, not fatal
-        print("WARNING: SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET not set - song search will not work", file=sys.stderr)
+        print(
+            "WARNING: SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET not set - "
+            "song search will not work",
+            file=sys.stderr,
+        )
 
     if errors:
         print("Configuration errors:", file=sys.stderr)

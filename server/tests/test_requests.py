@@ -1,10 +1,10 @@
 """Tests for song request endpoints."""
-import pytest
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.event import Event
-from app.models.request import Request, RequestStatus
+from app.models.request import Request
 
 
 class TestSubmitRequest:

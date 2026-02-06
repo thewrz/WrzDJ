@@ -54,7 +54,9 @@ jobs:
         run: bandit -r app -c pyproject.toml
 
       - name: Dependency audit with pip-audit
-        run: pip-audit
+        # Ignore CVE-2024-23342 (ecdsa timing attack) - no fix available yet
+        # This is a transitive dependency from python-jose
+        run: pip-audit --ignore-vuln CVE-2024-23342
 
       - name: Run tests with coverage
         env:
