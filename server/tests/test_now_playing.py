@@ -6,6 +6,9 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
+# Re-export UTC for tests
+__all__ = ["UTC"]
+
 
 def utcnow() -> datetime:
     """Return current UTC datetime (timezone-aware)."""
@@ -19,6 +22,7 @@ from app.models.request import Request, RequestStatus
 from app.models.user import User
 from app.services.auth import get_password_hash
 from app.services.now_playing import (
+    NOW_PLAYING_AUTO_HIDE_MINUTES,
     archive_to_history,
     clear_now_playing,
     fuzzy_match_accepted_request,
@@ -27,6 +31,8 @@ from app.services.now_playing import (
     get_now_playing,
     get_play_history,
     handle_now_playing_update,
+    is_now_playing_hidden,
+    set_now_playing_visibility,
     update_bridge_status,
 )
 
@@ -411,3 +417,147 @@ class TestGetPlayHistory:
         assert total == 10
         assert len(items) == 3
         assert items[0].title == "Track 7"  # 10, 9, 8, [7, 6, 5]
+
+
+class TestIsNowPlayingHidden:
+    """Tests for is_now_playing_hidden function."""
+
+    def test_hidden_when_no_now_playing(self, db: Session, test_event: Event):
+        """Hidden when no now_playing record exists."""
+        assert is_now_playing_hidden(db, test_event.id) is True
+
+    def test_hidden_when_empty_title(self, db: Session, test_event: Event):
+        """Hidden when now_playing has empty title."""
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="",
+            artist="",
+        )
+        db.add(now_playing)
+        db.commit()
+
+        assert is_now_playing_hidden(db, test_event.id) is True
+
+    def test_visible_with_track_playing(self, db: Session, test_event: Event):
+        """Visible when track is playing."""
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            started_at=utcnow(),
+        )
+        db.add(now_playing)
+        db.commit()
+
+        assert is_now_playing_hidden(db, test_event.id) is False
+
+    def test_hidden_when_manual_hide(self, db: Session, test_event: Event):
+        """Hidden when manual_hide_now_playing is True."""
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            started_at=utcnow(),
+            manual_hide_now_playing=True,
+        )
+        db.add(now_playing)
+        db.commit()
+
+        assert is_now_playing_hidden(db, test_event.id) is True
+
+    def test_hidden_after_auto_timeout(self, db: Session, test_event: Event):
+        """Hidden after 60 minutes of inactivity."""
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            started_at=utcnow() - timedelta(minutes=NOW_PLAYING_AUTO_HIDE_MINUTES + 1),
+        )
+        db.add(now_playing)
+        db.commit()
+
+        assert is_now_playing_hidden(db, test_event.id) is True
+
+    def test_visible_within_timeout(self, db: Session, test_event: Event):
+        """Visible within 60 minute timeout."""
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            started_at=utcnow() - timedelta(minutes=30),
+        )
+        db.add(now_playing)
+        db.commit()
+
+        assert is_now_playing_hidden(db, test_event.id) is False
+
+    def test_last_shown_at_resets_timer(self, db: Session, test_event: Event):
+        """last_shown_at resets the auto-hide timer."""
+        # Track started 90 minutes ago but was shown 30 minutes ago
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            started_at=utcnow() - timedelta(minutes=90),
+            last_shown_at=utcnow() - timedelta(minutes=30),
+        )
+        db.add(now_playing)
+        db.commit()
+
+        assert is_now_playing_hidden(db, test_event.id) is False
+
+
+class TestSetNowPlayingVisibility:
+    """Tests for set_now_playing_visibility function."""
+
+    def test_hide_existing_now_playing(self, db: Session, test_event: Event):
+        """Can hide existing now_playing."""
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            started_at=utcnow(),
+        )
+        db.add(now_playing)
+        db.commit()
+
+        success = set_now_playing_visibility(db, test_event.id, hidden=True)
+
+        assert success is True
+        db.refresh(now_playing)
+        assert now_playing.manual_hide_now_playing is True
+
+    def test_show_hidden_now_playing(self, db: Session, test_event: Event):
+        """Can show hidden now_playing and resets timer."""
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            started_at=utcnow() - timedelta(minutes=90),
+            manual_hide_now_playing=True,
+        )
+        db.add(now_playing)
+        db.commit()
+
+        success = set_now_playing_visibility(db, test_event.id, hidden=False)
+
+        assert success is True
+        db.refresh(now_playing)
+        assert now_playing.manual_hide_now_playing is False
+        assert now_playing.last_shown_at is not None
+        # last_shown_at should be recent (within last few seconds)
+        # Handle timezone-naive from SQLite
+        last_shown = now_playing.last_shown_at
+        if last_shown.tzinfo is None:
+            last_shown = last_shown.replace(tzinfo=UTC)
+        assert utcnow() - last_shown < timedelta(seconds=2)
+
+    def test_creates_placeholder_when_none_exists(self, db: Session, test_event: Event):
+        """Creates placeholder now_playing when none exists."""
+        success = set_now_playing_visibility(db, test_event.id, hidden=True)
+
+        assert success is True
+        now_playing = get_now_playing(db, test_event.id)
+        assert now_playing is not None
+        assert now_playing.title == ""
+        assert now_playing.manual_hide_now_playing is True

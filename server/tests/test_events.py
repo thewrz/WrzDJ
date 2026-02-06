@@ -538,6 +538,165 @@ class TestCsvExport:
         assert len(lines) == 1  # Just the header
 
 
+class TestDisplaySettings:
+    """Tests for display settings endpoints."""
+
+    def test_get_display_settings_success(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test getting display settings."""
+        response = client.get(
+            f"/api/events/{test_event.code}/display-settings",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert "now_playing_hidden" in data
+
+    def test_get_display_settings_no_auth(self, client: TestClient, test_event: Event):
+        """Test getting display settings without auth fails."""
+        response = client.get(f"/api/events/{test_event.code}/display-settings")
+        assert response.status_code == 401
+
+    def test_update_display_settings_hide(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test hiding now playing via display settings."""
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_hidden": True},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["now_playing_hidden"] is True
+
+    def test_update_display_settings_show(
+        self, client: TestClient, auth_headers: dict, test_event: Event, db: Session
+    ):
+        """Test showing now playing via display settings."""
+        from app.models.now_playing import NowPlaying
+
+        # First hide it
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            manual_hide_now_playing=True,
+        )
+        db.add(now_playing)
+        db.commit()
+
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_hidden": False},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["now_playing_hidden"] is False
+
+        # Verify last_shown_at was updated
+        db.refresh(now_playing)
+        assert now_playing.last_shown_at is not None
+
+    def test_update_display_settings_no_auth(self, client: TestClient, test_event: Event):
+        """Test updating display settings without auth fails."""
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_hidden": True},
+        )
+        assert response.status_code == 401
+
+    def test_update_display_settings_not_owner(
+        self, client: TestClient, db: Session, test_user: User, auth_headers: dict
+    ):
+        """Test updating display settings for event you don't own fails."""
+        from app.services.auth import get_password_hash
+
+        other_user = User(
+            username="otheruser_display",
+            password_hash=get_password_hash("otherpassword"),
+        )
+        db.add(other_user)
+        db.flush()
+
+        other_event = Event(
+            code="OTHER3",
+            name="Other User Event",
+            created_by_user_id=other_user.id,
+            expires_at=datetime.utcnow() + timedelta(hours=6),
+        )
+        db.add(other_event)
+        db.commit()
+
+        response = client.patch(
+            f"/api/events/{other_event.code}/display-settings",
+            json={"now_playing_hidden": True},
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
+
+
+class TestKioskDisplayNowPlayingHidden:
+    """Tests for now_playing_hidden field in kiosk display response."""
+
+    def test_kiosk_display_includes_now_playing_hidden(
+        self, client: TestClient, test_event: Event
+    ):
+        """Test that kiosk display includes now_playing_hidden field."""
+        response = client.get(f"/api/public/events/{test_event.code}/display")
+        assert response.status_code == 200
+        data = response.json()
+        assert "now_playing_hidden" in data
+
+    def test_kiosk_display_hidden_when_manual_hide(
+        self, client: TestClient, test_event: Event, db: Session
+    ):
+        """Test that kiosk display shows hidden when manual_hide is true."""
+        from app.models.now_playing import NowPlaying
+
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            manual_hide_now_playing=True,
+        )
+        db.add(now_playing)
+        db.commit()
+
+        response = client.get(f"/api/public/events/{test_event.code}/display")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["now_playing_hidden"] is True
+
+    def test_kiosk_display_visible_when_track_playing(
+        self, client: TestClient, test_event: Event, db: Session
+    ):
+        """Test that kiosk display shows visible when track is playing."""
+        from datetime import datetime
+
+        from app.models.now_playing import NowPlaying
+
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            started_at=datetime.utcnow(),
+            manual_hide_now_playing=False,
+        )
+        db.add(now_playing)
+        db.commit()
+
+        response = client.get(f"/api/public/events/{test_event.code}/display")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["now_playing_hidden"] is False
+
+
 class TestPlayHistoryCsvExport:
     """Tests for play history CSV export functionality."""
 

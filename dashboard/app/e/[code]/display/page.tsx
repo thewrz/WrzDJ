@@ -694,12 +694,15 @@ export default function KioskDisplayPage() {
 
         {/* Use StageLinQ now-playing if available, else fall back to request-based now_playing */}
         {(() => {
-          const nowPlaying = stagelinqNowPlaying || (display.now_playing ? {
+          // Check if now playing should be hidden (manual hide or auto-hide after 60 min)
+          const isHidden = display.now_playing_hidden;
+
+          const nowPlaying = isHidden ? null : (stagelinqNowPlaying || (display.now_playing ? {
             title: display.now_playing.title,
             artist: display.now_playing.artist,
             album_art_url: display.now_playing.artwork_url,
             source: 'request',
-          } : null);
+          } : null));
           const isStageLinQ = stagelinqNowPlaying?.source === 'stagelinq';
 
           return (

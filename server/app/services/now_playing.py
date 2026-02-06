@@ -12,11 +12,16 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+from datetime import timedelta
+
 from app.models.event import Event
 from app.models.now_playing import NowPlaying
 from app.models.play_history import PlayHistory
 from app.models.request import Request, RequestStatus
 from app.services.spotify import _call_spotify_api
+
+# Auto-hide timeout: 60 minutes of no track change
+NOW_PLAYING_AUTO_HIDE_MINUTES = 60
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +34,81 @@ def get_event_by_code_for_bridge(db: Session, code: str) -> Event | None:
 def get_now_playing(db: Session, event_id: int) -> NowPlaying | None:
     """Get the current now-playing track for an event."""
     return db.query(NowPlaying).filter(NowPlaying.event_id == event_id).first()
+
+
+def is_now_playing_hidden(db: Session, event_id: int) -> bool:
+    """
+    Check if now playing should be hidden on kiosk.
+
+    Hidden if ANY of these conditions are true:
+    1. No track is playing (empty title)
+    2. manual_hide_now_playing is True
+    3. More than 60 minutes since last activity (started_at or last_shown_at)
+    """
+    now_playing = get_now_playing(db, event_id)
+
+    # No now_playing record or empty track
+    if not now_playing or not now_playing.title:
+        return True
+
+    # Manually hidden
+    if now_playing.manual_hide_now_playing:
+        return True
+
+    # Auto-hide: check if more than 60 minutes since last activity
+    now = utcnow()
+    last_activity = now_playing.started_at
+
+    # Make timezone-aware if naive (SQLite doesn't preserve timezone)
+    if last_activity.tzinfo is None:
+        last_activity = last_activity.replace(tzinfo=UTC)
+
+    if now_playing.last_shown_at:
+        last_shown = now_playing.last_shown_at
+        if last_shown.tzinfo is None:
+            last_shown = last_shown.replace(tzinfo=UTC)
+        if last_shown > last_activity:
+            last_activity = last_shown
+
+    if now - last_activity > timedelta(minutes=NOW_PLAYING_AUTO_HIDE_MINUTES):
+        return True
+
+    return False
+
+
+def set_now_playing_visibility(db: Session, event_id: int, hidden: bool) -> bool:
+    """
+    Set manual visibility for now playing on kiosk.
+
+    When showing (hidden=False):
+    - Set manual_hide_now_playing = False
+    - Update last_shown_at to now (resets the 60-minute timer)
+
+    When hiding (hidden=True):
+    - Set manual_hide_now_playing = True
+
+    Returns True on success, False if no now_playing record exists.
+    """
+    now_playing = get_now_playing(db, event_id)
+
+    if not now_playing:
+        # Create a placeholder if none exists
+        now_playing = NowPlaying(
+            event_id=event_id,
+            title="",
+            artist="",
+            manual_hide_now_playing=hidden,
+            last_shown_at=utcnow() if not hidden else None,
+        )
+        db.add(now_playing)
+    else:
+        now_playing.manual_hide_now_playing = hidden
+        if not hidden:
+            # When showing, reset the timer
+            now_playing.last_shown_at = utcnow()
+
+    db.commit()
+    return True
 
 
 def get_next_play_order(db: Session, event_id: int) -> int:

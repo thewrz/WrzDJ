@@ -23,6 +23,7 @@ const mockKioskDisplay = {
     { id: 2, title: 'Song 2', artist: 'Artist 2', artwork_url: null },
   ],
   now_playing: null,
+  now_playing_hidden: false,
   updated_at: new Date().toISOString(),
 };
 
@@ -40,8 +41,8 @@ const mockNowPlaying = {
 
 const mockPlayHistory = {
   items: [
-    { id: 1, title: 'History Song 1', artist: 'History Artist 1', album_art_url: null, matched_request_id: null, source: 'stagelinq', started_at: new Date().toISOString(), ended_at: null, play_order: 1 },
-    { id: 2, title: 'History Song 2', artist: 'History Artist 2', album_art_url: null, matched_request_id: 1, source: 'stagelinq', started_at: new Date().toISOString(), ended_at: null, play_order: 2 },
+    { id: 1, title: 'History Song 1', artist: 'History Artist 1', album: null, album_art_url: null, spotify_uri: null, matched_request_id: null, source: 'stagelinq', started_at: new Date().toISOString(), ended_at: null, play_order: 1 },
+    { id: 2, title: 'History Song 2', artist: 'History Artist 2', album: null, album_art_url: null, spotify_uri: null, matched_request_id: 1, source: 'stagelinq', started_at: new Date().toISOString(), ended_at: null, play_order: 2 },
   ],
   total: 2,
 };
@@ -127,7 +128,7 @@ describe('KioskDisplayPage', () => {
       const historySection = historyLabel.closest('.history-section');
 
       // History section should NOT be inside queue section
-      expect(queueSection).not.toContainElement(historySection);
+      expect(queueSection).not.toContainElement(historySection as HTMLElement);
 
       // Both should be direct children of kiosk-main
       expect(queueSection?.parentElement?.classList.contains('kiosk-main')).toBe(true);

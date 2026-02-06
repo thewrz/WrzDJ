@@ -22,6 +22,19 @@ class EventUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
 
 
+class DisplaySettingsUpdate(BaseModel):
+    """Request body for updating display settings."""
+
+    now_playing_hidden: bool
+
+
+class DisplaySettingsResponse(BaseModel):
+    """Response for display settings update."""
+
+    status: str = "ok"
+    now_playing_hidden: bool
+
+
 class EventOut(BaseModel):
     id: int
     code: str
