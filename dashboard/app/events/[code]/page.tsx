@@ -5,9 +5,10 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/auth';
-import { api, ApiError, Event, ArchivedEvent, SongRequest } from '@/lib/api';
+import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem } from '@/lib/api';
 
-type StatusFilter = 'all' | 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
+// Removed 'played' from filter since played tracks appear in Play History section
+type StatusFilter = 'all' | 'new' | 'accepted' | 'playing' | 'rejected';
 
 function toLocalDateTimeString(date: Date): string {
   const pad = (n: number) => n.toString().padStart(2, '0');
@@ -22,10 +23,13 @@ export default function EventQueuePage() {
 
   const [event, setEvent] = useState<Event | ArchivedEvent | null>(null);
   const [requests, setRequests] = useState<SongRequest[]>([]);
+  const [playHistory, setPlayHistory] = useState<PlayHistoryItem[]>([]);
+  const [playHistoryTotal, setPlayHistoryTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [updating, setUpdating] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportingHistory, setExportingHistory] = useState(false);
 
   const [eventStatus, setEventStatus] = useState<'active' | 'expired' | 'archived'>('active');
   const [error, setError] = useState<{ message: string; status: number } | null>(null);
@@ -44,12 +48,15 @@ export default function EventQueuePage() {
 
   const loadData = useCallback(async (): Promise<boolean> => {
     try {
-      const [eventData, requestsData] = await Promise.all([
+      const [eventData, requestsData, historyData] = await Promise.all([
         api.getEvent(code),
         api.getRequests(code),
+        api.getPlayHistory(code, 30).catch(() => ({ items: [], total: 0 })),
       ]);
       setEvent(eventData);
       setRequests(requestsData);
+      setPlayHistory(historyData.items);
+      setPlayHistoryTotal(historyData.total);
       setEventStatus('active');
       setError(null);
       return true; // Continue polling
@@ -183,6 +190,17 @@ export default function EventQueuePage() {
     }
   };
 
+  const handleExportPlayHistoryCsv = async () => {
+    setExportingHistory(true);
+    try {
+      await api.exportPlayHistoryCsv(code);
+    } catch (err) {
+      console.error('Failed to export play history:', err);
+    } finally {
+      setExportingHistory(false);
+    }
+  };
+
   const filteredRequests = requests.filter((r) =>
     filter === 'all' ? true : r.status === filter
   );
@@ -192,7 +210,6 @@ export default function EventQueuePage() {
     new: requests.filter((r) => r.status === 'new').length,
     accepted: requests.filter((r) => r.status === 'accepted').length,
     playing: requests.filter((r) => r.status === 'playing').length,
-    played: requests.filter((r) => r.status === 'played').length,
     rejected: requests.filter((r) => r.status === 'rejected').length,
   };
 
@@ -350,7 +367,7 @@ export default function EventQueuePage() {
       </div>
 
       <div className="tabs">
-        {(['all', 'new', 'accepted', 'playing', 'played', 'rejected'] as StatusFilter[]).map((status) => (
+        {(['all', 'new', 'accepted', 'playing', 'rejected'] as StatusFilter[]).map((status) => (
           <button
             key={status}
             className={`tab ${filter === status ? 'active' : ''}`}
@@ -447,6 +464,110 @@ export default function EventQueuePage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Play History Section */}
+      {playHistory.length > 0 && (
+        <div className="card" style={{ marginTop: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <h2 style={{ margin: 0, fontSize: '1.25rem' }}>
+              Play History
+              <span style={{ color: '#9ca3af', fontWeight: 'normal', marginLeft: '0.5rem' }}>
+                ({playHistoryTotal} {playHistoryTotal === 1 ? 'track' : 'tracks'})
+              </span>
+            </h2>
+            <button
+              className="btn btn-sm"
+              style={{ background: '#8b5cf6', padding: '0.25rem 0.75rem' }}
+              onClick={handleExportPlayHistoryCsv}
+              disabled={exportingHistory}
+            >
+              {exportingHistory ? 'Exporting...' : 'Export Play History'}
+            </button>
+          </div>
+          <div className="request-list">
+            {playHistory.map((item) => (
+              <div key={item.id} className="request-item" style={{ padding: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
+                  {item.album_art_url ? (
+                    <img
+                      src={item.album_art_url}
+                      alt={item.title}
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '4px',
+                        objectFit: 'cover',
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '4px',
+                        background: '#333',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#9ca3af',
+                      }}
+                    >
+                      <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="request-info" style={{ flex: 1 }}>
+                    <h3 style={{ margin: 0 }}>{item.title}</h3>
+                    <p style={{ margin: '0.25rem 0 0', color: '#9ca3af' }}>{item.artist}</p>
+                    <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#6b7280' }}>
+                      {new Date(item.started_at).toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span
+                    className="badge"
+                    style={{
+                      background: item.source === 'stagelinq' ? '#8b5cf6' : '#3b82f6',
+                      color: '#fff',
+                      padding: '0.25rem 0.5rem',
+                      borderRadius: '0.25rem',
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    {item.source === 'stagelinq' ? 'Live' : 'Manual'}
+                  </span>
+                  {item.matched_request_id && (
+                    <span
+                      className="badge"
+                      style={{
+                        background: '#10b981',
+                        color: '#fff',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '0.25rem',
+                        fontSize: '0.75rem',
+                      }}
+                    >
+                      Requested
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -239,6 +239,7 @@ WrzDJ/
 - [x] Edit event expiry time
 - [x] Delete events
 - [x] Links to song source (Spotify)
+- [x] Play history with source badges (Live/Manual) and request matching
 
 ### StageLinQ Integration
 - [x] Auto-detect tracks from Denon DJ equipment (SC6000, Prime 4, etc.)
