@@ -55,20 +55,6 @@ def create_event(db: Session, name: str, user: User, expires_hours: int = 6) -> 
     return event
 
 
-def get_event_by_code(db: Session, code: str) -> Event | None:
-    """Get an active event by its code."""
-    return (
-        db.query(Event)
-        .filter(
-            Event.code == code.upper(),
-            Event.is_active == True,
-            Event.expires_at > datetime.utcnow(),
-            Event.archived_at == None,
-        )
-        .first()
-    )
-
-
 def get_event_by_code_with_status(db: Session, code: str) -> tuple[Event | None, EventLookupResult]:
     """
     Get an event by code and return lookup result status.

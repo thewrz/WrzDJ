@@ -130,12 +130,6 @@ export interface TidalStatus {
   expires_at: string | null;
 }
 
-/** Tidal OAuth URL response */
-export interface TidalAuthUrl {
-  auth_url: string;
-  state: string;
-}
-
 /** Tidal search result */
 export interface TidalSearchResult {
   track_id: string;
