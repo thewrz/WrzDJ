@@ -66,6 +66,21 @@ export interface KioskDisplay {
   updated_at: string;
 }
 
+export interface PlayHistoryItem {
+  id: number;
+  title: string;
+  artist: string;
+  artwork_url: string | null;
+  played_at: string;
+}
+
+export interface PlayHistoryResponse {
+  items: PlayHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface SearchResult {
   artist: string;
   title: string;
@@ -243,6 +258,16 @@ class ApiClient {
   async getKioskDisplay(code: string): Promise<KioskDisplay> {
     // Public endpoint, no auth needed
     const response = await fetch(`${getApiUrl()}/api/public/events/${code}/display`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+      throw new ApiError(error.detail || 'Request failed', response.status);
+    }
+    return response.json();
+  }
+
+  async getPlayHistory(code: string, limit: number = 10): Promise<PlayHistoryResponse> {
+    // Public endpoint, no auth needed
+    const response = await fetch(`${getApiUrl()}/api/public/events/${code}/history?limit=${limit}`);
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Request failed' }));
       throw new ApiError(error.detail || 'Request failed', response.status);

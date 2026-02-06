@@ -9,6 +9,7 @@ from app.api.deps import get_db
 from app.core.config import get_settings
 from app.models.request import RequestStatus
 from app.services.event import EventLookupResult, get_event_by_code_with_status
+from app.services.play_history import get_play_history, get_play_history_count
 
 router = APIRouter()
 settings = get_settings()
@@ -32,6 +33,21 @@ class KioskDisplayResponse(BaseModel):
     accepted_queue: list[PublicRequestInfo]
     now_playing: PublicRequestInfo | None
     updated_at: datetime
+
+
+class PlayHistoryItem(BaseModel):
+    id: int
+    title: str
+    artist: str
+    artwork_url: str | None
+    played_at: datetime
+
+
+class PlayHistoryResponse(BaseModel):
+    items: list[PlayHistoryItem]
+    total: int
+    limit: int
+    offset: int
 
 
 @router.get("/events/{code}/display", response_model=KioskDisplayResponse)
@@ -92,4 +108,47 @@ def get_kiosk_display(
         accepted_queue=accepted_queue,
         now_playing=now_playing,
         updated_at=datetime.utcnow(),
+    )
+
+
+@router.get("/events/{code}/history", response_model=PlayHistoryResponse)
+def get_event_history(
+    code: str,
+    db: Session = Depends(get_db),
+    limit: int = 10,
+    offset: int = 0,
+) -> PlayHistoryResponse:
+    """Get play history for an event."""
+    event, lookup_result = get_event_by_code_with_status(db, code)
+
+    if lookup_result == EventLookupResult.NOT_FOUND:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if lookup_result == EventLookupResult.EXPIRED:
+        raise HTTPException(status_code=410, detail="Event has expired")
+
+    if lookup_result == EventLookupResult.ARCHIVED:
+        raise HTTPException(status_code=410, detail="Event has been archived")
+
+    # Clamp limit to reasonable bounds
+    limit = max(1, min(limit, 50))
+    offset = max(0, offset)
+
+    history = get_play_history(db, event, limit=limit, offset=offset)
+    total = get_play_history_count(db, event)
+
+    return PlayHistoryResponse(
+        items=[
+            PlayHistoryItem(
+                id=h.id,
+                title=h.title,
+                artist=h.artist,
+                artwork_url=h.album_art_url,
+                played_at=h.played_at,
+            )
+            for h in history
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
     )

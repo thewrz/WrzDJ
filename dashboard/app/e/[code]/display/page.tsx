@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
-import { api, ApiError, KioskDisplay, SearchResult } from '@/lib/api';
+import { api, ApiError, KioskDisplay, PlayHistoryItem, SearchResult } from '@/lib/api';
 
 const INACTIVITY_TIMEOUT = 60000; // 60 seconds
 
@@ -12,6 +12,7 @@ export default function KioskDisplayPage() {
   const code = params.code as string;
 
   const [display, setDisplay] = useState<KioskDisplay | null>(null);
+  const [playHistory, setPlayHistory] = useState<PlayHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ message: string; status: number } | null>(null);
 
@@ -28,11 +29,15 @@ export default function KioskDisplayPage() {
   // Inactivity timer
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load kiosk display data
+  // Load kiosk display data and play history
   const loadDisplay = useCallback(async (): Promise<boolean> => {
     try {
-      const data = await api.getKioskDisplay(code);
-      setDisplay(data);
+      const [displayData, historyData] = await Promise.all([
+        api.getKioskDisplay(code),
+        api.getPlayHistory(code, 10),
+      ]);
+      setDisplay(displayData);
+      setPlayHistory(historyData.items);
       setError(null);
       return true; // Continue polling
     } catch (err) {
@@ -405,6 +410,83 @@ export default function KioskDisplayPage() {
           text-align: center;
           padding: 2rem;
         }
+        .history-section {
+          margin-top: 1.5rem;
+          padding-top: 1.5rem;
+          border-top: 1px solid rgba(255,255,255,0.1);
+          flex-shrink: 0;
+        }
+        .history-label {
+          color: #a855f7;
+          font-size: 0.875rem;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          margin-bottom: 0.75rem;
+        }
+        .history-scroll {
+          display: flex;
+          gap: 0.75rem;
+          overflow-x: auto;
+          padding-bottom: 0.5rem;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(168, 85, 247, 0.3) transparent;
+        }
+        .history-scroll::-webkit-scrollbar {
+          height: 4px;
+        }
+        .history-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .history-scroll::-webkit-scrollbar-thumb {
+          background: rgba(168, 85, 247, 0.3);
+          border-radius: 2px;
+        }
+        .history-item {
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          background: rgba(168, 85, 247, 0.1);
+          padding: 0.5rem 0.75rem;
+          border-radius: 0.5rem;
+          max-width: 200px;
+        }
+        .history-item-art {
+          width: 32px;
+          height: 32px;
+          border-radius: 0.25rem;
+          object-fit: cover;
+          flex-shrink: 0;
+        }
+        .history-item-placeholder {
+          width: 32px;
+          height: 32px;
+          border-radius: 0.25rem;
+          background: rgba(168, 85, 247, 0.2);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.875rem;
+          flex-shrink: 0;
+        }
+        .history-item-info {
+          min-width: 0;
+        }
+        .history-item-title {
+          color: #e9d5ff;
+          font-size: 0.75rem;
+          font-weight: 500;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .history-item-artist {
+          color: #a78bfa;
+          font-size: 0.625rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
         .request-button {
           margin-top: 1.5rem;
           align-self: center;
@@ -639,6 +721,27 @@ export default function KioskDisplayPage() {
               <div className="queue-empty">
                 <p>No songs in queue yet.</p>
                 <p>Be the first to request!</p>
+              </div>
+            )}
+
+            {playHistory.length > 0 && (
+              <div className="history-section">
+                <div className="history-label">Recently Played</div>
+                <div className="history-scroll">
+                  {playHistory.map((item) => (
+                    <div key={item.id} className="history-item">
+                      {item.artwork_url ? (
+                        <img src={item.artwork_url} alt={item.title} className="history-item-art" />
+                      ) : (
+                        <div className="history-item-placeholder">🎵</div>
+                      )}
+                      <div className="history-item-info">
+                        <div className="history-item-title">{item.title}</div>
+                        <div className="history-item-artist">{item.artist}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
