@@ -274,3 +274,254 @@ class TestSanitizeCsvValue:
         assert "'+" in data_line or "\"'+" in data_line
         assert "'-" in data_line or "\"'-" in data_line
         assert "'@" in data_line or "\"'@" in data_line
+
+
+class TestExportPlayHistoryToCsv:
+    """Tests for play history CSV export functionality."""
+
+    def test_includes_header_row(self):
+        """Test that CSV includes proper header row for play history."""
+        from app.services.export import export_play_history_to_csv
+
+        event = MagicMock()
+        csv_content = export_play_history_to_csv(event, [])
+
+        assert "Play Order" in csv_content
+        assert "Title" in csv_content
+        assert "Artist" in csv_content
+        assert "Album" in csv_content
+        assert "Source" in csv_content
+        assert "Was Requested" in csv_content
+        assert "Started At" in csv_content
+        assert "Ended At" in csv_content
+
+    def test_empty_history_list(self):
+        """Test exporting empty play history list."""
+        from app.services.export import export_play_history_to_csv
+
+        event = MagicMock()
+        csv_content = export_play_history_to_csv(event, [])
+
+        lines = csv_content.strip().split("\n")
+        assert len(lines) == 1  # Just header
+
+    def test_includes_play_history_data(self):
+        """Test that CSV includes play history data."""
+        from app.services.export import export_play_history_to_csv
+
+        event = MagicMock()
+
+        history_item = MagicMock()
+        history_item.play_order = 1
+        history_item.title = "Test Song"
+        history_item.artist = "Test Artist"
+        history_item.album = "Test Album"
+        history_item.source = "stagelinq"
+        history_item.matched_request_id = 42
+        history_item.started_at = datetime(2026, 1, 15, 12, 0, 0)
+        history_item.ended_at = datetime(2026, 1, 15, 12, 3, 30)
+
+        csv_content = export_play_history_to_csv(event, [history_item])
+
+        assert "1" in csv_content  # play_order
+        assert "Test Song" in csv_content
+        assert "Test Artist" in csv_content
+        assert "Test Album" in csv_content
+        assert "Live" in csv_content  # stagelinq -> "Live"
+        assert "Yes" in csv_content  # matched_request_id present -> "Yes"
+        assert "2026-01-15" in csv_content
+
+    def test_source_display_stagelinq_as_live(self):
+        """Test that stagelinq source displays as 'Live'."""
+        from app.services.export import export_play_history_to_csv
+
+        event = MagicMock()
+
+        history_item = MagicMock()
+        history_item.play_order = 1
+        history_item.title = "Song"
+        history_item.artist = "Artist"
+        history_item.album = None
+        history_item.source = "stagelinq"
+        history_item.matched_request_id = None
+        history_item.started_at = datetime(2026, 1, 15, 12, 0, 0)
+        history_item.ended_at = None
+
+        csv_content = export_play_history_to_csv(event, [history_item])
+
+        lines = csv_content.strip().split("\n")
+        data_line = lines[1]
+        assert "Live" in data_line
+
+    def test_source_display_manual_as_manual(self):
+        """Test that manual source displays as 'Manual'."""
+        from app.services.export import export_play_history_to_csv
+
+        event = MagicMock()
+
+        history_item = MagicMock()
+        history_item.play_order = 1
+        history_item.title = "Song"
+        history_item.artist = "Artist"
+        history_item.album = None
+        history_item.source = "manual"
+        history_item.matched_request_id = 10
+        history_item.started_at = datetime(2026, 1, 15, 12, 0, 0)
+        history_item.ended_at = None
+
+        csv_content = export_play_history_to_csv(event, [history_item])
+
+        lines = csv_content.strip().split("\n")
+        data_line = lines[1]
+        assert "Manual" in data_line
+
+    def test_was_requested_yes_when_matched(self):
+        """Test that Was Requested shows 'Yes' when matched_request_id is set."""
+        from app.services.export import export_play_history_to_csv
+
+        event = MagicMock()
+
+        history_item = MagicMock()
+        history_item.play_order = 1
+        history_item.title = "Song"
+        history_item.artist = "Artist"
+        history_item.album = None
+        history_item.source = "stagelinq"
+        history_item.matched_request_id = 42
+        history_item.started_at = datetime(2026, 1, 15, 12, 0, 0)
+        history_item.ended_at = None
+
+        csv_content = export_play_history_to_csv(event, [history_item])
+
+        lines = csv_content.strip().split("\n")
+        data_line = lines[1]
+        assert "Yes" in data_line
+
+    def test_was_requested_no_when_not_matched(self):
+        """Test that Was Requested shows 'No' when matched_request_id is None."""
+        from app.services.export import export_play_history_to_csv
+
+        event = MagicMock()
+
+        history_item = MagicMock()
+        history_item.play_order = 1
+        history_item.title = "Song"
+        history_item.artist = "Artist"
+        history_item.album = None
+        history_item.source = "stagelinq"
+        history_item.matched_request_id = None
+        history_item.started_at = datetime(2026, 1, 15, 12, 0, 0)
+        history_item.ended_at = None
+
+        csv_content = export_play_history_to_csv(event, [history_item])
+
+        lines = csv_content.strip().split("\n")
+        data_line = lines[1]
+        assert "No" in data_line
+
+    def test_handles_none_values(self):
+        """Test that None values are handled gracefully."""
+        from app.services.export import export_play_history_to_csv
+
+        event = MagicMock()
+
+        history_item = MagicMock()
+        history_item.play_order = 1
+        history_item.title = "Song"
+        history_item.artist = "Artist"
+        history_item.album = None
+        history_item.source = "stagelinq"
+        history_item.matched_request_id = None
+        history_item.started_at = None
+        history_item.ended_at = None
+
+        # Should not raise
+        csv_content = export_play_history_to_csv(event, [history_item])
+        assert "Song" in csv_content
+
+    def test_multiple_history_entries(self):
+        """Test exporting multiple play history entries."""
+        from app.services.export import export_play_history_to_csv
+
+        event = MagicMock()
+
+        history_items = []
+        for i in range(5):
+            item = MagicMock()
+            item.play_order = i + 1
+            item.title = f"Song {i}"
+            item.artist = f"Artist {i}"
+            item.album = f"Album {i}" if i % 2 == 0 else None
+            item.source = "stagelinq" if i % 2 == 0 else "manual"
+            item.matched_request_id = i if i % 2 == 0 else None
+            item.started_at = datetime(2026, 1, 15, 12, i, 0)
+            item.ended_at = datetime(2026, 1, 15, 12, i + 3, 0)
+            history_items.append(item)
+
+        csv_content = export_play_history_to_csv(event, history_items)
+
+        lines = csv_content.strip().split("\n")
+        assert len(lines) == 6  # Header + 5 data rows
+
+    def test_sanitizes_formula_injection(self):
+        """Test that play history export sanitizes user-controlled fields."""
+        from app.services.export import export_play_history_to_csv
+
+        event = MagicMock()
+
+        history_item = MagicMock()
+        history_item.play_order = 1
+        history_item.title = '=HYPERLINK("http://evil.com","Click")'
+        history_item.artist = "+cmd|' /C calc'!A0"
+        history_item.album = "-2+3+cmd"
+        history_item.source = "stagelinq"
+        history_item.matched_request_id = None
+        history_item.started_at = datetime(2026, 1, 15, 12, 0, 0)
+        history_item.ended_at = None
+
+        csv_content = export_play_history_to_csv(event, [history_item])
+
+        lines = csv_content.strip().split("\n")
+        data_line = lines[1]
+
+        # All formula characters should be escaped with leading quote
+        assert "'=" in data_line or "\"'=" in data_line
+        assert "'+" in data_line or "\"'+" in data_line
+        assert "'-" in data_line or "\"'-" in data_line
+
+
+class TestGeneratePlayHistoryExportFilename:
+    """Tests for play history export filename generation."""
+
+    def test_includes_event_code(self):
+        """Test that filename includes event code."""
+        from app.services.export import generate_play_history_export_filename
+
+        event = MagicMock()
+        event.code = "ABC123"
+        event.name = "Test Event"
+
+        filename = generate_play_history_export_filename(event)
+        assert "ABC123" in filename
+
+    def test_includes_play_history_indicator(self):
+        """Test that filename indicates it's play history."""
+        from app.services.export import generate_play_history_export_filename
+
+        event = MagicMock()
+        event.code = "ABC123"
+        event.name = "Test"
+
+        filename = generate_play_history_export_filename(event)
+        assert "play_history" in filename.lower()
+
+    def test_ends_with_csv_extension(self):
+        """Test that filename ends with .csv."""
+        from app.services.export import generate_play_history_export_filename
+
+        event = MagicMock()
+        event.code = "ABC123"
+        event.name = "Test"
+
+        filename = generate_play_history_export_filename(event)
+        assert filename.endswith(".csv")

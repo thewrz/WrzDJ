@@ -274,6 +274,32 @@ class ApiClient {
     URL.revokeObjectURL(url);
   }
 
+  async exportPlayHistoryCsv(code: string): Promise<void> {
+    const headers = new Headers();
+    if (this.token) {
+      headers.set('Authorization', `Bearer ${this.token}`);
+    }
+
+    const response = await fetch(`${getApiUrl()}/api/events/${code}/export/play-history/csv`, {
+      headers,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Export failed' }));
+      throw new ApiError(error.detail || 'Export failed', response.status);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const contentDisposition = response.headers.get('Content-Disposition');
+    const filenameMatch = contentDisposition?.match(/filename=([^;]+)/);
+    a.download = filenameMatch ? filenameMatch[1].replace(/"/g, '') : `${code}_play_history.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   async getKioskDisplay(code: string): Promise<KioskDisplay> {
     // Public endpoint, no auth needed
     const response = await fetch(`${getApiUrl()}/api/public/events/${code}/display`);

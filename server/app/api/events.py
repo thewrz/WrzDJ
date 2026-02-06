@@ -26,7 +26,13 @@ from app.services.event import (
     unarchive_event,
     update_event,
 )
-from app.services.export import export_requests_to_csv, generate_export_filename
+from app.services.export import (
+    export_play_history_to_csv,
+    export_requests_to_csv,
+    generate_export_filename,
+    generate_play_history_export_filename,
+)
+from app.services.now_playing import get_play_history
 from app.services.request import create_request, get_requests_for_event
 
 router = APIRouter()
@@ -201,8 +207,10 @@ def unarchive_event_endpoint(
 
 
 @router.get("/{code}/export/csv")
+@limiter.limit("5/minute")
 def export_event_csv(
     code: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
@@ -217,6 +225,44 @@ def export_event_csv(
     # Generate CSV content
     csv_content = export_requests_to_csv(event, requests)
     filename = generate_export_filename(event)
+
+    # Properly encode filename for Content-Disposition header (RFC 6266)
+    safe_filename = filename.replace('"', '\\"')
+    ascii_filename = quote(filename, safe="")
+
+    content_disposition = (
+        f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{ascii_filename}"
+    )
+    return StreamingResponse(
+        iter([csv_content]),
+        media_type="text/csv",
+        headers={"Content-Disposition": content_disposition},
+    )
+
+
+# Maximum number of play history entries to export in a single CSV
+MAX_EXPORT_PLAY_HISTORY = 10000
+
+
+@router.get("/{code}/export/play-history/csv")
+@limiter.limit("5/minute")
+def export_play_history_csv(
+    code: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Export play history as CSV. Owner can export regardless of event status."""
+    event = get_event_by_code_for_owner(db, code, current_user)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # Get all play history entries for the event (limited for safety)
+    history_items, _ = get_play_history(db, event.id, limit=MAX_EXPORT_PLAY_HISTORY, offset=0)
+
+    # Generate CSV content
+    csv_content = export_play_history_to_csv(event, history_items)
+    filename = generate_play_history_export_filename(event)
 
     # Properly encode filename for Content-Disposition header (RFC 6266)
     safe_filename = filename.replace('"', '\\"')

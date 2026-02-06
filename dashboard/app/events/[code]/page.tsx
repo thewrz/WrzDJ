@@ -7,7 +7,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/auth';
 import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem } from '@/lib/api';
 
-type StatusFilter = 'all' | 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
+// Removed 'played' from filter since played tracks appear in Play History section
+type StatusFilter = 'all' | 'new' | 'accepted' | 'playing' | 'rejected';
 
 function toLocalDateTimeString(date: Date): string {
   const pad = (n: number) => n.toString().padStart(2, '0');
@@ -23,10 +24,12 @@ export default function EventQueuePage() {
   const [event, setEvent] = useState<Event | ArchivedEvent | null>(null);
   const [requests, setRequests] = useState<SongRequest[]>([]);
   const [playHistory, setPlayHistory] = useState<PlayHistoryItem[]>([]);
+  const [playHistoryTotal, setPlayHistoryTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [updating, setUpdating] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportingHistory, setExportingHistory] = useState(false);
 
   const [eventStatus, setEventStatus] = useState<'active' | 'expired' | 'archived'>('active');
   const [error, setError] = useState<{ message: string; status: number } | null>(null);
@@ -48,11 +51,12 @@ export default function EventQueuePage() {
       const [eventData, requestsData, historyData] = await Promise.all([
         api.getEvent(code),
         api.getRequests(code),
-        api.getPlayHistory(code, 10).catch(() => ({ items: [], total: 0 })),
+        api.getPlayHistory(code, 30).catch(() => ({ items: [], total: 0 })),
       ]);
       setEvent(eventData);
       setRequests(requestsData);
       setPlayHistory(historyData.items);
+      setPlayHistoryTotal(historyData.total);
       setEventStatus('active');
       setError(null);
       return true; // Continue polling
@@ -186,6 +190,17 @@ export default function EventQueuePage() {
     }
   };
 
+  const handleExportPlayHistoryCsv = async () => {
+    setExportingHistory(true);
+    try {
+      await api.exportPlayHistoryCsv(code);
+    } catch (err) {
+      console.error('Failed to export play history:', err);
+    } finally {
+      setExportingHistory(false);
+    }
+  };
+
   const filteredRequests = requests.filter((r) =>
     filter === 'all' ? true : r.status === filter
   );
@@ -195,7 +210,6 @@ export default function EventQueuePage() {
     new: requests.filter((r) => r.status === 'new').length,
     accepted: requests.filter((r) => r.status === 'accepted').length,
     playing: requests.filter((r) => r.status === 'playing').length,
-    played: requests.filter((r) => r.status === 'played').length,
     rejected: requests.filter((r) => r.status === 'rejected').length,
   };
 
@@ -353,7 +367,7 @@ export default function EventQueuePage() {
       </div>
 
       <div className="tabs">
-        {(['all', 'new', 'accepted', 'playing', 'played', 'rejected'] as StatusFilter[]).map((status) => (
+        {(['all', 'new', 'accepted', 'playing', 'rejected'] as StatusFilter[]).map((status) => (
           <button
             key={status}
             className={`tab ${filter === status ? 'active' : ''}`}
@@ -456,7 +470,22 @@ export default function EventQueuePage() {
       {/* Play History Section */}
       {playHistory.length > 0 && (
         <div className="card" style={{ marginTop: '2rem' }}>
-          <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem' }}>Play History</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <h2 style={{ margin: 0, fontSize: '1.25rem' }}>
+              Play History
+              <span style={{ color: '#9ca3af', fontWeight: 'normal', marginLeft: '0.5rem' }}>
+                ({playHistoryTotal} {playHistoryTotal === 1 ? 'track' : 'tracks'})
+              </span>
+            </h2>
+            <button
+              className="btn btn-sm"
+              style={{ background: '#8b5cf6', padding: '0.25rem 0.75rem' }}
+              onClick={handleExportPlayHistoryCsv}
+              disabled={exportingHistory}
+            >
+              {exportingHistory ? 'Exporting...' : 'Export Play History'}
+            </button>
+          </div>
           <div className="request-list">
             {playHistory.map((item) => (
               <div key={item.id} className="request-item" style={{ padding: '0.75rem' }}>

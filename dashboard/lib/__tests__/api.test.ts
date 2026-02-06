@@ -207,6 +207,84 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('exportPlayHistoryCsv', () => {
+    it('downloads play history CSV file', async () => {
+      api.setToken('test-token');
+
+      const mockBlob = new Blob(['csv,content'], { type: 'text/csv' });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        blob: async () => mockBlob,
+        headers: new Headers({
+          'Content-Disposition': 'attachment; filename="ABC123_play_history_20260205.csv"',
+        }),
+      });
+
+      // Mock URL and document APIs
+      const mockUrl = 'blob:http://localhost/abc123';
+      const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue(mockUrl);
+      const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
+      const mockAnchor = {
+        href: '',
+        download: '',
+        click: vi.fn(),
+      };
+      const createElementSpy = vi.spyOn(document, 'createElement').mockReturnValue(mockAnchor as unknown as HTMLElement);
+
+      await api.exportPlayHistoryCsv('ABC123');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123/export/play-history/csv');
+
+      expect(createElementSpy).toHaveBeenCalledWith('a');
+      expect(mockAnchor.href).toBe(mockUrl);
+      expect(mockAnchor.download).toBe('ABC123_play_history_20260205.csv');
+      expect(mockAnchor.click).toHaveBeenCalled();
+      expect(revokeObjectURLSpy).toHaveBeenCalledWith(mockUrl);
+
+      createObjectURLSpy.mockRestore();
+      revokeObjectURLSpy.mockRestore();
+      createElementSpy.mockRestore();
+    });
+
+    it('throws ApiError on failure', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ detail: 'Event not found' }),
+      });
+
+      await expect(api.exportPlayHistoryCsv('INVALID')).rejects.toThrow('Event not found');
+    });
+
+    it('includes auth token in request', async () => {
+      api.setToken('my-auth-token');
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(['csv'], { type: 'text/csv' }),
+        headers: new Headers({
+          'Content-Disposition': 'attachment; filename="test.csv"',
+        }),
+      });
+
+      // Mock DOM APIs
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      vi.spyOn(document, 'createElement').mockReturnValue({
+        href: '',
+        download: '',
+        click: vi.fn(),
+      } as unknown as HTMLElement);
+
+      await api.exportPlayHistoryCsv('ABC123');
+
+      const [, options] = mockFetch.mock.calls[0];
+      expect(options.headers.get('Authorization')).toBe('Bearer my-auth-token');
+    });
+  });
+
   describe('error handling', () => {
     it('throws with detail from error response', async () => {
       api.setToken('token');
