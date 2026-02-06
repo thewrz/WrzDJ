@@ -32,6 +32,7 @@ services:
       PUBLIC_URL: http://localhost:3000
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BRIDGE_API_KEY: ${BRIDGE_API_KEY:-}
     ports:
       - "8000:8000"
     depends_on:
