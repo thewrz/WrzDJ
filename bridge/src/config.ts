@@ -13,6 +13,21 @@ export const config = {
 
   /** Minimum seconds before reporting a new track (debounce threshold) */
   minPlaySeconds: parseInt(process.env.MIN_PLAY_SECONDS || "5", 10),
+
+  /** Seconds of continuous play before reporting track as live */
+  liveThresholdSeconds: parseInt(process.env.LIVE_THRESHOLD_SECONDS || "15", 10),
+
+  /** Seconds current "now playing" deck must pause before switching to another deck */
+  nowPlayingPauseSeconds: parseInt(process.env.NOW_PLAYING_PAUSE_SECONDS || "10", 10),
+
+  /** Seconds of pause before resetting accumulated play time */
+  pauseGraceSeconds: parseInt(process.env.PAUSE_GRACE_SECONDS || "3", 10),
+
+  /** Whether to require fader > 0 for live detection */
+  useFaderDetection: process.env.USE_FADER_DETECTION !== "false",
+
+  /** Whether to only report from master deck */
+  masterDeckPriority: process.env.MASTER_DECK_PRIORITY !== "false",
 };
 
 /**
@@ -30,6 +45,20 @@ export function validateConfig(): void {
     throw new Error(
       "WRZDJ_EVENT_CODE is required. This is the event code from the DJ dashboard."
     );
+  }
+
+  // Validate numeric config values
+  if (Number.isNaN(config.minPlaySeconds) || config.minPlaySeconds < 0) {
+    throw new Error("MIN_PLAY_SECONDS must be a non-negative number");
+  }
+  if (Number.isNaN(config.liveThresholdSeconds) || config.liveThresholdSeconds < 0) {
+    throw new Error("LIVE_THRESHOLD_SECONDS must be a non-negative number");
+  }
+  if (Number.isNaN(config.pauseGraceSeconds) || config.pauseGraceSeconds < 0) {
+    throw new Error("PAUSE_GRACE_SECONDS must be a non-negative number");
+  }
+  if (Number.isNaN(config.nowPlayingPauseSeconds) || config.nowPlayingPauseSeconds < 0) {
+    throw new Error("NOW_PLAYING_PAUSE_SECONDS must be a non-negative number");
   }
 
   // Warn if using HTTP with a non-localhost URL

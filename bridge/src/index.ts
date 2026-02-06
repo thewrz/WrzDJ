@@ -5,10 +5,14 @@
  * track changes to the WrzDJ backend.
  *
  * Environment variables:
- *   WRZDJ_API_URL        - Backend API URL (default: http://localhost:8000)
- *   WRZDJ_BRIDGE_API_KEY - API key for authentication (required)
- *   WRZDJ_EVENT_CODE     - Event code to report tracks for (required)
- *   MIN_PLAY_SECONDS     - Debounce threshold in seconds (default: 5)
+ *   WRZDJ_API_URL           - Backend API URL (default: http://localhost:8000)
+ *   WRZDJ_BRIDGE_API_KEY    - API key for authentication (required)
+ *   WRZDJ_EVENT_CODE        - Event code to report tracks for (required)
+ *   MIN_PLAY_SECONDS        - Debounce threshold in seconds (default: 5)
+ *   LIVE_THRESHOLD_SECONDS  - Seconds before track is considered "live" (default: 8)
+ *   PAUSE_GRACE_SECONDS     - Seconds of pause tolerated before resetting (default: 3)
+ *   USE_FADER_DETECTION     - Require fader > 0 for live detection (default: true)
+ *   MASTER_DECK_PRIORITY    - Only report from master deck (default: true)
  */
 import { StageLinq } from "stagelinq";
 import { config, validateConfig } from "./config.js";
@@ -18,6 +22,17 @@ import {
   shouldSkipTrack,
   updateLastTrack,
 } from "./bridge.js";
+import { DeckStateManager } from "./deck-state-manager.js";
+import type { DeckLiveEvent } from "./deck-state.js";
+
+// Create deck state manager for robust track detection
+const deckManager = new DeckStateManager({
+  liveThresholdSeconds: config.liveThresholdSeconds,
+  pauseGraceSeconds: config.pauseGraceSeconds,
+  nowPlayingPauseSeconds: config.nowPlayingPauseSeconds,
+  useFaderDetection: config.useFaderDetection,
+  masterDeckPriority: config.masterDeckPriority,
+});
 
 async function main(): Promise<void> {
   console.log("[Bridge] WrzDJ StageLinQ Bridge starting...");
@@ -26,37 +41,96 @@ async function main(): Promise<void> {
   validateConfig();
   console.log(`[Bridge] API URL: ${config.apiUrl}`);
   console.log(`[Bridge] Event Code: ${config.eventCode}`);
-  console.log(`[Bridge] Debounce: ${config.minPlaySeconds}s`);
+  console.log(`[Bridge] Live Threshold: ${config.liveThresholdSeconds}s`);
+  console.log(`[Bridge] Pause Grace: ${config.pauseGraceSeconds}s`);
+  console.log(`[Bridge] Now Playing Pause: ${config.nowPlayingPauseSeconds}s`);
+  console.log(`[Bridge] Fader Detection: ${config.useFaderDetection}`);
+  console.log(`[Bridge] Master Deck Priority: ${config.masterDeckPriority}`);
 
-  // Handle now-playing events from DJ equipment (using static API)
-  StageLinq.devices.on("nowPlaying", async (status: unknown) => {
-    const trackStatus = status as {
-      title?: string;
-      artist?: string;
-      album?: string;
-      deck?: string;
-    };
+  // Handle track going "live" (after threshold, with conditions met)
+  deckManager.on("deckLive", async (event: DeckLiveEvent) => {
+    const { deckId, track } = event;
 
-    const title = trackStatus.title || "";
-    const artist = trackStatus.artist || "";
-
-    // Skip if we should debounce or dedupe
-    if (shouldSkipTrack(artist, title)) {
+    // Apply existing deduplication logic
+    if (shouldSkipTrack(track.artist, track.title)) {
       return;
     }
 
+    console.log(
+      `[Bridge] Deck ${deckId} LIVE: "${track.title}" by ${track.artist}`
+    );
+
     // Update tracking state and post to backend
-    updateLastTrack(artist, title);
-    await postNowPlaying(title, artist, trackStatus.album, trackStatus.deck);
+    updateLastTrack(track.artist, track.title);
+    await postNowPlaying(track.title, track.artist, track.album, deckId);
+  });
+
+  // Handle now-playing events from DJ equipment (track metadata + play state)
+  // The nowPlaying event is emitted when a track starts playing on a deck
+  StageLinq.devices.on("nowPlaying", (status) => {
+    const deckId = status.deck || "1";
+    const title = status.title || "";
+    const artist = status.artist || "";
+    const currentState = deckManager.getDeckState(deckId);
+
+    if (!title) {
+      // Track unloaded or stopped
+      deckManager.updateTrackInfo(deckId, null);
+      return;
+    }
+
+    // Check if this is a new track (different from current)
+    const isNewTrack =
+      !currentState.track ||
+      currentState.track.title !== title ||
+      currentState.track.artist !== artist;
+
+    if (isNewTrack) {
+      // New track loaded - update info
+      deckManager.updateTrackInfo(deckId, {
+        title,
+        artist,
+        album: status.album,
+      });
+    }
+
+    // Use EXPLICIT play state - don't assume true
+    // The play/playState booleans indicate actual play state
+    const isPlaying = status.play === true || status.playState === true;
+
+    // Only update play state if we have explicit info
+    if (typeof status.play === "boolean" || typeof status.playState === "boolean") {
+      deckManager.updatePlayState(deckId, isPlaying);
+    }
+  });
+
+  // Handle state changed events (play state, faders, master deck)
+  // stagelinq v3 emits stateChanged for real-time state updates
+  StageLinq.devices.on("stateChanged", (status) => {
+    if (!status.deck) return;
+
+    const deckId = status.deck;
+
+    // Update play state if provided
+    if (typeof status.play === "boolean" || typeof status.playState === "boolean") {
+      const isPlaying = status.play === true || status.playState === true;
+      deckManager.updatePlayState(deckId, isPlaying);
+    }
+
+    // Update fader level if provided
+    if (typeof status.faderLevel === "number") {
+      deckManager.updateFaderLevel(deckId, status.faderLevel);
+    }
+
+    // Update master deck if provided
+    if (status.masterStatus === true) {
+      deckManager.setMasterDeck(deckId);
+    }
   });
 
   // Handle device ready events
-  StageLinq.devices.on("ready", async (info: unknown) => {
-    const deviceInfo = info as {
-      software?: { name?: string; version?: string };
-      address?: string;
-    };
-    const deviceName = deviceInfo?.software?.name || "Unknown Device";
+  StageLinq.devices.on("ready", async (info) => {
+    const deviceName = info?.software?.name || "Unknown Device";
     console.log(`[Bridge] Device ready: ${deviceName}`);
     await postBridgeStatus(true, deviceName);
   });
@@ -70,6 +144,7 @@ async function main(): Promise<void> {
   // Graceful shutdown handlers
   const shutdown = async (signal: string): Promise<void> => {
     console.log(`\n[Bridge] Received ${signal}, shutting down...`);
+    deckManager.destroy(); // Clean up timers and listeners
     await postBridgeStatus(false);
     await StageLinq.disconnect();
     process.exit(0);
@@ -87,5 +162,6 @@ async function main(): Promise<void> {
 // Run the bridge
 main().catch((err: Error) => {
   console.error("[Bridge] Fatal error:", err.message);
+  deckManager.destroy();
   process.exit(1);
 });

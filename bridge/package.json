@@ -7,15 +7,20 @@
   "scripts": {
     "start": "node --env-file=.env --import tsx src/index.ts",
     "build": "tsc",
-    "dev": "node --env-file=.env --watch --import tsx src/index.ts"
+    "dev": "node --env-file=.env --watch --import tsx src/index.ts",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "stagelinq": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
     "tsx": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^4.0.0"
   },
   "engines": {
     "node": ">=20.0.0"
