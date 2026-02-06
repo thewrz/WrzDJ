@@ -28,11 +28,8 @@ async function main(): Promise<void> {
   console.log(`[Bridge] Event Code: ${config.eventCode}`);
   console.log(`[Bridge] Debounce: ${config.minPlaySeconds}s`);
 
-  // Initialize StageLinQ client
-  const stagelinq = new StageLinq({ downloadDbSources: false });
-
-  // Handle now-playing events from DJ equipment
-  stagelinq.devices.on("nowPlaying", async (status: unknown) => {
+  // Handle now-playing events from DJ equipment (using static API)
+  StageLinq.devices.on("nowPlaying", async (status: unknown) => {
     const trackStatus = status as {
       title?: string;
       artist?: string;
@@ -54,7 +51,7 @@ async function main(): Promise<void> {
   });
 
   // Handle device ready events
-  stagelinq.devices.on("ready", async (info: unknown) => {
+  StageLinq.devices.on("ready", async (info: unknown) => {
     const deviceInfo = info as {
       software?: { name?: string; version?: string };
       address?: string;
@@ -65,7 +62,7 @@ async function main(): Promise<void> {
   });
 
   // Handle device disconnect
-  stagelinq.devices.on("disconnect", async () => {
+  StageLinq.devices.on("disconnect", async () => {
     console.log("[Bridge] Device disconnected");
     await postBridgeStatus(false);
   });
@@ -74,7 +71,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     console.log(`\n[Bridge] Received ${signal}, shutting down...`);
     await postBridgeStatus(false);
-    await stagelinq.disconnect();
+    await StageLinq.disconnect();
     process.exit(0);
   };
 
@@ -83,7 +80,7 @@ async function main(): Promise<void> {
 
   // Connect to StageLinQ network
   console.log("[Bridge] Connecting to StageLinQ network...");
-  await stagelinq.connect();
+  await StageLinq.connect();
   console.log("[Bridge] Listening for DJ equipment...");
 }
 
