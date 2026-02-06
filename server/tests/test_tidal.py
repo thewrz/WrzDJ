@@ -1,6 +1,6 @@
 """Tests for Tidal sync functionality."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,10 +11,10 @@ from app.models.event import Event
 from app.models.request import Request, RequestStatus, TidalSyncStatus
 from app.models.user import User
 from app.services.tidal import (
-    disconnect_tidal,
-    start_device_login,
     cancel_device_login,
+    disconnect_tidal,
     manual_link_track,
+    start_device_login,
 )
 
 
@@ -28,7 +28,7 @@ def tidal_user(db: Session) -> User:
         password_hash=get_password_hash("testpassword123"),
         tidal_access_token="test_access_token",
         tidal_refresh_token="test_refresh_token",
-        tidal_token_expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        tidal_token_expires_at=datetime.now(UTC) + timedelta(hours=1),
         tidal_user_id="12345",
     )
     db.add(user)
@@ -44,7 +44,7 @@ def tidal_event(db: Session, tidal_user: User) -> Event:
         code="TIDAL1",
         name="Tidal Test Event",
         created_by_user_id=tidal_user.id,
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=6),
+        expires_at=datetime.now(UTC) + timedelta(hours=6),
         tidal_sync_enabled=True,
         tidal_playlist_id="playlist123",
     )
@@ -119,9 +119,7 @@ class TestTidalDeviceLogin:
 class TestTidalStatus:
     """Tests for Tidal account status."""
 
-    def test_status_linked(
-        self, client: TestClient, db: Session, tidal_user: User
-    ):
+    def test_status_linked(self, client: TestClient, db: Session, tidal_user: User):
         """Test status shows linked account."""
         # Login as tidal user
         response = client.post(

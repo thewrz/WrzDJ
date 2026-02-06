@@ -7,7 +7,6 @@ so we use tidalapi's device login which has first-party credentials.
 
 import logging
 import threading
-import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
