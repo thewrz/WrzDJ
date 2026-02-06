@@ -22,6 +22,10 @@ class Event(Base):
     now_playing_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Tidal playlist sync
+    tidal_playlist_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    tidal_sync_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
     created_by: Mapped["User"] = relationship("User", back_populates="events")
     requests: Mapped[list["Request"]] = relationship(
         "Request", back_populates="event", foreign_keys="Request.event_id"

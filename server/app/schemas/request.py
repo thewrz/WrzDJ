@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_serializer
 
-from app.models.request import RequestSource, RequestStatus
+from app.models.request import RequestSource, RequestStatus, TidalSyncStatus
 
 
 class RequestCreate(BaseModel):
@@ -31,6 +31,9 @@ class RequestOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     is_duplicate: bool = False
+    # Tidal sync status
+    tidal_track_id: str | None = None
+    tidal_sync_status: TidalSyncStatus | None = None
 
     class Config:
         from_attributes = True

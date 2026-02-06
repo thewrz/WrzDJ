@@ -17,6 +17,7 @@ dependencies = [
     "python-multipart>=0.0.6",
     "spotipy>=2.23.0",
     "slowapi>=0.1.9",
+    "tidalapi>=0.7.0",
 ]
 
 [project.optional-dependencies]
