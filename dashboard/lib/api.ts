@@ -429,7 +429,7 @@ class ApiClient {
   /**
    * Check if Tidal device login is complete.
    */
-  async checkTidalAuth(): Promise<{ complete: boolean; pending?: boolean; error?: string; verification_url?: string; user_code?: string }> {
+  async checkTidalAuth(): Promise<{ complete: boolean; pending?: boolean; error?: string; verification_url?: string; user_code?: string; user_id?: string }> {
     return this.fetch('/api/tidal/auth/check');
   }
 
