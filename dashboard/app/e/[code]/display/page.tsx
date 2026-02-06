@@ -265,14 +265,12 @@ export default function KioskDisplayPage() {
         .kiosk-main {
           flex: 1;
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: 1fr 1fr 1fr;
           gap: 2rem;
           min-height: 0;
         }
         .kiosk-main-single {
-          grid-template-columns: 1fr;
-          max-width: 600px;
-          margin: 0 auto;
+          grid-template-columns: 1fr 1fr;
         }
         .now-playing-section {
           background: rgba(255,255,255,0.1);
@@ -432,22 +430,34 @@ export default function KioskDisplayPage() {
           padding: 2rem;
         }
         .history-section {
-          background: rgba(255,255,255,0.03);
+          background: rgba(255,255,255,0.05);
           border-radius: 1.5rem;
-          padding: 1.5rem;
-          margin-top: 1.5rem;
+          padding: 2rem;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          max-height: 100%;
         }
         .history-label {
           color: #a855f7;
-          font-size: 0.875rem;
+          font-size: 1rem;
           text-transform: uppercase;
           letter-spacing: 0.1em;
-          margin-bottom: 0.75rem;
+          margin-bottom: 1rem;
+          flex-shrink: 0;
         }
         .history-list {
           display: flex;
           flex-direction: column;
           gap: 0.5rem;
+          overflow-y: auto;
+          flex: 1;
+          min-height: 0;
+        }
+        .history-empty {
+          color: #6b7280;
+          text-align: center;
+          padding: 2rem;
         }
         .history-item {
           display: flex;
@@ -757,33 +767,37 @@ export default function KioskDisplayPage() {
                     <p>Request one!</p>
                   </div>
                 )}
+              </div>
 
-                {/* Play History Section */}
-                {playHistory.length > 0 && (
-                  <div className="history-section">
-                    <div className="history-label">Recently Played</div>
-                    <div className="history-list">
-                      {playHistory.slice(0, 5).map((item) => (
-                        <div key={item.id} className="history-item">
-                          {item.album_art_url ? (
-                            <img src={item.album_art_url} alt={item.title} className="history-item-art" />
-                          ) : (
-                            <div className="history-item-placeholder">
-                              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
-                              </svg>
-                            </div>
-                          )}
-                          <div className="history-item-info">
-                            <div className="history-item-title">{item.title}</div>
-                            <div className="history-item-artist">{item.artist}</div>
+              {/* Play History Section - Always visible for consistent 3-column layout */}
+              <div className="history-section">
+                <div className="history-label">Recently Played</div>
+                {playHistory.length > 0 ? (
+                  <div className="history-list">
+                    {playHistory.slice(0, 5).map((item) => (
+                      <div key={item.id} className="history-item">
+                        {item.album_art_url ? (
+                          <img src={item.album_art_url} alt={item.title} className="history-item-art" />
+                        ) : (
+                          <div className="history-item-placeholder">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
+                            </svg>
                           </div>
-                          {item.matched_request_id && (
-                            <span className="requested-badge">Requested</span>
-                          )}
+                        )}
+                        <div className="history-item-info">
+                          <div className="history-item-title">{item.title}</div>
+                          <div className="history-item-artist">{item.artist}</div>
                         </div>
-                      ))}
-                    </div>
+                        {item.matched_request_id && (
+                          <span className="requested-badge">Requested</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="history-empty">
+                    <p>No songs played yet.</p>
                   </div>
                 )}
               </div>
