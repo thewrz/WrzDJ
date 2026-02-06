@@ -10,7 +10,7 @@
     "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
-    "stagelinq": "^2.0.0"
+    "stagelinq": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
