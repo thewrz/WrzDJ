@@ -6,6 +6,7 @@ from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.request import RequestOut, RequestUpdate
 from app.services.event import set_now_playing
+from app.services.now_playing import add_manual_play
 from app.services.request import get_request_by_id, update_request_status
 
 router = APIRouter()
@@ -31,10 +32,11 @@ def update_request(
     # Auto-set now_playing when a request is set to "playing"
     if update_data.status == RequestStatus.PLAYING:
         set_now_playing(db, request.event, request.id)
-    # Clear now_playing when the current song is marked as "played"
+    # Clear now_playing when the current song is marked as "played" and add to history
     elif update_data.status == RequestStatus.PLAYED:
         if request.event.now_playing_request_id == request.id:
             set_now_playing(db, request.event, None)
+        add_manual_play(db, request.event, request)
 
     return RequestOut(
         id=updated.id,

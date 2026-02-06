@@ -281,3 +281,43 @@ def get_play_history(
     total = query.count()
     items = query.order_by(PlayHistory.play_order.desc()).offset(offset).limit(limit).all()
     return items, total
+
+
+def add_manual_play(db: Session, event: Event, request: Request) -> PlayHistory:
+    """
+    Add a manually played song to play history.
+
+    Called when DJ marks a request as "played" without StageLinQ.
+    Idempotent: if an entry already exists for this matched_request_id, returns existing.
+    """
+    # Check for existing entry to ensure idempotency
+    existing = (
+        db.query(PlayHistory)
+        .filter(
+            PlayHistory.matched_request_id == request.id,
+            PlayHistory.source == "manual",
+        )
+        .first()
+    )
+    if existing:
+        return existing
+
+    history_entry = PlayHistory(
+        event_id=event.id,
+        title=request.song_title,
+        artist=request.artist,
+        album=None,
+        deck=None,
+        spotify_track_id=None,
+        album_art_url=request.artwork_url,
+        spotify_uri=None,
+        matched_request_id=request.id,
+        source="manual",
+        started_at=utcnow(),
+        ended_at=utcnow(),
+        play_order=get_next_play_order(db, event.id),
+    )
+    db.add(history_entry)
+    db.commit()
+    db.refresh(history_entry)
+    return history_entry
