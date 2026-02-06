@@ -7,12 +7,31 @@ This guide covers deploying WrzDJ on a VPS using Docker Compose with the subdoma
 ## Prerequisites
 
 - Ubuntu 22.04+ VPS with:
+  - **Minimum 1GB RAM** (2GB+ recommended)
   - Docker and Docker Compose
-  - nginx installed and running
-  - Certbot for SSL certificates
+  - nginx (will be installed in step 3)
+  - Certbot (will be installed in step 3)
 - DNS A records pointing to your server:
   - `app.yourdomain.com` → `<your-server-ip>`
   - `api.yourdomain.com` → `<your-server-ip>`
+
+### Memory Requirements
+
+If your VPS has only 1GB RAM, add swap space to prevent OOM during builds:
+
+```bash
+# Create 2GB swap file
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+# Make permanent
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# Verify
+free -h
+```
 
 ## Deployment Steps
 
@@ -42,29 +61,56 @@ Fill in all required values in `deploy/.env`:
 - `SPOTIFY_CLIENT_ID` - from Spotify Developer Dashboard
 - `SPOTIFY_CLIENT_SECRET` - from Spotify Developer Dashboard
 
-### 3. Set up SSL certificates
+### 3. Install and configure nginx
 
 ```bash
-# Frontend
-sudo certbot certonly --nginx -d app.yourdomain.com
+# Install nginx and certbot
+sudo apt update
+sudo apt install -y nginx certbot python3-certbot-nginx
 
-# Backend
-sudo certbot certonly --nginx -d api.yourdomain.com
-```
+# Copy nginx configs (update domain names as needed)
+sudo cp deploy/nginx/api.wrzdj.com.conf /etc/nginx/sites-available/api.yourdomain.com
+sudo cp deploy/nginx/app.wrzdj.com.conf /etc/nginx/sites-available/app.yourdomain.com
 
-### 4. Configure nginx
-
-```bash
-# Copy configs
-sudo cp deploy/nginx/app.yourdomain.com.conf /etc/nginx/sites-available/
-sudo cp deploy/nginx/api.yourdomain.com.conf /etc/nginx/sites-available/
+# Edit configs to replace wrzdj.com with your domain
+sudo sed -i 's/wrzdj.com/yourdomain.com/g' /etc/nginx/sites-available/api.yourdomain.com
+sudo sed -i 's/wrzdj.com/yourdomain.com/g' /etc/nginx/sites-available/app.yourdomain.com
 
 # Enable sites
-sudo ln -s /etc/nginx/sites-available/app.yourdomain.com.conf /etc/nginx/sites-enabled/
-sudo ln -s /etc/nginx/sites-available/api.yourdomain.com.conf /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/api.yourdomain.com /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/app.yourdomain.com /etc/nginx/sites-enabled/
 
-# Test and reload
+# Remove default site (optional)
+sudo rm -f /etc/nginx/sites-enabled/default
+
+# Hide nginx version (security hardening)
+sudo sed -i 's/# server_tokens off;/server_tokens off;/' /etc/nginx/nginx.conf
+
+# Test and start nginx
 sudo nginx -t
+sudo systemctl enable nginx
+sudo systemctl start nginx
+```
+
+### 4. Set up SSL certificates with Let's Encrypt
+
+**Important:** DNS must be pointing to your server before running certbot.
+
+```bash
+# Get certificates (certbot will update nginx configs automatically)
+sudo certbot --nginx -d api.yourdomain.com
+sudo certbot --nginx -d app.yourdomain.com
+
+# Verify auto-renewal is enabled
+sudo systemctl status certbot.timer
+
+# Test renewal (dry run)
+sudo certbot renew --dry-run
+```
+
+Certificates auto-renew via systemd timer. Manual renewal if needed:
+```bash
+sudo certbot renew
 sudo systemctl reload nginx
 ```
 
@@ -166,14 +212,31 @@ Ensure nginx is proxying to correct ports (api: 8000, web: 3000).
 
 ## Security Checklist
 
+### Application Security
 - [ ] Strong `JWT_SECRET` (use `openssl rand -hex 32`)
 - [ ] Strong `POSTGRES_PASSWORD`
-- [ ] HTTPS enabled (certbot)
 - [ ] `CORS_ORIGINS` set to specific domain (not `*`)
-- [ ] Firewall configured (only 80, 443, 22 open)
 - [ ] Database not exposed externally (127.0.0.1 only)
 - [ ] Rate limiting enabled (auto-enabled in production)
 - [ ] Login lockout enabled (auto-enabled in production)
-- [ ] Security headers verified (check browser dev tools)
+
+### Server Security
+- [ ] HTTPS enabled (certbot)
+- [ ] Firewall configured (only 80, 443, 22 open)
+- [ ] nginx version hidden (`server_tokens off`)
+- [ ] SSH key authentication (disable password auth)
+
+### Security Headers (verify in browser dev tools)
+- [ ] `Strict-Transport-Security` (HSTS)
+- [ ] `X-Content-Type-Options: nosniff`
+- [ ] `X-Frame-Options: DENY` or `SAMEORIGIN`
+- [ ] `X-XSS-Protection: 1; mode=block`
+- [ ] `Referrer-Policy: strict-origin-when-cross-origin`
+- [ ] `Content-Security-Policy` (CSP)
+
+Verify headers:
+```bash
+curl -I https://api.yourdomain.com/health | grep -iE 'strict|x-frame|x-content|x-xss|referrer|security'
+```
 
 See `docs/security/manual-checklist.md` for the complete security checklist.
