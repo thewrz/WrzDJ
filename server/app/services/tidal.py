@@ -145,7 +145,7 @@ def get_tidal_session(db: Session, user: User) -> tidalapi.Session | None:
     try:
         # Load tokens into session
         session.load_oauth_session(
-            token_type="Bearer",
+            token_type="Bearer",  # nosec B106 - OAuth token type, not a password
             access_token=user.tidal_access_token,
             refresh_token=user.tidal_refresh_token,
             expiry_time=user.tidal_token_expires_at,
@@ -177,7 +177,7 @@ def _track_to_result(track: tidalapi.Track) -> TidalSearchResult:
     try:
         if track.album:
             cover_url = track.album.image(640)
-    except Exception:
+    except Exception:  # nosec B110 - cover art is optional, failure is non-critical
         pass
 
     return TidalSearchResult(
