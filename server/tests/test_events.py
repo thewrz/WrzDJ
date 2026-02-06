@@ -545,8 +545,9 @@ class TestPlayHistoryCsvExport:
         self, client: TestClient, auth_headers: dict, test_event: Event, db: Session
     ):
         """Test exporting play history as CSV."""
-        from app.models.play_history import PlayHistory
         from datetime import datetime
+
+        from app.models.play_history import PlayHistory
 
         # Add play history entries
         entry1 = PlayHistory(
@@ -631,8 +632,9 @@ class TestPlayHistoryCsvExport:
         self, client: TestClient, auth_headers: dict, test_event: Event, db: Session
     ):
         """Test that export includes both stagelinq and manual sources."""
-        from app.models.play_history import PlayHistory
         from datetime import datetime
+
+        from app.models.play_history import PlayHistory
 
         # Add stagelinq entry (live DJ tracking)
         stagelinq_entry = PlayHistory(
@@ -680,8 +682,9 @@ class TestPlayHistoryCsvExport:
         self, client: TestClient, auth_headers: dict, test_event: Event, db: Session
     ):
         """Test that Was Requested column shows Yes/No correctly."""
-        from app.models.play_history import PlayHistory
         from datetime import datetime
+
+        from app.models.play_history import PlayHistory
 
         # Entry with matched request
         requested = PlayHistory(
