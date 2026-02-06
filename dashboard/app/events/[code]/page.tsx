@@ -51,7 +51,7 @@ export default function EventQueuePage() {
       const [eventData, requestsData, historyData] = await Promise.all([
         api.getEvent(code),
         api.getRequests(code),
-        api.getPlayHistory(code, 30).catch(() => ({ items: [], total: 0 })),
+        api.getPlayHistory(code).catch(() => ({ items: [], total: 0 })),
       ]);
       setEvent(eventData);
       setRequests(requestsData);

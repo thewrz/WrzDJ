@@ -329,7 +329,7 @@ class ApiClient {
   /**
    * Get play history for an event.
    */
-  async getPlayHistory(code: string, limit: number = 10, offset: number = 0): Promise<PlayHistoryResponse> {
+  async getPlayHistory(code: string, limit: number = 100, offset: number = 0): Promise<PlayHistoryResponse> {
     const response = await fetch(
       `${getApiUrl()}/api/public/e/${code}/history?limit=${limit}&offset=${offset}`
     );

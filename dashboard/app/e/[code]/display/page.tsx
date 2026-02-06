@@ -38,7 +38,7 @@ export default function KioskDisplayPage() {
       const [kioskData, nowPlayingData, historyData] = await Promise.all([
         api.getKioskDisplay(code),
         api.getNowPlaying(code).catch(() => null),
-        api.getPlayHistory(code, 10).catch(() => ({ items: [], total: 0 })),
+        api.getPlayHistory(code).catch(() => ({ items: [], total: 0 })),
       ]);
       setDisplay(kioskData);
       setStagelinqNowPlaying(nowPlayingData);
@@ -774,7 +774,7 @@ export default function KioskDisplayPage() {
                 <div className="history-label">Recently Played</div>
                 {playHistory.length > 0 ? (
                   <div className="history-list">
-                    {playHistory.slice(0, 5).map((item) => (
+                    {playHistory.map((item) => (
                       <div key={item.id} className="history-item">
                         {item.album_art_url ? (
                           <img src={item.album_art_url} alt={item.title} className="history-item-art" />
