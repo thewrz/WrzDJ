@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/auth';
-import { api, ApiError, Event, ArchivedEvent, SongRequest } from '@/lib/api';
+import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem } from '@/lib/api';
 
 type StatusFilter = 'all' | 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
 
@@ -22,6 +22,7 @@ export default function EventQueuePage() {
 
   const [event, setEvent] = useState<Event | ArchivedEvent | null>(null);
   const [requests, setRequests] = useState<SongRequest[]>([]);
+  const [playHistory, setPlayHistory] = useState<PlayHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [updating, setUpdating] = useState<number | null>(null);
@@ -44,12 +45,14 @@ export default function EventQueuePage() {
 
   const loadData = useCallback(async (): Promise<boolean> => {
     try {
-      const [eventData, requestsData] = await Promise.all([
+      const [eventData, requestsData, historyData] = await Promise.all([
         api.getEvent(code),
         api.getRequests(code),
+        api.getPlayHistory(code, 10).catch(() => ({ items: [], total: 0 })),
       ]);
       setEvent(eventData);
       setRequests(requestsData);
+      setPlayHistory(historyData.items);
       setEventStatus('active');
       setError(null);
       return true; // Continue polling
@@ -447,6 +450,95 @@ export default function EventQueuePage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Play History Section */}
+      {playHistory.length > 0 && (
+        <div className="card" style={{ marginTop: '2rem' }}>
+          <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem' }}>Play History</h2>
+          <div className="request-list">
+            {playHistory.map((item) => (
+              <div key={item.id} className="request-item" style={{ padding: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
+                  {item.album_art_url ? (
+                    <img
+                      src={item.album_art_url}
+                      alt={item.title}
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '4px',
+                        objectFit: 'cover',
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '4px',
+                        background: '#333',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#9ca3af',
+                      }}
+                    >
+                      <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="request-info" style={{ flex: 1 }}>
+                    <h3 style={{ margin: 0 }}>{item.title}</h3>
+                    <p style={{ margin: '0.25rem 0 0', color: '#9ca3af' }}>{item.artist}</p>
+                    <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#6b7280' }}>
+                      {new Date(item.started_at).toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span
+                    className="badge"
+                    style={{
+                      background: item.source === 'stagelinq' ? '#8b5cf6' : '#3b82f6',
+                      color: '#fff',
+                      padding: '0.25rem 0.5rem',
+                      borderRadius: '0.25rem',
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    {item.source === 'stagelinq' ? 'Live' : 'Manual'}
+                  </span>
+                  {item.matched_request_id && (
+                    <span
+                      className="badge"
+                      style={{
+                        background: '#10b981',
+                        color: '#fff',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '0.25rem',
+                        fontSize: '0.75rem',
+                      }}
+                    >
+                      Requested
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

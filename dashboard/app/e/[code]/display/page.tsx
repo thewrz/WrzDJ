@@ -708,7 +708,11 @@ export default function KioskDisplayPage() {
                         className="now-playing-art"
                       />
                     ) : (
-                      <div className="now-playing-placeholder">🎵</div>
+                      <div className="now-playing-placeholder">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
+                        </svg>
+                      </div>
                     )}
                     <h2 className="now-playing-title">{nowPlaying.title}</h2>
                     <p className="now-playing-artist">{nowPlaying.artist}</p>
@@ -734,7 +738,11 @@ export default function KioskDisplayPage() {
                         {item.artwork_url ? (
                           <img src={item.artwork_url} alt={item.title} className="queue-item-art" />
                         ) : (
-                          <div className="queue-item-placeholder">🎵</div>
+                          <div className="queue-item-placeholder">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
+                            </svg>
+                          </div>
                         )}
                         <div className="queue-item-info">
                           <div className="queue-item-title">{item.title}</div>
@@ -760,7 +768,11 @@ export default function KioskDisplayPage() {
                           {item.album_art_url ? (
                             <img src={item.album_art_url} alt={item.title} className="history-item-art" />
                           ) : (
-                            <div className="history-item-placeholder">🎵</div>
+                            <div className="history-item-placeholder">
+                              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
+                              </svg>
+                            </div>
                           )}
                           <div className="history-item-info">
                             <div className="history-item-title">{item.title}</div>
@@ -858,7 +870,11 @@ export default function KioskDisplayPage() {
                             style={{ width: 48, height: 48, borderRadius: 4, objectFit: 'cover' }}
                           />
                         ) : (
-                          <div style={{ width: 48, height: 48, borderRadius: 4, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🎵</div>
+                          <div style={{ width: 48, height: 48, borderRadius: 4, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.5)' }}>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
+                            </svg>
+                          </div>
                         )}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.title}</div>

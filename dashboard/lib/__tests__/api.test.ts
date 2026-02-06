@@ -103,6 +103,110 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('getPlayHistory', () => {
+    it('fetches play history with default parameters', async () => {
+      const mockHistoryResponse = {
+        items: [
+          {
+            id: 1,
+            title: 'Test Song',
+            artist: 'Test Artist',
+            album: 'Test Album',
+            album_art_url: 'https://example.com/art.jpg',
+            spotify_uri: 'spotify:track:123',
+            matched_request_id: null,
+            source: 'stagelinq',
+            started_at: '2024-01-01T12:00:00Z',
+            ended_at: '2024-01-01T12:03:00Z',
+            play_order: 1,
+          },
+        ],
+        total: 1,
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockHistoryResponse,
+      });
+
+      const result = await api.getPlayHistory('ABC123');
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].title).toBe('Test Song');
+      expect(result.items[0].source).toBe('stagelinq');
+      expect(result.total).toBe(1);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/public/e/ABC123/history');
+      expect(url).toContain('limit=10');
+      expect(url).toContain('offset=0');
+    });
+
+    it('fetches play history with custom limit and offset', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: [], total: 0 }),
+      });
+
+      await api.getPlayHistory('ABC123', 5, 10);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('limit=5');
+      expect(url).toContain('offset=10');
+    });
+
+    it('returns items with matched_request_id when request was fulfilled', async () => {
+      const mockHistoryResponse = {
+        items: [
+          {
+            id: 1,
+            title: 'Requested Song',
+            artist: 'Requested Artist',
+            album: null,
+            album_art_url: null,
+            spotify_uri: null,
+            matched_request_id: 42,
+            source: 'stagelinq',
+            started_at: '2024-01-01T12:00:00Z',
+            ended_at: null,
+            play_order: 1,
+          },
+        ],
+        total: 1,
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockHistoryResponse,
+      });
+
+      const result = await api.getPlayHistory('ABC123');
+
+      expect(result.items[0].matched_request_id).toBe(42);
+    });
+
+    it('throws ApiError on failure', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ detail: 'Event not found' }),
+      });
+
+      await expect(api.getPlayHistory('INVALID')).rejects.toThrow('Event not found');
+    });
+
+    it('returns empty items array when no history exists', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: [], total: 0 }),
+      });
+
+      const result = await api.getPlayHistory('ABC123');
+
+      expect(result.items).toHaveLength(0);
+      expect(result.total).toBe(0);
+    });
+  });
+
   describe('error handling', () => {
     it('throws with detail from error response', async () => {
       api.setToken('token');
