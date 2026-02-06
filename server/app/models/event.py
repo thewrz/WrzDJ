@@ -29,6 +29,4 @@ class Event(Base):
     now_playing: Mapped["Request | None"] = relationship(
         "Request", foreign_keys=[now_playing_request_id], post_update=True
     )
-    play_history: Mapped[list["PlayHistory"]] = relationship(
-        "PlayHistory", back_populates="event"
-    )
+    play_history: Mapped[list["PlayHistory"]] = relationship("PlayHistory", back_populates="event")
