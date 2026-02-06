@@ -66,7 +66,15 @@ SPOTIFY_CLIENT_SECRET=your_client_secret_here
 docker compose up -d db
 ```
 
-### 4. Start the backend
+### 4. Install git hooks
+
+```bash
+./scripts/setup-hooks.sh
+```
+
+This installs a pre-commit hook that runs ruff and bandit on staged Python files, catching lint errors before they reach CI.
+
+### 5. Start the backend
 
 ```bash
 cd server
@@ -78,7 +86,7 @@ python -m app.scripts.create_user --username admin --password admin
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 5. Start the dashboard
+### 6. Start the dashboard
 
 ```bash
 cd dashboard
@@ -86,7 +94,7 @@ npm install
 npm run dev
 ```
 
-### 6. Access the apps
+### 7. Access the apps
 
 - **API**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
@@ -232,6 +240,7 @@ WrzDJ/
   bridge/              # StageLinQ bridge service (Node.js)
     src/               # TypeScript source
     Dockerfile
+  scripts/             # Git hooks and dev tooling
   deploy/              # Deployment configs
     docker-compose.yml # Production compose
     nginx/             # Nginx configs
