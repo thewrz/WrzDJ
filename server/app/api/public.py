@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
+from app.models.request import Request as SongRequest
 from app.models.request import RequestStatus
 from app.services.event import EventLookupResult, get_event_by_code_with_status
 from app.services.now_playing import is_now_playing_hidden
@@ -39,6 +40,10 @@ class GuestRequestInfo(PublicRequestInfo):
 class GuestRequestListResponse(BaseModel):
     event: PublicEventInfo
     requests: list[GuestRequestInfo]
+
+
+class HasRequestedResponse(BaseModel):
+    has_requested: bool
 
 
 class KioskDisplayResponse(BaseModel):
@@ -148,3 +153,50 @@ def get_public_requests(
             for r in requests_list
         ],
     )
+
+
+MAX_FINGERPRINT_LENGTH = 64
+
+
+def _get_client_fingerprint(request: Request) -> str:
+    """Extract client fingerprint (IP) from the request, truncated to safe length."""
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        ip = forwarded_for.split(",")[0].strip()
+        return ip[:MAX_FINGERPRINT_LENGTH]
+    host = request.client.host if request.client else "unknown"
+    return host[:MAX_FINGERPRINT_LENGTH]
+
+
+@router.get("/events/{code}/has-requested", response_model=HasRequestedResponse)
+@limiter.limit("30/minute")
+def check_has_requested(
+    code: str,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HasRequestedResponse:
+    """Check if the current client has submitted any requests for this event."""
+    event, lookup_result = get_event_by_code_with_status(db, code)
+
+    if lookup_result == EventLookupResult.NOT_FOUND:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if lookup_result == EventLookupResult.EXPIRED:
+        raise HTTPException(status_code=410, detail="Event has expired")
+
+    if lookup_result == EventLookupResult.ARCHIVED:
+        raise HTTPException(status_code=410, detail="Event has been archived")
+
+    fingerprint = _get_client_fingerprint(request)
+
+    has_requested = (
+        db.query(SongRequest)
+        .filter(
+            SongRequest.event_id == event.id,
+            SongRequest.client_fingerprint == fingerprint,
+        )
+        .first()
+        is not None
+    )
+
+    return HasRequestedResponse(has_requested=has_requested)

@@ -363,9 +363,18 @@ a {
   z-index: 10;
 }
 
+@keyframes btn-glow {
+  0%, 100% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.4), 0 0 30px rgba(59, 130, 246, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.7), 0 0 40px rgba(59, 130, 246, 0.35); }
+}
+
 .sticky-bottom-button .btn {
   width: 100%;
   max-width: 500px;
   margin: 0 auto;
   display: block;
+  padding: 1rem 1.5rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  animation: btn-glow 2s ease-in-out infinite;
 }

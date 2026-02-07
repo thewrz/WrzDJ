@@ -40,6 +40,16 @@ export default function JoinEventPage() {
       const data = await api.getEvent(code);
       setEvent(data);
       setError(null);
+
+      // Check if this client has already requested for this event
+      try {
+        const { has_requested } = await api.checkHasRequested(code);
+        if (has_requested) {
+          setShowRequestList(true);
+        }
+      } catch {
+        // Silently fall back to search form if check fails
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setError({ message: err.message, status: err.status });
