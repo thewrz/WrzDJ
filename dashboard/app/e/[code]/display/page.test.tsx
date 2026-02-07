@@ -19,8 +19,8 @@ const mockKioskDisplay = {
   event: { code: 'TEST123', name: 'Test Event' },
   qr_join_url: 'https://example.com/join/TEST123',
   accepted_queue: [
-    { id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null },
-    { id: 2, title: 'Song 2', artist: 'Artist 2', artwork_url: null },
+    { id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, vote_count: 0 },
+    { id: 2, title: 'Song 2', artist: 'Artist 2', artwork_url: null, vote_count: 0 },
   ],
   now_playing: null,
   now_playing_hidden: false,

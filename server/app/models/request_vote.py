@@ -8,9 +8,7 @@ from app.models.base import Base
 
 class RequestVote(Base):
     __tablename__ = "request_votes"
-    __table_args__ = (
-        UniqueConstraint("request_id", "client_fingerprint", name="uq_request_vote"),
-    )
+    __table_args__ = (UniqueConstraint("request_id", "client_fingerprint", name="uq_request_vote"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     request_id: Mapped[int] = mapped_column(
