@@ -28,6 +28,7 @@ export default function EventQueuePage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [updating, setUpdating] = useState<number | null>(null);
+  const [acceptingAll, setAcceptingAll] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportingHistory, setExportingHistory] = useState(false);
 
@@ -167,6 +168,19 @@ export default function EventQueuePage() {
       console.error('Failed to update status:', err);
     } finally {
       setUpdating(null);
+    }
+  };
+
+  const handleAcceptAll = async () => {
+    setAcceptingAll(true);
+    try {
+      await api.acceptAllRequests(code);
+      const updatedRequests = await api.getRequests(code);
+      setRequests(updatedRequests);
+    } catch (err) {
+      console.error('Failed to accept all requests:', err);
+    } finally {
+      setAcceptingAll(false);
     }
   };
 
@@ -627,16 +641,28 @@ export default function EventQueuePage() {
         </div>
       )}
 
-      <div className="tabs">
-        {(['all', 'new', 'accepted', 'playing', 'rejected'] as StatusFilter[]).map((status) => (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+        <div className="tabs" style={{ marginBottom: 0 }}>
+          {(['all', 'new', 'accepted', 'playing', 'rejected'] as StatusFilter[]).map((status) => (
+            <button
+              key={status}
+              className={`tab ${filter === status ? 'active' : ''}`}
+              onClick={() => setFilter(status)}
+            >
+              {status.charAt(0).toUpperCase() + status.slice(1)} ({statusCounts[status]})
+            </button>
+          ))}
+        </div>
+        {!isExpiredOrArchived && statusCounts.new > 0 && (
           <button
-            key={status}
-            className={`tab ${filter === status ? 'active' : ''}`}
-            onClick={() => setFilter(status)}
+            className="btn btn-success btn-sm"
+            onClick={handleAcceptAll}
+            disabled={acceptingAll}
+            style={{ marginLeft: 'auto' }}
           >
-            {status.charAt(0).toUpperCase() + status.slice(1)} ({statusCounts[status]})
+            {acceptingAll ? 'Accepting...' : `Accept All (${statusCounts.new})`}
           </button>
-        ))}
+        )}
       </div>
 
       {filteredRequests.length === 0 ? (

@@ -76,6 +76,10 @@ export interface GuestRequestListResponse {
   requests: GuestRequestInfo[];
 }
 
+export interface HasRequestedResponse {
+  has_requested: boolean;
+}
+
 export interface VoteResponse {
   status: string;
   vote_count: number;
@@ -274,6 +278,12 @@ class ApiClient {
     return this.fetch(`/api/events/${code}/requests${params}`);
   }
 
+  async acceptAllRequests(code: string): Promise<{ status: string; accepted_count: number }> {
+    return this.fetch(`/api/events/${code}/requests/accept-all`, {
+      method: 'POST',
+    });
+  }
+
   async updateRequestStatus(requestId: number, status: string): Promise<SongRequest> {
     return this.fetch(`/api/requests/${requestId}`, {
       method: 'PATCH',
@@ -368,6 +378,15 @@ class ApiClient {
     a.download = filenameMatch ? filenameMatch[1].replace(/"/g, '') : `${code}_play_history.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async checkHasRequested(code: string): Promise<HasRequestedResponse> {
+    const response = await fetch(`${getApiUrl()}/api/public/events/${code}/has-requested`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+      throw new ApiError(error.detail || 'Request failed', response.status);
+    }
+    return response.json();
   }
 
   async getPublicRequests(code: string): Promise<GuestRequestListResponse> {

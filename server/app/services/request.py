@@ -95,6 +95,26 @@ def update_request_status(db: Session, request: Request, status: RequestStatus) 
     return request
 
 
+def accept_all_new_requests(db: Session, event: Event) -> list[Request]:
+    """Accept all NEW requests for an event in a single transaction."""
+    new_requests = (
+        db.query(Request)
+        .filter(
+            Request.event_id == event.id,
+            Request.status == RequestStatus.NEW.value,
+        )
+        .all()
+    )
+    now = datetime.utcnow()
+    for req in new_requests:
+        req.status = RequestStatus.ACCEPTED.value
+        req.updated_at = now
+    db.commit()
+    for req in new_requests:
+        db.refresh(req)
+    return new_requests
+
+
 def get_guest_visible_requests(
     db: Session,
     event: Event,

@@ -1,7 +1,7 @@
 from datetime import datetime
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -43,7 +43,8 @@ from app.services.now_playing import (
     is_now_playing_hidden,
     set_now_playing_visibility,
 )
-from app.services.request import create_request, get_requests_for_event
+from app.services.request import accept_all_new_requests, create_request, get_requests_for_event
+from app.services.tidal import sync_request_to_tidal
 
 router = APIRouter()
 settings = get_settings()
@@ -378,6 +379,30 @@ def submit_request(
         is_duplicate=is_duplicate,
         vote_count=song_request.vote_count,
     )
+
+
+@router.post("/{code}/requests/accept-all")
+@limiter.limit("10/minute")
+def accept_all_requests_endpoint(
+    code: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Accept all NEW requests for an event in one operation."""
+    event = get_event_by_code_for_owner(db, code, current_user)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    accepted = accept_all_new_requests(db, event)
+
+    # Trigger Tidal sync for each accepted request if enabled
+    if event.tidal_sync_enabled and event.created_by.tidal_access_token:
+        for req in accepted:
+            background_tasks.add_task(sync_request_to_tidal, db, req)
+
+    return {"status": "ok", "accepted_count": len(accepted)}
 
 
 @router.get("/{code}/requests", response_model=list[RequestOut])
