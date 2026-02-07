@@ -667,9 +667,25 @@ export default function EventQueuePage() {
                 </h3>
                 <p>{request.artist}</p>
                 {request.note && <div className="note">{request.note}</div>}
-                <p style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
-                  {new Date(request.created_at).toLocaleTimeString()}
-                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <p style={{ fontSize: '0.75rem', margin: 0 }}>
+                    {new Date(request.created_at).toLocaleTimeString()}
+                  </p>
+                  {request.vote_count > 0 && (
+                    <span
+                      style={{
+                        background: request.vote_count >= 5 ? '#f59e0b' : '#3b82f6',
+                        color: '#fff',
+                        padding: '0.125rem 0.5rem',
+                        borderRadius: '1rem',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {request.vote_count} {request.vote_count === 1 ? 'vote' : 'votes'}
+                    </span>
+                  )}
+                </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 {/* Tidal Sync Status */}

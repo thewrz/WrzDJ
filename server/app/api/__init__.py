@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api import auth, bridge, events, public, requests, search, tidal
+from app.api import auth, bridge, events, public, requests, search, tidal, votes
 
 api_router = APIRouter()
 
@@ -14,6 +14,7 @@ def api_health_check():
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(events.router, prefix="/events", tags=["events"])
 api_router.include_router(requests.router, prefix="/requests", tags=["requests"])
+api_router.include_router(votes.router, prefix="/requests", tags=["votes"])
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(public.router, prefix="/public", tags=["public"])
 api_router.include_router(bridge.router, tags=["bridge"])

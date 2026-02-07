@@ -376,6 +376,7 @@ def submit_request(
         created_at=song_request.created_at,
         updated_at=song_request.updated_at,
         is_duplicate=is_duplicate,
+        vote_count=song_request.vote_count,
     )
 
 
@@ -407,6 +408,7 @@ def get_event_requests(
             status=r.status,
             created_at=r.created_at,
             updated_at=r.updated_at,
+            vote_count=r.vote_count,
         )
         for r in requests
     ]

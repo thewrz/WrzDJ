@@ -34,6 +34,8 @@ class RequestOut(BaseModel):
     # Tidal sync status
     tidal_track_id: str | None = None
     tidal_sync_status: TidalSyncStatus | None = None
+    # Voting
+    vote_count: int = 0
 
     class Config:
         from_attributes = True

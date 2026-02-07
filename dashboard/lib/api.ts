@@ -55,6 +55,8 @@ export interface SongRequest {
   // Tidal sync status
   tidal_track_id: string | null;
   tidal_sync_status: 'pending' | 'synced' | 'not_found' | 'error' | null;
+  // Voting
+  vote_count: number;
 }
 
 export interface PublicRequestInfo {
@@ -62,6 +64,13 @@ export interface PublicRequestInfo {
   title: string;
   artist: string;
   artwork_url: string | null;
+  vote_count: number;
+}
+
+export interface VoteResponse {
+  status: string;
+  vote_count: number;
+  has_voted: boolean;
 }
 
 export interface KioskDisplay {
@@ -286,6 +295,14 @@ class ApiClient {
 
   async search(query: string): Promise<SearchResult[]> {
     return this.fetch(`/api/search?q=${encodeURIComponent(query)}`);
+  }
+
+  async voteRequest(requestId: number): Promise<VoteResponse> {
+    return this.fetch(`/api/requests/${requestId}/vote`, { method: 'POST' });
+  }
+
+  async unvoteRequest(requestId: number): Promise<VoteResponse> {
+    return this.fetch(`/api/requests/${requestId}/vote`, { method: 'DELETE' });
   }
 
   async getArchivedEvents(): Promise<ArchivedEvent[]> {

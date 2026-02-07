@@ -28,6 +28,8 @@ export default function KioskDisplayPage() {
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitIsDuplicate, setSubmitIsDuplicate] = useState(false);
+  const [submitVoteCount, setSubmitVoteCount] = useState(0);
 
   // Inactivity timer
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -149,6 +151,8 @@ export default function KioskDisplayPage() {
     setSelectedSong(null);
     setNote('');
     setSubmitted(false);
+    setSubmitIsDuplicate(false);
+    setSubmitVoteCount(0);
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -172,7 +176,7 @@ export default function KioskDisplayPage() {
 
     setSubmitting(true);
     try {
-      await api.submitRequest(
+      const result = await api.submitRequest(
         code,
         selectedSong.artist,
         selectedSong.title,
@@ -181,6 +185,8 @@ export default function KioskDisplayPage() {
         selectedSong.album_art || undefined
       );
       setSubmitted(true);
+      setSubmitIsDuplicate(result.is_duplicate ?? false);
+      setSubmitVoteCount(result.vote_count);
       // Auto-close after 2.5 seconds
       setTimeout(() => {
         closeModal();
@@ -423,6 +429,15 @@ export default function KioskDisplayPage() {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+        }
+        .vote-badge {
+          background: rgba(59, 130, 246, 0.2);
+          color: #60a5fa;
+          font-size: 0.75rem;
+          padding: 0.25rem 0.5rem;
+          border-radius: 1rem;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
         .queue-empty {
           color: #6b7280;
@@ -761,6 +776,11 @@ export default function KioskDisplayPage() {
                           <div className="queue-item-title">{item.title}</div>
                           <div className="queue-item-artist">{item.artist}</div>
                         </div>
+                        {item.vote_count > 0 && (
+                          <span className="vote-badge">
+                            {item.vote_count} {item.vote_count === 1 ? 'vote' : 'votes'}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -828,7 +848,14 @@ export default function KioskDisplayPage() {
             {submitted ? (
               <div className="success-message">
                 <div className="success-icon">✓</div>
-                <p className="success-text">Request Submitted!</p>
+                <p className="success-text">
+                  {submitIsDuplicate ? 'Vote Added!' : 'Request Submitted!'}
+                </p>
+                {submitIsDuplicate && submitVoteCount > 0 && (
+                  <p style={{ color: '#9ca3af', marginTop: '0.5rem' }}>
+                    {submitVoteCount} {submitVoteCount === 1 ? 'person wants' : 'people want'} this song!
+                  </p>
+                )}
               </div>
             ) : selectedSong ? (
               <div className="confirm-section">

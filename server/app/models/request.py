@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -53,6 +53,12 @@ class Request(Base):
     tidal_track_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     tidal_sync_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # Voting
+    vote_count: Mapped[int] = mapped_column(Integer, default=0)
+
     event: Mapped["Event"] = relationship(
         "Event", back_populates="requests", foreign_keys=[event_id]
+    )
+    votes: Mapped[list["RequestVote"]] = relationship(
+        "RequestVote", back_populates="request", cascade="all, delete-orphan"
     )

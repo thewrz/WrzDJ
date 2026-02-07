@@ -21,6 +21,8 @@ export default function JoinEventPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [submitIsDuplicate, setSubmitIsDuplicate] = useState(false);
+  const [submitVoteCount, setSubmitVoteCount] = useState(0);
 
   useEffect(() => {
     loadEvent();
@@ -64,8 +66,10 @@ export default function JoinEventPage() {
     setSubmitting(true);
     setSubmitError('');
     try {
-      await api.submitRequest(code, selectedSong.artist, selectedSong.title, note || undefined, selectedSong.url || undefined, selectedSong.album_art || undefined);
+      const result = await api.submitRequest(code, selectedSong.artist, selectedSong.title, note || undefined, selectedSong.url || undefined, selectedSong.album_art || undefined);
       setSubmitted(true);
+      setSubmitIsDuplicate(result.is_duplicate ?? false);
+      setSubmitVoteCount(result.vote_count);
     } catch (err) {
       console.error('Submit failed:', err);
       setSubmitError('Failed to submit request. Please try again.');
@@ -80,6 +84,8 @@ export default function JoinEventPage() {
     setSelectedSong(null);
     setNote('');
     setSubmitted(false);
+    setSubmitIsDuplicate(false);
+    setSubmitVoteCount(0);
   };
 
   if (loading) {
@@ -116,12 +122,16 @@ export default function JoinEventPage() {
     return (
       <div className="container" style={{ maxWidth: '500px' }}>
         <div className="card" style={{ textAlign: 'center' }}>
-          <h1 style={{ marginBottom: '1rem', color: '#22c55e' }}>Request Submitted!</h1>
+          <h1 style={{ marginBottom: '1rem', color: '#22c55e' }}>
+            {submitIsDuplicate ? 'Vote Added!' : 'Request Submitted!'}
+          </h1>
           <p style={{ marginBottom: '1rem' }}>
             <strong>{selectedSong?.title}</strong> by <strong>{selectedSong?.artist}</strong>
           </p>
           <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>
-            The DJ will see your request soon.
+            {submitIsDuplicate
+              ? `Someone already requested this song. Your vote has been added! ${submitVoteCount} ${submitVoteCount === 1 ? 'person wants' : 'people want'} this song.`
+              : 'The DJ will see your request soon.'}
           </p>
           <button className="btn btn-primary" onClick={resetForm}>
             Request Another Song

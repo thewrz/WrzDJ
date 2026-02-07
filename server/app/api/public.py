@@ -26,6 +26,7 @@ class PublicRequestInfo(BaseModel):
     title: str
     artist: str
     artwork_url: str | None
+    vote_count: int = 0
 
 
 class KioskDisplayResponse(BaseModel):
@@ -62,9 +63,9 @@ def get_kiosk_display(
         base_url = str(request.base_url).rstrip("/")
     qr_join_url = f"{base_url}/join/{event.code}"
 
-    # Get accepted requests (status = 'accepted') ordered by updated_at
+    # Get accepted requests (status = 'accepted') sorted by vote_count desc, then updated_at asc
     accepted_requests = [r for r in event.requests if r.status == RequestStatus.ACCEPTED.value]
-    accepted_requests.sort(key=lambda r: r.updated_at)
+    accepted_requests.sort(key=lambda r: (-r.vote_count, r.updated_at))
 
     accepted_queue = [
         PublicRequestInfo(
@@ -72,6 +73,7 @@ def get_kiosk_display(
             title=r.song_title,
             artist=r.artist,
             artwork_url=r.artwork_url,
+            vote_count=r.vote_count,
         )
         for r in accepted_requests
     ]

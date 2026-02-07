@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.event import Event
 from app.models.request import Request, RequestStatus
+from app.services.vote import add_vote
 
 
 def compute_dedupe_key(artist: str, title: str) -> str:
@@ -43,6 +44,10 @@ def create_request(
     )
 
     if existing:
+        # Auto-vote for the existing request when a duplicate is submitted
+        if client_fingerprint:
+            add_vote(db, existing.id, client_fingerprint)
+            db.refresh(existing)
         return existing, True
 
     request = Request(
