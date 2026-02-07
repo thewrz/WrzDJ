@@ -2,6 +2,7 @@ import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerDeb } from '@electron-forge/maker-deb';
+import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-natives';
 
@@ -28,6 +29,7 @@ const config: ForgeConfig = {
         maintainer: 'WrzDJ',
       },
     }),
+    new MakerZIP({}, ['linux', 'darwin']),
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),

@@ -4,9 +4,9 @@
  */
 import { EventEmitter } from 'events';
 import { StageLinq } from 'stagelinq';
-import { DeckStateManager } from '../../bridge/src/deck-state-manager.js';
-import type { DeckLiveEvent, DeckState } from '../../bridge/src/deck-state.js';
-import type { NowPlayingPayload, BridgeStatusPayload } from '../../bridge/src/types.js';
+import { DeckStateManager } from '@bridge/deck-state-manager.js';
+import type { DeckLiveEvent, DeckState } from '@bridge/deck-state.js';
+import type { NowPlayingPayload, BridgeStatusPayload } from '@bridge/types.js';
 import type { BridgeRunnerConfig, BridgeStatus, DeckDisplay, TrackDisplay } from '../shared/types.js';
 
 const MAX_RETRIES = 3;
