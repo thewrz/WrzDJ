@@ -7,6 +7,23 @@ WrzDJ is a DJ song request management system with three services:
 - **Frontend**: Next.js 16+ with React 18 (`dashboard/`) — TypeScript, vanilla CSS (dark theme)
 - **Bridge**: Node.js StageLinQ integration (`bridge/`) — connects to Denon DJ equipment
 
+## Git Workflow
+
+**Always use feature branches and PRs — never commit directly to `main`.**
+
+```bash
+# Create a feature branch before starting work
+git checkout -b feat/short-description
+
+# After work is done, push and open a PR
+git push -u origin feat/short-description
+gh pr create --title "feat: Short description" --body "..."
+```
+
+- Branch naming: `feat/`, `fix/`, `refactor/`, `docs/`, `chore/` prefixes
+- PR into `main` — never push directly to `main`
+- Run all CI checks locally before pushing (see below)
+
 ## Local Development
 
 ### Prerequisites
