@@ -1,5 +1,6 @@
 import { ipcMain, type BrowserWindow } from 'electron';
 import { login, verifyToken, buildAuthState } from './auth-service.js';
+import { fetchBridgeApiKey } from './bridge-api-key-service.js';
 import { fetchEvents } from './events-service.js';
 import { BridgeRunner } from './bridge-runner.js';
 import * as store from './store.js';
@@ -68,11 +69,17 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   // --- Bridge ---
 
-  ipcMain.handle(IPC_CHANNELS.BRIDGE_START, async (_event, eventCode: string, apiKey: string) => {
+  ipcMain.handle(IPC_CHANNELS.BRIDGE_START, async (_event, eventCode: string) => {
     store.setLastEventCode(eventCode);
-    store.setApiKey(apiKey);
 
     const apiUrl = store.getApiUrl();
+    const token = store.getToken();
+
+    if (!token) {
+      throw new Error('Not authenticated');
+    }
+
+    const apiKey = await fetchBridgeApiKey(apiUrl, token);
     const settings = store.getSettings();
 
     await bridgeRunner.start({

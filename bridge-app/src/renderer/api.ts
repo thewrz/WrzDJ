@@ -8,7 +8,7 @@ export interface BridgeApi {
   logout(): Promise<void>;
   getAuthState(): Promise<AuthState>;
   fetchEvents(): Promise<readonly EventInfo[]>;
-  startBridge(eventCode: string, apiKey: string): Promise<void>;
+  startBridge(eventCode: string): Promise<void>;
   stopBridge(): Promise<void>;
   getSettings(): Promise<BridgeSettings>;
   updateSettings(settings: Partial<BridgeSettings>): Promise<BridgeSettings>;

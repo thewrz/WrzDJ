@@ -18,8 +18,8 @@ const bridgeApi = {
     ipcRenderer.invoke(IPC_CHANNELS.EVENTS_FETCH),
 
   // Bridge control
-  startBridge: (eventCode: string, apiKey: string): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.BRIDGE_START, eventCode, apiKey),
+  startBridge: (eventCode: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.BRIDGE_START, eventCode),
 
   stopBridge: (): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.BRIDGE_STOP),

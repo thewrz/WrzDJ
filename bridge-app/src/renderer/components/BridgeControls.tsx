@@ -8,17 +8,16 @@ interface BridgeControlsProps {
 }
 
 export function BridgeControls({ status, selectedEventCode }: BridgeControlsProps) {
-  const [apiKey, setApiKey] = useState('');
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleStart = async () => {
-    if (!selectedEventCode || !apiKey) return;
+    if (!selectedEventCode) return;
 
     setStarting(true);
     setError(null);
     try {
-      await api.startBridge(selectedEventCode, apiKey);
+      await api.startBridge(selectedEventCode);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start bridge');
     } finally {
@@ -43,21 +42,10 @@ export function BridgeControls({ status, selectedEventCode }: BridgeControlsProp
       {!status.isRunning ? (
         <>
           <div className="bridge-controls">
-            <div className="form-group">
-              <label htmlFor="apiKey">Bridge API Key</label>
-              <input
-                id="apiKey"
-                className="input"
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Paste your bridge API key"
-              />
-            </div>
             <button
               className="btn btn-success"
               onClick={handleStart}
-              disabled={starting || !selectedEventCode || !apiKey}
+              disabled={starting || !selectedEventCode}
             >
               {starting ? 'Starting...' : 'Start Bridge'}
             </button>

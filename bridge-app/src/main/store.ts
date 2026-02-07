@@ -6,7 +6,6 @@ interface StoreSchema {
   apiUrl: string;
   encryptedToken: string;
   lastEventCode: string;
-  apiKey: string;
   settings: BridgeSettings;
 }
 
@@ -15,7 +14,6 @@ const store = new Store<StoreSchema>({
     apiUrl: 'https://api.wrzdj.com',
     encryptedToken: '',
     lastEventCode: '',
-    apiKey: '',
     settings: DEFAULT_SETTINGS,
   },
 });
@@ -67,14 +65,6 @@ export function getLastEventCode(): string {
 
 export function setLastEventCode(code: string): void {
   store.set('lastEventCode', code);
-}
-
-export function getApiKey(): string {
-  return store.get('apiKey');
-}
-
-export function setApiKey(key: string): void {
-  store.set('apiKey', key);
 }
 
 export function getSettings(): BridgeSettings {

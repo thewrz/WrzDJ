@@ -3,9 +3,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_current_user, get_db
 from app.core.bridge_auth import verify_bridge_api_key
+from app.core.config import get_settings
 from app.core.rate_limit import limiter
+from app.models.user import User
 from app.schemas.now_playing import (
     BridgeStatusPayload,
     NowPlayingBridgePayload,
@@ -23,6 +25,25 @@ from app.services.now_playing import (
 )
 
 router = APIRouter()
+
+
+# --- Bridge API Key retrieval (JWT auth, for GUI) ---
+
+
+@router.get("/bridge/apikey")
+def get_bridge_api_key(
+    _user: User = Depends(get_current_user),
+) -> dict:
+    """
+    Return the server's bridge API key to an authenticated user.
+
+    The GUI uses this so the DJ doesn't have to manually paste the key.
+    The CLI bridge and all bridge POST endpoints remain unchanged.
+    """
+    settings = get_settings()
+    if not settings.bridge_api_key:
+        raise HTTPException(status_code=503, detail="Bridge API key not configured on server")
+    return {"bridge_api_key": settings.bridge_api_key}
 
 
 # --- Bridge Endpoints (API key auth) ---
