@@ -41,13 +41,14 @@ source .venv/bin/activate
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # Frontend (from dashboard/)
-NEXT_PUBLIC_API_URL="http://192.168.1.25:8000" npm run dev
+Use typical cli tools to determine the local machines LAN IP address (e.g. 192.168.1.25) and update NEXT_PUBLIC_API_URL
+NEXT_PUBLIC_API_URL="http://LAN_IP:8000" npm run dev
 ```
 
 ### LAN Testing (phone)
-- Bind to `0.0.0.0`, use LAN IP `192.168.1.25`
+- Bind to `0.0.0.0`, use the LAN IP you discover 
 - Set `CORS_ORIGINS=*` for dev
-- Set `PUBLIC_URL=http://192.168.1.25:3000` for QR codes
+- Set `PUBLIC_URL=http://LAN_IP:3000` for QR codes
 - Frontend dev server already binds to `0.0.0.0` via `-H 0.0.0.0` in package.json
 
 ### Environment
