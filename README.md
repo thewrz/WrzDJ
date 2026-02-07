@@ -430,13 +430,6 @@ docker run --network host \
 
 ---
 
-## Branches
-
-- **`main`** - Uses Spotify API for song search (requires credentials, includes album art and popularity)
-- **`musicbrainz-search`** - Uses MusicBrainz for song search (free, no API key required)
-
----
-
 ## API Endpoints
 
 | Endpoint | Description |
