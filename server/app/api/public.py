@@ -1,6 +1,7 @@
 """Public API endpoints for kiosk display (no authentication required)."""
 
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -8,9 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.core.config import get_settings
+from app.core.rate_limit import limiter
 from app.models.request import RequestStatus
 from app.services.event import EventLookupResult, get_event_by_code_with_status
 from app.services.now_playing import is_now_playing_hidden
+from app.services.request import get_guest_visible_requests
 
 router = APIRouter()
 settings = get_settings()
@@ -27,6 +30,15 @@ class PublicRequestInfo(BaseModel):
     artist: str
     artwork_url: str | None
     vote_count: int = 0
+
+
+class GuestRequestInfo(PublicRequestInfo):
+    status: Literal["new", "accepted"]
+
+
+class GuestRequestListResponse(BaseModel):
+    event: PublicEventInfo
+    requests: list[GuestRequestInfo]
 
 
 class KioskDisplayResponse(BaseModel):
@@ -98,4 +110,41 @@ def get_kiosk_display(
         now_playing=now_playing,
         now_playing_hidden=now_playing_is_hidden,
         updated_at=datetime.utcnow(),
+    )
+
+
+@router.get("/events/{code}/requests", response_model=GuestRequestListResponse)
+@limiter.limit("60/minute")
+def get_public_requests(
+    code: str,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> GuestRequestListResponse:
+    """Get publicly visible requests for an event (NEW and ACCEPTED only)."""
+    event, lookup_result = get_event_by_code_with_status(db, code)
+
+    if lookup_result == EventLookupResult.NOT_FOUND:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if lookup_result == EventLookupResult.EXPIRED:
+        raise HTTPException(status_code=410, detail="Event has expired")
+
+    if lookup_result == EventLookupResult.ARCHIVED:
+        raise HTTPException(status_code=410, detail="Event has been archived")
+
+    requests_list = get_guest_visible_requests(db, event)
+
+    return GuestRequestListResponse(
+        event=PublicEventInfo(code=event.code, name=event.name),
+        requests=[
+            GuestRequestInfo(
+                id=r.id,
+                title=r.song_title,
+                artist=r.artist,
+                artwork_url=r.artwork_url,
+                vote_count=r.vote_count,
+                status=r.status,
+            )
+            for r in requests_list
+        ],
     )

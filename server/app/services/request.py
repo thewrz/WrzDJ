@@ -95,6 +95,24 @@ def update_request_status(db: Session, request: Request, status: RequestStatus) 
     return request
 
 
+def get_guest_visible_requests(
+    db: Session,
+    event: Event,
+    limit: int = 50,
+) -> list[Request]:
+    """Get requests visible to guests (NEW and ACCEPTED only)."""
+    return (
+        db.query(Request)
+        .filter(
+            Request.event_id == event.id,
+            Request.status.in_([RequestStatus.NEW.value, RequestStatus.ACCEPTED.value]),
+        )
+        .order_by(Request.vote_count.desc(), Request.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 def get_request_by_id(db: Session, request_id: int) -> Request | None:
     """Get a request by its ID."""
     return db.query(Request).filter(Request.id == request_id).first()

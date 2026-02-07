@@ -67,6 +67,15 @@ export interface PublicRequestInfo {
   vote_count: number;
 }
 
+export interface GuestRequestInfo extends PublicRequestInfo {
+  status: 'new' | 'accepted';
+}
+
+export interface GuestRequestListResponse {
+  event: { code: string; name: string };
+  requests: GuestRequestInfo[];
+}
+
 export interface VoteResponse {
   status: string;
   vote_count: number;
@@ -359,6 +368,15 @@ class ApiClient {
     a.download = filenameMatch ? filenameMatch[1].replace(/"/g, '') : `${code}_play_history.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async getPublicRequests(code: string): Promise<GuestRequestListResponse> {
+    const response = await fetch(`${getApiUrl()}/api/public/events/${code}/requests`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+      throw new ApiError(error.detail || 'Request failed', response.status);
+    }
+    return response.json();
   }
 
   async getKioskDisplay(code: string): Promise<KioskDisplay> {

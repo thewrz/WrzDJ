@@ -1,8 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { api, ApiError, Event, SearchResult } from '@/lib/api';
+import { api, ApiError, Event, GuestRequestInfo, SearchResult } from '@/lib/api';
+
+const CONFIRMATION_DISPLAY_MS = 3000;
+const FADE_ANIMATION_MS = 500;
+const POLL_INTERVAL_MS = 10000;
+const BACKOFF_INTERVAL_MS = 60000;
 
 export default function JoinEventPage() {
   const params = useParams();
@@ -24,11 +29,13 @@ export default function JoinEventPage() {
   const [submitIsDuplicate, setSubmitIsDuplicate] = useState(false);
   const [submitVoteCount, setSubmitVoteCount] = useState(0);
 
-  useEffect(() => {
-    loadEvent();
-  }, [code]);
+  // Request list view state
+  const [showRequestList, setShowRequestList] = useState(false);
+  const [fadingOut, setFadingOut] = useState(false);
+  const [guestRequests, setGuestRequests] = useState<GuestRequestInfo[]>([]);
+  const [pollInterval, setPollInterval] = useState(POLL_INTERVAL_MS);
 
-  const loadEvent = async () => {
+  const loadEvent = useCallback(async () => {
     try {
       const data = await api.getEvent(code);
       setEvent(data);
@@ -42,7 +49,51 @@ export default function JoinEventPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [code]);
+
+  useEffect(() => {
+    loadEvent();
+  }, [loadEvent]);
+
+  // Fade-out timer after successful submission
+  useEffect(() => {
+    if (!submitted) return;
+
+    const fadeTimer = setTimeout(() => {
+      setFadingOut(true);
+    }, CONFIRMATION_DISPLAY_MS);
+
+    const listTimer = setTimeout(() => {
+      setShowRequestList(true);
+      setFadingOut(false);
+    }, CONFIRMATION_DISPLAY_MS + FADE_ANIMATION_MS);
+
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(listTimer);
+    };
+  }, [submitted]);
+
+  // Poll for guest request list
+  const loadRequests = useCallback(async () => {
+    try {
+      const data = await api.getPublicRequests(code);
+      setGuestRequests(data.requests);
+      setPollInterval(POLL_INTERVAL_MS);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        setPollInterval(BACKOFF_INTERVAL_MS);
+      }
+    }
+  }, [code]);
+
+  useEffect(() => {
+    if (!showRequestList) return;
+
+    loadRequests();
+    const intervalId = setInterval(loadRequests, pollInterval);
+    return () => clearInterval(intervalId);
+  }, [showRequestList, loadRequests, pollInterval]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,6 +137,8 @@ export default function JoinEventPage() {
     setSubmitted(false);
     setSubmitIsDuplicate(false);
     setSubmitVoteCount(0);
+    setFadingOut(false);
+    setShowRequestList(false);
   };
 
   if (loading) {
@@ -118,10 +171,70 @@ export default function JoinEventPage() {
     );
   }
 
+  if (showRequestList) {
+    return (
+      <div className="guest-request-list-container">
+        <div className="container" style={{ maxWidth: '500px', flex: 1 }}>
+          <h2 style={{ marginBottom: '0.5rem' }}>{event.name}</h2>
+          <p style={{ color: '#9ca3af', marginBottom: '1rem' }}>
+            {guestRequests.length} {guestRequests.length === 1 ? 'request' : 'requests'}
+          </p>
+
+          {guestRequests.length > 0 ? (
+            <div className="guest-request-list">
+              {guestRequests.map((req) => (
+                <div key={req.id} className="guest-request-item">
+                  {req.artwork_url ? (
+                    <img
+                      src={req.artwork_url}
+                      alt={req.title}
+                      className="guest-request-item-art"
+                    />
+                  ) : (
+                    <div
+                      className="guest-request-item-art"
+                      style={{ background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <span style={{ fontSize: '1.25rem', color: '#666' }}>&#9835;</span>
+                    </div>
+                  )}
+                  <div className="guest-request-item-info">
+                    <div className="guest-request-item-title">{req.title}</div>
+                    <div className="guest-request-item-artist">{req.artist}</div>
+                  </div>
+                  <div className="guest-request-item-meta">
+                    <span className={`badge ${req.status === 'accepted' ? 'badge-accepted-guest' : 'badge-pending'}`}>
+                      {req.status === 'accepted' ? 'Accepted' : 'Pending'}
+                    </span>
+                    {req.vote_count > 0 && (
+                      <span className="guest-vote-badge">
+                        {req.vote_count} {req.vote_count === 1 ? 'vote' : 'votes'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="card" style={{ textAlign: 'center', color: '#9ca3af' }}>
+              <p>No requests yet. Be the first!</p>
+            </div>
+          )}
+        </div>
+
+        <div className="sticky-bottom-button">
+          <button className="btn btn-primary" onClick={resetForm}>
+            Request a Song
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (submitted) {
     return (
       <div className="container" style={{ maxWidth: '500px' }}>
-        <div className="card" style={{ textAlign: 'center' }}>
+        <div className={`card${fadingOut ? ' fade-out' : ''}`} style={{ textAlign: 'center' }}>
           <h1 style={{ marginBottom: '1rem', color: '#22c55e' }}>
             {submitIsDuplicate ? 'Vote Added!' : 'Request Submitted!'}
           </h1>
@@ -133,9 +246,6 @@ export default function JoinEventPage() {
               ? `Someone already requested this song. Your vote has been added! ${submitVoteCount} ${submitVoteCount === 1 ? 'person wants' : 'people want'} this song.`
               : 'The DJ will see your request soon.'}
           </p>
-          <button className="btn btn-primary" onClick={resetForm}>
-            Request Another Song
-          </button>
         </div>
       </div>
     );
