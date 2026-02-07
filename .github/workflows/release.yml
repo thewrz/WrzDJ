@@ -1,0 +1,162 @@
+name: Release
+
+# ONLY triggers when a pull request is merged into main.
+# Direct commits to main do NOT trigger this workflow.
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  check-release:
+    name: Check if release needed
+    # Only run if the PR was actually merged (not just closed)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate dated version
+        id: version
+        run: |
+          DATE_VERSION="v$(date +%Y.%m.%d)"
+
+          # Check if this date version already exists, append suffix if so
+          EXISTING=$(git tag -l "${DATE_VERSION}*" | sort -V | tail -1)
+          if [ -z "$EXISTING" ]; then
+            VERSION="$DATE_VERSION"
+          elif [ "$EXISTING" = "$DATE_VERSION" ]; then
+            VERSION="${DATE_VERSION}.2"
+          else
+            SUFFIX=$(echo "$EXISTING" | grep -oP '\.\d+$' | tr -d '.' || echo "1")
+            NEXT=$((SUFFIX + 1))
+            VERSION="${DATE_VERSION}.${NEXT}"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VERSION"
+
+  build-bridge-app:
+    name: Build Bridge App (${{ matrix.platform }})
+    needs: check-release
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: darwin
+          - os: windows-latest
+            platform: win32
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install bridge-app dependencies
+        working-directory: bridge-app
+        run: npm ci
+
+      - name: Build installers
+        working-directory: bridge-app
+        run: npm run make
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-app-${{ matrix.platform }}
+          path: bridge-app/out/make/**/*
+          if-no-files-found: warn
+
+  bundle-deploy-scripts:
+    name: Bundle deploy scripts
+    needs: check-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create deploy bundle
+        run: |
+          tar -czf wrzdj-deploy-scripts.tar.gz \
+            deploy/docker-compose.yml \
+            deploy/deploy.sh \
+            deploy/DEPLOYMENT.md \
+            deploy/.env.example \
+            deploy/nginx/ \
+            docker-compose.yml
+
+      - name: Upload deploy bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-scripts
+          path: wrzdj-deploy-scripts.tar.gz
+
+  create-release:
+    name: Create GitHub Release
+    needs: [check-release, build-bridge-app, bundle-deploy-scripts]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate release notes
+        id: notes
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Get commits since last release tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" --no-merges | head -30)
+          else
+            COMMITS=$(git log --pretty=format:"- %s" --no-merges -20)
+          fi
+
+          cat > release_notes.md << EOF
+          ## What's Changed
+
+          **${PR_TITLE}** (#${PR_NUMBER})
+
+          ${PR_BODY}
+
+          ### Commits
+          ${COMMITS}
+
+          ### Downloads
+
+          | Platform | Artifact |
+          |----------|----------|
+          | Windows | \`bridge-app-win32\` |
+          | macOS | \`bridge-app-darwin\` |
+          | Linux | \`bridge-app-linux\` |
+          | Deploy Scripts | \`wrzdj-deploy-scripts.tar.gz\` |
+          EOF
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.check-release.outputs.version }}
+          name: "WrzDJ ${{ needs.check-release.outputs.version }}"
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/**/*

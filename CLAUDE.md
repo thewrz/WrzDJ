@@ -2,10 +2,11 @@
 
 ## Project Overview
 
-WrzDJ is a DJ song request management system with three services:
+WrzDJ is a DJ song request management system with four services:
 - **Backend**: Python FastAPI (`server/`) — SQLAlchemy 2.0, PostgreSQL, Alembic migrations
 - **Frontend**: Next.js 16+ with React 18 (`dashboard/`) — TypeScript, vanilla CSS (dark theme)
 - **Bridge**: Node.js StageLinQ integration (`bridge/`) — connects to Denon DJ equipment
+- **Bridge App**: Electron GUI for the bridge (`bridge-app/`) — React + Vite, cross-platform installers
 
 ## Git Workflow
 
@@ -74,6 +75,12 @@ npx tsc --noEmit          # TypeScript type check (strict)
 npm test -- --run         # Vitest (23 tests)
 ```
 
+### Bridge App (from `bridge-app/`)
+```bash
+npx tsc --noEmit          # TypeScript type check
+npm test -- --run         # Vitest (12 tests)
+```
+
 ### Quick fix commands
 ```bash
 .venv/bin/ruff format .   # Auto-format Python files
@@ -137,6 +144,20 @@ NEW → REJECTED
 - `server/app/services/vote.py` — idempotent voting with atomic increments
 - `server/app/services/event.py` — event lifecycle, status computation
 - `server/app/services/tidal.py` — Tidal playlist sync (background tasks)
+
+### Bridge App Architecture
+- Electron main process: auth, events API, bridge runner, persistent store (electron-store)
+- Electron renderer: React UI with login, event selection, bridge controls, status panel
+- IPC via contextBridge — renderer has no Node.js access
+- Imports bridge code from `../bridge/src/` (DeckStateManager, types)
+- Installers: `.exe` (Windows), `.dmg` (macOS), `.deb` (Linux) via electron-forge
+
+### Release System
+- GitHub Actions release workflow: `.github/workflows/release.yml`
+- Triggers ONLY on PR merge to `main` (not on direct commits)
+- Dated versioning: `v2026.02.07`, suffix for same-day: `v2026.02.07.2`
+- Builds bridge-app installers on 3 platforms (matrix)
+- Bundles deploy scripts as `.tar.gz`
 
 ## Pre-commit Hook
 - Only runs on staged Python files in `server/`
