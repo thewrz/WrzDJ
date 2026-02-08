@@ -1,3 +1,6 @@
+import started from 'electron-squirrel-startup';
+if (started) process.exit();
+
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { registerIpcHandlers, getBridgeRunner } from './ipc-handlers.js';

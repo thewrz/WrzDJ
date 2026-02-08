@@ -19,6 +19,9 @@ const config: ForgeConfig = {
       name: 'wrzdj-bridge',
       authors: 'WrzDJ',
       setupIcon: './resources/icon.ico',
+      setupExe: 'wrzdj-bridge.exe',
+      noMsi: true,
+      loadingGif: './resources/installing.gif',
     }),
     new MakerDMG({
       icon: './resources/icon.icns',
