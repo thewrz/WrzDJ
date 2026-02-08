@@ -76,6 +76,19 @@ def is_now_playing_hidden(db: Session, event_id: int) -> bool:
     return False
 
 
+def get_manual_hide_setting(db: Session, event_id: int) -> bool:
+    """
+    Get the DJ's manual hide/show preference (not the computed kiosk state).
+
+    Returns the manual_hide_now_playing flag, ignoring auto-hide and track status.
+    Used by the dashboard toggle to reflect the DJ's intent.
+    """
+    now_playing = get_now_playing(db, event_id)
+    if not now_playing:
+        return False
+    return now_playing.manual_hide_now_playing
+
+
 def set_now_playing_visibility(db: Session, event_id: int, hidden: bool) -> bool:
     """
     Set manual visibility for now playing on kiosk.

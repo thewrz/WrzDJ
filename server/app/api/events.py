@@ -39,8 +39,8 @@ from app.services.export import (
     generate_play_history_export_filename,
 )
 from app.services.now_playing import (
+    get_manual_hide_setting,
     get_play_history,
-    is_now_playing_hidden,
     set_now_playing_visibility,
 )
 from app.services.request import accept_all_new_requests, create_request, get_requests_for_event
@@ -250,7 +250,7 @@ def get_display_settings(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    hidden = is_now_playing_hidden(db, event.id)
+    hidden = get_manual_hide_setting(db, event.id)
 
     return DisplaySettingsResponse(
         status="ok",

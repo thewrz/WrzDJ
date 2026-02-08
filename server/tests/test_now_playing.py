@@ -27,6 +27,7 @@ from app.services.now_playing import (
     clear_now_playing,
     fuzzy_match_accepted_request,
     fuzzy_match_score,
+    get_manual_hide_setting,
     get_next_play_order,
     get_now_playing,
     get_play_history,
@@ -505,6 +506,42 @@ class TestIsNowPlayingHidden:
         db.commit()
 
         assert is_now_playing_hidden(db, test_event.id) is False
+
+
+class TestGetManualHideSetting:
+    """Tests for get_manual_hide_setting function."""
+
+    def test_false_when_no_record(self, db: Session, test_event: Event):
+        """Returns False (visible) when no NowPlaying record exists."""
+        assert get_manual_hide_setting(db, test_event.id) is False
+
+    def test_returns_manual_hide_value(self, db: Session, test_event: Event):
+        """Returns the manual_hide_now_playing field value."""
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            manual_hide_now_playing=True,
+        )
+        db.add(now_playing)
+        db.commit()
+        assert get_manual_hide_setting(db, test_event.id) is True
+
+    def test_false_with_empty_title(self, db: Session, test_event: Event):
+        """Returns False even when title is empty (unlike is_now_playing_hidden).
+
+        This is the key difference: the manual setting reflects the DJ's
+        intent, not whether a track is actually playing.
+        """
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="",
+            artist="",
+            manual_hide_now_playing=False,
+        )
+        db.add(now_playing)
+        db.commit()
+        assert get_manual_hide_setting(db, test_event.id) is False
 
 
 class TestSetNowPlayingVisibility:
