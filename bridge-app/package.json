@@ -2,6 +2,7 @@
   "name": "wrzdj-bridge",
   "version": "0.1.0",
   "description": "WrzDJ StageLinQ Bridge - connects DJ equipment to WrzDJ",
+  "author": "WrzDJ",
   "main": ".vite/build/main.js",
   "scripts": {
     "start": "electron-forge start",

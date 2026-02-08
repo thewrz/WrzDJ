@@ -17,6 +17,7 @@ const config: ForgeConfig = {
   makers: [
     new MakerSquirrel({
       name: 'wrzdj-bridge',
+      authors: 'WrzDJ',
       setupIcon: './resources/icon.ico',
     }),
     new MakerDMG({
