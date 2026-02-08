@@ -150,13 +150,15 @@ NEW → REJECTED
 - Electron renderer: React UI with login, event selection, bridge controls, status panel
 - IPC via contextBridge — renderer has no Node.js access
 - Imports bridge code from `../bridge/src/` (DeckStateManager, types)
-- Installers: `.exe` (Windows), `.dmg` (macOS), `.deb` (Linux) via electron-forge
+- Installers: `.exe` (Windows), `.dmg` (macOS), `.AppImage` (Linux) via electron-forge
 
 ### Release System
 - GitHub Actions release workflow: `.github/workflows/release.yml`
-- Triggers ONLY on PR merge to `main` (not on direct commits)
+- Triggers on tag push (`v*`), not on PR merge
+- Workflow: merge PRs freely, then `git tag v2026.02.07 && git push --tags`
 - Dated versioning: `v2026.02.07`, suffix for same-day: `v2026.02.07.2`
 - Builds bridge-app installers on 3 platforms (matrix)
+- Linux format: AppImage (universal, no distro-specific packaging)
 - Bundles deploy scripts as `.tar.gz`
 
 ## Pre-commit Hook

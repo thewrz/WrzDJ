@@ -19,7 +19,6 @@
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.6.0",
-    "@electron-forge/maker-deb": "^7.6.0",
     "@electron-forge/maker-dmg": "^7.6.0",
     "@electron-forge/maker-squirrel": "^7.6.0",
     "@electron-forge/maker-zip": "^7.11.1",
@@ -31,6 +30,7 @@
     "@types/react-dom": "^18",
     "@vitejs/plugin-react": "^4.3.0",
     "electron": "^33.0.0",
+    "electron-forge-maker-appimage": "^26.7.0",
     "eslint": "^9.39.2",
     "jsdom": "^24.0.0",
     "react": "^18.2.0",

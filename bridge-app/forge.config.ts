@@ -1,7 +1,7 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerDMG } from '@electron-forge/maker-dmg';
-import { MakerDeb } from '@electron-forge/maker-deb';
+import { MakerAppImage } from 'electron-forge-maker-appimage';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-natives';
@@ -23,14 +23,15 @@ const config: ForgeConfig = {
     new MakerDMG({
       icon: './resources/icon.icns',
     }),
-    new MakerDeb({
+    new MakerAppImage({
       options: {
+        name: 'wrzdj-bridge',
+        bin: 'wrzdj-bridge',
         icon: './resources/icon.png',
         categories: ['Audio'],
-        maintainer: 'WrzDJ',
       },
     }),
-    new MakerZIP({}, ['linux', 'darwin']),
+    new MakerZIP({}, ['darwin']),
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),

@@ -1,48 +1,12 @@
 name: Release
 
-# ONLY triggers when a pull request is merged into main.
-# Direct commits to main do NOT trigger this workflow.
 on:
-  pull_request:
-    types: [closed]
-    branches: [main]
+  push:
+    tags: ['v*']
 
 jobs:
-  check-release:
-    name: Check if release needed
-    # Only run if the PR was actually merged (not just closed)
-    if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Generate dated version
-        id: version
-        run: |
-          DATE_VERSION="v$(date +%Y.%m.%d)"
-
-          # Check if this date version already exists, append suffix if so
-          EXISTING=$(git tag -l "${DATE_VERSION}*" | sort -V | tail -1)
-          if [ -z "$EXISTING" ]; then
-            VERSION="$DATE_VERSION"
-          elif [ "$EXISTING" = "$DATE_VERSION" ]; then
-            VERSION="${DATE_VERSION}.2"
-          else
-            SUFFIX=$(echo "$EXISTING" | grep -oP '\.\d+$' | tr -d '.' || echo "1")
-            NEXT=$((SUFFIX + 1))
-            VERSION="${DATE_VERSION}.${NEXT}"
-          fi
-
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Release version: $VERSION"
-
   build-bridge-app:
     name: Build Bridge App (${{ matrix.platform }})
-    needs: check-release
     strategy:
       matrix:
         include:
@@ -61,6 +25,10 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Install AppImage dependencies
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libfuse2
+
       - name: Install bridge-app dependencies
         working-directory: bridge-app
         run: npm ci
@@ -78,7 +46,6 @@ jobs:
 
   bundle-deploy-scripts:
     name: Bundle deploy scripts
-    needs: check-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -101,7 +68,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [check-release, build-bridge-app, bundle-deploy-scripts]
+    needs: [build-bridge-app, bundle-deploy-scripts]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -116,14 +83,9 @@ jobs:
           path: artifacts
 
       - name: Generate release notes
-        id: notes
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # Get commits since last release tag
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          # Get commits since last release tag (excluding current)
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           if [ -n "$LAST_TAG" ]; then
             COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" --no-merges | head -30)
           else
@@ -132,10 +94,6 @@ jobs:
 
           cat > release_notes.md << EOF
           ## What's Changed
-
-          **${PR_TITLE}** (#${PR_NUMBER})
-
-          ${PR_BODY}
 
           ### Commits
           ${COMMITS}
@@ -153,8 +111,8 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.check-release.outputs.version }}
-          name: "WrzDJ ${{ needs.check-release.outputs.version }}"
+          tag_name: ${{ github.ref_name }}
+          name: "WrzDJ ${{ github.ref_name }}"
           body_path: release_notes.md
           draft: false
           prerelease: false
