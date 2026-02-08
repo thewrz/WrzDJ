@@ -6,10 +6,17 @@ from app.api.deps import get_current_user, get_db
 from app.core.config import get_settings
 from app.core.lockout import lockout_manager
 from app.core.rate_limit import get_client_ip, limiter
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.auth import Token
-from app.schemas.user import UserOut
-from app.services.auth import authenticate_user, create_access_token
+from app.schemas.user import PublicSettings, RegisterRequest, UserOut
+from app.services.auth import (
+    authenticate_user,
+    create_access_token,
+    create_user,
+    get_user_by_username,
+)
+from app.services.system_settings import get_system_settings
+from app.services.turnstile import verify_turnstile_token
 
 router = APIRouter()
 settings = get_settings()
@@ -65,3 +72,64 @@ def login(
 @router.get("/me", response_model=UserOut)
 def get_me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
+
+
+@router.get("/settings", response_model=PublicSettings)
+def get_public_settings(db: Session = Depends(get_db)) -> PublicSettings:
+    """Public endpoint returning registration status and Turnstile site key."""
+    sys_settings = get_system_settings(db)
+    return PublicSettings(
+        registration_enabled=sys_settings.registration_enabled,
+        turnstile_site_key=settings.turnstile_site_key,
+    )
+
+
+@router.post("/register")
+@limiter.limit(lambda: f"{settings.registration_rate_limit_per_minute}/minute")
+async def register(
+    request: Request,
+    reg_data: RegisterRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Register a new user (pending approval)."""
+    # Check if registration is enabled
+    sys_settings = get_system_settings(db)
+    if not sys_settings.registration_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is currently disabled",
+        )
+
+    # Verify Turnstile token
+    client_ip = get_client_ip(request)
+    is_valid = await verify_turnstile_token(reg_data.turnstile_token, client_ip)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CAPTCHA verification failed",
+        )
+
+    # Check username uniqueness
+    if get_user_by_username(db, reg_data.username):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already exists",
+        )
+
+    # Check email uniqueness
+    existing_email = db.query(User).filter(User.email == reg_data.email).first()
+    if existing_email:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered",
+        )
+
+    # Create pending user
+    user = create_user(db, reg_data.username, reg_data.password, role=UserRole.PENDING.value)
+    user.email = reg_data.email
+    db.commit()
+
+    return {
+        "status": "ok",
+        "message": "Registration submitted. An admin will review your account.",
+    }

@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.services.auth import decode_token, get_user_by_username
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -34,3 +34,23 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return user
+
+
+def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+    """Reject pending users from accessing DJ features."""
+    if current_user.role == UserRole.PENDING.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account pending approval",
+        )
+    return current_user
+
+
+def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Only allow admin users."""
+    if current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user

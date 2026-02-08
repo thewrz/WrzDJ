@@ -232,8 +232,35 @@ class ApiClient {
     return response.json();
   }
 
-  async getMe(): Promise<{ id: number; username: string }> {
+  async getMe(): Promise<{ id: number; username: string; role: string }> {
     return this.fetch('/api/auth/me');
+  }
+
+  async getPublicSettings(): Promise<{ registration_enabled: boolean; turnstile_site_key: string }> {
+    const response = await fetch(`${getApiUrl()}/api/auth/settings`);
+    if (!response.ok) {
+      throw new ApiError('Failed to load settings', response.status);
+    }
+    return response.json();
+  }
+
+  async register(data: {
+    username: string;
+    email: string;
+    password: string;
+    confirm_password: string;
+    turnstile_token: string;
+  }): Promise<{ status: string; message: string }> {
+    const response = await fetch(`${getApiUrl()}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Registration failed' }));
+      throw new ApiError(error.detail || 'Registration failed', response.status);
+    }
+    return response.json();
   }
 
   async getEvents(): Promise<Event[]> {
@@ -538,6 +565,120 @@ class ApiClient {
       body: JSON.stringify({ tidal_track_id: tidalTrackId }),
     });
   }
+  // ========== Admin ==========
+
+  async getAdminStats(): Promise<SystemStats> {
+    return this.fetch('/api/admin/stats');
+  }
+
+  async getAdminUsers(
+    page: number = 1,
+    limit: number = 20,
+    role?: string
+  ): Promise<PaginatedResponse<AdminUser>> {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (role) params.set('role', role);
+    return this.fetch(`/api/admin/users?${params}`);
+  }
+
+  async createAdminUser(data: {
+    username: string;
+    password: string;
+    role: string;
+  }): Promise<AdminUser> {
+    return this.fetch('/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateAdminUser(
+    userId: number,
+    data: { role?: string; is_active?: boolean; password?: string }
+  ): Promise<AdminUser> {
+    return this.fetch(`/api/admin/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteAdminUser(userId: number): Promise<void> {
+    await this.fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+  }
+
+  async getAdminEvents(
+    page: number = 1,
+    limit: number = 20
+  ): Promise<PaginatedResponse<AdminEvent>> {
+    return this.fetch(`/api/admin/events?page=${page}&limit=${limit}`);
+  }
+
+  async updateAdminEvent(
+    code: string,
+    data: { name?: string; expires_at?: string }
+  ): Promise<AdminEvent> {
+    return this.fetch(`/api/admin/events/${code}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteAdminEvent(code: string): Promise<void> {
+    await this.fetch(`/api/admin/events/${code}`, { method: 'DELETE' });
+  }
+
+  async getAdminSettings(): Promise<SystemSettings> {
+    return this.fetch('/api/admin/settings');
+  }
+
+  async updateAdminSettings(data: Partial<SystemSettings>): Promise<SystemSettings> {
+    return this.fetch('/api/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+}
+
+export interface SystemStats {
+  total_users: number;
+  active_users: number;
+  pending_users: number;
+  total_events: number;
+  active_events: number;
+  total_requests: number;
+}
+
+export interface AdminUser {
+  id: number;
+  username: string;
+  is_active: boolean;
+  role: string;
+  created_at: string;
+  event_count: number;
+}
+
+export interface AdminEvent {
+  id: number;
+  code: string;
+  name: string;
+  owner_username: string;
+  owner_id: number;
+  created_at: string;
+  expires_at: string;
+  is_active: boolean;
+  request_count: number;
+}
+
+export interface SystemSettings {
+  registration_enabled: boolean;
+  search_rate_limit_per_minute: number;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export const api = new ApiClient();

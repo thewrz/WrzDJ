@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_active_user, get_db
 from app.core.bridge_auth import verify_bridge_api_key
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
@@ -32,7 +32,7 @@ router = APIRouter()
 
 @router.get("/bridge/apikey")
 def get_bridge_api_key(
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(get_current_active_user),
 ) -> dict:
     """
     Return the server's bridge API key to an authenticated user.

@@ -23,7 +23,9 @@ def bootstrap_admin() -> None:
             print(f"Bootstrap: {user_count} user(s) already exist, skipping.")
             return
 
-        user = create_user(db, settings.bootstrap_admin_username, settings.bootstrap_admin_password)
+        user = create_user(
+            db, settings.bootstrap_admin_username, settings.bootstrap_admin_password, role="admin"
+        )
         print(f"Bootstrap: Created admin user '{user.username}' with ID {user.id}")
     finally:
         db.close()

@@ -3,9 +3,12 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { api } from './api';
 
+export type UserRole = 'admin' | 'dj' | 'pending';
+
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
+  role: UserRole | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
 }
@@ -15,13 +18,17 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [role, setRole] = useState<UserRole | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
       api.setToken(token);
       api.getMe()
-        .then(() => setIsAuthenticated(true))
+        .then((user) => {
+          setIsAuthenticated(true);
+          setRole(user.role as UserRole);
+        })
         .catch(() => {
           localStorage.removeItem('token');
           api.setToken(null);
@@ -36,6 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { access_token } = await api.login(username, password);
     localStorage.setItem('token', access_token);
     api.setToken(access_token);
+    const user = await api.getMe();
+    setRole(user.role as UserRole);
     setIsAuthenticated(true);
   };
 
@@ -43,10 +52,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('token');
     api.setToken(null);
     setIsAuthenticated(false);
+    setRole(null);
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, isLoading, role, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

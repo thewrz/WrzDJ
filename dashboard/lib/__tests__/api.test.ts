@@ -285,6 +285,99 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('getMe', () => {
+    it('returns user info including role', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 1, username: 'testuser', role: 'admin' }),
+      });
+
+      const user = await api.getMe();
+
+      expect(user.id).toBe(1);
+      expect(user.username).toBe('testuser');
+      expect(user.role).toBe('admin');
+    });
+  });
+
+  describe('admin API', () => {
+    beforeEach(() => {
+      api.setToken('admin-token');
+    });
+
+    it('fetches admin stats', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          total_users: 5,
+          active_users: 4,
+          pending_users: 1,
+          total_events: 10,
+          active_events: 3,
+          total_requests: 50,
+        }),
+      });
+
+      const stats = await api.getAdminStats();
+      expect(stats.total_users).toBe(5);
+      expect(stats.pending_users).toBe(1);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/admin/stats');
+    });
+
+    it('fetches admin users with role filter', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{ id: 1, username: 'dj1', role: 'dj' }],
+          total: 1,
+          page: 1,
+          limit: 20,
+        }),
+      });
+
+      const result = await api.getAdminUsers(1, 20, 'dj');
+      expect(result.items).toHaveLength(1);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('role=dj');
+    });
+
+    it('creates admin user', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 2, username: 'newdj', role: 'dj' }),
+      });
+
+      const user = await api.createAdminUser({
+        username: 'newdj',
+        password: 'password123',
+        role: 'dj',
+      });
+      expect(user.username).toBe('newdj');
+
+      const [, options] = mockFetch.mock.calls[0];
+      expect(options.method).toBe('POST');
+    });
+
+    it('updates admin settings', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          registration_enabled: false,
+          search_rate_limit_per_minute: 50,
+        }),
+      });
+
+      const settings = await api.updateAdminSettings({
+        registration_enabled: false,
+      });
+      expect(settings.registration_enabled).toBe(false);
+    });
+  });
+
   describe('error handling', () => {
     it('throws with detail from error response', async () => {
       api.setToken('token');

@@ -7,7 +7,7 @@ doesn't have access to playlist creation scopes.
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_active_user, get_db
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.models.event import Event
@@ -38,7 +38,7 @@ router = APIRouter()
 
 @router.post("/auth/start")
 def start_auth(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Start Tidal device login flow.
 
@@ -55,7 +55,7 @@ def start_auth(
 
 @router.get("/auth/check")
 def check_auth(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> dict:
     """Check if device login is complete.
@@ -70,7 +70,7 @@ def check_auth(
 
 @router.post("/auth/cancel")
 def cancel_auth(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Cancel pending device login."""
     cancel_device_login(current_user)
@@ -79,7 +79,7 @@ def cancel_auth(
 
 @router.get("/status", response_model=TidalStatus)
 async def get_status(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> TidalStatus:
     """Check if current user has linked Tidal account."""
@@ -99,7 +99,7 @@ async def get_status(
 
 @router.post("/disconnect")
 def disconnect(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> dict:
     """Unlink Tidal account from current user."""
@@ -113,7 +113,7 @@ async def search(
     request: Request,
     q: str = Query(..., min_length=1),
     limit: int = Query(default=10, ge=1, le=50),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> list[TidalSearchResult]:
     """Search Tidal for tracks."""
@@ -128,7 +128,7 @@ async def search(
 @router.get("/events/{event_id}/settings", response_model=TidalEventSettings)
 def get_event_settings(
     event_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> TidalEventSettings:
     """Get Tidal sync settings for an event."""
@@ -149,7 +149,7 @@ def get_event_settings(
 def update_event_settings(
     event_id: int,
     settings_update: TidalEventSettingsUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> TidalEventSettings:
     """Update Tidal sync settings for an event."""
@@ -181,7 +181,7 @@ def update_event_settings(
 async def sync_request(
     request_id: int,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> TidalSyncResult:
     """Manually trigger Tidal sync for a request."""
@@ -200,7 +200,7 @@ async def sync_request(
 async def link_track(
     request_id: int,
     link_data: TidalManualLink,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> TidalSyncResult:
     """Manually link a Tidal track to a request."""

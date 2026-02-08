@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_active_user, get_db
 from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.request import RequestOut, RequestUpdate
@@ -19,7 +19,7 @@ def update_request(
     update_data: RequestUpdate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> RequestOut:
     request = get_request_by_id(db, request_id)
     if not request:

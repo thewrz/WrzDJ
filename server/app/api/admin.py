@@ -1,0 +1,216 @@
+"""Admin API endpoints for user management, event oversight, and system settings."""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_admin, get_db
+from app.models.event import Event
+from app.models.request import Request
+from app.models.user import User, UserRole
+from app.schemas.system_settings import SystemSettingsOut, SystemSettingsUpdate
+from app.schemas.user import (
+    AdminEventOut,
+    AdminUserCreate,
+    AdminUserOut,
+    AdminUserUpdate,
+    PaginatedResponse,
+    SystemStats,
+)
+from app.services.admin import (
+    count_admins,
+    create_user_admin,
+    delete_user,
+    get_all_events_admin,
+    get_all_users,
+    get_system_stats,
+    get_user_by_id,
+    update_user_admin,
+)
+from app.services.auth import get_user_by_username
+from app.services.event import delete_event, update_event
+from app.services.system_settings import get_system_settings, update_system_settings
+
+router = APIRouter()
+
+
+@router.get("/stats", response_model=SystemStats)
+def admin_stats(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> SystemStats:
+    stats = get_system_stats(db)
+    return SystemStats(**stats)
+
+
+@router.get("/users", response_model=PaginatedResponse)
+def admin_list_users(
+    page: int = 1,
+    limit: int = 20,
+    role: str | None = None,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> PaginatedResponse:
+    if role and role not in [r.value for r in UserRole]:
+        raise HTTPException(status_code=400, detail="Invalid role filter")
+    items, total = get_all_users(db, page=page, limit=limit, role_filter=role)
+    return PaginatedResponse(items=items, total=total, page=page, limit=limit)
+
+
+@router.post("/users", response_model=AdminUserOut, status_code=status.HTTP_201_CREATED)
+def admin_create_user(
+    user_data: AdminUserCreate,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> AdminUserOut:
+    if user_data.role not in [r.value for r in UserRole]:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    existing = get_user_by_username(db, user_data.username)
+    if existing:
+        raise HTTPException(status_code=409, detail="Username already exists")
+    user = create_user_admin(db, user_data.username, user_data.password, user_data.role)
+    return AdminUserOut(
+        id=user.id,
+        username=user.username,
+        is_active=user.is_active,
+        role=user.role,
+        created_at=user.created_at,
+        event_count=0,
+    )
+
+
+@router.patch("/users/{user_id}", response_model=AdminUserOut)
+def admin_update_user(
+    user_id: int,
+    update_data: AdminUserUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+) -> AdminUserOut:
+    user = get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Validate role if provided
+    if update_data.role is not None and update_data.role not in [r.value for r in UserRole]:
+        raise HTTPException(status_code=400, detail="Invalid role")
+
+    # Last-admin protection: prevent demoting/deactivating the last admin
+    if user.role == UserRole.ADMIN.value:
+        is_demoting = update_data.role is not None and update_data.role != UserRole.ADMIN.value
+        is_deactivating = update_data.is_active is False
+        if (is_demoting or is_deactivating) and count_admins(db) <= 1:
+            raise HTTPException(status_code=400, detail="Cannot remove the last admin")
+
+    updated = update_user_admin(
+        db,
+        user,
+        role=update_data.role,
+        is_active=update_data.is_active,
+        password=update_data.password,
+    )
+    event_count = (
+        db.query(func.count(Event.id)).filter(Event.created_by_user_id == updated.id).scalar()
+    )
+    return AdminUserOut(
+        id=updated.id,
+        username=updated.username,
+        is_active=updated.is_active,
+        role=updated.role,
+        created_at=updated.created_at,
+        event_count=event_count or 0,
+    )
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def admin_delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+) -> None:
+    user = get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+    if user.role == UserRole.ADMIN.value and count_admins(db) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot remove the last admin")
+    delete_user(db, user)
+
+
+@router.get("/events", response_model=PaginatedResponse)
+def admin_list_events(
+    page: int = 1,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> PaginatedResponse:
+    items, total = get_all_events_admin(db, page=page, limit=limit)
+    return PaginatedResponse(items=items, total=total, page=page, limit=limit)
+
+
+@router.patch("/events/{code}", response_model=AdminEventOut)
+def admin_update_event(
+    code: str,
+    event_data: dict,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> AdminEventOut:
+    """Admin can edit any event (not just their own)."""
+    event = db.query(Event).filter(Event.code == code.upper()).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    updated = update_event(
+        db,
+        event,
+        name=event_data.get("name"),
+        expires_at=event_data.get("expires_at"),
+    )
+    owner = db.query(User).filter(User.id == updated.created_by_user_id).first()
+    req_count = db.query(func.count(Request.id)).filter(Request.event_id == updated.id).scalar()
+    return AdminEventOut(
+        id=updated.id,
+        code=updated.code,
+        name=updated.name,
+        owner_username=owner.username if owner else "unknown",
+        owner_id=updated.created_by_user_id,
+        created_at=updated.created_at,
+        expires_at=updated.expires_at,
+        is_active=updated.is_active,
+        request_count=req_count or 0,
+    )
+
+
+@router.delete("/events/{code}", status_code=status.HTTP_204_NO_CONTENT)
+def admin_delete_event(
+    code: str,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> None:
+    """Admin can delete any event."""
+    event = db.query(Event).filter(Event.code == code.upper()).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    delete_event(db, event)
+
+
+@router.get("/settings", response_model=SystemSettingsOut)
+def admin_get_settings(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> SystemSettingsOut:
+    settings = get_system_settings(db)
+    return SystemSettingsOut.model_validate(settings)
+
+
+@router.patch("/settings", response_model=SystemSettingsOut)
+def admin_update_settings(
+    update_data: SystemSettingsUpdate,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> SystemSettingsOut:
+    settings = update_system_settings(
+        db,
+        registration_enabled=update_data.registration_enabled,
+        search_rate_limit_per_minute=update_data.search_rate_limit_per_minute,
+    )
+    return SystemSettingsOut.model_validate(settings)

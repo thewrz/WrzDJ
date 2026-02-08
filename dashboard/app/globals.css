@@ -378,3 +378,196 @@ a {
   font-weight: 600;
   animation: btn-glow 2s ease-in-out infinite;
 }
+
+/* Admin Layout */
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.admin-sidebar {
+  width: 220px;
+  background: #111;
+  border-right: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.admin-sidebar-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid #333;
+}
+
+.admin-sidebar-header h2 {
+  font-size: 1.25rem;
+  color: #3b82f6;
+}
+
+.admin-sidebar-nav {
+  flex: 1;
+  padding: 1rem 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-sidebar-link {
+  display: block;
+  padding: 0.75rem 1.5rem;
+  color: #9ca3af;
+  text-decoration: none;
+  transition: background 0.2s, color 0.2s;
+}
+
+.admin-sidebar-link:hover {
+  background: #1a1a1a;
+  color: #ededed;
+}
+
+.admin-sidebar-link.active {
+  background: #1a1a1a;
+  color: #3b82f6;
+  border-left: 3px solid #3b82f6;
+}
+
+.admin-sidebar-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.admin-main {
+  flex: 1;
+  overflow-x: auto;
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.stat-card {
+  background: #1a1a1a;
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #ededed;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin-top: 0.25rem;
+}
+
+/* Admin Table */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #333;
+}
+
+.admin-table th {
+  color: #9ca3af;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.admin-table tbody tr:hover {
+  background: #1a1a1a;
+}
+
+/* Role badges */
+.badge-role-admin {
+  background: #6b21a8;
+  color: white;
+}
+
+.badge-role-dj {
+  background: #3b82f6;
+  color: white;
+}
+
+.badge-role-pending {
+  background: #f59e0b;
+  color: #0a0a0a;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: #1a1a1a;
+  border-radius: 8px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 450px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .admin-layout {
+    flex-direction: column;
+  }
+
+  .admin-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #333;
+  }
+
+  .admin-sidebar-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0;
+  }
+
+  .admin-sidebar-link {
+    white-space: nowrap;
+    padding: 0.75rem 1rem;
+  }
+
+  .admin-sidebar-link.active {
+    border-left: none;
+    border-bottom: 3px solid #3b82f6;
+  }
+
+  .admin-sidebar-footer {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+}
