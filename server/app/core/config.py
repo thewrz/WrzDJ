@@ -90,8 +90,8 @@ class Settings(BaseSettings):
     # File uploads
     uploads_dir: str = ""  # defaults to server/uploads/ relative to project root
     max_banner_size_mb: int = 5
-    banner_width: int = 1200
-    banner_height: int = 300
+    banner_width: int = 1920
+    banner_height: int = 480
 
     @property
     def resolved_uploads_dir(self) -> str:

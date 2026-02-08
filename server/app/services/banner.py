@@ -90,7 +90,7 @@ def _create_kiosk_variant(img: Image.Image) -> Image.Image:
 def process_banner_upload(file: UploadFile, event_code: str) -> tuple[str, str, list[str]]:
     """Process an uploaded banner image.
 
-    Validates, resizes to 1200x300, converts to WebP, creates a desaturated kiosk
+    Validates, resizes to 1920x480, converts to WebP, creates a desaturated kiosk
     variant, and extracts dominant colors.
 
     Args:
@@ -154,11 +154,11 @@ def process_banner_upload(file: UploadFile, event_code: str) -> tuple[str, str, 
     banners_dir = _get_banners_dir()
 
     # Save main banner
-    img.save(banners_dir / f"{base_name}.webp", "WEBP", quality=85)
+    img.save(banners_dir / f"{base_name}.webp", "WEBP", quality=92)
 
     # Create and save kiosk variant (desaturated)
     kiosk_img = _create_kiosk_variant(img)
-    kiosk_img.save(banners_dir / f"{base_name}_kiosk.webp", "WEBP", quality=85)
+    kiosk_img.save(banners_dir / f"{base_name}_kiosk.webp", "WEBP", quality=92)
 
     return banner_filename, kiosk_filename, colors
 

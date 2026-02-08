@@ -244,26 +244,45 @@ export default function KioskDisplayPage() {
           display: flex;
           flex-direction: column;
           overflow: hidden;
+          position: relative;
         }
-        .kiosk-banner {
+        .kiosk-banner-bg {
+          position: absolute;
+          top: 0;
+          left: 0;
           width: 100%;
-          margin-bottom: 1.5rem;
-          border-radius: 1rem;
+          height: 300px;
+          z-index: 0;
           overflow: hidden;
-          flex-shrink: 0;
         }
-        .kiosk-banner img {
+        .kiosk-banner-bg img {
           width: 100%;
-          height: auto;
-          display: block;
-          max-height: 150px;
+          height: 100%;
           object-fit: cover;
+          display: block;
+        }
+        .kiosk-banner-bg::after {
+          content: '';
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(
+            to bottom,
+            transparent 0%,
+            transparent 30%,
+            var(--kiosk-fade, rgba(26, 26, 46, 0.6)) 60%,
+            var(--kiosk-fade, rgba(26, 26, 46, 1)) 100%
+          );
         }
         .kiosk-header {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
           margin-bottom: 2rem;
+          position: relative;
+          z-index: 1;
         }
         .kiosk-event-name {
           font-size: 2.5rem;
@@ -288,6 +307,8 @@ export default function KioskDisplayPage() {
           grid-template-columns: 1fr 1fr 1fr;
           gap: 2rem;
           min-height: 0;
+          position: relative;
+          z-index: 1;
         }
         .kiosk-main-single {
           grid-template-columns: 1fr 1fr;
@@ -542,6 +563,8 @@ export default function KioskDisplayPage() {
           margin-top: 1.5rem;
           align-self: center;
           flex-shrink: 0;
+          position: relative;
+          z-index: 1;
           background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
           color: #fff;
           border: none;
@@ -716,8 +739,15 @@ export default function KioskDisplayPage() {
         className="kiosk-container"
         style={display.banner_colors ? {
           '--kiosk-bg': `linear-gradient(135deg, ${display.banner_colors[0] || '#1a1a2e'} 0%, ${display.banner_colors[1] || '#16213e'} 50%, ${display.banner_colors[2] || '#0f3460'} 100%)`,
+          '--kiosk-fade': display.banner_colors[0] || '#1a1a2e',
         } as React.CSSProperties : undefined}
       >
+        {display.banner_kiosk_url && (
+          <div className="kiosk-banner-bg">
+            <img src={display.banner_kiosk_url} alt="" />
+          </div>
+        )}
+
         <div className="kiosk-header">
           <h1 className="kiosk-event-name">{display.event.name}</h1>
           <div className="kiosk-qr">
@@ -725,12 +755,6 @@ export default function KioskDisplayPage() {
             <p className="kiosk-qr-label">Scan to request from phone</p>
           </div>
         </div>
-
-        {display.banner_kiosk_url && (
-          <div className="kiosk-banner">
-            <img src={display.banner_kiosk_url} alt="Event banner" />
-          </div>
-        )}
 
         {/* Use StageLinQ now-playing if available, else fall back to request-based now_playing */}
         {(() => {

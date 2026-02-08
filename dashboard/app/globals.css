@@ -269,6 +269,47 @@ a {
   animation: fade-out 0.5s ease-out forwards;
 }
 
+/* Join page banner background */
+.join-page-wrapper {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.join-banner-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 200px;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.join-banner-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: blur(2px) brightness(0.65);
+}
+
+.join-banner-bg::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 20%,
+    rgba(10, 10, 10, 0.6) 50%,
+    #0a0a0a 100%
+  );
+}
+
 /* Guest request list on join page */
 .guest-request-list-container {
   display: flex;
@@ -276,6 +317,7 @@ a {
   min-height: 100vh;
   min-height: 100dvh;
   padding-bottom: 5rem;
+  position: relative;
 }
 
 .guest-request-list {

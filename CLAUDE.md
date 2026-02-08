@@ -185,13 +185,13 @@ NEW → REJECTED
 
 ### Banner / Image Upload
 - DJs upload banner images per event via `POST /api/events/{code}/banner` (multipart)
-- Backend (Pillow): validates format (JPEG/PNG/GIF/WebP), resizes to 1200x300, converts to WebP
+- Backend (Pillow): validates format (JPEG/PNG/GIF/WebP), resizes to 1920x480, converts to WebP (quality 92)
 - Two variants saved: original and desaturated kiosk version (40% saturation, 80% brightness)
 - Dominant colors extracted via quantization (3 colors, darkened to 40% for theme-safe backgrounds)
 - Files stored in `{UPLOADS_DIR}/banners/`, served via FastAPI `StaticFiles` at `/uploads`
 - DB columns on `events`: `banner_filename` (String), `banner_colors` (JSON text)
-- Kiosk display: uses desaturated banner + dynamic CSS theme from extracted colors (`--kiosk-bg`)
-- Join page: uses original banner with CSS `blur(2px) brightness(0.65)` overlay
+- Kiosk display: desaturated banner rendered as **absolute-positioned background layer** behind the header (event name + QR), full-width, no border-radius, with gradient fade-out to `--kiosk-bg` color. Header/main/button sit on top via `z-index: 1`.
+- Join page: original banner rendered as **absolute-positioned background** behind the header area, full-width, with `blur(2px) brightness(0.65)` and gradient fade to `#0a0a0a`
 - Delete endpoint: `DELETE /api/events/{code}/banner` — cleans up both file variants
 - Path traversal protection: resolved paths validated with `Path.is_relative_to()`
 - Service: `server/app/services/banner.py`
