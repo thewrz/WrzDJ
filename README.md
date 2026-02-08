@@ -6,7 +6,7 @@
 
 # WrzDJ
 
-A modern, real-time song request system for DJs. Guests scan a QR code to submit requests -- no app install, no login. DJs manage everything from a live dashboard with automatic track detection from DJ equipment via a plugin system supporting Denon StageLinQ, Traktor Broadcast, and more.
+A modern, real-time song request system for DJs. Guests scan a QR code to submit requests -- no app install, no login. DJs manage everything from a live dashboard with automatic track detection from DJ equipment via a plugin system supporting Denon StageLinQ, Pioneer PRO DJ LINK, Traktor Broadcast, and more.
 
 <p align="center">
   <img src="docs/images/dashboard.png" alt="WrzDJ Dashboard" width="800">
@@ -19,7 +19,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 ## What Makes WrzDJ Different
 
 - **Zero friction for guests** -- scan a QR code, search Spotify, submit a request. Done.
-- **Live track detection** -- the bridge connects to DJ equipment via plugins (Denon StageLinQ, Traktor Broadcast), so the kiosk and dashboard update in real-time as the DJ plays.
+- **Live track detection** -- the bridge connects to DJ equipment via plugins (Denon StageLinQ, Pioneer PRO DJ LINK, Traktor Broadcast), so the kiosk and dashboard update in real-time as the DJ plays.
 - **Automatic request matching** -- when the DJ plays a requested song, WrzDJ detects it via fuzzy matching and moves it through the workflow automatically.
 - **Tidal playlist sync** -- accepted requests are auto-added to a Tidal playlist, ready for the SC6000 to load.
 - **Desktop app for the bridge** -- no terminal needed. Sign in, pick your event, click Start.
@@ -62,6 +62,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 ### Bridge (DJ Equipment Detection)
 - Plugin architecture supporting multiple DJ platforms
 - **Denon StageLinQ** -- auto-detect tracks from SC6000, Prime 4, etc. over LAN with full per-deck data
+- **Pioneer PRO DJ LINK** -- connect to CDJ-3000, CDJ-2000NXS2, etc. over Ethernet with full per-deck data, on-air status, and master deck detection
 - **Traktor Broadcast** -- receive track metadata via Traktor's built-in Icecast broadcast
 - Robust deck state machine with configurable thresholds
 - Master deck priority and channel fader detection (StageLinQ)
@@ -78,7 +79,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Cross-platform Electron app (Windows `.exe`, macOS `.dmg`, Linux `.AppImage`)
 - Sign in with your WrzDJ account -- no API keys to copy/paste
 - Select your active event from a dropdown
-- Choose DJ protocol (StageLinQ, Traktor Broadcast) with dynamic config options
+- Choose DJ protocol (StageLinQ, Pioneer PRO DJ LINK, Traktor Broadcast) with dynamic config options
 - One-click Start/Stop for track detection
 - Real-time status panel: connected devices, current track, per-deck states
 - Configurable detection settings (live threshold, pause grace, fader detection, master deck priority)
@@ -108,17 +109,18 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
                                |
                         [Bridge Service]
                           (plugin system)
-                           /           \
-                  StageLinQ (LAN)    Icecast (local)
-                         |                |
-              [Denon SC6000/Prime 4]  [Traktor Pro]
+                        /       |        \
+              StageLinQ    PRO DJ LINK   Icecast
+               (LAN)       (Ethernet)    (local)
+                 |              |            |
+           [Denon CDJs]   [Pioneer CDJs]  [Traktor Pro]
 ```
 
 | Service | Stack | Directory |
 |---------|-------|-----------|
 | Backend | Python, FastAPI, SQLAlchemy 2.0, PostgreSQL, Alembic | `server/` |
 | Frontend | Next.js 16, React 18, TypeScript, vanilla CSS | `dashboard/` |
-| Bridge | Node.js, TypeScript, plugin architecture (StageLinQ, Traktor Broadcast) | `bridge/` |
+| Bridge | Node.js, TypeScript, plugin architecture (StageLinQ, Pioneer PRO DJ LINK, Traktor Broadcast) | `bridge/` |
 | Bridge App | Electron, React, Vite, electron-forge | `bridge-app/` |
 
 ### Supported DJ Equipment
@@ -129,6 +131,13 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Prime 4 / Prime 4+
 - Prime 2 / Prime Go
 - X1850 / X1800 mixer (as network hub)
+
+**Pioneer (via PRO DJ LINK)**
+- CDJ-3000
+- CDJ-2000NXS2 / CDJ-2000NXS
+- XDJ-1000MK2 / XDJ-700
+- DJM-900NXS2 / DJM-750MK2 mixer (for on-air detection)
+- Requires Ethernet connection (CDJs on same LAN, not USB-only)
 
 **Native Instruments (via Traktor Broadcast)**
 - Traktor Pro 3 / Pro 4 (any controller or setup with broadcast enabled)
@@ -276,7 +285,7 @@ PUBLIC_URL=https://app.yourdomain.com
 | `POST /api/votes/{request_id}` | Upvote a request |
 | `GET /api/bridge/apikey` | Get bridge API key (JWT auth) |
 
-### StageLinQ Bridge Endpoints (API Key Auth)
+### Bridge Endpoints (API Key Auth)
 
 | Endpoint | Description |
 |----------|-------------|
@@ -309,7 +318,8 @@ WrzDJ is built on these excellent open source projects:
 - [React](https://github.com/facebook/react) -- UI library
 
 ### DJ Integration
-- [stagelinq](https://github.com/chrisle/stagelinq) -- Node.js library for the Denon StageLinQ protocol (the backbone of live track detection)
+- [stagelinq](https://github.com/chrisle/stagelinq) -- Node.js library for the Denon StageLinQ protocol
+- [prolink-connect](https://github.com/evanpurkhiser/prolink-connect) -- TypeScript library for the Pioneer PRO DJ LINK protocol
 - [Spotipy](https://github.com/spotipy-dev/spotipy) -- Python client for the Spotify Web API
 - [python-tidalapi](https://github.com/tamland/python-tidal) -- Python client for the Tidal API
 
@@ -348,7 +358,7 @@ WrzDJ/
     Dockerfile
   bridge/              # DJ equipment bridge (Node.js)
     src/               # TypeScript source
-      plugins/         # DJ software plugins (StageLinQ, Traktor, etc.)
+      plugins/         # DJ software plugins (StageLinQ, Pioneer, Traktor)
     Dockerfile
   bridge-app/          # Electron desktop app for the bridge
     src/

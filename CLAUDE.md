@@ -5,7 +5,7 @@
 WrzDJ is a DJ song request management system with four services:
 - **Backend**: Python FastAPI (`server/`) — SQLAlchemy 2.0, PostgreSQL, Alembic migrations
 - **Frontend**: Next.js 16+ with React 18 (`dashboard/`) — TypeScript, vanilla CSS (dark theme)
-- **Bridge**: Node.js StageLinQ integration (`bridge/`) — connects to Denon DJ equipment
+- **Bridge**: Node.js DJ equipment integration (`bridge/`) — plugin system for Denon StageLinQ, Traktor Broadcast, Pioneer PRO DJ LINK
 - **Bridge App**: Electron GUI for the bridge (`bridge-app/`) — React + Vite, cross-platform installers
 
 ## Git Workflow
@@ -75,10 +75,16 @@ npx tsc --noEmit          # TypeScript type check (strict)
 npm test -- --run         # Vitest (23 tests)
 ```
 
+### Bridge (from `bridge/`)
+```bash
+npx tsc --noEmit          # TypeScript type check
+npm test -- --run         # Vitest (132 tests)
+```
+
 ### Bridge App (from `bridge-app/`)
 ```bash
 npx tsc --noEmit          # TypeScript type check
-npm test -- --run         # Vitest (12 tests)
+npm test -- --run         # Vitest (34 tests)
 ```
 
 ### Quick fix commands
@@ -146,11 +152,13 @@ NEW → REJECTED
 - `server/app/services/tidal.py` — Tidal playlist sync (background tasks)
 
 ### Bridge Plugin System
+- Built-in plugins: StageLinQ (Denon), Traktor Broadcast, Pioneer PRO DJ LINK
 - Plugins self-describe via `info`, `capabilities`, and `configOptions`
 - `PluginConfigOption` declares type (`number`/`string`/`boolean`), default, min/max, label
 - Registry provides `getPluginMeta()`/`listPluginMeta()` for serializable metadata (safe for IPC)
 - Bridge-app SettingsPanel is fully data-driven from plugin metadata — no hardcoded plugin UI
 - Adding a plugin with `configOptions` auto-surfaces those settings in the UI
+- Pioneer plugin uses `prolink-connect` npm library for PRO DJ LINK protocol
 - See `docs/PLUGIN-ARCHITECTURE.md` for full details
 
 ### Bridge App Architecture
@@ -159,6 +167,15 @@ NEW → REJECTED
 - IPC via contextBridge — renderer has no Node.js access
 - Imports bridge code from `../bridge/src/` (DeckStateManager, types)
 - Installers: `.exe` (Windows), `.dmg` (macOS), `.AppImage` (Linux) via electron-forge
+
+### Bridge App Externalization (Native Modules)
+- Plugins with npm deps (stagelinq, prolink-connect) must be **externalized** from Vite
+- Add to `externalDeps` in `bridge-app/vite.main.config.ts` AND `dependencies` in `bridge-app/package.json`
+- `copyExternals` plugin copies externalized deps + transitive deps to `.vite/build/node_modules/`
+- `AutoUnpackNativesPlugin` unpacks `.node` native files from asar to `app.asar.unpacked/`
+- Native module compilation: `npm install --ignore-scripts` then `npx electron-rebuild`
+- Use `overrides` in package.json to unify native dep versions across plugins (e.g., `better-sqlite3`)
+- Traktor plugin uses only Node.js built-ins — no externalization needed
 
 ### Release System
 - GitHub Actions release workflow: `.github/workflows/release.yml`
