@@ -190,6 +190,25 @@ export default function JoinEventPage() {
             {guestRequests.length} {guestRequests.length === 1 ? 'request' : 'requests'}
           </p>
 
+          {event.banner_url && (
+            <div style={{
+              marginBottom: '1rem',
+              borderRadius: '8px',
+              overflow: 'hidden',
+            }}>
+              <img
+                src={event.banner_url}
+                alt=""
+                style={{
+                  width: '100%',
+                  height: 'auto',
+                  display: 'block',
+                  filter: 'blur(2px) brightness(0.65)',
+                }}
+              />
+            </div>
+          )}
+
           {guestRequests.length > 0 ? (
             <div className="guest-request-list">
               {guestRequests.map((req) => (
@@ -324,6 +343,26 @@ export default function JoinEventPage() {
       <div className="card">
         <h1 style={{ marginBottom: '0.5rem' }}>{event.name}</h1>
         <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>Request a song</p>
+
+        {event.banner_url && (
+          <div style={{
+            marginBottom: '1.5rem',
+            borderRadius: '8px',
+            overflow: 'hidden',
+            position: 'relative',
+          }}>
+            <img
+              src={event.banner_url}
+              alt=""
+              style={{
+                width: '100%',
+                height: 'auto',
+                display: 'block',
+                filter: 'blur(2px) brightness(0.65)',
+              }}
+            />
+          </div>
+        )}
 
         <form onSubmit={handleSearch}>
           <div className="form-group">

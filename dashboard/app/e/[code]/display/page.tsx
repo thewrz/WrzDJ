@@ -239,11 +239,25 @@ export default function KioskDisplayPage() {
         }
         .kiosk-container {
           height: 100vh;
-          background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+          background: var(--kiosk-bg, linear-gradient(135deg, #1a1a2e 0%, #16213e 100%));
           padding: 2rem;
           display: flex;
           flex-direction: column;
           overflow: hidden;
+        }
+        .kiosk-banner {
+          width: 100%;
+          margin-bottom: 1.5rem;
+          border-radius: 1rem;
+          overflow: hidden;
+          flex-shrink: 0;
+        }
+        .kiosk-banner img {
+          width: 100%;
+          height: auto;
+          display: block;
+          max-height: 150px;
+          object-fit: cover;
         }
         .kiosk-header {
           display: flex;
@@ -698,7 +712,12 @@ export default function KioskDisplayPage() {
         }
       `}</style>
 
-      <div className="kiosk-container">
+      <div
+        className="kiosk-container"
+        style={display.banner_colors ? {
+          '--kiosk-bg': `linear-gradient(135deg, ${display.banner_colors[0] || '#1a1a2e'} 0%, ${display.banner_colors[1] || '#16213e'} 50%, ${display.banner_colors[2] || '#0f3460'} 100%)`,
+        } as React.CSSProperties : undefined}
+      >
         <div className="kiosk-header">
           <h1 className="kiosk-event-name">{display.event.name}</h1>
           <div className="kiosk-qr">
@@ -706,6 +725,12 @@ export default function KioskDisplayPage() {
             <p className="kiosk-qr-label">Scan to request from phone</p>
           </div>
         </div>
+
+        {display.banner_kiosk_url && (
+          <div className="kiosk-banner">
+            <img src={display.banner_kiosk_url} alt="Event banner" />
+          </div>
+        )}
 
         {/* Use StageLinQ now-playing if available, else fall back to request-based now_playing */}
         {(() => {

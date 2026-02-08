@@ -119,15 +119,20 @@ def delete_event(db: Session, event: Event) -> None:
     """Delete an event and all its associated data.
 
     Deletes in FK-safe order to avoid constraint violations:
-    1. Clear circular now_playing_request_id FK
-    2. Bulk-delete child records (requests cascade-delete votes at DB level)
-    3. Delete event (DB cascades delete play_history and now_playing)
+    1. Clean up banner files
+    2. Clear circular now_playing_request_id FK
+    3. Bulk-delete child records (requests cascade-delete votes at DB level)
+    4. Delete event (DB cascades delete play_history and now_playing)
     """
     from app.models.now_playing import NowPlaying
     from app.models.play_history import PlayHistory
     from app.models.request_vote import RequestVote
+    from app.services.banner import delete_banner_files
 
     event_id = event.id
+
+    # Clean up banner files before deleting
+    delete_banner_files(event.banner_filename)
 
     # Break circular FK: event -> now_playing_request_id -> request -> event
     event.now_playing_request_id = None

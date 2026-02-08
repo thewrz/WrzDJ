@@ -1,7 +1,17 @@
+import json
 from datetime import datetime
 from urllib.parse import quote
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -54,6 +64,27 @@ settings = get_settings()
 MAX_EXPORT_REQUESTS = 10000
 
 
+def _get_base_url(request: Request | None) -> str | None:
+    """Get the base URL for constructing public URLs."""
+    if settings.public_url:
+        return settings.public_url.rstrip("/")
+    if request:
+        return str(request.base_url).rstrip("/")
+    return None
+
+
+def _get_banner_urls(event, request: Request | None) -> tuple[str | None, str | None]:
+    """Get banner and kiosk banner URLs for an event."""
+    if not event.banner_filename:
+        return None, None
+    # Banner files are served from the API server via /uploads/
+    api_base = f"http://{request.headers.get('host', 'localhost:8000')}" if request else ""
+    banner_url = f"{api_base}/uploads/{event.banner_filename}"
+    stem = event.banner_filename.rsplit(".", 1)[0]
+    kiosk_url = f"{api_base}/uploads/{stem}_kiosk.webp"
+    return banner_url, kiosk_url
+
+
 def _event_to_out(
     event,
     request: Request | None = None,
@@ -61,16 +92,13 @@ def _event_to_out(
     include_status: bool = False,
 ) -> EventOut:
     """Convert Event model to EventOut schema with join_url."""
-    # Use configured PUBLIC_URL if set, otherwise fall back to request base_url
-    if settings.public_url:
-        base_url = settings.public_url.rstrip("/")
-    elif request:
-        base_url = str(request.base_url).rstrip("/")
-    else:
-        base_url = None
+    base_url = _get_base_url(request)
     join_url = f"{base_url}/join/{event.code}" if base_url else None
 
     event_status = compute_event_status(event) if include_status else None
+
+    banner_url, banner_kiosk_url = _get_banner_urls(event, request)
+    banner_colors = json.loads(event.banner_colors) if event.banner_colors else None
 
     return EventOut(
         id=event.id,
@@ -85,6 +113,9 @@ def _event_to_out(
         request_count=request_count,
         tidal_sync_enabled=event.tidal_sync_enabled,
         tidal_playlist_id=event.tidal_playlist_id,
+        banner_url=banner_url,
+        banner_kiosk_url=banner_kiosk_url,
+        banner_colors=banner_colors,
     )
 
 
@@ -437,3 +468,58 @@ def get_event_requests(
         )
         for r in requests
     ]
+
+
+@router.post("/{code}/banner", response_model=EventOut)
+@limiter.limit("10/minute")
+def upload_banner(
+    code: str,
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> EventOut:
+    """Upload a custom banner image for the event."""
+    from app.services.banner import delete_banner_files, process_banner_upload
+
+    event = get_event_by_code_for_owner(db, code, current_user)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # Delete old banner files if replacing
+    delete_banner_files(event.banner_filename)
+
+    try:
+        banner_filename, _kiosk_filename, colors = process_banner_upload(file, event.code)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    event.banner_filename = banner_filename
+    event.banner_colors = json.dumps(colors)
+    db.commit()
+    db.refresh(event)
+
+    return _event_to_out(event, request)
+
+
+@router.delete("/{code}/banner", response_model=EventOut)
+def delete_banner(
+    code: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> EventOut:
+    """Delete the event's custom banner image."""
+    from app.services.banner import delete_banner_files
+
+    event = get_event_by_code_for_owner(db, code, current_user)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    delete_banner_files(event.banner_filename)
+    event.banner_filename = None
+    event.banner_colors = None
+    db.commit()
+    db.refresh(event)
+
+    return _event_to_out(event, request)

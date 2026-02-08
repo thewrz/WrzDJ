@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
 from app.api import api_router
@@ -48,6 +51,11 @@ else:
 
 # Include API router
 app.include_router(api_router, prefix="/api")
+
+# Serve uploaded files (banners, etc.)
+uploads_dir = Path(settings.resolved_uploads_dir)
+uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
 
 @app.get("/health")
