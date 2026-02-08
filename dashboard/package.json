@@ -17,7 +17,6 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.3",
     "@eslint/js": "^9.39.2",
     "@testing-library/jest-dom": "^6.4.0",
     "@testing-library/react": "^16.3.2",
@@ -25,8 +24,8 @@
     "@types/react": "^18",
     "@typescript-eslint/eslint-plugin": "^8.54.0",
     "@typescript-eslint/parser": "^8.54.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^9.39.2",
-    "eslint-config-next": "^16.1.6",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^17.3.0",
