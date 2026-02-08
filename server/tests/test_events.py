@@ -141,6 +141,99 @@ class TestDeleteEvent:
         event = db.query(Event).filter(Event.code == test_event.code).first()
         assert event is None
 
+    def test_delete_event_with_associated_data(
+        self, client: TestClient, auth_headers: dict, db: Session, test_user: User
+    ):
+        """Test deleting an event that has requests, votes, play history, and now_playing."""
+        from app.models.now_playing import NowPlaying
+        from app.models.play_history import PlayHistory
+        from app.models.request_vote import RequestVote
+
+        # Create event
+        event = Event(
+            code="DELME1",
+            name="Event With Data",
+            created_by_user_id=test_user.id,
+            expires_at=datetime.utcnow() + timedelta(hours=6),
+        )
+        db.add(event)
+        db.flush()
+
+        # Add requests
+        req1 = Request(
+            event_id=event.id,
+            song_title="Stayin Alive",
+            artist="Bee Gees",
+            source="manual",
+            status=RequestStatus.PLAYING.value,
+            dedupe_key="delme_dedupe_1",
+        )
+        req2 = Request(
+            event_id=event.id,
+            song_title="The End",
+            artist="The Doors",
+            source="manual",
+            status=RequestStatus.PLAYED.value,
+            dedupe_key="delme_dedupe_2",
+        )
+        db.add_all([req1, req2])
+        db.flush()
+
+        # Set now_playing_request_id (circular FK)
+        event.now_playing_request_id = req1.id
+        db.flush()
+
+        # Add votes on requests
+        vote = RequestVote(
+            request_id=req1.id,
+            client_fingerprint="voter1",
+        )
+        db.add(vote)
+
+        # Add now_playing record
+        now_playing = NowPlaying(
+            event_id=event.id,
+            title="Stayin Alive",
+            artist="Bee Gees",
+            matched_request_id=req1.id,
+            source="stagelinq",
+        )
+        db.add(now_playing)
+
+        # Add play history
+        play_entry = PlayHistory(
+            event_id=event.id,
+            title="The End",
+            artist="The Doors",
+            source="manual",
+            matched_request_id=req2.id,
+            started_at=datetime.utcnow(),
+            play_order=1,
+        )
+        db.add(play_entry)
+        db.commit()
+
+        # Capture IDs before deletion (objects become stale after delete)
+        event_id = event.id
+        req1_id = req1.id
+
+        # Delete should succeed (was 500 before fix)
+        response = client.delete(
+            f"/api/events/{event.code}",
+            headers=auth_headers,
+        )
+        assert response.status_code == 204
+
+        # Expire session to force fresh reads from DB
+        db.expire_all()
+
+        # Verify everything is deleted
+        assert db.query(Event).filter(Event.id == event_id).first() is None
+        assert db.query(Request).filter(Request.event_id == event_id).all() == []
+        assert db.query(NowPlaying).filter(NowPlaying.event_id == event_id).first() is None
+        assert db.query(PlayHistory).filter(PlayHistory.event_id == event_id).all() == []
+        assert db.query(RequestVote).filter(RequestVote.request_id == req1_id).all() == []
+
     def test_delete_event_no_auth(self, client: TestClient, test_event: Event):
         """Test deleting event without auth fails."""
         response = client.delete(f"/api/events/{test_event.code}")
