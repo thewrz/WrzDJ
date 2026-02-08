@@ -1,33 +1,60 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../api.js';
 import type { EventInfo } from '../../shared/types.js';
+
+const POLL_INTERVAL_MS = 30_000;
 
 interface EventSelectorProps {
   selectedCode: string | null;
   onSelect: (event: EventInfo) => void;
+  onEventRemoved?: (code: string) => void;
 }
 
-export function EventSelector({ selectedCode, onSelect }: EventSelectorProps) {
+export function EventSelector({ selectedCode, onSelect, onEventRemoved }: EventSelectorProps) {
   const [events, setEvents] = useState<readonly EventInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const selectedCodeRef = useRef(selectedCode);
+  selectedCodeRef.current = selectedCode;
 
-  useEffect(() => {
-    loadEvents();
-  }, []);
-
-  const loadEvents = async () => {
-    setLoading(true);
+  const loadEvents = useCallback(async (isBackground = false) => {
+    if (!isBackground) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const result = await api.fetchEvents();
       setEvents(result);
+
+      // If the selected event is no longer in the list, notify parent
+      const currentCode = selectedCodeRef.current;
+      if (currentCode && !result.some((e) => e.code === currentCode)) {
+        onEventRemoved?.(currentCode);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load events');
+      // Only show errors on foreground loads — don't disrupt with transient poll failures
+      if (!isBackground) {
+        setError(err instanceof Error ? err.message : 'Failed to load events');
+      }
     } finally {
-      setLoading(false);
+      if (!isBackground) {
+        setLoading(false);
+      }
     }
-  };
+  }, [onEventRemoved]);
+
+  // Initial load
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents]);
+
+  // Periodic background refresh
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadEvents(true);
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [loadEvents]);
 
   if (loading) {
     return (
@@ -43,7 +70,7 @@ export function EventSelector({ selectedCode, onSelect }: EventSelectorProps) {
       <div className="card">
         <div className="card-title">Select Event</div>
         <div className="error-message">{error}</div>
-        <button className="btn btn-ghost btn-sm" onClick={loadEvents}>
+        <button className="btn btn-ghost btn-sm" onClick={() => loadEvents()}>
           Retry
         </button>
       </div>
@@ -57,7 +84,7 @@ export function EventSelector({ selectedCode, onSelect }: EventSelectorProps) {
         <p style={{ color: '#9ca3af', fontSize: '0.85rem' }}>
           No active events. Create an event on the WrzDJ dashboard first.
         </p>
-        <button className="btn btn-ghost btn-sm" onClick={loadEvents} style={{ marginTop: '0.5rem' }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => loadEvents()} style={{ marginTop: '0.5rem' }}>
           Refresh
         </button>
       </div>

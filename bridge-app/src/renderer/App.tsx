@@ -20,6 +20,10 @@ export function App() {
     setSelectedEvent(event);
   }, []);
 
+  const handleEventRemoved = useCallback((code: string) => {
+    setSelectedEvent((prev) => (prev?.code === code ? null : prev));
+  }, []);
+
   // Loading state
   if (loading && !authState.isAuthenticated) {
     return <div className="loading">Loading...</div>;
@@ -47,6 +51,7 @@ export function App() {
         <EventSelector
           selectedCode={selectedEvent?.code ?? null}
           onSelect={handleEventSelect}
+          onEventRemoved={handleEventRemoved}
         />
 
         <BridgeControls

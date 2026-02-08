@@ -13,6 +13,8 @@ export interface BridgeStatus {
   readonly eventName: string | null;
   readonly currentTrack: TrackDisplay | null;
   readonly deckStates: readonly DeckDisplay[];
+  /** Reason the bridge was stopped automatically (e.g. event deleted/expired) */
+  readonly stopReason: string | null;
 }
 
 /** Track info for display in the GUI */

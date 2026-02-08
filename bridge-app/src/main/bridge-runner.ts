@@ -8,6 +8,7 @@ import { getPlugin } from '@bridge/plugin-registry.js';
 import type { DeckLiveEvent, DeckState } from '@bridge/deck-state.js';
 import type { NowPlayingPayload, BridgeStatusPayload } from '@bridge/types.js';
 import type { PluginConnectionEvent } from '@bridge/plugin-types.js';
+import { checkEventHealth } from './event-health-service.js';
 import type { BridgeRunnerConfig, BridgeStatus, DeckDisplay, TrackDisplay } from '../shared/types.js';
 
 // Register built-in plugins
@@ -15,6 +16,7 @@ import '@bridge/plugins/index.js';
 
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 2000;
+const HEALTH_CHECK_INTERVAL_MS = 30_000;
 
 /**
  * BridgeRunner manages the lifecycle of the bridge via plugins.
@@ -31,6 +33,8 @@ export class BridgeRunner extends EventEmitter {
   private currentTrack: TrackDisplay | null = null;
   private lastTrackKey: string | null = null;
   private lastPostTime = 0;
+  private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private stopReason: string | null = null;
 
   get isRunning(): boolean {
     return this.running;
@@ -47,6 +51,7 @@ export class BridgeRunner extends EventEmitter {
     this.lastPostTime = 0;
     this.currentTrack = null;
     this.connectedDevice = null;
+    this.stopReason = null;
 
     const protocol = config.settings.protocol || 'stagelinq';
 
@@ -82,6 +87,7 @@ export class BridgeRunner extends EventEmitter {
     try {
       await this.pluginBridge.start(config.settings.pluginConfig);
       this.log('Plugin started, listening for DJ equipment...');
+      this.startHealthCheck();
     } catch (err) {
       this.running = false;
       this.pluginBridge = null;
@@ -92,10 +98,18 @@ export class BridgeRunner extends EventEmitter {
     }
   }
 
-  async stop(): Promise<void> {
+  async stop(reason?: string): Promise<void> {
     if (!this.running) return;
 
-    this.log('Stopping bridge...');
+    this.stopHealthCheck();
+
+    if (reason) {
+      this.stopReason = reason;
+      this.log(`Stopping bridge: ${reason}`);
+    } else {
+      this.log('Stopping bridge...');
+    }
+
     this.running = false;
 
     if (this.pluginBridge) {
@@ -142,6 +156,7 @@ export class BridgeRunner extends EventEmitter {
       eventName: null,
       currentTrack: this.currentTrack,
       deckStates,
+      stopReason: this.stopReason,
     };
   }
 
@@ -296,6 +311,37 @@ export class BridgeRunner extends EventEmitter {
     };
 
     await this.postWithRetry('/api/bridge/status', payload);
+  }
+
+  // --- Event health check ---
+
+  private startHealthCheck(): void {
+    this.stopHealthCheck();
+    this.healthCheckTimer = setInterval(() => {
+      this.runHealthCheck();
+    }, HEALTH_CHECK_INTERVAL_MS);
+  }
+
+  private stopHealthCheck(): void {
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = null;
+    }
+  }
+
+  private async runHealthCheck(): Promise<void> {
+    if (!this.running || !this.config) return;
+
+    const status = await checkEventHealth(this.config.apiUrl, this.config.eventCode);
+
+    if (status === 'not_found') {
+      this.log('Event no longer exists — stopping bridge');
+      await this.stop('Event was deleted');
+    } else if (status === 'expired') {
+      this.log('Event has expired or been archived — stopping bridge');
+      await this.stop('Event expired or archived');
+    }
+    // 'active' and 'error' — do nothing (don't stop on transient errors)
   }
 
   // --- Status emission ---

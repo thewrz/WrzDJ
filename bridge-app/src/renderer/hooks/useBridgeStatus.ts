@@ -9,6 +9,7 @@ const INITIAL_STATUS: BridgeStatus = {
   eventName: null,
   currentTrack: null,
   deckStates: [],
+  stopReason: null,
 };
 
 export function useBridgeStatus() {
