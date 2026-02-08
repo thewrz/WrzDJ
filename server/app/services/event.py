@@ -116,10 +116,38 @@ def get_event_by_code_for_owner(db: Session, code: str, user: User) -> Event | N
 
 
 def delete_event(db: Session, event: Event) -> None:
-    """Delete an event and all its associated requests."""
-    # Requests are deleted via cascade, but let's be explicit
-    db.query(Request).filter(Request.event_id == event.id).delete()
-    db.delete(event)
+    """Delete an event and all its associated data.
+
+    Deletes in FK-safe order to avoid constraint violations:
+    1. Clear circular now_playing_request_id FK
+    2. Bulk-delete child records (requests cascade-delete votes at DB level)
+    3. Delete event (DB cascades delete play_history and now_playing)
+    """
+    from app.models.now_playing import NowPlaying
+    from app.models.play_history import PlayHistory
+    from app.models.request_vote import RequestVote
+
+    event_id = event.id
+
+    # Break circular FK: event -> now_playing_request_id -> request -> event
+    event.now_playing_request_id = None
+    db.flush()
+
+    # Delete child records in FK-safe order
+    db.query(NowPlaying).filter(NowPlaying.event_id == event_id).delete(synchronize_session=False)
+    db.query(PlayHistory).filter(PlayHistory.event_id == event_id).delete(synchronize_session=False)
+    # Delete votes before requests (SQLite doesn't enforce FK cascades)
+    request_ids = [r[0] for r in db.query(Request.id).filter(Request.event_id == event_id).all()]
+    if request_ids:
+        db.query(RequestVote).filter(RequestVote.request_id.in_(request_ids)).delete(
+            synchronize_session=False
+        )
+    db.query(Request).filter(Request.event_id == event_id).delete(synchronize_session=False)
+
+    # Expunge event from session to skip ORM relationship processing,
+    # then bulk-delete the event row directly
+    db.expunge(event)
+    db.query(Event).filter(Event.id == event_id).delete(synchronize_session=False)
     db.commit()
 
 
