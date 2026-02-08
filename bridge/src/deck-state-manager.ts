@@ -22,9 +22,6 @@ import type {
   TrackInfo,
 } from "./deck-state.js";
 
-/** Default deck IDs (1-4) */
-const DEFAULT_DECK_IDS = ["1", "2", "3", "4"];
-
 /** Maximum number of decks to prevent unbounded map growth */
 const MAX_DECKS = 16;
 
@@ -62,11 +59,6 @@ export class DeckStateManager extends EventEmitter {
     this.config = config;
     this.decks = new Map();
     this.timers = new Map();
-
-    // Initialize default decks
-    for (const deckId of DEFAULT_DECK_IDS) {
-      this.decks.set(deckId, createEmptyDeckState(deckId));
-    }
   }
 
   /**
@@ -103,6 +95,8 @@ export class DeckStateManager extends EventEmitter {
     // Clear any pending timers
     this.clearTimer(deckId);
 
+    const wasNowPlaying = deckId === this.currentNowPlayingDeckId;
+
     if (track === null) {
       // Track unloaded - reset to empty
       this.emitLog(`Deck ${deckId}: Track unloaded (was: ${currentState.track?.title ?? 'empty'}) → EMPTY`);
@@ -111,6 +105,13 @@ export class DeckStateManager extends EventEmitter {
         faderLevel: currentState.faderLevel,
         isMaster: currentState.isMaster,
       });
+
+      // If this was the now-playing deck, scan for a new candidate
+      if (wasNowPlaying) {
+        this.emitLog(`Deck ${deckId}: Was now-playing, scanning for new candidate after unload`);
+        this.clearNowPlayingSwitchTimer();
+        this.scanForNowPlayingCandidate();
+      }
       return;
     }
 
@@ -123,6 +124,13 @@ export class DeckStateManager extends EventEmitter {
       faderLevel: currentState.faderLevel,
       isMaster: currentState.isMaster,
     });
+
+    // If this was the now-playing deck and it got a new track, scan for a new candidate
+    if (wasNowPlaying) {
+      this.emitLog(`Deck ${deckId}: Was now-playing, scanning for new candidate after track change`);
+      this.clearNowPlayingSwitchTimer();
+      this.scanForNowPlayingCandidate();
+    }
   }
 
   /**
@@ -315,6 +323,13 @@ export class DeckStateManager extends EventEmitter {
       ...currentState,
       state: "ENDED",
     });
+
+    // If this was the now-playing deck, scan for a new candidate immediately
+    if (deckId === this.currentNowPlayingDeckId) {
+      this.emitLog(`Deck ${deckId}: Was now-playing, scanning for new candidate after grace period`);
+      this.clearNowPlayingSwitchTimer();
+      this.scanForNowPlayingCandidate();
+    }
   }
 
   /**
@@ -338,6 +353,13 @@ export class DeckStateManager extends EventEmitter {
     if (wasLow && isNowUp && currentState.state === "PLAYING") {
       this.emitLog(`Deck ${deckId}: Fader raised (${clampedLevel.toFixed(2)}), checking report conditions`);
       this.checkAndReport(deckId);
+    }
+
+    // If the current now-playing deck's fader drops to 0, start the switch timer
+    // This handles the common DJ fade-out transition pattern
+    if (deckId === this.currentNowPlayingDeckId && clampedLevel === 0 && !wasLow) {
+      this.emitLog(`Deck ${deckId}: Now-playing deck fader dropped to 0, starting switch timer`);
+      this.startNowPlayingSwitchTimer();
     }
   }
 
@@ -477,11 +499,21 @@ export class DeckStateManager extends EventEmitter {
 
   /**
    * Called when the now-playing switch timer expires.
-   * Finds another playing deck to switch to (sorted by deck ID for deterministic order).
    */
   private onNowPlayingSwitchTimerExpired(): void {
     this.nowPlayingSwitchTimer = null;
     this.emitLog(`Now-playing switch timer expired (was deck ${this.currentNowPlayingDeckId}), scanning for candidate`);
+    this.scanForNowPlayingCandidate();
+  }
+
+  /**
+   * Scan all decks for a candidate to become the new "now playing" deck.
+   * Clears currentNowPlayingDeckId first, then finds the best candidate
+   * (sorted by deck ID for deterministic order).
+   */
+  private scanForNowPlayingCandidate(): void {
+    const previousDeckId = this.currentNowPlayingDeckId;
+    this.currentNowPlayingDeckId = null;
 
     // Sort deck IDs numerically for deterministic behavior
     const sortedDeckIds = [...this.decks.keys()].sort((a, b) =>
@@ -490,7 +522,7 @@ export class DeckStateManager extends EventEmitter {
 
     // Find another deck that is in PLAYING state and currently playing
     for (const deckId of sortedDeckIds) {
-      if (deckId === this.currentNowPlayingDeckId) {
+      if (deckId === previousDeckId) {
         continue;
       }
 
@@ -517,6 +549,7 @@ export class DeckStateManager extends EventEmitter {
         });
 
         this.currentNowPlayingDeckId = deckId;
+        this.clearNowPlayingSwitchTimer();
 
         if (state.track) {
           const event: DeckLiveEvent = {
@@ -531,7 +564,6 @@ export class DeckStateManager extends EventEmitter {
 
     // No other deck found - clear current now playing
     this.emitLog('No switch candidate found, clearing now-playing deck');
-    this.currentNowPlayingDeckId = null;
   }
 
   /**
