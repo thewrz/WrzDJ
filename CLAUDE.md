@@ -30,7 +30,7 @@ gh pr create --title "feat: Short description" --body "..."
 ### Prerequisites
 - PostgreSQL 16 via Docker: `docker compose up -d db`
 - Python 3.11+ with venv: `server/.venv/`
-- Node.js 20+
+- Node.js 22+
 
 ### Starting Services
 ```bash
@@ -158,7 +158,7 @@ NEW → REJECTED
 - Registry provides `getPluginMeta()`/`listPluginMeta()` for serializable metadata (safe for IPC)
 - Bridge-app SettingsPanel is fully data-driven from plugin metadata — no hardcoded plugin UI
 - Adding a plugin with `configOptions` auto-surfaces those settings in the UI
-- Pioneer plugin uses `prolink-connect` npm library for PRO DJ LINK protocol
+- Pioneer plugin uses `alphatheta-connect` npm library for PRO DJ LINK protocol (maintained fork of `prolink-connect` with encrypted Rekordbox DB support)
 - See `docs/PLUGIN-ARCHITECTURE.md` for full details
 
 ### Bridge App Architecture
@@ -169,12 +169,12 @@ NEW → REJECTED
 - Installers: `.exe` (Windows), `.dmg` (macOS), `.AppImage` (Linux) via electron-forge
 
 ### Bridge App Externalization (Native Modules)
-- Plugins with npm deps (stagelinq, prolink-connect) must be **externalized** from Vite
+- Plugins with npm deps (stagelinq, alphatheta-connect) must be **externalized** from Vite
 - Add to `externalDeps` in `bridge-app/vite.main.config.ts` AND `dependencies` in `bridge-app/package.json`
 - `copyExternals` plugin copies externalized deps + transitive deps to `.vite/build/node_modules/`
 - `AutoUnpackNativesPlugin` unpacks `.node` native files from asar to `app.asar.unpacked/`
 - Native module compilation: `npm install --ignore-scripts` then `npx electron-rebuild`
-- Use `overrides` in package.json to unify native dep versions across plugins (e.g., `better-sqlite3`)
+- `alphatheta-connect` uses `better-sqlite3-multiple-ciphers` natively — no `overrides` needed
 - Traktor plugin uses only Node.js built-ins — no externalization needed
 
 ### Release System

@@ -5,7 +5,7 @@ import fs from 'fs';
 // Modules that must be externalized from the Vite bundle (loaded via require()
 // at runtime). Bundling stagelinq breaks TCP connection state management and
 // class name-dependent service resolution.
-const externalDeps = ['stagelinq', 'prolink-connect'];
+const externalDeps = ['stagelinq', 'alphatheta-connect'];
 
 /**
  * Resolves the full transitive dependency tree for the given packages by

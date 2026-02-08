@@ -85,7 +85,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: dashboard/package-lock.json
 
@@ -117,7 +117,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: bridge-app/package-lock.json
 
@@ -133,3 +133,7 @@ jobs:
 
       - name: Run tests
         run: npm test -- --run
+
+      - name: Security audit
+        run: npm audit --audit-level=high
+        continue-on-error: true

@@ -29,10 +29,10 @@ const mockNetwork = {
   db: mockDb,
   autoconfigFromPeers: vi.fn().mockResolvedValue(undefined),
   connect: vi.fn(),
-  disconnect: vi.fn().mockResolvedValue(undefined),
+  disconnect: vi.fn().mockReturnValue(() => Promise.resolve(undefined)),
 };
 
-vi.mock("prolink-connect", () => ({
+vi.mock("alphatheta-connect", () => ({
   bringOnline: vi.fn().mockResolvedValue(mockNetwork),
   CDJStatus: {
     PlayState: {
@@ -133,7 +133,7 @@ describe("PioneerProlinkPlugin", () => {
     });
 
     it("calls bringOnline, autoconfigFromPeers, and connect on start", async () => {
-      const { bringOnline } = await import("prolink-connect");
+      const { bringOnline } = await import("alphatheta-connect");
 
       await plugin.start();
 
@@ -168,7 +168,7 @@ describe("PioneerProlinkPlugin", () => {
     });
 
     it("handles disconnect failure gracefully", async () => {
-      mockNetwork.disconnect.mockRejectedValueOnce(new Error("socket error"));
+      mockNetwork.disconnect.mockReturnValueOnce(() => Promise.reject(new Error("socket error")));
 
       await plugin.start();
       await plugin.stop(); // Should not throw
