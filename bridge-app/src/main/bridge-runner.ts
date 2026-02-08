@@ -180,7 +180,7 @@ export class BridgeRunner extends EventEmitter {
         this.deckManager.updateTrackInfo(deckId, {
           title,
           artist,
-          album: status.album,
+          album: (status as unknown as Record<string, unknown>).album as string | undefined,
         });
       }
 
@@ -203,8 +203,9 @@ export class BridgeRunner extends EventEmitter {
         this.deckManager.updatePlayState(deckId, isPlaying);
       }
 
-      if (typeof status.faderLevel === 'number') {
-        this.deckManager.updateFaderLevel(deckId, status.faderLevel);
+      const statusAny = status as unknown as Record<string, unknown>;
+      if (typeof statusAny.faderLevel === 'number') {
+        this.deckManager.updateFaderLevel(deckId, statusAny.faderLevel);
       }
 
       if (status.masterStatus === true) {
@@ -214,9 +215,10 @@ export class BridgeRunner extends EventEmitter {
       this.emitStatus();
     });
 
-    // Handle device ready
-    StageLinq.devices.on('ready', async (info) => {
-      const deviceName = info?.software?.name || 'Unknown Device';
+    // Handle device ready (stagelinq types are incomplete — cast to register handler)
+    (StageLinq.devices as NodeJS.EventEmitter).on('ready', async (info: Record<string, unknown>) => {
+      const software = info?.software as Record<string, unknown> | undefined;
+      const deviceName = (software?.name as string) || 'Unknown Device';
       this.connectedDevice = deviceName;
       this.log(`Device ready: ${deviceName}`);
       this.emitStatus();
@@ -224,7 +226,7 @@ export class BridgeRunner extends EventEmitter {
     });
 
     // Handle device disconnect
-    StageLinq.devices.on('disconnect', async () => {
+    (StageLinq.devices as NodeJS.EventEmitter).on('disconnect', async () => {
       this.connectedDevice = null;
       this.log('Device disconnected');
       this.emitStatus();
