@@ -4,6 +4,7 @@ out/
 .vite/
 *.js
 *.d.ts
+!src/types/*.d.ts
 *.js.map
 !vite.*.config.ts
 !forge.config.ts
