@@ -26,8 +26,8 @@ export const config = {
   /** Whether to require fader > 0 for live detection (default: false for 3rd-party mixer compat) */
   useFaderDetection: process.env.USE_FADER_DETECTION === "true",
 
-  /** Whether to only report from master deck (default: false for 3rd-party mixer compat) */
-  masterDeckPriority: process.env.MASTER_DECK_PRIORITY === "true",
+  /** Whether to only report from master deck (default: true, opt out with MASTER_DECK_PRIORITY=false) */
+  masterDeckPriority: process.env.MASTER_DECK_PRIORITY !== "false",
 };
 
 /**
