@@ -1,34 +1,121 @@
+<p align="center">
+  <img src="https://img.shields.io/badge/release-v2026-blue" alt="Release">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platforms">
+</p>
+
 # WrzDJ
 
-A modern song request system for DJs. Guests scan a QR code to join an event and submit song requests. DJs manage requests via a web dashboard with real-time StageLinQ integration.
+A modern, real-time song request system for DJs. Guests scan a QR code to submit requests -- no app install, no login. DJs manage everything from a live dashboard with automatic track detection from Denon DJ equipment via StageLinQ.
 
 ---
 
-## Features at a Glance
+## What Makes WrzDJ Different
 
-| Guest Experience | DJ Dashboard | Live Integration |
-|------------------|--------------|------------------|
-| Scan QR to join | Accept/reject requests | Auto-detect playing tracks |
-| Search via Spotify | Mark songs as played | Real-time "Now Playing" |
-| No login required | View play history | Fuzzy request matching |
-| See queue on kiosk | Toggle kiosk visibility | Album art enrichment |
+- **Zero friction for guests** -- scan a QR code, search Spotify, submit a request. Done.
+- **Live track detection** -- the bridge connects directly to Denon DJ hardware over StageLinQ, so the kiosk and dashboard update in real-time as the DJ plays.
+- **Automatic request matching** -- when the DJ plays a requested song, WrzDJ detects it via fuzzy matching and moves it through the workflow automatically.
+- **Tidal playlist sync** -- accepted requests are auto-added to a Tidal playlist, ready for the SC6000 to load.
+- **Desktop app for the bridge** -- no terminal needed. Sign in, pick your event, click Start.
+
+---
+
+## Features
+
+### Guest Experience
+- Scan a QR code to join an event instantly (no login required)
+- Search songs via Spotify with album art and popularity info
+- Submit requests with optional notes to the DJ
+- Upvote other guests' requests to bump priority
+- View the live request queue and see what's been accepted
+- See what's playing now on the kiosk display
+
+### DJ Dashboard
+- Accept, reject, and manage incoming song requests in real-time
+- Bulk accept all pending requests with one click
+- Mark songs as Playing/Played with full status workflow (new -> accepted -> playing -> played)
+- Toggle "Now Playing" visibility on the public kiosk
+- Bridge connection status indicator (green/gray dot, polls every 3s)
+- Tidal playlist sync -- auto-add accepted requests to a Tidal playlist for SC6000
+- Manual Tidal track linking when auto-match fails
+- Play history with source badges (Live/Manual) and request matching
+- Export requests and play history to CSV
+- Edit event expiry, delete events
+- QR code display for easy guest onboarding
 
 ### Kiosk Display
+- Public full-screen view at `/e/{code}/display`
+- Three-column layout: Now Playing | Up Next | Recently Played
+- Animated audio visualizer on the "Now Playing" card
+- Album art from Spotify enrichment
+- "Requested" badges on play history items that matched guest requests
+- Built-in song request modal with 60-second inactivity timeout
+- Auto-hides "Now Playing" after 60 minutes of inactivity
+- Kiosk mode protections (disabled right-click, text selection)
+
+### StageLinQ Bridge
+- Auto-detect tracks from Denon DJ equipment in real-time
+- Robust deck state machine with configurable thresholds
+- Master deck priority and channel fader detection
+- Pause grace periods to avoid false transitions
+- Real-time "Now Playing" with LIVE badge on kiosk
+- Append-only play history log
+- Automatic request matching via fuzzy search (artist + title)
+- Request auto-transition: accepted -> playing -> played
+- Spotify album art enrichment for detected tracks
+- Bridge connection status visible on DJ dashboard
+
+### Bridge Desktop App (NEW)
+- Cross-platform Electron app (Windows `.exe`, macOS `.dmg`, Linux `.deb`)
+- Sign in with your WrzDJ account -- no API keys to copy/paste
+- Select your active event from a dropdown
+- One-click Start/Stop for StageLinQ detection
+- Real-time status panel: connected devices, current track, per-deck states
+- Configurable detection settings (live threshold, pause grace, fader detection, master deck priority)
+- Encrypted credential storage via OS keychain (`safeStorage`)
+- Dark theme matching the WrzDJ dashboard
+
+### Automated Releases
+- GitHub Actions release workflow triggers on PR merge to `main`
+- Dated versioning: `v2026.02.07`, with same-day suffix support (`v2026.02.07.2`)
+- Builds bridge-app installers on 3 platforms in parallel
+- Bundles deploy scripts as a `.tar.gz` artifact
+- Auto-generated release notes from PR title/body + commit log
+
+---
+
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Event Name                       [QR]  │
-├─────────────────┬─────────────────┬─────────────────────────┤
-│   Now Playing   │    Up Next      │   Recently Played       │
-│                 │                 │                         │
-│   Track Title   │  1. Song A      │  1. Song X  [Requested] │
-│   Artist Name   │  2. Song B      │  2. Song Y              │
-│   [Album Art]   │  3. Song C      │  3. Song Z  [Requested] │
-│                 │                 │                         │
-└─────────────────┴─────────────────┴─────────────────────────┘
+[Guests]                     [DJ]
+   |                           |
+   | scan QR                   | dashboard
+   v                           v
+[Next.js Frontend] <------> [FastAPI Backend] <--- [PostgreSQL]
+                               ^
+                               | HTTP (API key auth)
+                               |
+                        [Bridge Service]
+                               ^
+                               | StageLinQ (LAN)
+                               |
+                     [Denon SC6000 / Prime 4]
 ```
 
-**Smart Visibility**: Now Playing auto-hides after 60 minutes of inactivity. DJs can manually show/hide from the dashboard.
+| Service | Stack | Directory |
+|---------|-------|-----------|
+| Backend | Python, FastAPI, SQLAlchemy 2.0, PostgreSQL, Alembic | `server/` |
+| Frontend | Next.js 16, React 18, TypeScript, vanilla CSS | `dashboard/` |
+| Bridge | Node.js, TypeScript, StageLinQ protocol | `bridge/` |
+| Bridge App | Electron, React, Vite, electron-forge | `bridge-app/` |
+
+### Supported DJ Hardware
+
+- Denon SC6000 / SC6000M
+- Denon SC5000 / SC5000M
+- Denon Prime 4 / Prime 4+
+- Denon Prime 2 / Prime Go
+- Denon X1850 / X1800 mixer (as network hub)
 
 ---
 
@@ -38,43 +125,31 @@ A modern song request system for DJs. Guests scan a QR code to join an event and
 
 - Docker + Docker Compose
 - Python 3.11+
-- Node.js 20+ with npm/pnpm
-- **Spotify Developer Account** (for API credentials)
+- Node.js 20+
+- [Spotify Developer Account](https://developer.spotify.com/dashboard) (for song search)
 
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/yourusername/WrzDJ.git
+git clone https://github.com/thewrz/WrzDJ.git
 cd WrzDJ
 cp .env.example .env
+# Edit .env with your Spotify credentials, JWT secret, etc.
 ```
 
-### 2. Configure Spotify API
-
-1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-2. Create a new app to get your Client ID and Client Secret
-3. Add your credentials to `.env`:
-
-```env
-SPOTIFY_CLIENT_ID=your_client_id_here
-SPOTIFY_CLIENT_SECRET=your_client_secret_here
-```
-
-### 3. Start the database
+### 2. Start the database
 
 ```bash
 docker compose up -d db
 ```
 
-### 4. Install git hooks
+### 3. Install git hooks
 
 ```bash
 ./scripts/setup-hooks.sh
 ```
 
-This installs a pre-commit hook that runs ruff and bandit on staged Python files, catching lint errors before they reach CI.
-
-### 5. Start the backend
+### 4. Start the backend
 
 ```bash
 cd server
@@ -86,7 +161,7 @@ python -m app.scripts.create_user --username admin --password admin
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 6. Start the dashboard
+### 5. Start the dashboard
 
 ```bash
 cd dashboard
@@ -94,128 +169,146 @@ npm install
 npm run dev
 ```
 
-### 7. Access the apps
+### 6. Access the apps
 
 - **API**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
 - **Dashboard**: http://localhost:3000
 
+### 7. (Optional) Run the bridge
+
+For StageLinQ integration, the bridge must be on the same LAN as your DJ equipment:
+
+```bash
+cd bridge
+npm install
+cp .env.example .env
+# Edit .env with your API URL, bridge API key, and event code
+npm start
+```
+
+Or use the desktop app instead -- see [Bridge Desktop App](#bridge-desktop-app-new) above.
+
 ---
 
 ## Deployment
 
-WrzDJ supports three deployment methods. All use a **subdomain model** in production:
-- **Frontend**: `https://app.your-domain.example`
-- **Backend**: `https://api.your-domain.example`
+WrzDJ supports three deployment methods. Production uses a **subdomain model**:
+- `https://app.your-domain.example` (frontend)
+- `https://api.your-domain.example` (backend)
 
 ### Option 1: Docker Compose (Local Full Stack)
-
-Run everything locally with Docker:
 
 ```bash
 docker compose up --build
 ```
 
-Access at http://localhost:3000 (frontend) and http://localhost:8000 (API).
+### Option 2: PaaS (Render / Railway)
 
-### Option 2: PaaS (Railway / Render)
+**Render** -- auto-detects `render.yaml`:
 
-#### Render (Recommended)
+1. Push to GitHub, connect to [Render](https://render.com)
+2. Set Spotify credentials in the Environment tab
+3. Add custom domains for API and frontend services
 
-1. Fork/push this repo to GitHub
-2. Connect the repo to [Render](https://render.com)
-3. Render auto-detects `render.yaml` and creates services
-4. Set Spotify credentials in Render dashboard (Environment tab)
-5. Add custom domains:
-   - `wrzdj-api` service → `api.yourdomain.com`
-   - `wrzdj-web` service → `app.yourdomain.com`
-6. Configure DNS with CNAME records pointing to Render
+**Railway**:
 
-#### Railway
+1. Create project on [Railway](https://railway.app), add PostgreSQL
+2. Deploy `server/` and `dashboard/` as separate services
+3. Set environment variables (see `.env.example`)
 
-1. Create a new project on [Railway](https://railway.app)
-2. Add a PostgreSQL database
-3. Deploy backend:
-   - New Service → GitHub Repo → Select `server` folder
-   - Set root directory to `server`
-   - Add environment variables (see below)
-4. Deploy frontend:
-   - New Service → GitHub Repo → Select `dashboard` folder
-   - Set root directory to `dashboard`
-   - Set build arg: `NEXT_PUBLIC_API_URL=https://api.yourdomain.com`
-5. Add custom domains in Railway settings
+### Option 3: VPS (Docker + nginx)
 
-**Required Environment Variables (Backend):**
+For full control on your own server:
+
+```bash
+cd /opt && git clone https://github.com/thewrz/WrzDJ.git && cd WrzDJ
+cp deploy/.env.example deploy/.env  # Fill in secure values
+docker compose -f deploy/docker-compose.yml up -d --build
+```
+
+See `deploy/DEPLOYMENT.md` for full nginx and SSL setup instructions.
+
+### Required Backend Environment Variables
+
 ```
 ENV=production
-DATABASE_URL=<from Railway PostgreSQL>
-JWT_SECRET=<generate with: openssl rand -hex 32>
-SPOTIFY_CLIENT_ID=<your Spotify client ID>
-SPOTIFY_CLIENT_SECRET=<your Spotify client secret>
+DATABASE_URL=<PostgreSQL connection string>
+JWT_SECRET=<openssl rand -hex 32>
+SPOTIFY_CLIENT_ID=<from Spotify Developer Dashboard>
+SPOTIFY_CLIENT_SECRET=<from Spotify Developer Dashboard>
+BRIDGE_API_KEY=<openssl rand -hex 32>
 CORS_ORIGINS=https://app.yourdomain.com
 PUBLIC_URL=https://app.yourdomain.com
 ```
 
-### Option 3: VPS (Docker Compose)
+---
 
-For full control on your own server (DigitalOcean, Linode, Hetzner, etc.):
+## API Endpoints
 
-#### Prerequisites
-- Ubuntu VPS with Docker and Docker Compose
-- nginx installed
-- Certbot for SSL certificates
-- DNS A records: `app.yourdomain.com` and `api.yourdomain.com` → your server IP
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/auth/login` | DJ authentication |
+| `GET /api/events` | List DJ's events |
+| `POST /api/events` | Create event |
+| `GET /api/events/{code}/display-settings` | Get kiosk display settings |
+| `PATCH /api/events/{code}/display-settings` | Toggle now playing visibility |
+| `GET /api/public/e/{code}` | Get event info (public) |
+| `GET /api/search` | Search songs via Spotify |
+| `POST /api/requests` | Submit song request |
+| `PATCH /api/requests/{id}` | Update request status |
+| `POST /api/votes/{request_id}` | Upvote a request |
+| `GET /api/bridge/apikey` | Get bridge API key (JWT auth) |
 
-#### Deployment Steps
+### StageLinQ Bridge Endpoints (API Key Auth)
 
-```bash
-# Clone repository
-cd /opt
-git clone https://github.com/yourusername/WrzDJ.git
-cd WrzDJ
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/bridge/nowplaying` | Report currently playing track |
+| `POST /api/bridge/status` | Report bridge connection status |
+| `DELETE /api/bridge/nowplaying/{code}` | Signal track ended / deck cleared |
 
-# Configure environment
-cp deploy/.env.example deploy/.env
-nano deploy/.env  # Fill in secure values
+### Public Endpoints
 
-# Generate JWT secret
-openssl rand -hex 32
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/public/e/{code}/nowplaying` | Get current now-playing track |
+| `GET /api/public/e/{code}/history` | Get play history (paginated) |
+| `GET /api/public/e/{code}/requests` | Get request queue (public) |
 
-# Set up SSL certificates (replace yourdomain.com with your actual domain)
-sudo certbot certonly --nginx -d app.yourdomain.com
-sudo certbot certonly --nginx -d api.yourdomain.com
+Full interactive API documentation available at `/docs` when running the backend.
 
-# Configure nginx (copy and rename the example configs for your domain)
-sudo cp deploy/nginx/app.wrzdj.com.conf /etc/nginx/sites-available/app.yourdomain.com.conf
-sudo cp deploy/nginx/api.wrzdj.com.conf /etc/nginx/sites-available/api.yourdomain.com.conf
-# Edit both files to replace wrzdj.com with your domain
-sudo ln -s /etc/nginx/sites-available/app.yourdomain.com.conf /etc/nginx/sites-enabled/
-sudo ln -s /etc/nginx/sites-available/api.yourdomain.com.conf /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
+---
 
-# Build and start services
-docker compose -f deploy/docker-compose.yml up -d --build
+## Built With
 
-# Create admin user
-docker compose -f deploy/docker-compose.yml exec api python -m app.scripts.create_user --username admin --password your-secure-password
-```
+WrzDJ is built on these excellent open source projects:
 
-#### Maintenance
+### Core Infrastructure
+- [FastAPI](https://github.com/tiangolo/fastapi) -- high-performance Python web framework
+- [SQLAlchemy](https://github.com/sqlalchemy/sqlalchemy) -- Python SQL toolkit and ORM
+- [Alembic](https://github.com/sqlalchemy/alembic) -- database migration tool for SQLAlchemy
+- [PostgreSQL](https://www.postgresql.org/) -- the database
+- [Next.js](https://github.com/vercel/next.js) -- React framework for the dashboard and kiosk
+- [React](https://github.com/facebook/react) -- UI library
 
-```bash
-# View logs
-docker compose -f deploy/docker-compose.yml logs -f
+### DJ Integration
+- [stagelinq](https://github.com/chrisle/stagelinq) -- Node.js library for the Denon StageLinQ protocol (the backbone of live track detection)
+- [Spotipy](https://github.com/spotipy-dev/spotipy) -- Python client for the Spotify Web API
+- [python-tidalapi](https://github.com/tamland/python-tidal) -- Python client for the Tidal API
 
-# Restart services
-docker compose -f deploy/docker-compose.yml restart
+### Desktop App
+- [Electron](https://github.com/electron/electron) -- cross-platform desktop framework
+- [Electron Forge](https://github.com/electron/forge) -- build tooling and installers for Electron
+- [electron-store](https://github.com/sindresorhus/electron-store) -- persistent key-value storage for Electron
+- [Vite](https://github.com/vitejs/vite) -- fast build tool and dev server
 
-# Update deployment
-git pull
-docker compose -f deploy/docker-compose.yml up -d --build
-
-# Database backup
-docker compose -f deploy/docker-compose.yml exec db pg_dump -U wrzdj wrzdj > backup.sql
-```
+### Utilities
+- [qrcode.react](https://github.com/zpao/qrcode.react) -- QR code generation for React
+- [Pydantic](https://github.com/pydantic/pydantic) -- data validation for Python
+- [SlowAPI](https://github.com/laurentS/slowapi) -- rate limiting for FastAPI
+- [Uvicorn](https://github.com/encode/uvicorn) -- ASGI server
+- [bcrypt](https://github.com/pyca/bcrypt) -- password hashing
 
 ---
 
@@ -226,7 +319,7 @@ WrzDJ/
   server/              # FastAPI backend
     app/
       api/             # API routes
-      core/            # Configuration, validation
+      core/            # Configuration, validation, rate limiting
       db/              # Database session
       models/          # SQLAlchemy models
       schemas/         # Pydantic schemas
@@ -234,231 +327,30 @@ WrzDJ/
     scripts/           # Startup scripts
     Dockerfile
   dashboard/           # Next.js frontend
-    app/               # App router pages
-    lib/               # Utilities
+    app/               # App router pages (dashboard, kiosk, join)
+    lib/               # API client, auth, utilities
     Dockerfile
   bridge/              # StageLinQ bridge service (Node.js)
     src/               # TypeScript source
     Dockerfile
+  bridge-app/          # Electron desktop app for the bridge
+    src/
+      main/            # Electron main process (auth, IPC, bridge runner)
+      preload/         # Context bridge (secure IPC)
+      renderer/        # React UI (login, events, controls, status)
+      shared/          # Shared types
   scripts/             # Git hooks and dev tooling
-  deploy/              # Deployment configs
-    docker-compose.yml # Production compose
-    nginx/             # Nginx configs
-    .env.example       # Production env template
+  deploy/              # Production deployment configs
+    docker-compose.yml
+    nginx/
+    .env.example
+  .github/workflows/   # CI + automated release pipeline
   docker-compose.yml   # Local dev compose
   render.yaml          # Render PaaS config
-  .env.example         # Dev env template
 ```
 
 ---
 
-## Features
+## License
 
-### Core
-- [x] DJ login with JWT authentication
-- [x] Create events with unique codes and QR
-- [x] Submit song requests (public, no login required)
-- [x] Search songs via Spotify API (with album art and popularity)
-- [x] Real-time request queue (polling)
-- [x] Request workflow: new → accepted → playing → played (or rejected)
-- [x] Basic spam/duplicate detection
-
-### Kiosk Display
-- [x] Public kiosk view at `/e/{code}/display`
-- [x] Three-column layout: Now Playing | Up Next | Recently Played
-- [x] Shows "Now Playing" with album art and animated visualizer
-- [x] Scrollable "Accepted Requests" queue
-- [x] Play history with "Requested" badges for matched songs
-- [x] Built-in song request modal
-- [x] Auto-hides "Now Playing" after 60 minutes of inactivity
-- [x] Kiosk mode protections (disabled right-click, selection)
-- [x] 60-second inactivity timeout on request modal
-
-### DJ Dashboard
-- [x] Accept/Reject incoming requests
-- [x] Mark songs as Playing/Played
-- [x] Toggle "Now Playing" visibility on kiosk (show/hide)
-- [x] Edit event expiry time
-- [x] Delete events
-- [x] Links to song source (Spotify)
-- [x] Play history with source badges (Live/Manual) and request matching
-
-### StageLinQ Integration
-- [x] Auto-detect tracks from Denon DJ equipment (SC6000, Prime 4, etc.)
-- [x] Real-time "Now Playing" with LIVE badge
-- [x] Play history log (append-only)
-- [x] Automatic request matching via fuzzy search
-- [x] Request auto-transition: accepted -> playing -> played
-- [x] Spotify album art enrichment for played tracks
-- [x] Bridge connection status indicator
-
-### Planned
-- [ ] Mobile app for guests
-- [ ] Share-to-app from Spotify/Apple Music
-
----
-
-## StageLinQ Integration
-
-WrzDJ supports automatic track detection from Denon DJ equipment via the StageLinQ protocol. When enabled, the system automatically:
-
-1. Detects what track the DJ is playing in real-time
-2. Displays it on the kiosk with a "LIVE" badge
-3. Logs all played tracks to a play history
-4. Auto-matches played tracks to guest requests (fuzzy matching)
-5. Transitions matched requests through the workflow automatically
-
-### Architecture
-
-```
-[SC6000 / Prime 4]
-        | StageLinQ (Ethernet/LAN)
-        v
-[Bridge Service]  -- Node.js, runs on DJ's network
-        | HTTP POST (API key auth)
-        v
-[FastAPI Backend]  -- Cloud or local
-        | Polling
-        v
-[Next.js Frontend] -- Kiosk display + DJ dashboard
-```
-
-### Supported Hardware
-
-- Denon SC6000 / SC6000M
-- Denon SC5000 / SC5000M
-- Denon Prime 4 / Prime 4+
-- Denon Prime 2 / Prime Go
-- Denon X1850 / X1800 mixer (for network hub)
-
-### Setup
-
-#### 1. Generate a Bridge API Key
-
-```bash
-openssl rand -hex 32
-```
-
-Save this key - you'll need it for both the backend and bridge.
-
-#### 2. Configure the Backend
-
-Add to your backend `.env`:
-
-```env
-BRIDGE_API_KEY=your_generated_key_here
-```
-
-Run the database migration:
-
-```bash
-cd server
-source .venv/bin/activate
-alembic upgrade head
-```
-
-#### 3. Set Up the Bridge Service
-
-The bridge must run on the same local network as your DJ equipment (StageLinQ uses UDP broadcast discovery).
-
-```bash
-cd bridge
-npm install
-cp .env.example .env
-```
-
-Edit `.env`:
-
-```env
-WRZDJ_API_URL=https://api.yourdomain.com  # Your backend URL
-WRZDJ_BRIDGE_API_KEY=your_generated_key_here
-WRZDJ_EVENT_CODE=ABC123  # Event code from DJ dashboard
-MIN_PLAY_SECONDS=5  # Debounce threshold (optional)
-```
-
-#### 4. Run the Bridge
-
-```bash
-npm start
-```
-
-You should see:
-```
-[Bridge] WrzDJ StageLinQ Bridge starting...
-[Bridge] API URL: https://api.yourdomain.com
-[Bridge] Event Code: ABC123
-[Bridge] Connecting to StageLinQ network...
-[Bridge] Listening for DJ equipment...
-[Bridge] Device ready: SC6000
-```
-
-#### 5. Verify It Works
-
-1. Load a track on your DJ equipment
-2. Check the kiosk display - you should see the track with a "LIVE" badge
-3. The DJ dashboard will show bridge connection status
-
-### Docker Deployment
-
-For production, run the bridge in Docker (must use host networking for StageLinQ discovery):
-
-```bash
-cd bridge
-docker build -t wrzdj-bridge .
-docker run --network host \
-  -e WRZDJ_API_URL=https://api.yourdomain.com \
-  -e WRZDJ_BRIDGE_API_KEY=your_key \
-  -e WRZDJ_EVENT_CODE=ABC123 \
-  wrzdj-bridge
-```
-
-### Network Requirements
-
-- Bridge machine must be on the same LAN as DJ equipment
-- DJ equipment connected via Ethernet (not WiFi)
-- Backend can be local or cloud-hosted (bridge only needs outbound HTTP/HTTPS)
-- If using HTTPS (recommended), ensure valid SSL certificates
-
-### Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| Bridge not detecting equipment | Ensure bridge is on same LAN, equipment connected via Ethernet |
-| "Authentication failed" | Check BRIDGE_API_KEY matches in backend and bridge |
-| Tracks not appearing | Check event code is correct and event is active |
-| High latency | Bridge should be on same network, not over VPN |
-
----
-
-## API Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Root health check |
-| `GET /api/health` | API health check |
-| `POST /api/auth/login` | DJ authentication |
-| `GET /api/events` | List DJ's events |
-| `POST /api/events` | Create event |
-| `GET /api/events/{code}/display-settings` | Get kiosk display settings |
-| `PATCH /api/events/{code}/display-settings` | Toggle now playing visibility |
-| `GET /api/public/e/{code}` | Get event info (public) |
-| `GET /api/search` | Search songs |
-| `POST /api/requests` | Submit song request |
-| `PATCH /api/requests/{id}` | Update request status |
-
-### StageLinQ Bridge Endpoints (API Key Auth)
-
-| Endpoint | Description |
-|----------|-------------|
-| `POST /api/bridge/nowplaying` | Report new track playing |
-| `POST /api/bridge/status` | Report bridge connection status |
-| `DELETE /api/bridge/nowplaying/{code}` | Signal track ended/deck cleared |
-
-### StageLinQ Public Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/public/e/{code}/nowplaying` | Get current now-playing track |
-| `GET /api/public/e/{code}/history` | Get play history (paginated) |
-
-Full API documentation available at `/docs` when running the backend.
+MIT
