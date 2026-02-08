@@ -139,6 +139,8 @@ export class BridgeRunner extends EventEmitter {
     if (this.deckManager) {
       for (const deckId of this.deckManager.getDeckIds()) {
         const state: DeckState = this.deckManager.getDeckState(deckId);
+        // Skip ghost empty decks with no track loaded
+        if (state.state === 'EMPTY' && !state.track) continue;
         deckStates.push({
           deckId: state.deckId,
           state: state.state,

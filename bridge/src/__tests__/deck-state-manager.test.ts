@@ -27,26 +27,23 @@ describe("DeckStateManager", () => {
   });
 
   describe("Initial State", () => {
-    it("starts all decks in EMPTY state", () => {
-      expect(manager.getDeckState("1").state).toBe("EMPTY");
-      expect(manager.getDeckState("2").state).toBe("EMPTY");
-      expect(manager.getDeckState("3").state).toBe("EMPTY");
-      expect(manager.getDeckState("4").state).toBe("EMPTY");
+    it("starts with no decks (created on demand)", () => {
+      expect(manager.getDeckIds()).toEqual([]);
     });
 
-    it("returns null track for empty deck", () => {
+    it("creates deck on demand via getDeckState", () => {
       const state = manager.getDeckState("1");
+      expect(state.state).toBe("EMPTY");
       expect(state.track).toBeNull();
       expect(state.isPlaying).toBe(false);
+      expect(manager.getDeckIds()).toEqual(["1"]);
     });
 
-    it("returns default deck IDs on init", () => {
-      expect(manager.getDeckIds()).toEqual(["1", "2", "3", "4"]);
-    });
-
-    it("includes dynamically created decks in getDeckIds", () => {
-      manager.getDeckState("1A"); // Creates deck on demand
-      expect(manager.getDeckIds()).toEqual(["1", "2", "3", "4", "1A"]);
+    it("includes all dynamically created decks in getDeckIds", () => {
+      manager.getDeckState("1");
+      manager.getDeckState("2");
+      manager.getDeckState("1A");
+      expect(manager.getDeckIds()).toEqual(["1", "2", "1A"]);
     });
   });
 
@@ -333,7 +330,7 @@ describe("DeckStateManager", () => {
       expect(manager.getDeckState("2").state).toBe("CUEING");
     });
 
-    it("same track on different decks can report after priority switch", () => {
+    it("same track on different decks can report after grace period expires", () => {
       const deckLiveHandler = vi.fn();
       manager.on("deckLive", deckLiveHandler);
 
@@ -362,8 +359,8 @@ describe("DeckStateManager", () => {
       // Deck 1 pauses
       manager.updatePlayState("1", false);
 
-      // After 10s pause, switch to deck 2
-      vi.advanceTimersByTime(10000);
+      // After grace period (3s), deck 1 transitions to ENDED → scan triggers switch
+      vi.advanceTimersByTime(3000);
 
       // Now deck 2 should report
       expect(deckLiveHandler).toHaveBeenCalledTimes(2);
@@ -584,8 +581,8 @@ describe("DeckStateManager", () => {
     });
 
     it("throws error when maximum deck limit is reached", () => {
-      // Create 12 more decks (4 default + 12 = 16, which is the limit)
-      for (let i = 5; i <= 16; i++) {
+      // Create 16 decks from scratch (no pre-init)
+      for (let i = 1; i <= 16; i++) {
         expect(() => manager.getDeckState(String(i))).not.toThrow();
       }
 
@@ -671,7 +668,7 @@ describe("DeckStateManager", () => {
       expect(manager.getCurrentNowPlayingDeckId()).toBe("1");
     });
 
-    it("switches to new deck after current now-playing pauses for 10s", () => {
+    it("switches to new deck after current now-playing deck's grace period expires", () => {
       const deckLiveHandler = vi.fn();
       manager.on("deckLive", deckLiveHandler);
 
@@ -689,13 +686,13 @@ describe("DeckStateManager", () => {
       // Deck 1 pauses
       manager.updatePlayState("1", false);
 
-      // After 9 seconds, should NOT have switched
-      vi.advanceTimersByTime(9000);
+      // Before grace period, should NOT have switched
+      vi.advanceTimersByTime(2999);
       expect(deckLiveHandler).toHaveBeenCalledTimes(1);
       expect(manager.getCurrentNowPlayingDeckId()).toBe("1");
 
-      // After 10 seconds total pause, should switch to deck 2
-      vi.advanceTimersByTime(1000);
+      // After grace period (3s), deck 1 → ENDED, scan finds deck 2
+      vi.advanceTimersByTime(1);
       expect(deckLiveHandler).toHaveBeenCalledTimes(2);
       expect(manager.getCurrentNowPlayingDeckId()).toBe("2");
       expect(deckLiveHandler).toHaveBeenLastCalledWith({
@@ -704,7 +701,7 @@ describe("DeckStateManager", () => {
       });
     });
 
-    it("does NOT switch if current now-playing deck resumes within 10s", () => {
+    it("does NOT switch if current now-playing deck resumes within grace period", () => {
       const deckLiveHandler = vi.fn();
       manager.on("deckLive", deckLiveHandler);
 
@@ -720,13 +717,13 @@ describe("DeckStateManager", () => {
 
       // Deck 1 pauses
       manager.updatePlayState("1", false);
-      vi.advanceTimersByTime(5000); // 5 seconds pause
+      vi.advanceTimersByTime(2000); // 2 seconds pause (within 3s grace)
 
-      // Deck 1 resumes before 10s
+      // Deck 1 resumes before grace period expires
       manager.updatePlayState("1", true);
       vi.advanceTimersByTime(10000); // Wait to confirm no switch
 
-      // Should NOT have switched - deck 1 resumed in time
+      // Should NOT have switched - deck 1 resumed within grace period
       expect(deckLiveHandler).toHaveBeenCalledTimes(1);
       expect(manager.getCurrentNowPlayingDeckId()).toBe("1");
     });
@@ -752,7 +749,7 @@ describe("DeckStateManager", () => {
       expect(manager.getCurrentNowPlayingDeckId()).toBe("1");
     });
 
-    it("clears currentNowPlayingDeckId when no other deck is playing after switch timer", () => {
+    it("clears currentNowPlayingDeckId when no other deck is playing after grace period", () => {
       const deckLiveHandler = vi.fn();
       manager.on("deckLive", deckLiveHandler);
 
@@ -765,8 +762,8 @@ describe("DeckStateManager", () => {
       // Deck 1 pauses
       manager.updatePlayState("1", false);
 
-      // After 10 seconds, no other deck to switch to
-      vi.advanceTimersByTime(10000);
+      // After grace period (3s), deck 1 → ENDED, scan finds no candidate
+      vi.advanceTimersByTime(3000);
 
       // currentNowPlayingDeckId should be cleared
       expect(manager.getCurrentNowPlayingDeckId()).toBeNull();
@@ -790,12 +787,199 @@ describe("DeckStateManager", () => {
       manager.updatePlayState("2", true);
       vi.advanceTimersByTime(15000);
 
-      // Deck 1 pauses
+      // Deck 1 pauses — grace period expires at 3s, then switch timer at 10s
       manager.updatePlayState("1", false);
       vi.advanceTimersByTime(10000);
 
       // Should NOT switch to deck 2 because fader is down
       expect(deckLiveHandler).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("Re-check Mechanisms", () => {
+    const track1: TrackInfo = {
+      title: "Song One",
+      artist: "Artist One",
+    };
+    const track2: TrackInfo = {
+      title: "Song Two",
+      artist: "Artist Two",
+    };
+    const track3: TrackInfo = {
+      title: "Song Three",
+      artist: "Artist Three",
+    };
+
+    it("track load on now-playing deck triggers scan → other PLAYING deck takes over", () => {
+      const deckLiveHandler = vi.fn();
+      manager.on("deckLive", deckLiveHandler);
+
+      // Deck 1 becomes now playing
+      manager.updateTrackInfo("1", track1);
+      manager.updatePlayState("1", true);
+      vi.advanceTimersByTime(15000);
+      expect(deckLiveHandler).toHaveBeenCalledTimes(1);
+      expect(manager.getCurrentNowPlayingDeckId()).toBe("1");
+
+      // Deck 2 is playing (reached PLAYING but blocked by priority)
+      manager.updateTrackInfo("2", track2);
+      manager.updatePlayState("2", true);
+      vi.advanceTimersByTime(15000);
+      expect(deckLiveHandler).toHaveBeenCalledTimes(1);
+
+      // DJ loads a new track on deck 1 (preparing next track)
+      manager.updateTrackInfo("1", track3);
+
+      // Scan should find deck 2 and switch
+      expect(deckLiveHandler).toHaveBeenCalledTimes(2);
+      expect(manager.getCurrentNowPlayingDeckId()).toBe("2");
+      expect(deckLiveHandler).toHaveBeenLastCalledWith({
+        deckId: "2",
+        track: track2,
+      });
+    });
+
+    it("track unload on now-playing deck triggers scan", () => {
+      const deckLiveHandler = vi.fn();
+      manager.on("deckLive", deckLiveHandler);
+
+      // Deck 1 becomes now playing
+      manager.updateTrackInfo("1", track1);
+      manager.updatePlayState("1", true);
+      vi.advanceTimersByTime(15000);
+      expect(deckLiveHandler).toHaveBeenCalledTimes(1);
+
+      // Deck 2 is playing
+      manager.updateTrackInfo("2", track2);
+      manager.updatePlayState("2", true);
+      vi.advanceTimersByTime(15000);
+
+      // Track unloaded from deck 1
+      manager.updateTrackInfo("1", null);
+
+      // Should switch to deck 2
+      expect(deckLiveHandler).toHaveBeenCalledTimes(2);
+      expect(manager.getCurrentNowPlayingDeckId()).toBe("2");
+    });
+
+    it("grace period on now-playing deck triggers scan", () => {
+      const deckLiveHandler = vi.fn();
+      manager.on("deckLive", deckLiveHandler);
+
+      // Deck 1 becomes now playing
+      manager.updateTrackInfo("1", track1);
+      manager.updatePlayState("1", true);
+      vi.advanceTimersByTime(15000);
+      expect(deckLiveHandler).toHaveBeenCalledTimes(1);
+
+      // Deck 2 is playing
+      manager.updateTrackInfo("2", track2);
+      manager.updatePlayState("2", true);
+      vi.advanceTimersByTime(15000);
+
+      // Deck 1 pauses
+      manager.updatePlayState("1", false);
+
+      // Grace period expires (3s) — scan triggers
+      vi.advanceTimersByTime(3000);
+
+      expect(deckLiveHandler).toHaveBeenCalledTimes(2);
+      expect(manager.getCurrentNowPlayingDeckId()).toBe("2");
+    });
+
+    it("fader drop to 0 on now-playing deck starts switch timer", () => {
+      // Use a manager without faderDetection to isolate the switch-timer behavior
+      manager = new DeckStateManager({
+        liveThresholdSeconds: 15,
+        pauseGraceSeconds: 3,
+        nowPlayingPauseSeconds: 10,
+        useFaderDetection: false,
+        masterDeckPriority: false,
+      });
+
+      const deckLiveHandler = vi.fn();
+      manager.on("deckLive", deckLiveHandler);
+
+      // Deck 1 becomes now playing with fader up
+      manager.updateFaderLevel("1", 1.0);
+      manager.updateTrackInfo("1", track1);
+      manager.updatePlayState("1", true);
+      vi.advanceTimersByTime(15000);
+      expect(deckLiveHandler).toHaveBeenCalledTimes(1);
+
+      // Deck 2 is playing
+      manager.updateFaderLevel("2", 1.0);
+      manager.updateTrackInfo("2", track2);
+      manager.updatePlayState("2", true);
+      vi.advanceTimersByTime(15000);
+
+      // Drop deck 1's fader to 0
+      manager.updateFaderLevel("1", 0);
+
+      // Before switch timer expires, no switch
+      vi.advanceTimersByTime(9999);
+      expect(deckLiveHandler).toHaveBeenCalledTimes(1);
+
+      // After switch timer (10s), deck 2 takes over
+      vi.advanceTimersByTime(1);
+      expect(deckLiveHandler).toHaveBeenCalledTimes(2);
+      expect(manager.getCurrentNowPlayingDeckId()).toBe("2");
+    });
+
+    it("fader drop on non-now-playing deck does NOT start switch timer", () => {
+      manager = new DeckStateManager({
+        liveThresholdSeconds: 15,
+        pauseGraceSeconds: 3,
+        nowPlayingPauseSeconds: 10,
+        useFaderDetection: false,
+        masterDeckPriority: false,
+      });
+
+      const deckLiveHandler = vi.fn();
+      manager.on("deckLive", deckLiveHandler);
+
+      // Deck 1 becomes now playing
+      manager.updateFaderLevel("1", 1.0);
+      manager.updateTrackInfo("1", track1);
+      manager.updatePlayState("1", true);
+      vi.advanceTimersByTime(15000);
+      expect(deckLiveHandler).toHaveBeenCalledTimes(1);
+
+      // Deck 2 is playing with fader up
+      manager.updateFaderLevel("2", 1.0);
+      manager.updateTrackInfo("2", track2);
+      manager.updatePlayState("2", true);
+      vi.advanceTimersByTime(15000);
+
+      // Drop deck 2's fader (not the now-playing deck)
+      manager.updateFaderLevel("2", 0);
+
+      // Wait beyond switch timer
+      vi.advanceTimersByTime(15000);
+
+      // Should NOT have switched — only deck 1's fader matters for switch
+      expect(deckLiveHandler).toHaveBeenCalledTimes(1);
+      expect(manager.getCurrentNowPlayingDeckId()).toBe("1");
+    });
+
+    it("non-now-playing deck load/unload does NOT trigger scan", () => {
+      const deckLiveHandler = vi.fn();
+      manager.on("deckLive", deckLiveHandler);
+
+      // Deck 1 becomes now playing
+      manager.updateTrackInfo("1", track1);
+      manager.updatePlayState("1", true);
+      vi.advanceTimersByTime(15000);
+      expect(deckLiveHandler).toHaveBeenCalledTimes(1);
+
+      // Load and unload tracks on deck 2 (not now-playing)
+      manager.updateTrackInfo("2", track2);
+      manager.updateTrackInfo("2", null);
+      manager.updateTrackInfo("2", track3);
+
+      // Deck 1 should still be now-playing, no extra events
+      expect(deckLiveHandler).toHaveBeenCalledTimes(1);
+      expect(manager.getCurrentNowPlayingDeckId()).toBe("1");
     });
   });
 
