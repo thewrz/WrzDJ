@@ -33,6 +33,9 @@ services:
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}  # Admin user created on first startup (has admin role for /admin dashboard)
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}  # Admin user password
       BRIDGE_API_KEY: ${BRIDGE_API_KEY:-}
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - api_uploads:/app/uploads
     ports:
       - "8000:8000"
     depends_on:
@@ -52,3 +55,4 @@ services:
 
 volumes:
   postgres_data:
+  api_uploads:
