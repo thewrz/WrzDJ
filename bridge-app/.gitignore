@@ -1,0 +1,10 @@
+node_modules/
+dist/
+out/
+.vite/
+*.js
+*.d.ts
+*.js.map
+!vite.*.config.ts
+!forge.config.ts
+!vitest.config.ts

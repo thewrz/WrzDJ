@@ -103,3 +103,29 @@ jobs:
 
       - name: Security audit
         run: npm audit --audit-level=high
+
+  bridge-app:
+    name: Bridge App Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bridge-app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: bridge-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npm test -- --run
