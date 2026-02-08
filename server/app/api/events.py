@@ -8,6 +8,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Query,
     Request,
     UploadFile,
     status,
@@ -441,7 +442,7 @@ def get_event_requests(
     code: str,
     status: RequestStatus | None = None,
     since: datetime | None = None,
-    limit: int = 100,
+    limit: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> list[RequestOut]:

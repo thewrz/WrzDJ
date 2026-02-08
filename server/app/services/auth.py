@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
-from jose import JWTError, jwt
+import jwt
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -22,9 +22,9 @@ def get_password_hash(password: str) -> str:
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(UTC) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.jwt_expire_minutes)
+        expire = datetime.now(UTC) + timedelta(minutes=settings.jwt_expire_minutes)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
     return encoded_jwt
@@ -37,7 +37,7 @@ def decode_token(token: str) -> TokenData | None:
         if username is None:
             return None
         return TokenData(username=username)
-    except JWTError:
+    except jwt.PyJWTError:
         return None
 
 

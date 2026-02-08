@@ -10,6 +10,49 @@ import type { BridgeSettings } from '../shared/types.js';
 
 const bridgeRunner = new BridgeRunner();
 
+/** Validate that a value is a valid HTTP(S) URL. */
+function isValidHttpUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/** Validate that an event code matches the expected format. */
+function isValidEventCode(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Z0-9]{4,10}$/.test(value);
+}
+
+/** Known BridgeSettings keys and their expected types. */
+const SETTINGS_SCHEMA: Record<string, string> = {
+  protocol: 'string',
+  pluginConfig: 'object',
+  liveThresholdSeconds: 'number',
+  pauseGraceSeconds: 'number',
+  nowPlayingPauseSeconds: 'number',
+  useFaderDetection: 'boolean',
+  masterDeckPriority: 'boolean',
+  minPlaySeconds: 'number',
+};
+
+/** Validate and filter a settings update to only known keys with correct types. */
+function validateSettingsUpdate(partial: unknown): Partial<BridgeSettings> {
+  if (typeof partial !== 'object' || partial === null || Array.isArray(partial)) {
+    throw new Error('Invalid settings: expected an object');
+  }
+  const validated: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(partial)) {
+    const expectedType = SETTINGS_SCHEMA[key];
+    if (!expectedType) continue; // skip unknown keys
+    if (typeof value !== expectedType) continue; // skip wrong types
+    validated[key] = value;
+  }
+  return validated as Partial<BridgeSettings>;
+}
+
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // Forward bridge status changes to renderer
   bridgeRunner.on('statusChanged', (status) => {
@@ -28,6 +71,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // --- Auth ---
 
   ipcMain.handle(IPC_CHANNELS.AUTH_LOGIN, async (_event, apiUrl: string, username: string, password: string) => {
+    if (!isValidHttpUrl(apiUrl)) {
+      throw new Error('Invalid API URL: must be a valid HTTP or HTTPS URL');
+    }
     const result = await login(apiUrl, username, password);
     store.setApiUrl(apiUrl);
     store.setToken(result.accessToken);
@@ -84,6 +130,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // --- Bridge ---
 
   ipcMain.handle(IPC_CHANNELS.BRIDGE_START, async (_event, eventCode: string) => {
+    if (!isValidEventCode(eventCode)) {
+      throw new Error('Invalid event code: must be 4-10 alphanumeric characters');
+    }
     store.setLastEventCode(eventCode);
 
     const apiUrl = store.getApiUrl();
@@ -115,7 +164,8 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE, (_event, partial: Partial<BridgeSettings>) => {
-    return store.updateSettings(partial);
+    const validated = validateSettingsUpdate(partial);
+    return store.updateSettings(validated);
   });
 }
 

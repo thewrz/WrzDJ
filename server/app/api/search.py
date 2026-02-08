@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db
+from app.api.deps import get_current_admin, get_db
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.models.search_cache import SearchCache
@@ -27,7 +27,7 @@ async def search(
 @router.delete("/cache")
 def clear_search_cache(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    _admin: User = Depends(get_current_admin),
 ) -> dict:
     """Clear all cached search results (admin only)."""
     count = db.query(SearchCache).delete()

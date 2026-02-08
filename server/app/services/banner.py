@@ -14,6 +14,9 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
+# Guard against decompression bombs (default is 178M pixels)
+Image.MAX_IMAGE_PIXELS = 25_000_000
+
 ALLOWED_FORMATS = {"JPEG", "PNG", "GIF", "WEBP"}
 
 
