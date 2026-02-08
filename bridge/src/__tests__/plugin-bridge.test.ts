@@ -316,6 +316,51 @@ describe("PluginBridge", () => {
     });
   });
 
+  describe("Log throttling", () => {
+    beforeEach(async () => {
+      plugin = createMockPlugin(FULL_CAPABILITIES);
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+    });
+
+    it("suppresses duplicate log messages within the dedup window", () => {
+      const logs: string[] = [];
+      bridge.on("log", (m: string) => logs.push(m));
+
+      plugin.emit("log", "Discovery: 192.168.1.71 (IGNORED)");
+      plugin.emit("log", "Discovery: 192.168.1.71 (IGNORED)");
+      plugin.emit("log", "Discovery: 192.168.1.71 (IGNORED)");
+
+      expect(logs.filter((m) => m.includes("IGNORED"))).toHaveLength(1);
+    });
+
+    it("allows the same message again after the dedup window expires", () => {
+      const logs: string[] = [];
+      bridge.on("log", (m: string) => logs.push(m));
+
+      plugin.emit("log", "Repeated message");
+      expect(logs.filter((m) => m.includes("Repeated"))).toHaveLength(1);
+
+      // Advance past the 60s dedup window
+      vi.advanceTimersByTime(61_000);
+
+      plugin.emit("log", "Repeated message");
+      expect(logs.filter((m) => m.includes("Repeated"))).toHaveLength(2);
+    });
+
+    it("allows different messages through independently", () => {
+      const logs: string[] = [];
+      bridge.on("log", (m: string) => logs.push(m));
+
+      plugin.emit("log", "Message A");
+      plugin.emit("log", "Message B");
+      plugin.emit("log", "Message A"); // suppressed
+      plugin.emit("log", "Message C");
+
+      expect(logs).toHaveLength(3);
+    });
+  });
+
   describe("DeckStateManager log forwarding", () => {
     it("forwards DeckStateManager logs", async () => {
       plugin = createMockPlugin(FULL_CAPABILITIES);

@@ -22,6 +22,9 @@ import type {
 /** Default virtual deck ID for single-deck plugins */
 const VIRTUAL_DECK_ID = "1";
 
+/** Suppress duplicate log messages within this window */
+const LOG_DEDUP_WINDOW_MS = 60_000;
+
 /**
  * PluginBridge connects an EquipmentSourcePlugin to a DeckStateManager,
  * translating plugin events and synthesizing missing data.
@@ -36,6 +39,7 @@ export class PluginBridge extends EventEmitter {
   private readonly plugin: EquipmentSourcePlugin;
   private readonly deckManager: DeckStateManager;
   private running = false;
+  private readonly recentLogs = new Map<string, number>();
 
   constructor(plugin: EquipmentSourcePlugin, config: DeckStateManagerConfig) {
     super();
@@ -94,6 +98,7 @@ export class PluginBridge extends EventEmitter {
   private cleanup(): void {
     this.deckManager.destroy();
     this.plugin.removeAllListeners();
+    this.recentLogs.clear();
   }
 
   private wireEvents(): void {
@@ -132,12 +137,36 @@ export class PluginBridge extends EventEmitter {
     });
 
     this.plugin.on("log", (message: string) => {
+      if (this.shouldThrottleLog(message)) return;
       this.emit("log", `[${this.plugin.info.id}] ${message}`);
     });
 
     this.plugin.on("error", (err: Error) => {
       this.emit("error", err);
     });
+  }
+
+  /** Suppress duplicate log messages — only allow each unique message once per dedup window. */
+  private shouldThrottleLog(message: string): boolean {
+    const now = Date.now();
+    const lastSeen = this.recentLogs.get(message);
+
+    if (lastSeen !== undefined && now - lastSeen < LOG_DEDUP_WINDOW_MS) {
+      return true;
+    }
+
+    this.recentLogs.set(message, now);
+
+    // Prune stale entries periodically to prevent unbounded growth
+    if (this.recentLogs.size > 200) {
+      for (const [key, time] of this.recentLogs) {
+        if (now - time >= LOG_DEDUP_WINDOW_MS) {
+          this.recentLogs.delete(key);
+        }
+      }
+    }
+
+    return false;
   }
 
   private normalizeDeckId(deckId: string): string {
