@@ -45,6 +45,9 @@ export default function EventQueuePage() {
   const [nowPlayingHidden, setNowPlayingHidden] = useState(false);
   const [togglingNowPlaying, setTogglingNowPlaying] = useState(false);
 
+  // Bridge connection state
+  const [bridgeConnected, setBridgeConnected] = useState(false);
+
   // Tidal sync state
   const [tidalStatus, setTidalStatus] = useState<TidalStatus | null>(null);
   const [tidalSyncEnabled, setTidalSyncEnabled] = useState(false);
@@ -70,12 +73,13 @@ export default function EventQueuePage() {
 
   const loadData = useCallback(async (): Promise<boolean> => {
     try {
-      const [eventData, requestsData, historyData, displaySettings, tidalStatusData] = await Promise.all([
+      const [eventData, requestsData, historyData, displaySettings, tidalStatusData, nowPlayingData] = await Promise.all([
         api.getEvent(code),
         api.getRequests(code),
         api.getPlayHistory(code).catch(() => ({ items: [], total: 0 })),
         api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false })),
         api.getTidalStatus().catch(() => ({ linked: false, user_id: null, expires_at: null })),
+        api.getNowPlaying(code).catch(() => null),
       ]);
       setEvent(eventData);
       setRequests(requestsData);
@@ -84,6 +88,7 @@ export default function EventQueuePage() {
       setNowPlayingHidden(displaySettings.now_playing_hidden);
       setTidalStatus(tidalStatusData);
       setTidalSyncEnabled(eventData.tidal_sync_enabled ?? false);
+      setBridgeConnected(nowPlayingData?.bridge_connected ?? false);
       setEventStatus('active');
       setError(null);
       return true; // Continue polling
@@ -580,6 +585,41 @@ export default function EventQueuePage() {
             >
               {togglingNowPlaying ? '...' : nowPlayingHidden ? 'Hidden' : 'Visible'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Bridge Status */}
+      {!isExpiredOrArchived && (
+        <div
+          className="card"
+          style={{
+            marginBottom: '1rem',
+            padding: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div>
+            <span style={{ fontWeight: 500 }}>Bridge Status</span>
+            <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
+              Denon StageLinQ bridge connection for live track detection
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span
+              style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: bridgeConnected ? '#10b981' : '#6b7280',
+                display: 'inline-block',
+              }}
+            />
+            <span style={{ color: bridgeConnected ? '#10b981' : '#9ca3af', fontSize: '0.875rem' }}>
+              {bridgeConnected ? 'Bridge Connected' : 'Bridge Not Connected'}
+            </span>
           </div>
         </div>
       )}
