@@ -260,21 +260,8 @@ export default function KioskDisplayPage() {
           height: 100%;
           object-fit: cover;
           display: block;
-        }
-        .kiosk-banner-bg::after {
-          content: '';
-          position: absolute;
-          bottom: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background: linear-gradient(
-            to bottom,
-            transparent 0%,
-            transparent 30%,
-            var(--kiosk-fade, rgba(26, 26, 46, 0.6)) 60%,
-            var(--kiosk-fade, rgba(26, 26, 46, 1)) 100%
-          );
+          mask-image: linear-gradient(to bottom, black 0%, black 40%, transparent 100%);
+          -webkit-mask-image: linear-gradient(to bottom, black 0%, black 40%, transparent 100%);
         }
         .kiosk-header {
           display: flex;
@@ -739,7 +726,6 @@ export default function KioskDisplayPage() {
         className="kiosk-container"
         style={display.banner_colors ? {
           '--kiosk-bg': `linear-gradient(135deg, ${display.banner_colors[0] || '#1a1a2e'} 0%, ${display.banner_colors[1] || '#16213e'} 50%, ${display.banner_colors[2] || '#0f3460'} 100%)`,
-          '--kiosk-fade': display.banner_colors[0] || '#1a1a2e',
         } as React.CSSProperties : undefined}
       >
         {display.banner_kiosk_url && (
