@@ -28,6 +28,7 @@ Every plugin implements this interface, which extends Node.js `EventEmitter`:
 interface EquipmentSourcePlugin extends EventEmitter {
   readonly info: PluginInfo;
   readonly capabilities: PluginCapabilities;
+  readonly configOptions: readonly PluginConfigOption[];
   readonly isRunning: boolean;
 
   start(config?: Record<string, unknown>): Promise<void>;
@@ -35,6 +36,7 @@ interface EquipmentSourcePlugin extends EventEmitter {
 }
 ```
 
+- `configOptions` declares user-configurable settings for this plugin (see PluginConfigOption below).
 - `start()` initializes the connection to the DJ software. The optional `config` parameter carries plugin-specific settings (e.g., port number for Traktor).
 - `stop()` tears down the connection and cleans up all resources.
 - Both methods are async and must be safe to call in sequence.
@@ -64,6 +66,24 @@ interface PluginCapabilities {
   readonly albumMetadata: boolean;  // Provides album info with tracks
 }
 ```
+
+### PluginConfigOption
+
+Declares a user-configurable setting for a plugin. The bridge-app UI renders these dynamically — no hardcoded UI is needed per plugin.
+
+```typescript
+interface PluginConfigOption {
+  readonly key: string;           // Setting key, e.g. "port"
+  readonly label: string;         // Human-readable label, e.g. "Broadcast port"
+  readonly type: "number" | "string" | "boolean";
+  readonly default: number | string | boolean;
+  readonly description?: string;  // Tooltip/help text
+  readonly min?: number;          // For type: "number" only
+  readonly max?: number;          // For type: "number" only
+}
+```
+
+Plugins with no user-configurable options set `configOptions: []`.
 
 **How capabilities drive synthesis:**
 
@@ -95,7 +115,10 @@ Plugins emit these events via `EventEmitter`. PluginBridge subscribes to all of 
 The registry (`bridge/src/plugin-registry.ts`) maps plugin IDs to factory functions. Plugins are instantiated on demand — each call to `getPlugin()` returns a fresh instance.
 
 ```typescript
-import { registerPlugin, getPlugin, listPlugins } from "./plugin-registry.js";
+import {
+  registerPlugin, getPlugin, listPlugins,
+  getPluginMeta, listPluginMeta,
+} from "./plugin-registry.js";
 
 // Register a factory
 registerPlugin("my-plugin", () => new MyPlugin());
@@ -105,7 +128,13 @@ const plugin = getPlugin("my-plugin"); // Returns new MyPlugin() or null
 
 // List registered IDs
 const ids = listPlugins(); // ["stagelinq", "traktor-broadcast", "my-plugin"]
+
+// Get serializable metadata (info + capabilities + configOptions)
+const meta = getPluginMeta("my-plugin"); // PluginMeta | null
+const allMeta = listPluginMeta();        // PluginMeta[]
 ```
+
+`getPluginMeta()` and `listPluginMeta()` return plain objects safe for IPC transfer. The bridge-app uses `listPluginMeta()` to populate the protocol dropdown and render plugin-specific config inputs dynamically.
 
 Built-in plugins register themselves in `bridge/src/plugins/index.ts`, which is imported as a side-effect at startup.
 
@@ -125,7 +154,7 @@ Connects to Denon DJ equipment (SC6000, SC Live, etc.) over the local network us
 | `masterDeck` | `true` |
 | `albumMetadata` | `true` |
 
-**Configuration:** None required. The plugin discovers devices via StageLinQ network announcements.
+**Configuration:** No user-configurable options (`configOptions: []`). The plugin discovers devices via StageLinQ network announcements.
 
 ### Traktor Broadcast (`traktor-broadcast`)
 
@@ -180,6 +209,11 @@ export class MyPlugin extends EventEmitter implements EquipmentSourcePlugin {
     albumMetadata: false,
   };
 
+  readonly configOptions: readonly PluginConfigOption[] = [
+    // Add user-configurable options here, or leave empty
+    // { key: "port", label: "Port", type: "number", default: 9000, min: 1024, max: 65535 },
+  ];
+
   private running = false;
 
   get isRunning(): boolean {
@@ -219,23 +253,7 @@ import { MyPlugin } from "./my-plugin.js";
 registerPlugin("my-plugin", () => new MyPlugin());
 ```
 
-### 3. Add to the UI plugin list
-
-In `bridge-app/src/shared/types.ts`, add an entry to `AVAILABLE_PLUGINS`:
-
-```typescript
-export const AVAILABLE_PLUGINS = [
-  { id: 'stagelinq', name: 'Denon StageLinQ', description: '...' },
-  { id: 'traktor-broadcast', name: 'Traktor Broadcast', description: '...' },
-  { id: 'my-plugin', name: 'My DJ Software', description: '...' },
-];
-```
-
-### 4. Update the settings panel (if needed)
-
-If your plugin accepts configuration (like the Traktor port setting), add a conditional section in `bridge-app/src/renderer/components/SettingsPanel.tsx` and update the `pluginHasCapability()` helper to reflect your plugin's capabilities.
-
-### 5. Write tests
+### 3. Write tests
 
 Create `bridge/src/__tests__/my-plugin.test.ts`. Follow the patterns in the existing test files:
 
@@ -250,6 +268,20 @@ Run with:
 ```bash
 cd bridge && npm run test:run
 ```
+
+## UI Integration
+
+The bridge-app Settings panel is fully data-driven from plugin metadata. No hardcoded plugin knowledge exists in the UI.
+
+**How it works:**
+
+1. On mount, the renderer calls `api.listPluginMeta()` via IPC
+2. The main process calls `listPluginMeta()` from the plugin registry, which creates temporary plugin instances, reads their metadata, and returns serializable `PluginMeta` objects
+3. The protocol dropdown is populated from `PluginMeta[].info`
+4. When a protocol is selected, `PluginConfigInput` components are rendered for each `configOption` based on its `type` (number, string, boolean)
+5. Capability-based toggles (fader detection, master deck priority) are conditionally shown based on `PluginMeta.capabilities`
+
+Adding a new plugin with `configOptions` automatically surfaces those options in the UI with no frontend changes needed.
 
 ## Design Principles
 
@@ -280,8 +312,11 @@ bridge/src/
     traktor-broadcast-plugin.test.ts # ICY parsing and HTTP server tests
 
 bridge-app/src/
-  shared/types.ts              # AVAILABLE_PLUGINS list, BridgeSettings.protocol
+  shared/types.ts              # PluginMeta, PluginConfigOption, BridgeSettings.protocol
+  main/ipc-handlers.ts         # IPC handler: exposes listPluginMeta to renderer
   main/bridge-runner.ts        # Electron main process: creates PluginBridge from settings
+  preload/preload.ts           # contextBridge: exposes listPluginMeta to renderer
+  renderer/api.ts              # Typed API wrapper for renderer
   renderer/components/
-    SettingsPanel.tsx           # Protocol selector dropdown, per-plugin config UI
+    SettingsPanel.tsx           # Data-driven protocol selector and config UI
 ```

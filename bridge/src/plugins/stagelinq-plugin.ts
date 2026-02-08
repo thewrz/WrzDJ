@@ -11,6 +11,7 @@ import { StageLinq } from "stagelinq";
 import type {
   EquipmentSourcePlugin,
   PluginCapabilities,
+  PluginConfigOption,
   PluginInfo,
 } from "../plugin-types.js";
 
@@ -28,6 +29,8 @@ export class StageLinqPlugin extends EventEmitter implements EquipmentSourcePlug
     masterDeck: true,
     albumMetadata: true,
   };
+
+  readonly configOptions: readonly PluginConfigOption[] = [];
 
   private running = false;
   private loggerListener: ((...args: unknown[]) => void) | null = null;

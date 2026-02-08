@@ -29,6 +29,17 @@ export interface PluginInfo {
   readonly description: string;
 }
 
+/** Describes a user-configurable option exposed by a plugin */
+export interface PluginConfigOption {
+  readonly key: string;
+  readonly label: string;
+  readonly type: "number" | "string" | "boolean";
+  readonly default: number | string | boolean;
+  readonly description?: string;
+  readonly min?: number;
+  readonly max?: number;
+}
+
 /** Track event emitted by a plugin */
 export interface PluginTrackEvent {
   readonly deckId: string;
@@ -80,6 +91,7 @@ export interface PluginEventMap {
 export interface EquipmentSourcePlugin extends EventEmitter {
   readonly info: PluginInfo;
   readonly capabilities: PluginCapabilities;
+  readonly configOptions: readonly PluginConfigOption[];
   readonly isRunning: boolean;
 
   /** Start the plugin. Config is plugin-specific. */

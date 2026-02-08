@@ -49,11 +49,32 @@ export interface BridgeSettings {
   readonly minPlaySeconds: number;
 }
 
-/** Available plugins for the protocol selector */
-export const AVAILABLE_PLUGINS = [
-  { id: 'stagelinq', name: 'Denon StageLinQ', description: 'Connects to Denon DJ equipment via StageLinQ protocol' },
-  { id: 'traktor-broadcast', name: 'Traktor Broadcast', description: 'Receives track metadata from Traktor via broadcast stream' },
-] as const;
+/** Describes a user-configurable option exposed by a plugin */
+export interface PluginConfigOption {
+  readonly key: string;
+  readonly label: string;
+  readonly type: 'number' | 'string' | 'boolean';
+  readonly default: number | string | boolean;
+  readonly description?: string;
+  readonly min?: number;
+  readonly max?: number;
+}
+
+/** Plugin capabilities (what data it can provide) */
+export interface PluginCapabilities {
+  readonly multiDeck: boolean;
+  readonly playState: boolean;
+  readonly faderLevel: boolean;
+  readonly masterDeck: boolean;
+  readonly albumMetadata: boolean;
+}
+
+/** Serializable plugin metadata for IPC */
+export interface PluginMeta {
+  readonly info: { readonly id: string; readonly name: string; readonly description: string };
+  readonly capabilities: PluginCapabilities;
+  readonly configOptions: readonly PluginConfigOption[];
+}
 
 /** Event info from the backend */
 export interface EventInfo {
@@ -79,6 +100,7 @@ export const IPC_CHANNELS = {
   AUTH_GET_STATE: 'auth:getState',
   AUTH_CHANGED: 'auth:changed',
   EVENTS_FETCH: 'events:fetch',
+  PLUGINS_LIST_META: 'plugins:listMeta',
   BRIDGE_START: 'bridge:start',
   BRIDGE_STOP: 'bridge:stop',
   BRIDGE_STATUS: 'bridge:status',

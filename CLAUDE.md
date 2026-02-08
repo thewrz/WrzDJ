@@ -145,6 +145,14 @@ NEW → REJECTED
 - `server/app/services/event.py` — event lifecycle, status computation
 - `server/app/services/tidal.py` — Tidal playlist sync (background tasks)
 
+### Bridge Plugin System
+- Plugins self-describe via `info`, `capabilities`, and `configOptions`
+- `PluginConfigOption` declares type (`number`/`string`/`boolean`), default, min/max, label
+- Registry provides `getPluginMeta()`/`listPluginMeta()` for serializable metadata (safe for IPC)
+- Bridge-app SettingsPanel is fully data-driven from plugin metadata — no hardcoded plugin UI
+- Adding a plugin with `configOptions` auto-surfaces those settings in the UI
+- See `docs/PLUGIN-ARCHITECTURE.md` for full details
+
 ### Bridge App Architecture
 - Electron main process: auth, events API, bridge runner, persistent store (electron-store)
 - Electron renderer: React UI with login, event selection, bridge controls, status panel

@@ -26,6 +26,7 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server } 
 import type {
   EquipmentSourcePlugin,
   PluginCapabilities,
+  PluginConfigOption,
   PluginInfo,
 } from "../plugin-types.js";
 
@@ -68,6 +69,18 @@ export class TraktorBroadcastPlugin extends EventEmitter implements EquipmentSou
     masterDeck: false,
     albumMetadata: false,
   };
+
+  readonly configOptions: readonly PluginConfigOption[] = [
+    {
+      key: "port",
+      label: "Broadcast port",
+      type: "number",
+      default: DEFAULT_PORT,
+      min: 1024,
+      max: 65535,
+      description: "Local port for Traktor to broadcast to",
+    },
+  ];
 
   private server: Server | null = null;
   private running = false;

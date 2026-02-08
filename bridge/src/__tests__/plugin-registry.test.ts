@@ -6,6 +6,8 @@ import { EventEmitter } from "events";
 import {
   registerPlugin,
   getPlugin,
+  getPluginMeta,
+  listPluginMeta,
   listPlugins,
   clearRegistry,
 } from "../plugin-registry.js";
@@ -22,6 +24,9 @@ function createMockPlugin(id = "mock"): EquipmentSourcePlugin {
       masterDeck: false,
       albumMetadata: false,
     },
+    configOptions: [
+      { key: "port", label: "Port", type: "number", default: 9000, min: 1024, max: 65535 },
+    ],
     isRunning: false,
     start: async () => {},
     stop: async () => {},
@@ -69,5 +74,30 @@ describe("Plugin Registry", () => {
     registerPlugin("mock", () => createMockPlugin());
     clearRegistry();
     expect(listPlugins()).toEqual([]);
+  });
+
+  it("returns plugin metadata via getPluginMeta", () => {
+    registerPlugin("mock", () => createMockPlugin());
+    const meta = getPluginMeta("mock");
+    expect(meta).not.toBeNull();
+    expect(meta!.info.id).toBe("mock");
+    expect(meta!.capabilities.multiDeck).toBe(true);
+    expect(meta!.capabilities.faderLevel).toBe(false);
+    expect(meta!.configOptions).toHaveLength(1);
+    expect(meta!.configOptions[0].key).toBe("port");
+    expect(meta!.configOptions[0].default).toBe(9000);
+  });
+
+  it("returns null from getPluginMeta for unregistered plugin", () => {
+    expect(getPluginMeta("nonexistent")).toBeNull();
+  });
+
+  it("lists metadata for all registered plugins", () => {
+    registerPlugin("alpha", () => createMockPlugin("alpha"));
+    registerPlugin("beta", () => createMockPlugin("beta"));
+    const metas = listPluginMeta();
+    expect(metas).toHaveLength(2);
+    expect(metas[0].info.id).toBe("alpha");
+    expect(metas[1].info.id).toBe("beta");
   });
 });

@@ -1,24 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api.js';
-import type { BridgeSettings } from '../../shared/types.js';
-import { DEFAULT_SETTINGS, AVAILABLE_PLUGINS } from '../../shared/types.js';
+import type { BridgeSettings, PluginMeta, PluginConfigOption } from '../../shared/types.js';
+import { DEFAULT_SETTINGS } from '../../shared/types.js';
 import { useBridgeStatus } from '../hooks/useBridgeStatus.js';
-
-/** Check if the selected protocol supports a capability */
-function pluginHasCapability(protocol: string, capability: 'faderLevel' | 'masterDeck'): boolean {
-  // StageLinQ supports all capabilities; other plugins may not
-  if (protocol === 'stagelinq') return true;
-  if (protocol === 'traktor-broadcast') return false;
-  return true; // Unknown plugins — show all options
-}
 
 export function SettingsPanel() {
   const [settings, setSettings] = useState<BridgeSettings>(DEFAULT_SETTINGS);
+  const [plugins, setPlugins] = useState<readonly PluginMeta[]>([]);
   const [open, setOpen] = useState(false);
   const bridgeStatus = useBridgeStatus();
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch(() => {});
+    api.listPluginMeta().then(setPlugins).catch(() => {});
   }, []);
 
   const update = useCallback(async (partial: Partial<BridgeSettings>) => {
@@ -31,7 +25,7 @@ export function SettingsPanel() {
   }, []);
 
   const protocol = settings.protocol || 'stagelinq';
-  const isTraktor = protocol === 'traktor-broadcast';
+  const currentPlugin = plugins.find((p) => p.info.id === protocol);
 
   return (
     <div className="card">
@@ -61,8 +55,8 @@ export function SettingsPanel() {
                 fontSize: '0.85rem',
               }}
             >
-              {AVAILABLE_PLUGINS.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+              {plugins.map((p) => (
+                <option key={p.info.id} value={p.info.id}>{p.info.name}</option>
               ))}
             </select>
           </div>
@@ -73,23 +67,18 @@ export function SettingsPanel() {
             </div>
           )}
 
-          {isTraktor && (
-            <div className="settings-row">
-              <label>Broadcast port</label>
-              <input
-                type="number"
-                value={(settings.pluginConfig?.port as number) ?? 8123}
-                min={1024}
-                max={65535}
+          {currentPlugin && currentPlugin.configOptions.length > 0 && (
+            currentPlugin.configOptions.map((opt) => (
+              <PluginConfigInput
+                key={opt.key}
+                option={opt}
+                value={settings.pluginConfig?.[opt.key]}
                 disabled={bridgeStatus.isRunning}
-                onChange={(e) => update({
-                  pluginConfig: {
-                    ...settings.pluginConfig,
-                    port: parseInt(e.target.value) || 8123,
-                  },
+                onChange={(value) => update({
+                  pluginConfig: { ...settings.pluginConfig, [opt.key]: value },
                 })}
               />
-            </div>
+            ))
           )}
 
           <div className="settings-row">
@@ -136,7 +125,7 @@ export function SettingsPanel() {
             />
           </div>
 
-          {pluginHasCapability(protocol, 'faderLevel') && (
+          {currentPlugin?.capabilities.faderLevel && (
             <div className="settings-row">
               <label>Require fader up</label>
               <button
@@ -146,7 +135,7 @@ export function SettingsPanel() {
             </div>
           )}
 
-          {pluginHasCapability(protocol, 'masterDeck') && (
+          {currentPlugin?.capabilities.masterDeck && (
             <div className="settings-row">
               <label>Master deck only</label>
               <button
@@ -159,4 +148,58 @@ export function SettingsPanel() {
       )}
     </div>
   );
+}
+
+/** Renders a single plugin config option as the appropriate input type. */
+function PluginConfigInput({ option, value, disabled, onChange }: {
+  option: PluginConfigOption;
+  value: unknown;
+  disabled: boolean;
+  onChange: (value: number | string | boolean) => void;
+}) {
+  if (option.type === 'number') {
+    return (
+      <div className="settings-row">
+        <label>{option.label}</label>
+        <input
+          type="number"
+          value={(value as number) ?? option.default}
+          min={option.min}
+          max={option.max}
+          disabled={disabled}
+          onChange={(e) => onChange(parseInt(e.target.value) || (option.default as number))}
+        />
+      </div>
+    );
+  }
+
+  if (option.type === 'string') {
+    return (
+      <div className="settings-row">
+        <label>{option.label}</label>
+        <input
+          type="text"
+          value={(value as string) ?? option.default}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </div>
+    );
+  }
+
+  if (option.type === 'boolean') {
+    const checked = (value as boolean) ?? option.default;
+    return (
+      <div className="settings-row">
+        <label>{option.label}</label>
+        <button
+          className={`toggle ${checked ? 'active' : ''}`}
+          disabled={disabled}
+          onClick={() => onChange(!checked)}
+        />
+      </div>
+    );
+  }
+
+  return null;
 }

@@ -1,4 +1,4 @@
-import type { AuthState, BridgeSettings, BridgeStatus, EventInfo } from '../shared/types.js';
+import type { AuthState, BridgeSettings, BridgeStatus, EventInfo, PluginMeta } from '../shared/types.js';
 
 /**
  * Type-safe wrapper around the bridgeApi exposed via contextBridge.
@@ -7,6 +7,7 @@ export interface BridgeApi {
   login(apiUrl: string, username: string, password: string): Promise<void>;
   logout(): Promise<void>;
   getAuthState(): Promise<AuthState>;
+  listPluginMeta(): Promise<readonly PluginMeta[]>;
   fetchEvents(): Promise<readonly EventInfo[]>;
   startBridge(eventCode: string): Promise<void>;
   stopBridge(): Promise<void>;

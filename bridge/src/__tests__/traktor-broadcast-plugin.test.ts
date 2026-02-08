@@ -71,6 +71,17 @@ describe("TraktorBroadcastPlugin", () => {
     expect(plugin.capabilities.albumMetadata).toBe(false);
   });
 
+  it("exposes configOptions with port option", () => {
+    plugin = new TraktorBroadcastPlugin();
+    expect(plugin.configOptions).toHaveLength(1);
+    const portOpt = plugin.configOptions[0];
+    expect(portOpt.key).toBe("port");
+    expect(portOpt.type).toBe("number");
+    expect(portOpt.default).toBe(8123);
+    expect(portOpt.min).toBe(1024);
+    expect(portOpt.max).toBe(65535);
+  });
+
   it("starts and stops cleanly", async () => {
     plugin = new TraktorBroadcastPlugin();
     expect(plugin.isRunning).toBe(false);

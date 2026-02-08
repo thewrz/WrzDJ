@@ -47,6 +47,7 @@ function createMockPlugin(
   Object.assign(emitter, {
     info: { id: "mock", name: "Mock Plugin", description: "Test" },
     capabilities,
+    configOptions: [],
     start: async () => {
       running = true;
     },
