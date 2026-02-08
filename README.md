@@ -8,6 +8,12 @@
 
 A modern, real-time song request system for DJs. Guests scan a QR code to submit requests -- no app install, no login. DJs manage everything from a live dashboard with automatic track detection from Denon DJ equipment via StageLinQ.
 
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="WrzDJ Dashboard" width="800">
+  <br>
+  <em>DJ dashboard — manage requests, QR code for guests, bridge status, and Tidal sync</em>
+</p>
+
 ---
 
 ## What Makes WrzDJ Different
