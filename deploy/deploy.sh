@@ -8,15 +8,17 @@ set -euo pipefail
 # 1. Stopping existing containers
 # 2. Killing any process holding ports 8000/3000
 # 3. Rebuilding and starting fresh
+# 4. Waiting for API health check to pass
 
-COMPOSE_FILE="$(dirname "$0")/docker-compose.yml"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 
 echo "==> Stopping existing containers..."
 docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>/dev/null || true
 
 echo "==> Checking for processes holding ports 8000 and 3000..."
 for PORT in 8000 3000; do
-  PIDS=$(ss -tlnp | grep ":${PORT}" | grep -oP 'pid=\K[0-9]+' | sort -u)
+  PIDS=$(ss -tlnp | grep ":${PORT}" | grep -oP 'pid=\K[0-9]+' | sort -u || true)
   if [ -n "${PIDS:-}" ]; then
     for PID in $PIDS; do
       PROC=$(ps -p "$PID" -o comm= 2>/dev/null || echo "unknown")
@@ -39,9 +41,30 @@ done
 echo "==> Rebuilding and starting stack..."
 docker compose -f "$COMPOSE_FILE" up -d --build
 
-echo "==> Waiting for services to become healthy..."
-sleep 5
+echo "==> Waiting for API to become healthy..."
+MAX_WAIT=60
+ELAPSED=0
+while [ $ELAPSED -lt $MAX_WAIT ]; do
+  if curl -sf http://127.0.0.1:8000/health > /dev/null 2>&1; then
+    echo "    API healthy after ${ELAPSED}s"
+    break
+  fi
+  if [ $ELAPSED -eq 0 ]; then
+    printf "    Waiting"
+  fi
+  printf "."
+  sleep 2
+  ELAPSED=$((ELAPSED + 2))
+done
 
+if [ $ELAPSED -ge $MAX_WAIT ]; then
+  echo ""
+  echo "WARNING: API did not become healthy within ${MAX_WAIT}s"
+  echo "==> API logs:"
+  docker compose -f "$COMPOSE_FILE" logs --tail=20 api
+fi
+
+echo ""
 echo "==> Service status:"
 docker compose -f "$COMPOSE_FILE" ps
 
