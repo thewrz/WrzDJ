@@ -14,8 +14,8 @@
  */
 import { EventEmitter } from "events";
 
-import { bringOnline, CDJStatus, DeviceType } from "prolink-connect";
-import type { Device, ProlinkNetwork } from "prolink-connect";
+import { bringOnline, CDJStatus, DeviceType } from "alphatheta-connect";
+import type { Device, ProlinkNetwork } from "alphatheta-connect";
 
 import type {
   EquipmentSourcePlugin,
@@ -68,7 +68,11 @@ export class PioneerProlinkPlugin extends EventEmitter implements EquipmentSourc
       this.emit("log", "Connecting as virtual device...");
       network.connect();
     } catch (err) {
-      await network.disconnect().catch(() => {});
+      try {
+        await network.disconnect()();
+      } catch {
+        // Best effort cleanup
+      }
       throw err;
     }
 
@@ -88,7 +92,7 @@ export class PioneerProlinkPlugin extends EventEmitter implements EquipmentSourc
 
     if (this.network) {
       try {
-        await this.network.disconnect();
+        await this.network.disconnect()();
       } catch {
         // Best effort on shutdown
       }

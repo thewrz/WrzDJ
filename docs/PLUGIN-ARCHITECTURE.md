@@ -184,7 +184,7 @@ Because all capabilities are `false`, PluginBridge synthesizes everything: deck 
 
 **File:** `bridge/src/plugins/pioneer-prolink-plugin.ts`
 
-Connects to Pioneer DJ equipment (CDJ-3000, CDJ-2000NXS2, etc.) via the PRO DJ LINK protocol using the [`prolink-connect`](https://github.com/evanpurkhiser/prolink-connect) npm library. Joins the network as a virtual CDJ device, monitors CDJ status packets, and queries track metadata from CDJ databases.
+Connects to Pioneer DJ equipment (CDJ-3000, CDJ-2000NXS2, etc.) via the PRO DJ LINK protocol using the [`alphatheta-connect`](https://github.com/chrisle/alphatheta-connect) npm library (maintained fork of `prolink-connect` with encrypted Rekordbox DB support). Joins the network as a virtual CDJ device, monitors CDJ status packets, and queries track metadata from CDJ databases.
 
 | Capability | Value |
 |------------|-------|
@@ -344,6 +344,7 @@ bridge/src/
   __tests__/
     deck-state-manager.test.ts # Deck state machine tests
     pioneer-prolink-plugin.test.ts # Pioneer plugin tests
+    stagelinq-plugin.test.ts   # StageLinQ plugin tests
     plugin-bridge.test.ts      # PluginBridge synthesis and event forwarding tests
     plugin-registry.test.ts    # Registry CRUD tests
     traktor-broadcast-plugin.test.ts # ICY parsing and HTTP server tests

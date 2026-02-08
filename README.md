@@ -150,7 +150,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 
 - Docker + Docker Compose
 - Python 3.11+
-- Node.js 20+
+- Node.js 22+
 - [Spotify Developer Account](https://developer.spotify.com/dashboard) (for song search)
 
 ### 1. Clone and configure
@@ -319,7 +319,7 @@ WrzDJ is built on these excellent open source projects:
 
 ### DJ Integration
 - [stagelinq](https://github.com/chrisle/stagelinq) -- Node.js library for the Denon StageLinQ protocol
-- [prolink-connect](https://github.com/evanpurkhiser/prolink-connect) -- TypeScript library for the Pioneer PRO DJ LINK protocol
+- [alphatheta-connect](https://github.com/chrisle/alphatheta-connect) -- TypeScript library for the Pioneer PRO DJ LINK protocol (maintained fork with encrypted Rekordbox DB support)
 - [Spotipy](https://github.com/spotipy-dev/spotipy) -- Python client for the Spotify Web API
 - [python-tidalapi](https://github.com/tamland/python-tidal) -- Python client for the Tidal API
 
