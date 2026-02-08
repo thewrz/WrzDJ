@@ -72,16 +72,17 @@ export const IPC_CHANNELS = {
   BRIDGE_START: 'bridge:start',
   BRIDGE_STOP: 'bridge:stop',
   BRIDGE_STATUS: 'bridge:status',
+  BRIDGE_LOG: 'bridge:log',
   SETTINGS_GET: 'settings:get',
   SETTINGS_UPDATE: 'settings:update',
 } as const;
 
-/** Default bridge settings */
+/** Default bridge settings (fader/master defaults off for 3rd-party mixer compat) */
 export const DEFAULT_SETTINGS: BridgeSettings = {
   liveThresholdSeconds: 15,
   pauseGraceSeconds: 3,
   nowPlayingPauseSeconds: 10,
-  useFaderDetection: true,
-  masterDeckPriority: true,
+  useFaderDetection: false,
+  masterDeckPriority: false,
   minPlaySeconds: 5,
 };

@@ -98,6 +98,7 @@ export class DeckStateManager extends EventEmitter {
 
     if (track === null) {
       // Track unloaded - reset to empty
+      this.emitLog(`Deck ${deckId}: Track unloaded (was: ${currentState.track?.title ?? 'empty'}) → EMPTY`);
       this.decks.set(deckId, {
         ...createEmptyDeckState(deckId),
         faderLevel: currentState.faderLevel,
@@ -107,6 +108,7 @@ export class DeckStateManager extends EventEmitter {
     }
 
     // New track loaded - reset state but keep fader/master
+    this.emitLog(`Deck ${deckId}: Track loaded "${track.title}" by ${track.artist} → LOADED`);
     this.decks.set(deckId, {
       ...createEmptyDeckState(deckId),
       state: "LOADED",
@@ -154,8 +156,10 @@ export class DeckStateManager extends EventEmitter {
       if (pauseDuration <= graceMs) {
         // Within grace period - keep accumulated time
         accumulatedTime = currentState.accumulatedPlayTime;
+        this.emitLog(`Deck ${deckId}: Resumed within grace period (${pauseDuration}ms pause, accumulated ${(accumulatedTime / 1000).toFixed(1)}s)`);
+      } else {
+        this.emitLog(`Deck ${deckId}: Pause exceeded grace period (${pauseDuration}ms > ${graceMs}ms), resetting accumulated time`);
       }
-      // Else: pause was too long, reset accumulated time
     }
 
     // Determine new state
@@ -164,6 +168,8 @@ export class DeckStateManager extends EventEmitter {
       // Resuming from PLAYING or ENDED state
       newState = "PLAYING";
     }
+
+    this.emitLog(`Deck ${deckId}: Play started → ${newState} (from ${currentState.state})`);
 
     this.decks.set(deckId, {
       ...currentState,
@@ -177,10 +183,14 @@ export class DeckStateManager extends EventEmitter {
     // If this is the current now-playing deck resuming, cancel the switch timer
     if (deckId === this.currentNowPlayingDeckId) {
       this.clearNowPlayingSwitchTimer();
+      this.emitLog(`Deck ${deckId}: Cancelled now-playing switch timer (deck resumed)`);
     }
 
     // If CUEING, start the threshold timer
     if (newState === "CUEING") {
+      const thresholdMs = this.config.liveThresholdSeconds * 1000;
+      const remainingMs = Math.max(0, thresholdMs - accumulatedTime);
+      this.emitLog(`Deck ${deckId}: Starting threshold timer (${(remainingMs / 1000).toFixed(1)}s remaining of ${this.config.liveThresholdSeconds}s)`);
       this.startThresholdTimer(deckId, accumulatedTime);
     }
   }
@@ -205,17 +215,20 @@ export class DeckStateManager extends EventEmitter {
     if (currentState.state === "PLAYING") {
       // Stay in PLAYING during brief pause
       newState = "PLAYING";
+      this.emitLog(`Deck ${deckId}: Paused in PLAYING state (accumulated ${(totalAccumulated / 1000).toFixed(1)}s), starting ${this.config.pauseGraceSeconds}s grace timer`);
       // Start grace period timer
       this.startGracePeriodTimer(deckId);
 
       // If this is the current now-playing deck, start the switch timer
       // This allows switching to another deck if this one stays paused
       if (deckId === this.currentNowPlayingDeckId) {
+        this.emitLog(`Deck ${deckId}: Starting ${this.config.nowPlayingPauseSeconds}s now-playing switch timer`);
         this.startNowPlayingSwitchTimer();
       }
     } else {
       // CUEING -> LOADED
       newState = "LOADED";
+      this.emitLog(`Deck ${deckId}: Paused during cueing → LOADED (accumulated ${(totalAccumulated / 1000).toFixed(1)}s)`);
     }
 
     this.decks.set(deckId, {
@@ -263,10 +276,12 @@ export class DeckStateManager extends EventEmitter {
 
     // Must still be in CUEING state and playing
     if (currentState.state !== "CUEING" || !currentState.isPlaying) {
+      this.emitLog(`Deck ${deckId}: Threshold timer fired but state=${currentState.state} isPlaying=${currentState.isPlaying}, ignoring`);
       return;
     }
 
     // Transition to PLAYING
+    this.emitLog(`Deck ${deckId}: Threshold reached → PLAYING (track: "${currentState.track?.title}")`);
     this.decks.set(deckId, {
       ...currentState,
       state: "PLAYING",
@@ -288,6 +303,7 @@ export class DeckStateManager extends EventEmitter {
     }
 
     // Transition to ENDED
+    this.emitLog(`Deck ${deckId}: Grace period expired → ENDED (track: "${currentState.track?.title}")`);
     this.decks.set(deckId, {
       ...currentState,
       state: "ENDED",
@@ -313,6 +329,7 @@ export class DeckStateManager extends EventEmitter {
 
     // If fader just came up and we're in PLAYING, check if we should report
     if (wasLow && isNowUp && currentState.state === "PLAYING") {
+      this.emitLog(`Deck ${deckId}: Fader raised (${clampedLevel.toFixed(2)}), checking report conditions`);
       this.checkAndReport(deckId);
     }
   }
@@ -322,6 +339,10 @@ export class DeckStateManager extends EventEmitter {
    */
   setMasterDeck(deckId: string): void {
     const previousMasterState = [...this.decks.values()].find((d) => d.isMaster);
+
+    if (!previousMasterState || previousMasterState.deckId !== deckId) {
+      this.emitLog(`Deck ${deckId}: Set as master deck (was: ${previousMasterState?.deckId ?? 'none'})`);
+    }
 
     // Clear master from all decks
     for (const [id, state] of this.decks) {
@@ -366,6 +387,7 @@ export class DeckStateManager extends EventEmitter {
 
     // Must be in PLAYING state
     if (state.state !== "PLAYING") {
+      this.emitLog(`Deck ${deckId}: Report check — blocked (state=${state.state}, need PLAYING)`);
       return;
     }
 
@@ -376,12 +398,14 @@ export class DeckStateManager extends EventEmitter {
 
     // Check fader if enabled
     if (this.config.useFaderDetection && state.faderLevel === 0) {
+      this.emitLog(`Deck ${deckId}: Report check — blocked (fader is down, faderLevel=${state.faderLevel})`);
       return;
     }
 
     // Check master deck priority if enabled
     // If no master deck is set, allow any deck to report
     if (this.config.masterDeckPriority && this.hasMasterDeck() && !state.isMaster) {
+      this.emitLog(`Deck ${deckId}: Report check — blocked (not master deck, masterDeckPriority=true)`);
       return;
     }
 
@@ -391,12 +415,15 @@ export class DeckStateManager extends EventEmitter {
       const currentNowPlaying = this.getDeckState(this.currentNowPlayingDeckId);
       // If current now-playing deck is still playing or only briefly paused, don't switch
       if (currentNowPlaying.isPlaying || currentNowPlaying.state === "PLAYING") {
+        this.emitLog(`Deck ${deckId}: Report check — blocked (deck ${this.currentNowPlayingDeckId} has now-playing priority)`);
         return;
       }
     }
 
     // All conditions met - report!
     if (state.track) {
+      this.emitLog(`Deck ${deckId}: REPORTING "${state.track.title}" by ${state.track.artist} (fader=${state.faderLevel.toFixed(2)}, master=${state.isMaster})`);
+
       this.decks.set(deckId, {
         ...state,
         hasBeenReported: true,
@@ -447,6 +474,7 @@ export class DeckStateManager extends EventEmitter {
    */
   private onNowPlayingSwitchTimerExpired(): void {
     this.nowPlayingSwitchTimer = null;
+    this.emitLog(`Now-playing switch timer expired (was deck ${this.currentNowPlayingDeckId}), scanning for candidate`);
 
     // Sort deck IDs numerically for deterministic behavior
     const sortedDeckIds = [...this.decks.keys()].sort((a, b) =>
@@ -464,15 +492,18 @@ export class DeckStateManager extends EventEmitter {
       if (state.state === "PLAYING" && state.isPlaying && !state.hasBeenReported) {
         // Check fader if enabled
         if (this.config.useFaderDetection && state.faderLevel === 0) {
+          this.emitLog(`Deck ${deckId}: Switch candidate skipped (fader down)`);
           continue;
         }
 
         // Check master deck priority if enabled
         if (this.config.masterDeckPriority && this.hasMasterDeck() && !state.isMaster) {
+          this.emitLog(`Deck ${deckId}: Switch candidate skipped (not master)`);
           continue;
         }
 
         // Found a candidate - report it
+        this.emitLog(`Deck ${deckId}: Switching now-playing to this deck ("${state.track?.title}")`);
         this.decks.set(deckId, {
           ...state,
           hasBeenReported: true,
@@ -492,6 +523,7 @@ export class DeckStateManager extends EventEmitter {
     }
 
     // No other deck found - clear current now playing
+    this.emitLog('No switch candidate found, clearing now-playing deck');
     this.currentNowPlayingDeckId = null;
   }
 
@@ -537,6 +569,14 @@ export class DeckStateManager extends EventEmitter {
    */
   getCurrentNowPlayingDeckId(): string | null {
     return this.currentNowPlayingDeckId;
+  }
+
+  /**
+   * Emit a diagnostic log message.
+   * Consumers can listen for 'log' events to capture these messages.
+   */
+  private emitLog(message: string): void {
+    this.emit("log", message);
   }
 
   /**
