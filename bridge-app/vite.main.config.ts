@@ -8,10 +8,36 @@ import fs from 'fs';
 const externalDeps = ['stagelinq'];
 
 /**
- * Copies externalized dependencies into the build output's node_modules/ so
- * they're available at runtime in the packaged app. Required because
- * @electron-forge/plugin-vite excludes the project's node_modules/ from the
- * asar (it assumes Vite bundles everything).
+ * Resolves the full transitive dependency tree for the given packages by
+ * walking each package.json's `dependencies` field recursively.
+ */
+function collectTransitiveDeps(entryDeps: string[], nodeModulesDir: string): string[] {
+  const all = new Set<string>();
+  const queue = [...entryDeps];
+  while (queue.length > 0) {
+    const dep = queue.shift()!;
+    if (all.has(dep)) continue;
+    const depDir = path.join(nodeModulesDir, dep);
+    if (!fs.existsSync(depDir)) continue;
+    all.add(dep);
+    const pkgPath = path.join(depDir, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (pkg.dependencies) {
+        for (const d of Object.keys(pkg.dependencies)) {
+          if (!all.has(d)) queue.push(d);
+        }
+      }
+    }
+  }
+  return [...all];
+}
+
+/**
+ * Copies externalized dependencies (and all their transitive deps) into the
+ * build output's node_modules/ so they're available at runtime in the packaged
+ * app. Required because @electron-forge/plugin-vite excludes the project's
+ * node_modules/ from the asar (it assumes Vite bundles everything).
  */
 function copyExternals(deps: string[]): Plugin {
   return {
@@ -19,8 +45,10 @@ function copyExternals(deps: string[]): Plugin {
     writeBundle(options) {
       const outDir = options.dir;
       if (!outDir) return;
-      for (const dep of deps) {
-        const src = path.resolve(__dirname, 'node_modules', dep);
+      const nodeModulesDir = path.resolve(__dirname, 'node_modules');
+      const allDeps = collectTransitiveDeps(deps, nodeModulesDir);
+      for (const dep of allDeps) {
+        const src = path.join(nodeModulesDir, dep);
         const dest = path.join(outDir, 'node_modules', dep);
         if (fs.existsSync(src)) {
           fs.cpSync(src, dest, { recursive: true, force: true });
