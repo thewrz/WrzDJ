@@ -1,16 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
+import { api } from '@/lib/api';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [registrationEnabled, setRegistrationEnabled] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    api.getPublicSettings()
+      .then((s) => setRegistrationEnabled(s.registration_enabled))
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,6 +81,15 @@ export default function LoginPage() {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
+
+        {registrationEnabled && (
+          <p style={{ textAlign: 'center', marginTop: '1.5rem', color: '#9ca3af' }}>
+            Don&apos;t have an account?{' '}
+            <Link href="/register" style={{ color: '#3b82f6' }}>
+              Create Account
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );

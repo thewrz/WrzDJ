@@ -55,6 +55,7 @@ NEXT_PUBLIC_API_URL="http://LAN_IP:8000" npm run dev
 ### Environment
 - `.env` at repo root has all local dev config
 - Key vars: `DATABASE_URL`, `JWT_SECRET`, `SPOTIFY_CLIENT_ID/SECRET`, `CORS_ORIGINS`, `PUBLIC_URL`, `NEXT_PUBLIC_API_URL`
+- Turnstile vars (for self-registration CAPTCHA): `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`
 
 ## Running CI Checks Locally
 
@@ -72,13 +73,13 @@ NEXT_PUBLIC_API_URL="http://LAN_IP:8000" npm run dev
 ```bash
 npm run lint              # ESLint
 npx tsc --noEmit          # TypeScript type check (strict)
-npm test -- --run         # Vitest (23 tests)
+npm test -- --run         # Vitest (28 tests)
 ```
 
 ### Bridge (from `bridge/`)
 ```bash
 npx tsc --noEmit          # TypeScript type check
-npm test -- --run         # Vitest (132 tests)
+npm test -- --run         # Vitest (159 tests)
 ```
 
 ### Bridge App (from `bridge-app/`)
@@ -98,7 +99,7 @@ npm test -- --run         # Vitest (34 tests)
 ### Backend (pytest)
 - Config: `server/pyproject.toml` under `[tool.pytest.ini_options]`
 - Test DB: SQLite in-memory (not PostgreSQL)
-- Fixtures in `server/tests/conftest.py`: `db`, `client`, `test_user`, `auth_headers`, `test_event`, `test_request`
+- Fixtures in `server/tests/conftest.py`: `db`, `client`, `test_user`, `auth_headers`, `admin_user`, `admin_headers`, `pending_user`, `pending_headers`, `test_event`, `test_request`
 - TestClient's default host is `"testclient"` — use this for client_fingerprint in test fixtures
 - Coverage minimum: 70% (`--cov-fail-under=70`)
 - Run single file: `.venv/bin/pytest tests/test_requests.py -v`
@@ -127,9 +128,45 @@ npm test -- --run         # Vitest (34 tests)
 
 ## Architecture Patterns
 
+### Roles & Permissions
+- User roles: `admin`, `dj`, `pending` — stored as `String(20)` column on User model
+- `admin`: Full access including `/api/admin/*` endpoints and admin dashboard
+- `dj`: Standard DJ access — create events, manage requests, search music
+- `pending`: Can login and view `/me` only — blocked from all DJ features until approved
+- Auth dependencies in `server/app/api/deps.py`:
+  - `get_current_user` — any authenticated user (used for `/me`)
+  - `get_current_active_user` — rejects `pending` users (used for all DJ endpoints)
+  - `get_current_admin` — rejects non-admin users (used for `/api/admin/*`)
+- Bootstrap user (from `BOOTSTRAP_ADMIN_USERNAME` env var) gets `role="admin"`
+- Self-registered users get `role="pending"` until approved by admin
+
+### Admin Dashboard
+- Frontend pages under `dashboard/app/admin/` with sidebar layout
+- Overview (`/admin`): Stats grid (users, events, requests, pending count)
+- Users (`/admin/users`): CRUD with role filter tabs, approve/reject pending users
+- Events (`/admin/events`): View/edit/delete any event regardless of owner
+- Settings (`/admin/settings`): Toggle registration, adjust search rate limit
+- Auth guard: non-admin users redirected to `/events`
+
+### Self-Registration
+- `POST /api/auth/register` — rate limited (3/min), creates `pending` user
+- `GET /api/auth/settings` — public endpoint returning `registration_enabled` + `turnstile_site_key`
+- Registration can be toggled on/off from admin Settings page (DB-backed, not env var)
+- Cloudflare Turnstile CAPTCHA required (server-side verification via `server/app/services/turnstile.py`)
+- Turnstile verification skipped in dev when no `TURNSTILE_SECRET_KEY` is configured
+- Frontend: `dashboard/app/register/page.tsx` — form with Turnstile widget
+- Login page conditionally shows "Create Account" link when registration is enabled
+
+### System Settings
+- DB-backed singleton in `system_settings` table (`server/app/models/system_settings.py`)
+- `registration_enabled` (bool) — controls self-registration
+- `search_rate_limit_per_minute` (int) — admin-configurable external API rate limit
+- Service: `server/app/services/system_settings.py` — lazy-creates with defaults if missing
+
 ### API Structure
+- Admin endpoints: `server/app/api/admin.py` — 10 endpoints under `/api/admin/`
 - Authenticated endpoints: `server/app/api/events.py`, `requests.py`
-- Public endpoints (no auth): `server/app/api/public.py`, `votes.py`, `bridge.py`
+- Public endpoints (no auth): `server/app/api/public.py`, `votes.py`, `bridge.py`, auth settings/register
 - Rate limiting via slowapi: `@limiter.limit("N/minute")`
 - Client fingerprinting: IP-based via `X-Forwarded-For` header fallback to `request.client.host`
 
@@ -150,6 +187,9 @@ NEW → REJECTED
 - `server/app/services/vote.py` — idempotent voting with atomic increments
 - `server/app/services/event.py` — event lifecycle, status computation
 - `server/app/services/tidal.py` — Tidal playlist sync (background tasks)
+- `server/app/services/admin.py` — user/event CRUD for admins, system stats, last-admin protection
+- `server/app/services/system_settings.py` — DB-backed singleton settings
+- `server/app/services/turnstile.py` — Cloudflare Turnstile CAPTCHA verification
 
 ### Bridge Plugin System
 - Built-in plugins: StageLinQ (Denon), Traktor Broadcast, Pioneer PRO DJ LINK
@@ -196,3 +236,6 @@ NEW → REJECTED
 - Frontend `next build` is needed for TypeScript validation (stricter than dev mode)
 - The `request.client.host` in events.py submit_request differs from `X-Forwarded-For` logic in votes.py — known inconsistency behind proxies
 - When adding fields to shared interfaces (e.g., `PublicRequestInfo`), grep for test fixtures that construct those types and add the field there too
+- Admin endpoints need `get_current_admin` dependency; DJ endpoints need `get_current_active_user` (not `get_current_user` which allows pending)
+- `EmailStr` requires `pydantic[email]` (includes `email-validator`) — already in pyproject.toml
+- Admin last-admin protection: verify `count_admins(db) > 1` before demoting/deleting/deactivating any admin

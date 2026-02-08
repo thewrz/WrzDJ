@@ -30,8 +30,8 @@ services:
       SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
       CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
       PUBLIC_URL: http://localhost:3000
-      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
-      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}  # Admin user created on first startup (has admin role for /admin dashboard)
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}  # Admin user password
       BRIDGE_API_KEY: ${BRIDGE_API_KEY:-}
     ports:
       - "8000:8000"

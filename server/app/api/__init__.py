@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api import auth, bridge, events, public, requests, search, tidal, votes
+from app.api import admin, auth, bridge, events, public, requests, search, tidal, votes
 
 api_router = APIRouter()
 
@@ -19,3 +19,4 @@ api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(public.router, prefix="/public", tags=["public"])
 api_router.include_router(bridge.router, tags=["bridge"])
 api_router.include_router(tidal.router, prefix="/tidal", tags=["tidal"])
+api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

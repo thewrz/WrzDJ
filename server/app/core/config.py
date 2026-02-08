@@ -79,6 +79,11 @@ class Settings(BaseSettings):
             return self.lockout_enabled
         return self.is_production
 
+    # Cloudflare Turnstile (CAPTCHA for self-registration)
+    turnstile_secret_key: str = ""
+    turnstile_site_key: str = ""
+    registration_rate_limit_per_minute: int = 3
+
     # Cache durations (1 hour for Spotify since popularity changes)
     search_cache_hours: int = 1
 

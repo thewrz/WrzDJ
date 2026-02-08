@@ -5,6 +5,7 @@ from app.models.play_history import PlayHistory
 from app.models.request import Request
 from app.models.request_vote import RequestVote
 from app.models.search_cache import SearchCache
+from app.models.system_settings import SystemSettings
 from app.models.user import User
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "SearchCache",
     "NowPlaying",
     "PlayHistory",
+    "SystemSettings",
 ]

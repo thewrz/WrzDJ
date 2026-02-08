@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_active_user, get_db
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.models.request import RequestStatus
@@ -93,7 +93,7 @@ def create_new_event(
     event_data: EventCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> EventOut:
     event = create_event(db, event_data.name, current_user, event_data.expires_hours)
     return _event_to_out(event, request)
@@ -103,7 +103,7 @@ def create_new_event(
 def list_events(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> list[EventOut]:
     events = get_events_for_user(db, current_user)
     return [_event_to_out(e, request) for e in events]
@@ -113,7 +113,7 @@ def list_events(
 def list_archived_events(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> list[EventOut]:
     """List all archived and expired events for the current user."""
     # Get archived events
@@ -153,7 +153,7 @@ def update_event_endpoint(
     event_data: EventUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> EventOut:
     event = get_event_by_code_for_owner(db, code, current_user)
     if not event:
@@ -172,7 +172,7 @@ def update_event_endpoint(
 def delete_event_endpoint(
     code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> None:
     """Delete an event and all its requests."""
     event = get_event_by_code_for_owner(db, code, current_user)
@@ -186,7 +186,7 @@ def archive_event_endpoint(
     code: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> EventOut:
     """Archive an event."""
     event = get_event_by_code_for_owner(db, code, current_user)
@@ -205,7 +205,7 @@ def unarchive_event_endpoint(
     code: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> EventOut:
     """Unarchive an event."""
     event = get_event_by_code_for_owner(db, code, current_user)
@@ -224,7 +224,7 @@ def update_display_settings(
     code: str,
     settings: DisplaySettingsUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> DisplaySettingsResponse:
     """Update display settings for an event (e.g., hide/show now playing on kiosk)."""
     event = get_event_by_code_for_owner(db, code, current_user)
@@ -243,7 +243,7 @@ def update_display_settings(
 def get_display_settings(
     code: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> DisplaySettingsResponse:
     """Get current display settings for an event."""
     event = get_event_by_code_for_owner(db, code, current_user)
@@ -264,7 +264,7 @@ def export_event_csv(
     code: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> StreamingResponse:
     """Export event requests as CSV. Owner can export regardless of event status."""
     event = get_event_by_code_for_owner(db, code, current_user)
@@ -302,7 +302,7 @@ def export_play_history_csv(
     code: str,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> StreamingResponse:
     """Export play history as CSV. Owner can export regardless of event status."""
     event = get_event_by_code_for_owner(db, code, current_user)
@@ -388,7 +388,7 @@ def accept_all_requests_endpoint(
     request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Accept all NEW requests for an event in one operation."""
     event = get_event_by_code_for_owner(db, code, current_user)
@@ -412,7 +412,7 @@ def get_event_requests(
     since: datetime | None = None,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ) -> list[RequestOut]:
     # Owner can view requests regardless of event status
     event = get_event_by_code_for_owner(db, code, current_user)

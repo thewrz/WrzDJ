@@ -58,15 +58,68 @@ def client(db: Session) -> Generator[TestClient, None, None]:
 
 @pytest.fixture
 def test_user(db: Session) -> User:
-    """Create a test user."""
+    """Create a test user with DJ role."""
     user = User(
         username="testuser",
         password_hash=get_password_hash("testpassword123"),
+        role="dj",
     )
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
+
+
+@pytest.fixture
+def admin_user(db: Session) -> User:
+    """Create an admin test user."""
+    user = User(
+        username="adminuser",
+        password_hash=get_password_hash("adminpassword123"),
+        role="admin",
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture
+def admin_headers(client: TestClient, admin_user: User) -> dict[str, str]:
+    """Get authentication headers for the admin user."""
+    response = client.post(
+        "/api/auth/login",
+        data={"username": "adminuser", "password": "adminpassword123"},
+    )
+    assert response.status_code == 200, f"Login failed: {response.json()}"
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def pending_user(db: Session) -> User:
+    """Create a pending test user."""
+    user = User(
+        username="pendinguser",
+        password_hash=get_password_hash("pendingpassword123"),
+        role="pending",
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture
+def pending_headers(client: TestClient, pending_user: User) -> dict[str, str]:
+    """Get authentication headers for the pending user."""
+    response = client.post(
+        "/api/auth/login",
+        data={"username": "pendinguser", "password": "pendingpassword123"},
+    )
+    assert response.status_code == 200, f"Login failed: {response.json()}"
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture

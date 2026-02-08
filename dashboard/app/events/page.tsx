@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { api, Event } from '@/lib/api';
 
 export default function EventsPage() {
-  const { isAuthenticated, isLoading, logout } = useAuth();
+  const { isAuthenticated, isLoading, role, logout } = useAuth();
   const router = useRouter();
   const [events, setEvents] = useState<Event[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
@@ -18,8 +18,10 @@ export default function EventsPage() {
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
+    } else if (!isLoading && role === 'pending') {
+      router.push('/pending');
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, role, router]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -68,6 +70,11 @@ export default function EventsPage() {
       <div className="header">
         <h1>My Events</h1>
         <div style={{ display: 'flex', gap: '1rem' }}>
+          {role === 'admin' && (
+            <Link href="/admin">
+              <button className="btn" style={{ background: '#6b21a8' }}>Admin</button>
+            </Link>
+          )}
           <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
             Create Event
           </button>
