@@ -140,13 +140,18 @@ async function main(): Promise<void> {
     }
   });
 
-  // Handle device ready events
-  StageLinq.devices.on("ready", async (info) => {
+  // Handle per-device connection (emitted for each device that connects successfully)
+  StageLinq.devices.on("connected", async (info) => {
     const deviceName = info?.software?.name || "Unknown Device";
     const deviceVersion = info?.software?.version || "unknown";
     const deviceAddress = info?.address || "unknown";
-    console.log(`[Bridge] Device ready: ${deviceName} v${deviceVersion} at ${deviceAddress}`);
+    console.log(`[Bridge] Device connected: ${deviceName} v${deviceVersion} at ${deviceAddress}`);
     await postBridgeStatus(true, deviceName);
+  });
+
+  // Handle all devices ready (StateMap initialized — track events will now flow)
+  StageLinq.devices.on("ready", () => {
+    console.log("[Bridge] All devices ready — StateMap initialized, listening for tracks");
   });
 
   // Handle device disconnect
@@ -166,6 +171,14 @@ async function main(): Promise<void> {
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+  // Configure StageLinQ: disable database downloads and file transfer
+  // We only need StateMap for track metadata — DB downloads add extra TCP
+  // connections that fail on some networks and are unnecessary for WrzDJ.
+  StageLinq.options = {
+    downloadDbSources: false,
+    enableFileTranfer: false, // Note: typo is in the stagelinq library API
+  };
 
   // Connect to StageLinQ network
   console.log("[Bridge] Connecting to StageLinQ network...");

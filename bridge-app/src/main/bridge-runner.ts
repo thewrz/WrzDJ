@@ -63,6 +63,14 @@ export class BridgeRunner extends EventEmitter {
     this.emitStatus();
 
     try {
+      // Disable database downloads and file transfer — we only need StateMap
+      // for track metadata. DB downloads add extra TCP connections that fail
+      // on some networks and are unnecessary for WrzDJ.
+      StageLinq.options = {
+        downloadDbSources: false,
+        enableFileTranfer: false, // Note: typo is in the stagelinq library API
+      };
+
       this.log('Connecting to StageLinQ network...');
       await StageLinq.connect();
       this.log('Listening for DJ equipment...');
@@ -227,16 +235,21 @@ export class BridgeRunner extends EventEmitter {
       this.emitStatus();
     });
 
-    // Handle device ready (stagelinq types are incomplete — cast to register handler)
-    (StageLinq.devices as NodeJS.EventEmitter).on('ready', async (info: Record<string, unknown>) => {
+    // Handle per-device connection (emitted for each device that connects)
+    (StageLinq.devices as NodeJS.EventEmitter).on('connected', async (info: Record<string, unknown>) => {
       const software = info?.software as Record<string, unknown> | undefined;
       const deviceName = (software?.name as string) || 'Unknown Device';
       const deviceVersion = (software?.version as string) || 'unknown';
       const deviceAddress = (info?.address as string) || 'unknown';
       this.connectedDevice = deviceName;
-      this.log(`Device ready: ${deviceName} v${deviceVersion} at ${deviceAddress}`);
+      this.log(`Device connected: ${deviceName} v${deviceVersion} at ${deviceAddress}`);
       this.emitStatus();
       await this.postBridgeStatus(true, deviceName);
+    });
+
+    // Handle all devices ready (StateMap initialized — track events will now flow)
+    (StageLinq.devices as NodeJS.EventEmitter).on('ready', () => {
+      this.log('All devices ready — StateMap initialized, listening for tracks');
     });
 
     // Handle device disconnect

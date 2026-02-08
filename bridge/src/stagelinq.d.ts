@@ -41,15 +41,24 @@ declare module "stagelinq" {
     masterStatus?: boolean;
   }
 
+  interface StageLinqOptions {
+    maxRetries?: number;
+    downloadDbSources?: boolean;
+    /** Note: typo is in the stagelinq library API */
+    enableFileTranfer?: boolean;
+  }
+
   interface DevicesEmitter extends EventEmitter {
     on(event: "nowPlaying", listener: (status: NowPlayingStatus) => void): this;
     on(event: "stateChanged", listener: (status: StateChangedData) => void): this;
     on(event: "trackLoaded", listener: (status: NowPlayingStatus) => void): this;
-    on(event: "ready", listener: (info: DeviceInfo) => void): this;
+    on(event: "connected", listener: (info: DeviceInfo) => void): this;
+    on(event: "ready", listener: () => void): this;
     on(event: "disconnect", listener: () => void): this;
   }
 
   export const StageLinq: {
+    options: StageLinqOptions;
     devices: DevicesEmitter;
     connect(): Promise<void>;
     disconnect(): Promise<void>;
