@@ -37,6 +37,8 @@ export interface DeckDisplay {
 
 /** Bridge detection settings */
 export interface BridgeSettings {
+  readonly protocol: string;
+  readonly pluginConfig?: Record<string, unknown>;
   readonly liveThresholdSeconds: number;
   readonly pauseGraceSeconds: number;
   readonly nowPlayingPauseSeconds: number;
@@ -44,6 +46,12 @@ export interface BridgeSettings {
   readonly masterDeckPriority: boolean;
   readonly minPlaySeconds: number;
 }
+
+/** Available plugins for the protocol selector */
+export const AVAILABLE_PLUGINS = [
+  { id: 'stagelinq', name: 'Denon StageLinQ', description: 'Connects to Denon DJ equipment via StageLinQ protocol' },
+  { id: 'traktor-broadcast', name: 'Traktor Broadcast', description: 'Receives track metadata from Traktor via broadcast stream' },
+] as const;
 
 /** Event info from the backend */
 export interface EventInfo {
@@ -79,6 +87,7 @@ export const IPC_CHANNELS = {
 
 /** Default bridge settings (fader off for 3rd-party mixer compat, master deck priority off) */
 export const DEFAULT_SETTINGS: BridgeSettings = {
+  protocol: 'stagelinq',
   liveThresholdSeconds: 15,
   pauseGraceSeconds: 3,
   nowPlayingPauseSeconds: 10,
