@@ -77,12 +77,12 @@ export const IPC_CHANNELS = {
   SETTINGS_UPDATE: 'settings:update',
 } as const;
 
-/** Default bridge settings (fader/master defaults off for 3rd-party mixer compat) */
+/** Default bridge settings (fader off for 3rd-party mixer compat, master deck priority on) */
 export const DEFAULT_SETTINGS: BridgeSettings = {
   liveThresholdSeconds: 15,
   pauseGraceSeconds: 3,
   nowPlayingPauseSeconds: 10,
   useFaderDetection: false,
-  masterDeckPriority: false,
+  masterDeckPriority: true,
   minPlaySeconds: 5,
 };
