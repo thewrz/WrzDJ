@@ -127,7 +127,7 @@ registerPlugin("my-plugin", () => new MyPlugin());
 const plugin = getPlugin("my-plugin"); // Returns new MyPlugin() or null
 
 // List registered IDs
-const ids = listPlugins(); // ["stagelinq", "traktor-broadcast", "my-plugin"]
+const ids = listPlugins(); // ["pioneer-prolink", "stagelinq", "traktor-broadcast", "my-plugin"]
 
 // Get serializable metadata (info + capabilities + configOptions)
 const meta = getPluginMeta("my-plugin"); // PluginMeta | null
@@ -179,6 +179,40 @@ Receives track metadata from Traktor via its built-in broadcast feature. Traktor
 **Traktor setup:** Settings > Broadcasting > Address: `127.0.0.1`, Port: `8123` (or your configured port).
 
 Because all capabilities are `false`, PluginBridge synthesizes everything: deck IDs are normalized to `"1"`, and play state is set to `true` whenever track metadata arrives.
+
+### Pioneer PRO DJ LINK (`pioneer-prolink`)
+
+**File:** `bridge/src/plugins/pioneer-prolink-plugin.ts`
+
+Connects to Pioneer DJ equipment (CDJ-3000, CDJ-2000NXS2, etc.) via the PRO DJ LINK protocol using the [`prolink-connect`](https://github.com/evanpurkhiser/prolink-connect) npm library. Joins the network as a virtual CDJ device, monitors CDJ status packets, and queries track metadata from CDJ databases.
+
+| Capability | Value |
+|------------|-------|
+| `multiDeck` | `true` |
+| `playState` | `true` |
+| `faderLevel` | `true` |
+| `masterDeck` | `true` |
+| `albumMetadata` | `true` |
+
+**Configuration:** No user-configurable options (`configOptions: []`). The plugin uses `autoconfigFromPeers()` for automatic network discovery.
+
+**How it works:**
+
+1. `bringOnline()` opens UDP sockets and listens for device announcements
+2. `autoconfigFromPeers()` waits for the first CDJ to appear and configures the network interface
+3. `connect()` announces the plugin as a virtual CDJ (device ID 5) and activates services
+4. CDJ status packets arrive via `statusEmitter.on("status")` — the plugin maps:
+   - `PlayState.Playing` → `playState` event
+   - `isOnAir` → binary fader level (1.0 / 0.0)
+   - `isMaster` → `masterDeck` event
+   - Track ID changes → metadata query via `network.db.getMetadata()` → `track` event
+
+**Important caveats:**
+
+- Cannot coexist with Rekordbox on the same machine (both use the same protocol slots)
+- Requires Ethernet connection — CDJs must be on the same LAN (not USB-only)
+- On-air detection requires a compatible DJM mixer connected via Ethernet; without one, `isOnAir` defaults to `true` (fader detection becomes a no-op)
+- Occupies one virtual CDJ slot (max 5 real CDJs when plugin is running)
 
 ## Creating a New Plugin
 
@@ -304,9 +338,12 @@ bridge/src/
   deck-state.ts                # Type definitions: DeckState, TrackInfo, DeckLiveEvent
   plugins/
     index.ts                   # Side-effect import: registers all built-in plugins
+    pioneer-prolink-plugin.ts  # Pioneer PRO DJ LINK integration
     stagelinq-plugin.ts        # Denon StageLinQ integration
     traktor-broadcast-plugin.ts # Traktor Broadcast/Icecast integration
   __tests__/
+    deck-state-manager.test.ts # Deck state machine tests
+    pioneer-prolink-plugin.test.ts # Pioneer plugin tests
     plugin-bridge.test.ts      # PluginBridge synthesis and event forwarding tests
     plugin-registry.test.ts    # Registry CRUD tests
     traktor-broadcast-plugin.test.ts # ICY parsing and HTTP server tests
