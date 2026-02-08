@@ -70,8 +70,15 @@ export class DeckStateManager extends EventEmitter {
   }
 
   /**
+   * Get all known deck IDs (both defaults and dynamically created).
+   */
+  getDeckIds(): readonly string[] {
+    return [...this.decks.keys()];
+  }
+
+  /**
    * Get the current state of a deck.
-   * @param deckId - The deck identifier (e.g., "1", "2", "3", "4")
+   * @param deckId - The deck identifier (e.g., "1A", "2B")
    * @returns The current deck state
    * @throws Error if maximum deck limit is reached
    */

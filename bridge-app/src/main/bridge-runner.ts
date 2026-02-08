@@ -27,6 +27,7 @@ export class BridgeRunner extends EventEmitter {
   private currentTrack: TrackDisplay | null = null;
   private lastTrackKey: string | null = null;
   private lastPostTime = 0;
+  private loggerListener: ((...args: unknown[]) => void) | null = null;
 
   get isRunning(): boolean {
     return this.running;
@@ -58,23 +59,28 @@ export class BridgeRunner extends EventEmitter {
       masterDeckPriority: config.settings.masterDeckPriority,
     });
 
-    this.wireEvents();
     this.wireDeckManagerLogs();
     this.emitStatus();
 
     try {
-      // Disable database downloads (we only need StateMap for track metadata).
-      // Keep FileTransfer enabled so the library's service handshake completes
-      // fully before StateMap setup.
+      // Configure StageLinQ options BEFORE accessing StageLinq.devices or
+      // StageLinq.logger. The options setter resets the internal singleton
+      // instance, so any event handlers registered beforehand are orphaned.
       StageLinq.options = {
         downloadDbSources: false,
         enableFileTranfer: true,
       };
 
-      // Forward stagelinq library's internal debug logs to our log stream
-      StageLinq.logger.on('any', (...args: unknown[]) => {
+      // Forward stagelinq library's internal debug logs to our log stream.
+      // Store the listener reference so we can remove it on stop().
+      this.loggerListener = (...args: unknown[]) => {
         this.log(`[StageLinQ] ${args.map(String).join(' ')}`);
-      });
+      };
+      StageLinq.logger.on('any', this.loggerListener);
+
+      // Wire event handlers AFTER options are set so they attach to the
+      // correct StageLinqDevices instance (the one that will be connected).
+      this.wireEvents();
 
       this.log('Connecting to StageLinQ network...');
       await StageLinq.connect();
@@ -83,6 +89,7 @@ export class BridgeRunner extends EventEmitter {
       this.running = false;
       this.deckManager.destroy();
       this.deckManager = null;
+      this.removeLoggerListener();
       const message = err instanceof Error ? err.message : String(err);
       this.log(`Failed to connect: ${message}`);
       this.emitStatus();
@@ -108,31 +115,39 @@ export class BridgeRunner extends EventEmitter {
       // Best effort on shutdown
     }
 
+    this.removeLoggerListener();
     this.connectedDevice = null;
     this.currentTrack = null;
     this.emitStatus();
     this.log('Bridge stopped.');
   }
 
+  private removeLoggerListener(): void {
+    if (this.loggerListener) {
+      try {
+        StageLinq.logger.removeListener('any', this.loggerListener);
+      } catch {
+        // Best effort — logger may not support removeListener
+      }
+      this.loggerListener = null;
+    }
+  }
+
   getStatus(): BridgeStatus {
     const deckStates: DeckDisplay[] = [];
 
     if (this.deckManager) {
-      for (const deckId of ['1', '2', '3', '4']) {
-        try {
-          const state: DeckState = this.deckManager.getDeckState(deckId);
-          deckStates.push({
-            deckId: state.deckId,
-            state: state.state,
-            trackTitle: state.track?.title ?? null,
-            trackArtist: state.track?.artist ?? null,
-            isPlaying: state.isPlaying,
-            isMaster: state.isMaster,
-            faderLevel: state.faderLevel,
-          });
-        } catch {
-          // Skip if deck doesn't exist
-        }
+      for (const deckId of this.deckManager.getDeckIds()) {
+        const state: DeckState = this.deckManager.getDeckState(deckId);
+        deckStates.push({
+          deckId: state.deckId,
+          state: state.state,
+          trackTitle: state.track?.title ?? null,
+          trackArtist: state.track?.artist ?? null,
+          isPlaying: state.isPlaying,
+          isMaster: state.isMaster,
+          faderLevel: state.faderLevel,
+        });
       }
     }
 
@@ -221,16 +236,15 @@ export class BridgeRunner extends EventEmitter {
       if (!this.deckManager || !status.deck) return;
 
       const deckId = status.deck;
-      this.log(`StageLinQ stateChanged: deck=${deckId} play=${status.play} playState=${status.playState} faderLevel=${(status as unknown as Record<string, unknown>).faderLevel} masterStatus=${status.masterStatus}`);
+      this.log(`StageLinQ stateChanged: deck=${deckId} play=${status.play} playState=${status.playState} externalMixerVolume=${status.externalMixerVolume} masterStatus=${status.masterStatus}`);
 
       if (typeof status.play === 'boolean' || typeof status.playState === 'boolean') {
         const isPlaying = status.play === true || status.playState === true;
         this.deckManager.updatePlayState(deckId, isPlaying);
       }
 
-      const statusAny = status as unknown as Record<string, unknown>;
-      if (typeof statusAny.faderLevel === 'number') {
-        this.deckManager.updateFaderLevel(deckId, statusAny.faderLevel);
+      if (typeof status.externalMixerVolume === 'number') {
+        this.deckManager.updateFaderLevel(deckId, status.externalMixerVolume);
       }
 
       if (status.masterStatus === true) {
