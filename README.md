@@ -6,7 +6,7 @@
 
 # WrzDJ
 
-A modern, real-time song request system for DJs. Guests scan a QR code to submit requests -- no app install, no login. DJs manage everything from a live dashboard with automatic track detection from Denon DJ equipment via StageLinQ.
+A modern, real-time song request system for DJs. Guests scan a QR code to submit requests -- no app install, no login. DJs manage everything from a live dashboard with automatic track detection from DJ equipment via a plugin system supporting Denon StageLinQ, Traktor Broadcast, and more.
 
 <p align="center">
   <img src="docs/images/dashboard.png" alt="WrzDJ Dashboard" width="800">
@@ -19,7 +19,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 ## What Makes WrzDJ Different
 
 - **Zero friction for guests** -- scan a QR code, search Spotify, submit a request. Done.
-- **Live track detection** -- the bridge connects directly to Denon DJ hardware over StageLinQ, so the kiosk and dashboard update in real-time as the DJ plays.
+- **Live track detection** -- the bridge connects to DJ equipment via plugins (Denon StageLinQ, Traktor Broadcast), so the kiosk and dashboard update in real-time as the DJ plays.
 - **Automatic request matching** -- when the DJ plays a requested song, WrzDJ detects it via fuzzy matching and moves it through the workflow automatically.
 - **Tidal playlist sync** -- accepted requests are auto-added to a Tidal playlist, ready for the SC6000 to load.
 - **Desktop app for the bridge** -- no terminal needed. Sign in, pick your event, click Start.
@@ -59,10 +59,13 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Auto-hides "Now Playing" after 60 minutes of inactivity
 - Kiosk mode protections (disabled right-click, text selection)
 
-### StageLinQ Bridge
-- Auto-detect tracks from Denon DJ equipment in real-time
+### Bridge (DJ Equipment Detection)
+- Plugin architecture supporting multiple DJ platforms
+- **Denon StageLinQ** -- auto-detect tracks from SC6000, Prime 4, etc. over LAN with full per-deck data
+- **Traktor Broadcast** -- receive track metadata via Traktor's built-in Icecast broadcast
 - Robust deck state machine with configurable thresholds
-- Master deck priority and channel fader detection
+- Master deck priority and channel fader detection (StageLinQ)
+- Capability-driven synthesis -- plugins declare what they provide, the bridge fills in the gaps
 - Pause grace periods to avoid false transitions
 - Real-time "Now Playing" with LIVE badge on kiosk
 - Append-only play history log
@@ -71,22 +74,24 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Spotify album art enrichment for detected tracks
 - Bridge connection status visible on DJ dashboard
 
-### Bridge Desktop App (NEW)
-- Cross-platform Electron app (Windows `.exe`, macOS `.dmg`, Linux `.deb`)
+### Bridge Desktop App
+- Cross-platform Electron app (Windows `.exe`, macOS `.dmg`, Linux `.AppImage`)
 - Sign in with your WrzDJ account -- no API keys to copy/paste
 - Select your active event from a dropdown
-- One-click Start/Stop for StageLinQ detection
+- Choose DJ protocol (StageLinQ, Traktor Broadcast) with dynamic config options
+- One-click Start/Stop for track detection
 - Real-time status panel: connected devices, current track, per-deck states
 - Configurable detection settings (live threshold, pause grace, fader detection, master deck priority)
+- Auto-disconnect when event is deleted or expired
 - Encrypted credential storage via OS keychain (`safeStorage`)
 - Dark theme matching the WrzDJ dashboard
 
 ### Automated Releases
-- GitHub Actions release workflow triggers on PR merge to `main`
+- GitHub Actions release workflow triggers on tag push (`v*`), not on every PR merge
 - Dated versioning: `v2026.02.07`, with same-day suffix support (`v2026.02.07.2`)
 - Builds bridge-app installers on 3 platforms in parallel
 - Bundles deploy scripts as a `.tar.gz` artifact
-- Auto-generated release notes from PR title/body + commit log
+- Auto-generated release notes from commit log since last tag
 
 ---
 
@@ -102,26 +107,31 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
                                | HTTP (API key auth)
                                |
                         [Bridge Service]
-                               ^
-                               | StageLinQ (LAN)
-                               |
-                     [Denon SC6000 / Prime 4]
+                          (plugin system)
+                           /           \
+                  StageLinQ (LAN)    Icecast (local)
+                         |                |
+              [Denon SC6000/Prime 4]  [Traktor Pro]
 ```
 
 | Service | Stack | Directory |
 |---------|-------|-----------|
 | Backend | Python, FastAPI, SQLAlchemy 2.0, PostgreSQL, Alembic | `server/` |
 | Frontend | Next.js 16, React 18, TypeScript, vanilla CSS | `dashboard/` |
-| Bridge | Node.js, TypeScript, StageLinQ protocol | `bridge/` |
+| Bridge | Node.js, TypeScript, plugin architecture (StageLinQ, Traktor Broadcast) | `bridge/` |
 | Bridge App | Electron, React, Vite, electron-forge | `bridge-app/` |
 
-### Supported DJ Hardware
+### Supported DJ Equipment
 
-- Denon SC6000 / SC6000M
-- Denon SC5000 / SC5000M
-- Denon Prime 4 / Prime 4+
-- Denon Prime 2 / Prime Go
-- Denon X1850 / X1800 mixer (as network hub)
+**Denon (via StageLinQ)**
+- SC6000 / SC6000M
+- SC5000 / SC5000M
+- Prime 4 / Prime 4+
+- Prime 2 / Prime Go
+- X1850 / X1800 mixer (as network hub)
+
+**Native Instruments (via Traktor Broadcast)**
+- Traktor Pro 3 / Pro 4 (any controller or setup with broadcast enabled)
 
 ---
 
@@ -183,17 +193,17 @@ npm run dev
 
 ### 7. (Optional) Run the bridge
 
-For StageLinQ integration, the bridge must be on the same LAN as your DJ equipment:
+For live track detection, the bridge connects to your DJ equipment. Use the desktop app (recommended) or run the CLI bridge:
 
 ```bash
 cd bridge
 npm install
 cp .env.example .env
-# Edit .env with your API URL, bridge API key, and event code
+# Edit .env with your API URL, bridge API key, event code, and protocol
 npm start
 ```
 
-Or use the desktop app instead -- see [Bridge Desktop App](#bridge-desktop-app-new) above.
+Or use the desktop app instead -- see [Bridge Desktop App](#bridge-desktop-app) above.
 
 ---
 
@@ -336,8 +346,9 @@ WrzDJ/
     app/               # App router pages (dashboard, kiosk, join)
     lib/               # API client, auth, utilities
     Dockerfile
-  bridge/              # StageLinQ bridge service (Node.js)
+  bridge/              # DJ equipment bridge (Node.js)
     src/               # TypeScript source
+      plugins/         # DJ software plugins (StageLinQ, Traktor, etc.)
     Dockerfile
   bridge-app/          # Electron desktop app for the bridge
     src/
