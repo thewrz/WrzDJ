@@ -1,16 +1,19 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from './hooks/useAuth.js';
 import { useBridgeStatus } from './hooks/useBridgeStatus.js';
+import { useBridgeLog } from './hooks/useBridgeLog.js';
 import { LoginForm } from './components/LoginForm.js';
 import { EventSelector } from './components/EventSelector.js';
 import { BridgeControls } from './components/BridgeControls.js';
 import { StatusPanel } from './components/StatusPanel.js';
 import { SettingsPanel } from './components/SettingsPanel.js';
+import { LogPanel } from './components/LogPanel.js';
 import type { EventInfo } from '../shared/types.js';
 
 export function App() {
   const { authState, loading, error, login, logout } = useAuth();
   const bridgeStatus = useBridgeStatus();
+  const { entries: logEntries, clear: clearLog } = useBridgeLog();
   const [selectedEvent, setSelectedEvent] = useState<EventInfo | null>(null);
 
   const handleEventSelect = useCallback((event: EventInfo) => {
@@ -52,6 +55,8 @@ export function App() {
         />
 
         <StatusPanel status={bridgeStatus} />
+
+        <LogPanel entries={logEntries} onClear={clearLog} />
 
         <SettingsPanel />
       </div>

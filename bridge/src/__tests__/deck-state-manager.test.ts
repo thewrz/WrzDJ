@@ -39,6 +39,15 @@ describe("DeckStateManager", () => {
       expect(state.track).toBeNull();
       expect(state.isPlaying).toBe(false);
     });
+
+    it("returns default deck IDs on init", () => {
+      expect(manager.getDeckIds()).toEqual(["1", "2", "3", "4"]);
+    });
+
+    it("includes dynamically created decks in getDeckIds", () => {
+      manager.getDeckState("1A"); // Creates deck on demand
+      expect(manager.getDeckIds()).toEqual(["1", "2", "3", "4", "1A"]);
+    });
   });
 
   describe("Track Loading", () => {

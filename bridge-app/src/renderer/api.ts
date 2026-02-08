@@ -13,6 +13,7 @@ export interface BridgeApi {
   getSettings(): Promise<BridgeSettings>;
   updateSettings(settings: Partial<BridgeSettings>): Promise<BridgeSettings>;
   onBridgeStatus(callback: (status: BridgeStatus) => void): () => void;
+  onBridgeLog(callback: (message: string) => void): () => void;
   onAuthChanged(callback: (state: AuthState) => void): () => void;
 }
 

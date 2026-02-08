@@ -16,40 +16,70 @@ declare module "stagelinq" {
     title?: string;
     artist?: string;
     album?: string;
+    /** Deck identifier formatted as "{player}{layer}" e.g. "1A", "2B" */
     deck?: string;
-    /** Explicit play state from PlayerStatus.play */
+    /** Player number (1-4) as configured on the hardware */
+    player?: number;
+    /** Layer letter: "A", "B", "C", or "D" */
+    layer?: string;
+    /** Explicit play state from Engine/Deck/Play */
     play?: boolean;
-    /** Alternative play state from PlayerStatus.playState */
+    /** Alternative play state from Engine/Deck/PlayState */
     playState?: boolean;
-    /** Master deck status from PlayerStatus.masterStatus */
+    /** Master deck status */
     masterStatus?: boolean;
-    /** Fader level (0-1) */
-    faderLevel?: number;
-    /** @deprecated Use play or playState instead */
-    isPlaying?: boolean;
+    /** External mixer volume (0-1) */
+    externalMixerVolume?: number;
+    /** Whether a song is loaded on this deck */
+    songLoaded?: boolean;
+    /** Network device address */
+    address?: string;
+    /** Network device port */
+    port?: number;
   }
 
   interface StateChangedData {
+    /** Deck identifier formatted as "{player}{layer}" e.g. "1A", "2B" */
     deck?: string;
+    /** Player number (1-4) */
+    player?: number;
+    /** Layer letter: "A", "B", "C", or "D" */
+    layer?: string;
     /** Explicit play state */
     play?: boolean;
     /** Alternative play state */
     playState?: boolean;
-    /** Fader level (0-1) */
-    faderLevel?: number;
+    /** External mixer volume (0-1) */
+    externalMixerVolume?: number;
     /** Master deck status */
     masterStatus?: boolean;
+  }
+
+  interface StageLinqOptions {
+    maxRetries?: number;
+    downloadDbSources?: boolean;
+    /** Note: typo is in the stagelinq library API */
+    enableFileTranfer?: boolean;
+  }
+
+  /** Internal library logger — EventEmitter that emits log/debug/warn/error/info/any events */
+  interface StageLinqLogger {
+    on(event: "any" | "log" | "debug" | "warn" | "error" | "info" | "silly", listener: (...args: unknown[]) => void): this;
+    removeListener(event: string, listener: (...args: unknown[]) => void): this;
   }
 
   interface DevicesEmitter extends EventEmitter {
     on(event: "nowPlaying", listener: (status: NowPlayingStatus) => void): this;
     on(event: "stateChanged", listener: (status: StateChangedData) => void): this;
     on(event: "trackLoaded", listener: (status: NowPlayingStatus) => void): this;
-    on(event: "ready", listener: (info: DeviceInfo) => void): this;
+    on(event: "connected", listener: (info: DeviceInfo) => void): this;
+    on(event: "ready", listener: () => void): this;
     on(event: "disconnect", listener: () => void): this;
   }
 
   export const StageLinq: {
+    options: StageLinqOptions;
+    logger: StageLinqLogger;
     devices: DevicesEmitter;
     connect(): Promise<void>;
     disconnect(): Promise<void>;

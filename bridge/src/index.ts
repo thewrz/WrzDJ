@@ -11,8 +11,8 @@
  *   MIN_PLAY_SECONDS        - Debounce threshold in seconds (default: 5)
  *   LIVE_THRESHOLD_SECONDS  - Seconds before track is considered "live" (default: 8)
  *   PAUSE_GRACE_SECONDS     - Seconds of pause tolerated before resetting (default: 3)
- *   USE_FADER_DETECTION     - Require fader > 0 for live detection (default: true)
- *   MASTER_DECK_PRIORITY    - Only report from master deck (default: true)
+ *   USE_FADER_DETECTION     - Require fader > 0 for live detection (default: false)
+ *   MASTER_DECK_PRIORITY    - Only report from master deck (default: false)
  */
 import { StageLinq } from "stagelinq";
 import { config, validateConfig } from "./config.js";
@@ -44,8 +44,14 @@ async function main(): Promise<void> {
   console.log(`[Bridge] Live Threshold: ${config.liveThresholdSeconds}s`);
   console.log(`[Bridge] Pause Grace: ${config.pauseGraceSeconds}s`);
   console.log(`[Bridge] Now Playing Pause: ${config.nowPlayingPauseSeconds}s`);
+  console.log(`[Bridge] Min Play Seconds: ${config.minPlaySeconds}s`);
   console.log(`[Bridge] Fader Detection: ${config.useFaderDetection}`);
   console.log(`[Bridge] Master Deck Priority: ${config.masterDeckPriority}`);
+
+  // Forward DeckStateManager diagnostic logs to console
+  deckManager.on("log", (message: string) => {
+    console.log(`[Bridge] ${message}`);
+  });
 
   // Handle track going "live" (after threshold, with conditions met)
   deckManager.on("deckLive", async (event: DeckLiveEvent) => {
@@ -65,9 +71,36 @@ async function main(): Promise<void> {
     await postNowPlaying(track.title, track.artist, track.album, deckId);
   });
 
+  // Graceful shutdown handlers
+  const shutdown = async (signal: string): Promise<void> => {
+    console.log(`\n[Bridge] Received ${signal}, shutting down...`);
+    deckManager.destroy(); // Clean up timers and listeners
+    await postBridgeStatus(false);
+    await StageLinq.disconnect();
+    process.exit(0);
+  };
+
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+  // Configure StageLinQ options BEFORE accessing StageLinq.devices or
+  // StageLinq.logger. The options setter resets the internal singleton
+  // instance, so any event handlers registered beforehand are orphaned.
+  StageLinq.options = {
+    downloadDbSources: false,
+    enableFileTranfer: true,
+  };
+
+  // Forward stagelinq library's internal debug logs to console
+  StageLinq.logger.on("any", (...args: unknown[]) => {
+    console.log(`[StageLinQ] ${args.map(String).join(" ")}`);
+  });
+
   // Handle now-playing events from DJ equipment (track metadata + play state)
   // The nowPlaying event is emitted when a track starts playing on a deck
   StageLinq.devices.on("nowPlaying", (status) => {
+    console.log(`[Bridge] StageLinQ nowPlaying event: deck=${status.deck ?? 'undefined'} title="${status.title ?? ''}" artist="${status.artist ?? ''}" play=${status.play} playState=${status.playState}`);
+
     const deckId = status.deck || "1";
     const title = status.title || "";
     const artist = status.artist || "";
@@ -107,9 +140,13 @@ async function main(): Promise<void> {
   // Handle state changed events (play state, faders, master deck)
   // stagelinq v3 emits stateChanged for real-time state updates
   StageLinq.devices.on("stateChanged", (status) => {
-    if (!status.deck) return;
+    if (!status.deck) {
+      console.log(`[Bridge] StageLinQ stateChanged event without deck ID, ignoring:`, JSON.stringify(status));
+      return;
+    }
 
     const deckId = status.deck;
+    console.log(`[Bridge] StageLinQ stateChanged: deck=${deckId} play=${status.play} playState=${status.playState} externalMixerVolume=${status.externalMixerVolume} masterStatus=${status.masterStatus}`);
 
     // Update play state if provided
     if (typeof status.play === "boolean" || typeof status.playState === "boolean") {
@@ -118,8 +155,8 @@ async function main(): Promise<void> {
     }
 
     // Update fader level if provided
-    if (typeof status.faderLevel === "number") {
-      deckManager.updateFaderLevel(deckId, status.faderLevel);
+    if (typeof status.externalMixerVolume === "number") {
+      deckManager.updateFaderLevel(deckId, status.externalMixerVolume);
     }
 
     // Update master deck if provided
@@ -128,11 +165,18 @@ async function main(): Promise<void> {
     }
   });
 
-  // Handle device ready events
-  StageLinq.devices.on("ready", async (info) => {
+  // Handle per-device connection (emitted for each device that connects successfully)
+  StageLinq.devices.on("connected", async (info) => {
     const deviceName = info?.software?.name || "Unknown Device";
-    console.log(`[Bridge] Device ready: ${deviceName}`);
+    const deviceVersion = info?.software?.version || "unknown";
+    const deviceAddress = info?.address || "unknown";
+    console.log(`[Bridge] Device connected: ${deviceName} v${deviceVersion} at ${deviceAddress}`);
     await postBridgeStatus(true, deviceName);
+  });
+
+  // Handle all devices ready (StateMap initialized — track events will now flow)
+  StageLinq.devices.on("ready", () => {
+    console.log("[Bridge] All devices ready — StateMap initialized, listening for tracks");
   });
 
   // Handle device disconnect
@@ -140,18 +184,6 @@ async function main(): Promise<void> {
     console.log("[Bridge] Device disconnected");
     await postBridgeStatus(false);
   });
-
-  // Graceful shutdown handlers
-  const shutdown = async (signal: string): Promise<void> => {
-    console.log(`\n[Bridge] Received ${signal}, shutting down...`);
-    deckManager.destroy(); // Clean up timers and listeners
-    await postBridgeStatus(false);
-    await StageLinq.disconnect();
-    process.exit(0);
-  };
-
-  process.on("SIGINT", () => shutdown("SIGINT"));
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
 
   // Connect to StageLinQ network
   console.log("[Bridge] Connecting to StageLinQ network...");

@@ -27,6 +27,7 @@ export class BridgeRunner extends EventEmitter {
   private currentTrack: TrackDisplay | null = null;
   private lastTrackKey: string | null = null;
   private lastPostTime = 0;
+  private loggerListener: ((...args: unknown[]) => void) | null = null;
 
   get isRunning(): boolean {
     return this.running;
@@ -58,10 +59,29 @@ export class BridgeRunner extends EventEmitter {
       masterDeckPriority: config.settings.masterDeckPriority,
     });
 
-    this.wireEvents();
+    this.wireDeckManagerLogs();
     this.emitStatus();
 
     try {
+      // Configure StageLinQ options BEFORE accessing StageLinq.devices or
+      // StageLinq.logger. The options setter resets the internal singleton
+      // instance, so any event handlers registered beforehand are orphaned.
+      StageLinq.options = {
+        downloadDbSources: false,
+        enableFileTranfer: true,
+      };
+
+      // Forward stagelinq library's internal debug logs to our log stream.
+      // Store the listener reference so we can remove it on stop().
+      this.loggerListener = (...args: unknown[]) => {
+        this.log(`[StageLinQ] ${args.map(String).join(' ')}`);
+      };
+      StageLinq.logger.on('any', this.loggerListener);
+
+      // Wire event handlers AFTER options are set so they attach to the
+      // correct StageLinqDevices instance (the one that will be connected).
+      this.wireEvents();
+
       this.log('Connecting to StageLinQ network...');
       await StageLinq.connect();
       this.log('Listening for DJ equipment...');
@@ -69,6 +89,7 @@ export class BridgeRunner extends EventEmitter {
       this.running = false;
       this.deckManager.destroy();
       this.deckManager = null;
+      this.removeLoggerListener();
       const message = err instanceof Error ? err.message : String(err);
       this.log(`Failed to connect: ${message}`);
       this.emitStatus();
@@ -94,31 +115,39 @@ export class BridgeRunner extends EventEmitter {
       // Best effort on shutdown
     }
 
+    this.removeLoggerListener();
     this.connectedDevice = null;
     this.currentTrack = null;
     this.emitStatus();
     this.log('Bridge stopped.');
   }
 
+  private removeLoggerListener(): void {
+    if (this.loggerListener) {
+      try {
+        StageLinq.logger.removeListener('any', this.loggerListener);
+      } catch {
+        // Best effort — logger may not support removeListener
+      }
+      this.loggerListener = null;
+    }
+  }
+
   getStatus(): BridgeStatus {
     const deckStates: DeckDisplay[] = [];
 
     if (this.deckManager) {
-      for (const deckId of ['1', '2', '3', '4']) {
-        try {
-          const state: DeckState = this.deckManager.getDeckState(deckId);
-          deckStates.push({
-            deckId: state.deckId,
-            state: state.state,
-            trackTitle: state.track?.title ?? null,
-            trackArtist: state.track?.artist ?? null,
-            isPlaying: state.isPlaying,
-            isMaster: state.isMaster,
-            faderLevel: state.faderLevel,
-          });
-        } catch {
-          // Skip if deck doesn't exist
-        }
+      for (const deckId of this.deckManager.getDeckIds()) {
+        const state: DeckState = this.deckManager.getDeckState(deckId);
+        deckStates.push({
+          deckId: state.deckId,
+          state: state.state,
+          trackTitle: state.track?.title ?? null,
+          trackArtist: state.track?.artist ?? null,
+          isPlaying: state.isPlaying,
+          isMaster: state.isMaster,
+          faderLevel: state.faderLevel,
+        });
       }
     }
 
@@ -130,6 +159,14 @@ export class BridgeRunner extends EventEmitter {
       currentTrack: this.currentTrack,
       deckStates,
     };
+  }
+
+  private wireDeckManagerLogs(): void {
+    if (!this.deckManager) return;
+
+    this.deckManager.on('log', (message: string) => {
+      this.log(message);
+    });
   }
 
   private wireEvents(): void {
@@ -159,6 +196,8 @@ export class BridgeRunner extends EventEmitter {
     // Handle nowPlaying events from DJ equipment
     StageLinq.devices.on('nowPlaying', (status) => {
       if (!this.deckManager) return;
+
+      this.log(`StageLinQ nowPlaying: deck=${status.deck ?? 'undefined'} title="${status.title ?? ''}" artist="${status.artist ?? ''}" play=${status.play} playState=${status.playState}`);
 
       const deckId = status.deck || '1';
       const title = status.title || '';
@@ -197,15 +236,15 @@ export class BridgeRunner extends EventEmitter {
       if (!this.deckManager || !status.deck) return;
 
       const deckId = status.deck;
+      this.log(`StageLinQ stateChanged: deck=${deckId} play=${status.play} playState=${status.playState} externalMixerVolume=${status.externalMixerVolume} masterStatus=${status.masterStatus}`);
 
       if (typeof status.play === 'boolean' || typeof status.playState === 'boolean') {
         const isPlaying = status.play === true || status.playState === true;
         this.deckManager.updatePlayState(deckId, isPlaying);
       }
 
-      const statusAny = status as unknown as Record<string, unknown>;
-      if (typeof statusAny.faderLevel === 'number') {
-        this.deckManager.updateFaderLevel(deckId, statusAny.faderLevel);
+      if (typeof status.externalMixerVolume === 'number') {
+        this.deckManager.updateFaderLevel(deckId, status.externalMixerVolume);
       }
 
       if (status.masterStatus === true) {
@@ -215,14 +254,21 @@ export class BridgeRunner extends EventEmitter {
       this.emitStatus();
     });
 
-    // Handle device ready (stagelinq types are incomplete — cast to register handler)
-    (StageLinq.devices as NodeJS.EventEmitter).on('ready', async (info: Record<string, unknown>) => {
+    // Handle per-device connection (emitted for each device that connects)
+    (StageLinq.devices as NodeJS.EventEmitter).on('connected', async (info: Record<string, unknown>) => {
       const software = info?.software as Record<string, unknown> | undefined;
       const deviceName = (software?.name as string) || 'Unknown Device';
+      const deviceVersion = (software?.version as string) || 'unknown';
+      const deviceAddress = (info?.address as string) || 'unknown';
       this.connectedDevice = deviceName;
-      this.log(`Device ready: ${deviceName}`);
+      this.log(`Device connected: ${deviceName} v${deviceVersion} at ${deviceAddress}`);
       this.emitStatus();
       await this.postBridgeStatus(true, deviceName);
+    });
+
+    // Handle all devices ready (StateMap initialized — track events will now flow)
+    (StageLinq.devices as NodeJS.EventEmitter).on('ready', () => {
+      this.log('All devices ready — StateMap initialized, listening for tracks');
     });
 
     // Handle device disconnect
@@ -286,17 +332,19 @@ export class BridgeRunner extends EventEmitter {
           throw new Error(`HTTP ${response.status}: ${text}`);
         }
 
+        this.log(`POST ${endpoint} succeeded`);
         return;
       } catch (err) {
         lastError = err as Error;
         if (attempt < MAX_RETRIES) {
           const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+          this.log(`Retry ${attempt + 1}/${MAX_RETRIES} in ${backoff}ms: ${lastError.message}`);
           await new Promise((resolve) => setTimeout(resolve, backoff));
         }
       }
     }
 
-    this.log(`POST ${endpoint} failed: ${lastError?.message}`);
+    this.log(`POST ${endpoint} failed after ${MAX_RETRIES + 1} attempts: ${lastError?.message}`);
   }
 
   private async postNowPlaying(

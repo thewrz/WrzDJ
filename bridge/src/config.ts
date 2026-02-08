@@ -23,11 +23,11 @@ export const config = {
   /** Seconds of pause before resetting accumulated play time */
   pauseGraceSeconds: parseInt(process.env.PAUSE_GRACE_SECONDS || "3", 10),
 
-  /** Whether to require fader > 0 for live detection */
-  useFaderDetection: process.env.USE_FADER_DETECTION !== "false",
+  /** Whether to require fader > 0 for live detection (default: false for 3rd-party mixer compat) */
+  useFaderDetection: process.env.USE_FADER_DETECTION === "true",
 
-  /** Whether to only report from master deck */
-  masterDeckPriority: process.env.MASTER_DECK_PRIORITY !== "false",
+  /** Whether to only report from master deck (default: false for 3rd-party mixer compat) */
+  masterDeckPriority: process.env.MASTER_DECK_PRIORITY === "true",
 };
 
 /**

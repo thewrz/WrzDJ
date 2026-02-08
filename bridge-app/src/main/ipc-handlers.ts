@@ -17,6 +17,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   });
 
+  // Forward bridge log messages to renderer
+  bridgeRunner.on('log', (message: string) => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC_CHANNELS.BRIDGE_LOG, message);
+    }
+  });
+
   // --- Auth ---
 
   ipcMain.handle(IPC_CHANNELS.AUTH_LOGIN, async (_event, apiUrl: string, username: string, password: string) => {
