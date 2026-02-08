@@ -63,13 +63,18 @@ export class BridgeRunner extends EventEmitter {
     this.emitStatus();
 
     try {
-      // Disable database downloads and file transfer — we only need StateMap
-      // for track metadata. DB downloads add extra TCP connections that fail
-      // on some networks and are unnecessary for WrzDJ.
+      // Disable database downloads (we only need StateMap for track metadata).
+      // Keep FileTransfer enabled so the library's service handshake completes
+      // fully before StateMap setup.
       StageLinq.options = {
         downloadDbSources: false,
-        enableFileTranfer: false, // Note: typo is in the stagelinq library API
+        enableFileTranfer: true,
       };
+
+      // Forward stagelinq library's internal debug logs to our log stream
+      StageLinq.logger.on('any', (...args: unknown[]) => {
+        this.log(`[StageLinQ] ${args.map(String).join(' ')}`);
+      });
 
       this.log('Connecting to StageLinQ network...');
       await StageLinq.connect();

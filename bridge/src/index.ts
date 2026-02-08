@@ -172,13 +172,18 @@ async function main(): Promise<void> {
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
 
-  // Configure StageLinQ: disable database downloads and file transfer
-  // We only need StateMap for track metadata — DB downloads add extra TCP
-  // connections that fail on some networks and are unnecessary for WrzDJ.
+  // Configure StageLinQ: disable database downloads (we only need StateMap
+  // for track metadata). Keep FileTransfer enabled so the library's service
+  // handshake completes fully before StateMap setup.
   StageLinq.options = {
     downloadDbSources: false,
-    enableFileTranfer: false, // Note: typo is in the stagelinq library API
+    enableFileTranfer: true,
   };
+
+  // Forward stagelinq library's internal debug logs to console
+  StageLinq.logger.on("any", (...args: unknown[]) => {
+    console.log(`[StageLinQ] ${args.map(String).join(" ")}`);
+  });
 
   // Connect to StageLinQ network
   console.log("[Bridge] Connecting to StageLinQ network...");

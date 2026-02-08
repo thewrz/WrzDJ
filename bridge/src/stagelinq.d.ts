@@ -48,6 +48,11 @@ declare module "stagelinq" {
     enableFileTranfer?: boolean;
   }
 
+  /** Internal library logger — EventEmitter that emits log/debug/warn/error/info/any events */
+  interface StageLinqLogger {
+    on(event: "any" | "log" | "debug" | "warn" | "error" | "info" | "silly", listener: (...args: unknown[]) => void): this;
+  }
+
   interface DevicesEmitter extends EventEmitter {
     on(event: "nowPlaying", listener: (status: NowPlayingStatus) => void): this;
     on(event: "stateChanged", listener: (status: StateChangedData) => void): this;
@@ -59,6 +64,7 @@ declare module "stagelinq" {
 
   export const StageLinq: {
     options: StageLinqOptions;
+    logger: StageLinqLogger;
     devices: DevicesEmitter;
     connect(): Promise<void>;
     disconnect(): Promise<void>;
