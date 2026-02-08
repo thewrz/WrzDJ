@@ -1,0 +1,322 @@
+# Bridge Plugin Architecture
+
+The WrzDJ Bridge uses a plugin system to abstract DJ equipment detection. Each DJ software integration is a self-contained plugin that emits normalized events, allowing the bridge to support multiple DJ platforms without modifying its core logic.
+
+## Architecture Overview
+
+```
+DJ Software  ──►  Plugin  ──►  PluginBridge  ──►  DeckStateManager  ──►  Backend API
+                                (synthesis)         (state machine)        (now-playing)
+```
+
+| Layer | File | Responsibility |
+|-------|------|----------------|
+| Plugin | `bridge/src/plugins/*.ts` | Connects to DJ software, emits raw events |
+| PluginBridge | `bridge/src/plugin-bridge.ts` | Normalizes events, synthesizes missing data |
+| DeckStateManager | `bridge/src/deck-state-manager.ts` | Per-deck state machine, debounce, live detection |
+| Bridge entry | `bridge/src/index.ts` | Wires everything together, posts to backend API |
+
+## Core Interfaces
+
+All types are defined in `bridge/src/plugin-types.ts`.
+
+### EquipmentSourcePlugin
+
+Every plugin implements this interface, which extends Node.js `EventEmitter`:
+
+```typescript
+interface EquipmentSourcePlugin extends EventEmitter {
+  readonly info: PluginInfo;
+  readonly capabilities: PluginCapabilities;
+  readonly configOptions: readonly PluginConfigOption[];
+  readonly isRunning: boolean;
+
+  start(config?: Record<string, unknown>): Promise<void>;
+  stop(): Promise<void>;
+}
+```
+
+- `configOptions` declares user-configurable settings for this plugin (see PluginConfigOption below).
+- `start()` initializes the connection to the DJ software. The optional `config` parameter carries plugin-specific settings (e.g., port number for Traktor).
+- `stop()` tears down the connection and cleans up all resources.
+- Both methods are async and must be safe to call in sequence.
+
+### PluginInfo
+
+Static metadata used for display and registry lookup:
+
+```typescript
+interface PluginInfo {
+  readonly id: string;          // Registry key, e.g. "stagelinq"
+  readonly name: string;        // Human-readable, e.g. "Denon StageLinQ"
+  readonly description: string;
+}
+```
+
+### PluginCapabilities
+
+Declares what data the plugin can provide. PluginBridge uses these flags to decide what to synthesize:
+
+```typescript
+interface PluginCapabilities {
+  readonly multiDeck: boolean;      // Reports per-deck data (vs single stream)
+  readonly playState: boolean;      // Provides explicit play/pause events
+  readonly faderLevel: boolean;     // Provides channel fader levels
+  readonly masterDeck: boolean;     // Provides master deck assignment
+  readonly albumMetadata: boolean;  // Provides album info with tracks
+}
+```
+
+### PluginConfigOption
+
+Declares a user-configurable setting for a plugin. The bridge-app UI renders these dynamically — no hardcoded UI is needed per plugin.
+
+```typescript
+interface PluginConfigOption {
+  readonly key: string;           // Setting key, e.g. "port"
+  readonly label: string;         // Human-readable label, e.g. "Broadcast port"
+  readonly type: "number" | "string" | "boolean";
+  readonly default: number | string | boolean;
+  readonly description?: string;  // Tooltip/help text
+  readonly min?: number;          // For type: "number" only
+  readonly max?: number;          // For type: "number" only
+}
+```
+
+Plugins with no user-configurable options set `configOptions: []`.
+
+**How capabilities drive synthesis:**
+
+| Capability | When `false` | PluginBridge behavior |
+|------------|-------------|----------------------|
+| `multiDeck` | Single combined stream | All deck IDs mapped to virtual deck `"1"` |
+| `playState` | No play/pause signals | Automatically sets play state to `true` when track metadata arrives |
+| `faderLevel` | No fader data | Fader detection settings ignored |
+| `masterDeck` | No master deck info | Master deck priority settings ignored |
+| `albumMetadata` | No album field | Album field omitted from track reports |
+
+## Plugin Events
+
+Plugins emit these events via `EventEmitter`. PluginBridge subscribes to all of them.
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `track` | `{ deckId, track: { title, artist, album? } \| null }` | Track loaded/changed on a deck, or `null` for unload |
+| `playState` | `{ deckId, isPlaying }` | Deck play/pause state changed |
+| `fader` | `{ deckId, level }` | Channel fader level changed (0.0 to 1.0) |
+| `masterDeck` | `{ deckId }` | Deck became the master |
+| `connection` | `{ connected, deviceName? }` | Device connected or disconnected |
+| `ready` | (none) | Plugin fully initialized and ready |
+| `log` | `string` | Diagnostic message |
+| `error` | `Error` | Error condition |
+
+## Plugin Registry
+
+The registry (`bridge/src/plugin-registry.ts`) maps plugin IDs to factory functions. Plugins are instantiated on demand — each call to `getPlugin()` returns a fresh instance.
+
+```typescript
+import {
+  registerPlugin, getPlugin, listPlugins,
+  getPluginMeta, listPluginMeta,
+} from "./plugin-registry.js";
+
+// Register a factory
+registerPlugin("my-plugin", () => new MyPlugin());
+
+// Create an instance
+const plugin = getPlugin("my-plugin"); // Returns new MyPlugin() or null
+
+// List registered IDs
+const ids = listPlugins(); // ["stagelinq", "traktor-broadcast", "my-plugin"]
+
+// Get serializable metadata (info + capabilities + configOptions)
+const meta = getPluginMeta("my-plugin"); // PluginMeta | null
+const allMeta = listPluginMeta();        // PluginMeta[]
+```
+
+`getPluginMeta()` and `listPluginMeta()` return plain objects safe for IPC transfer. The bridge-app uses `listPluginMeta()` to populate the protocol dropdown and render plugin-specific config inputs dynamically.
+
+Built-in plugins register themselves in `bridge/src/plugins/index.ts`, which is imported as a side-effect at startup.
+
+## Built-in Plugins
+
+### Denon StageLinQ (`stagelinq`)
+
+**File:** `bridge/src/plugins/stagelinq-plugin.ts`
+
+Connects to Denon DJ equipment (SC6000, SC Live, etc.) over the local network using the StageLinQ protocol. Full capabilities — reports per-deck metadata, play state, fader levels, master deck, and album info.
+
+| Capability | Value |
+|------------|-------|
+| `multiDeck` | `true` |
+| `playState` | `true` |
+| `faderLevel` | `true` |
+| `masterDeck` | `true` |
+| `albumMetadata` | `true` |
+
+**Configuration:** No user-configurable options (`configOptions: []`). The plugin discovers devices via StageLinQ network announcements.
+
+### Traktor Broadcast (`traktor-broadcast`)
+
+**File:** `bridge/src/plugins/traktor-broadcast-plugin.ts`
+
+Receives track metadata from Traktor via its built-in broadcast feature. Traktor sends an Icecast-compatible stream to a local HTTP server, and the plugin extracts ICY metadata (`StreamTitle='Artist - Title'`) from the interleaved audio/metadata stream.
+
+| Capability | Value |
+|------------|-------|
+| `multiDeck` | `false` |
+| `playState` | `false` |
+| `faderLevel` | `false` |
+| `masterDeck` | `false` |
+| `albumMetadata` | `false` |
+
+**Configuration:**
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `port` | `number` | `8123` | Local port for the Icecast server |
+
+**Traktor setup:** Settings > Broadcasting > Address: `127.0.0.1`, Port: `8123` (or your configured port).
+
+Because all capabilities are `false`, PluginBridge synthesizes everything: deck IDs are normalized to `"1"`, and play state is set to `true` whenever track metadata arrives.
+
+## Creating a New Plugin
+
+### 1. Create the plugin file
+
+Create `bridge/src/plugins/my-plugin.ts`:
+
+```typescript
+import { EventEmitter } from "events";
+import type {
+  EquipmentSourcePlugin,
+  PluginCapabilities,
+  PluginInfo,
+} from "../plugin-types.js";
+
+export class MyPlugin extends EventEmitter implements EquipmentSourcePlugin {
+  readonly info: PluginInfo = {
+    id: "my-plugin",
+    name: "My DJ Software",
+    description: "Connects to My DJ Software via ...",
+  };
+
+  readonly capabilities: PluginCapabilities = {
+    multiDeck: true,       // Set based on what your integration provides
+    playState: true,
+    faderLevel: false,
+    masterDeck: false,
+    albumMetadata: false,
+  };
+
+  readonly configOptions: readonly PluginConfigOption[] = [
+    // Add user-configurable options here, or leave empty
+    // { key: "port", label: "Port", type: "number", default: 9000, min: 1024, max: 65535 },
+  ];
+
+  private running = false;
+
+  get isRunning(): boolean {
+    return this.running;
+  }
+
+  async start(config?: Record<string, unknown>): Promise<void> {
+    if (this.running) {
+      throw new Error("My plugin is already running");
+    }
+    this.running = true;
+
+    // Initialize your connection here
+    // When you detect a track change:
+    //   this.emit("track", { deckId: "1", track: { title, artist } });
+    // When you detect play state:
+    //   this.emit("playState", { deckId: "1", isPlaying: true });
+  }
+
+  async stop(): Promise<void> {
+    if (!this.running) return;
+    this.running = false;
+
+    // Tear down connections, close sockets/servers
+    this.removeAllListeners();
+  }
+}
+```
+
+### 2. Register the plugin
+
+Add to `bridge/src/plugins/index.ts`:
+
+```typescript
+import { MyPlugin } from "./my-plugin.js";
+
+registerPlugin("my-plugin", () => new MyPlugin());
+```
+
+### 3. Write tests
+
+Create `bridge/src/__tests__/my-plugin.test.ts`. Follow the patterns in the existing test files:
+
+- Test plugin metadata and capabilities
+- Test `start()`/`stop()` lifecycle (idempotency, error on double-start)
+- Test event emission for track changes
+- Test deduplication if applicable
+- Use `port: 0` for OS-assigned ports if your plugin runs a server, and `AbortController` for streaming connections
+
+Run with:
+
+```bash
+cd bridge && npm run test:run
+```
+
+## UI Integration
+
+The bridge-app Settings panel is fully data-driven from plugin metadata. No hardcoded plugin knowledge exists in the UI.
+
+**How it works:**
+
+1. On mount, the renderer calls `api.listPluginMeta()` via IPC
+2. The main process calls `listPluginMeta()` from the plugin registry, which creates temporary plugin instances, reads their metadata, and returns serializable `PluginMeta` objects
+3. The protocol dropdown is populated from `PluginMeta[].info`
+4. When a protocol is selected, `PluginConfigInput` components are rendered for each `configOption` based on its `type` (number, string, boolean)
+5. Capability-based toggles (fader detection, master deck priority) are conditionally shown based on `PluginMeta.capabilities`
+
+Adding a new plugin with `configOptions` automatically surfaces those options in the UI with no frontend changes needed.
+
+## Design Principles
+
+**Capability-driven synthesis.** Plugins declare what they can provide. PluginBridge fills in the gaps automatically. A plugin that only provides track metadata still works — PluginBridge synthesizes play state and normalizes deck IDs.
+
+**No shared state.** Each plugin instance is independent. The registry creates fresh instances on every `getPlugin()` call. Plugins communicate only through events.
+
+**Minimal dependencies.** The Traktor plugin uses only Node.js built-in `http` module — no additional npm packages. Prefer built-in modules when possible.
+
+**Protocol-agnostic state machine.** DeckStateManager knows nothing about StageLinQ, Icecast, or any DJ software. It only understands deck state transitions and timing thresholds. This separation means new plugins never need to modify the state machine.
+
+## File Map
+
+```
+bridge/src/
+  plugin-types.ts              # Interfaces: EquipmentSourcePlugin, events, capabilities
+  plugin-registry.ts           # Factory registry: register/get/list plugins
+  plugin-bridge.ts             # Translation layer: plugin events → DeckStateManager
+  deck-state-manager.ts        # Per-deck state machine (unchanged by plugin system)
+  deck-state.ts                # Type definitions: DeckState, TrackInfo, DeckLiveEvent
+  plugins/
+    index.ts                   # Side-effect import: registers all built-in plugins
+    stagelinq-plugin.ts        # Denon StageLinQ integration
+    traktor-broadcast-plugin.ts # Traktor Broadcast/Icecast integration
+  __tests__/
+    plugin-bridge.test.ts      # PluginBridge synthesis and event forwarding tests
+    plugin-registry.test.ts    # Registry CRUD tests
+    traktor-broadcast-plugin.test.ts # ICY parsing and HTTP server tests
+
+bridge-app/src/
+  shared/types.ts              # PluginMeta, PluginConfigOption, BridgeSettings.protocol
+  main/ipc-handlers.ts         # IPC handler: exposes listPluginMeta to renderer
+  main/bridge-runner.ts        # Electron main process: creates PluginBridge from settings
+  preload/preload.ts           # contextBridge: exposes listPluginMeta to renderer
+  renderer/api.ts              # Typed API wrapper for renderer
+  renderer/components/
+    SettingsPanel.tsx           # Data-driven protocol selector and config UI
+```

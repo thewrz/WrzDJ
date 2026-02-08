@@ -1,14 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api.js';
-import type { BridgeSettings } from '../../shared/types.js';
+import type { BridgeSettings, PluginMeta, PluginConfigOption } from '../../shared/types.js';
 import { DEFAULT_SETTINGS } from '../../shared/types.js';
+import { useBridgeStatus } from '../hooks/useBridgeStatus.js';
 
 export function SettingsPanel() {
   const [settings, setSettings] = useState<BridgeSettings>(DEFAULT_SETTINGS);
+  const [plugins, setPlugins] = useState<readonly PluginMeta[]>([]);
   const [open, setOpen] = useState(false);
+  const bridgeStatus = useBridgeStatus();
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch(() => {});
+    api.listPluginMeta().then(setPlugins).catch(() => {});
   }, []);
 
   const update = useCallback(async (partial: Partial<BridgeSettings>) => {
@@ -19,6 +23,9 @@ export function SettingsPanel() {
       // Silently fail - settings will be stale but functional
     }
   }, []);
+
+  const protocol = settings.protocol || 'stagelinq';
+  const currentPlugin = plugins.find((p) => p.info.id === protocol);
 
   return (
     <div className="card">
@@ -33,6 +40,47 @@ export function SettingsPanel() {
 
       {open && (
         <div>
+          <div className="settings-row">
+            <label>Protocol</label>
+            <select
+              value={protocol}
+              disabled={bridgeStatus.isRunning}
+              onChange={(e) => update({ protocol: e.target.value })}
+              style={{
+                background: '#2a2a2a',
+                color: '#ededed',
+                border: '1px solid #444',
+                borderRadius: '4px',
+                padding: '4px 8px',
+                fontSize: '0.85rem',
+              }}
+            >
+              {plugins.map((p) => (
+                <option key={p.info.id} value={p.info.id}>{p.info.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {bridgeStatus.isRunning && (
+            <div style={{ fontSize: '0.75rem', color: '#888', marginBottom: '8px', paddingLeft: '4px' }}>
+              Stop the bridge to change protocol.
+            </div>
+          )}
+
+          {currentPlugin && currentPlugin.configOptions.length > 0 && (
+            currentPlugin.configOptions.map((opt) => (
+              <PluginConfigInput
+                key={opt.key}
+                option={opt}
+                value={settings.pluginConfig?.[opt.key]}
+                disabled={bridgeStatus.isRunning}
+                onChange={(value) => update({
+                  pluginConfig: { ...settings.pluginConfig, [opt.key]: value },
+                })}
+              />
+            ))
+          )}
+
           <div className="settings-row">
             <label>Live threshold (seconds)</label>
             <input
@@ -77,23 +125,81 @@ export function SettingsPanel() {
             />
           </div>
 
-          <div className="settings-row">
-            <label>Require fader up</label>
-            <button
-              className={`toggle ${settings.useFaderDetection ? 'active' : ''}`}
-              onClick={() => update({ useFaderDetection: !settings.useFaderDetection })}
-            />
-          </div>
+          {currentPlugin?.capabilities.faderLevel && (
+            <div className="settings-row">
+              <label>Require fader up</label>
+              <button
+                className={`toggle ${settings.useFaderDetection ? 'active' : ''}`}
+                onClick={() => update({ useFaderDetection: !settings.useFaderDetection })}
+              />
+            </div>
+          )}
 
-          <div className="settings-row">
-            <label>Master deck only</label>
-            <button
-              className={`toggle ${settings.masterDeckPriority ? 'active' : ''}`}
-              onClick={() => update({ masterDeckPriority: !settings.masterDeckPriority })}
-            />
-          </div>
+          {currentPlugin?.capabilities.masterDeck && (
+            <div className="settings-row">
+              <label>Master deck only</label>
+              <button
+                className={`toggle ${settings.masterDeckPriority ? 'active' : ''}`}
+                onClick={() => update({ masterDeckPriority: !settings.masterDeckPriority })}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
   );
+}
+
+/** Renders a single plugin config option as the appropriate input type. */
+function PluginConfigInput({ option, value, disabled, onChange }: {
+  option: PluginConfigOption;
+  value: unknown;
+  disabled: boolean;
+  onChange: (value: number | string | boolean) => void;
+}) {
+  if (option.type === 'number') {
+    return (
+      <div className="settings-row">
+        <label>{option.label}</label>
+        <input
+          type="number"
+          value={(value as number) ?? option.default}
+          min={option.min}
+          max={option.max}
+          disabled={disabled}
+          onChange={(e) => onChange(parseInt(e.target.value) || (option.default as number))}
+        />
+      </div>
+    );
+  }
+
+  if (option.type === 'string') {
+    return (
+      <div className="settings-row">
+        <label>{option.label}</label>
+        <input
+          type="text"
+          value={(value as string) ?? option.default}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </div>
+    );
+  }
+
+  if (option.type === 'boolean') {
+    const checked = (value as boolean) ?? option.default;
+    return (
+      <div className="settings-row">
+        <label>{option.label}</label>
+        <button
+          className={`toggle ${checked ? 'active' : ''}`}
+          disabled={disabled}
+          onClick={() => onChange(!checked)}
+        />
+      </div>
+    );
+  }
+
+  return null;
 }

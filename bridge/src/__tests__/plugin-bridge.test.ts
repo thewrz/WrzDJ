@@ -1,0 +1,383 @@
+/**
+ * Tests for PluginBridge — the translation layer between plugins and DeckStateManager.
+ *
+ * Uses a mock plugin (EventEmitter) to verify event normalization,
+ * play-state synthesis for limited-capability plugins, and deck ID mapping.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { EventEmitter } from "events";
+import { PluginBridge } from "../plugin-bridge.js";
+import type { DeckLiveEvent, DeckStateManagerConfig } from "../deck-state.js";
+import type {
+  EquipmentSourcePlugin,
+  PluginCapabilities,
+  PluginConnectionEvent,
+} from "../plugin-types.js";
+
+const DEFAULT_CONFIG: DeckStateManagerConfig = {
+  liveThresholdSeconds: 15,
+  pauseGraceSeconds: 3,
+  nowPlayingPauseSeconds: 10,
+  useFaderDetection: false,
+  masterDeckPriority: false,
+};
+
+const FULL_CAPABILITIES: PluginCapabilities = {
+  multiDeck: true,
+  playState: true,
+  faderLevel: true,
+  masterDeck: true,
+  albumMetadata: true,
+};
+
+const MINIMAL_CAPABILITIES: PluginCapabilities = {
+  multiDeck: false,
+  playState: false,
+  faderLevel: false,
+  masterDeck: false,
+  albumMetadata: false,
+};
+
+function createMockPlugin(
+  capabilities: PluginCapabilities = FULL_CAPABILITIES
+): EquipmentSourcePlugin {
+  const emitter = new EventEmitter() as EquipmentSourcePlugin;
+  let running = false;
+  Object.defineProperty(emitter, "isRunning", { get: () => running });
+  Object.assign(emitter, {
+    info: { id: "mock", name: "Mock Plugin", description: "Test" },
+    capabilities,
+    configOptions: [],
+    start: async () => {
+      running = true;
+    },
+    stop: async () => {
+      running = false;
+    },
+  });
+  return emitter;
+}
+
+describe("PluginBridge", () => {
+  let plugin: EquipmentSourcePlugin;
+  let bridge: PluginBridge;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(async () => {
+    if (bridge?.isRunning) await bridge.stop();
+    vi.useRealTimers();
+  });
+
+  describe("Lifecycle", () => {
+    it("starts and stops the plugin", async () => {
+      plugin = createMockPlugin();
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+
+      expect(bridge.isRunning).toBe(false);
+      await bridge.start();
+      expect(bridge.isRunning).toBe(true);
+      expect(plugin.isRunning).toBe(true);
+
+      await bridge.stop();
+      expect(bridge.isRunning).toBe(false);
+    });
+
+    it("throws when starting an already-running bridge", async () => {
+      plugin = createMockPlugin();
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+      await expect(bridge.start()).rejects.toThrow("already running");
+    });
+
+    it("cleans up on plugin start failure", async () => {
+      plugin = createMockPlugin();
+      (plugin as unknown as Record<string, unknown>).start = async () => {
+        throw new Error("Connection failed");
+      };
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+
+      await expect(bridge.start()).rejects.toThrow("Connection failed");
+      expect(bridge.isRunning).toBe(false);
+    });
+
+    it("stop is idempotent when not running", async () => {
+      plugin = createMockPlugin();
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.stop(); // Should not throw
+    });
+
+    it("exposes plugin info and capabilities", async () => {
+      plugin = createMockPlugin();
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      expect(bridge.pluginInfo.id).toBe("mock");
+      expect(bridge.pluginCapabilities).toEqual(FULL_CAPABILITIES);
+    });
+  });
+
+  describe("Full-capability plugin (StageLinQ-like)", () => {
+    beforeEach(async () => {
+      plugin = createMockPlugin(FULL_CAPABILITIES);
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+    });
+
+    it("forwards track events to DeckStateManager", () => {
+      plugin.emit("track", {
+        deckId: "1A",
+        track: { title: "Test Song", artist: "Test Artist" },
+      });
+
+      const state = bridge.manager.getDeckState("1A");
+      expect(state.state).toBe("LOADED");
+      expect(state.track?.title).toBe("Test Song");
+    });
+
+    it("forwards play state events", () => {
+      plugin.emit("track", {
+        deckId: "1A",
+        track: { title: "Test Song", artist: "Test Artist" },
+      });
+      plugin.emit("playState", { deckId: "1A", isPlaying: true });
+
+      const state = bridge.manager.getDeckState("1A");
+      expect(state.isPlaying).toBe(true);
+      expect(state.state).toBe("CUEING");
+    });
+
+    it("forwards fader events", () => {
+      plugin.emit("fader", { deckId: "1A", level: 0.75 });
+
+      const state = bridge.manager.getDeckState("1A");
+      expect(state.faderLevel).toBe(0.75);
+    });
+
+    it("forwards master deck events", () => {
+      plugin.emit("masterDeck", { deckId: "2B" });
+
+      const state = bridge.manager.getDeckState("2B");
+      expect(state.isMaster).toBe(true);
+    });
+
+    it("emits deckLive when track reaches threshold", () => {
+      const liveEvents: DeckLiveEvent[] = [];
+      bridge.on("deckLive", (e: DeckLiveEvent) => liveEvents.push(e));
+
+      plugin.emit("track", {
+        deckId: "1A",
+        track: { title: "Live Track", artist: "DJ" },
+      });
+      plugin.emit("playState", { deckId: "1A", isPlaying: true });
+
+      // Advance past threshold
+      vi.advanceTimersByTime(16_000);
+
+      expect(liveEvents).toHaveLength(1);
+      expect(liveEvents[0].track.title).toBe("Live Track");
+      expect(liveEvents[0].deckId).toBe("1A");
+    });
+
+    it("forwards connection events from plugin", () => {
+      const connections: PluginConnectionEvent[] = [];
+      bridge.on("connection", (e: PluginConnectionEvent) =>
+        connections.push(e)
+      );
+
+      plugin.emit("connection", {
+        connected: true,
+        deviceName: "SC6000",
+      });
+
+      expect(connections).toHaveLength(1);
+      expect(connections[0].connected).toBe(true);
+      expect(connections[0].deviceName).toBe("SC6000");
+    });
+
+    it("forwards ready events from plugin", () => {
+      const readyFn = vi.fn();
+      bridge.on("ready", readyFn);
+      plugin.emit("ready");
+      expect(readyFn).toHaveBeenCalledOnce();
+    });
+
+    it("forwards plugin log messages with prefix", () => {
+      const logs: string[] = [];
+      bridge.on("log", (m: string) => logs.push(m));
+
+      plugin.emit("log", "Device found");
+
+      expect(logs.some((m) => m.includes("[mock]") && m.includes("Device found"))).toBe(true);
+    });
+
+    it("forwards plugin errors", () => {
+      const errors: Error[] = [];
+      bridge.on("error", (e: Error) => errors.push(e));
+
+      plugin.emit("error", new Error("Network timeout"));
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0].message).toBe("Network timeout");
+    });
+
+    it("handles track unload (null track)", () => {
+      plugin.emit("track", {
+        deckId: "1A",
+        track: { title: "Song", artist: "Artist" },
+      });
+      plugin.emit("track", { deckId: "1A", track: null });
+
+      const state = bridge.manager.getDeckState("1A");
+      expect(state.state).toBe("EMPTY");
+      expect(state.track).toBeNull();
+    });
+  });
+
+  describe("Minimal-capability plugin (Traktor-like)", () => {
+    beforeEach(async () => {
+      plugin = createMockPlugin(MINIMAL_CAPABILITIES);
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+    });
+
+    it("assigns virtual deck ID for single-deck plugins", () => {
+      plugin.emit("track", {
+        deckId: "anything",
+        track: { title: "Song", artist: "Artist" },
+      });
+
+      // Should be mapped to virtual deck "1"
+      const state = bridge.manager.getDeckState("1");
+      expect(state.track?.title).toBe("Song");
+    });
+
+    it("synthesizes play state when track is loaded", () => {
+      plugin.emit("track", {
+        deckId: "1",
+        track: { title: "Song", artist: "Artist" },
+      });
+
+      const state = bridge.manager.getDeckState("1");
+      expect(state.isPlaying).toBe(true);
+      expect(state.state).toBe("CUEING");
+    });
+
+    it("does NOT synthesize play state for track unload", () => {
+      plugin.emit("track", {
+        deckId: "1",
+        track: { title: "Song", artist: "Artist" },
+      });
+      plugin.emit("track", { deckId: "1", track: null });
+
+      const state = bridge.manager.getDeckState("1");
+      expect(state.state).toBe("EMPTY");
+      expect(state.isPlaying).toBe(false);
+    });
+
+    it("emits deckLive after threshold with synthesized play state", () => {
+      const liveEvents: DeckLiveEvent[] = [];
+      bridge.on("deckLive", (e: DeckLiveEvent) => liveEvents.push(e));
+
+      plugin.emit("track", {
+        deckId: "1",
+        track: { title: "Broadcast Track", artist: "DJ" },
+      });
+
+      vi.advanceTimersByTime(16_000);
+
+      expect(liveEvents).toHaveLength(1);
+      expect(liveEvents[0].track.title).toBe("Broadcast Track");
+      expect(liveEvents[0].deckId).toBe("1");
+    });
+
+    it("handles rapid track changes (new track resets threshold)", () => {
+      const liveEvents: DeckLiveEvent[] = [];
+      bridge.on("deckLive", (e: DeckLiveEvent) => liveEvents.push(e));
+
+      // First track — play for 10s (not enough)
+      plugin.emit("track", {
+        deckId: "1",
+        track: { title: "Track 1", artist: "DJ" },
+      });
+      vi.advanceTimersByTime(10_000);
+
+      // New track — resets threshold
+      plugin.emit("track", {
+        deckId: "1",
+        track: { title: "Track 2", artist: "DJ" },
+      });
+      vi.advanceTimersByTime(10_000);
+      expect(liveEvents).toHaveLength(0);
+
+      // Finish threshold for Track 2
+      vi.advanceTimersByTime(6_000);
+      expect(liveEvents).toHaveLength(1);
+      expect(liveEvents[0].track.title).toBe("Track 2");
+    });
+  });
+
+  describe("Log throttling", () => {
+    beforeEach(async () => {
+      plugin = createMockPlugin(FULL_CAPABILITIES);
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+    });
+
+    it("suppresses duplicate log messages within the dedup window", () => {
+      const logs: string[] = [];
+      bridge.on("log", (m: string) => logs.push(m));
+
+      plugin.emit("log", "Discovery: 192.168.1.71 (IGNORED)");
+      plugin.emit("log", "Discovery: 192.168.1.71 (IGNORED)");
+      plugin.emit("log", "Discovery: 192.168.1.71 (IGNORED)");
+
+      expect(logs.filter((m) => m.includes("IGNORED"))).toHaveLength(1);
+    });
+
+    it("allows the same message again after the dedup window expires", () => {
+      const logs: string[] = [];
+      bridge.on("log", (m: string) => logs.push(m));
+
+      plugin.emit("log", "Repeated message");
+      expect(logs.filter((m) => m.includes("Repeated"))).toHaveLength(1);
+
+      // Advance past the 60s dedup window
+      vi.advanceTimersByTime(61_000);
+
+      plugin.emit("log", "Repeated message");
+      expect(logs.filter((m) => m.includes("Repeated"))).toHaveLength(2);
+    });
+
+    it("allows different messages through independently", () => {
+      const logs: string[] = [];
+      bridge.on("log", (m: string) => logs.push(m));
+
+      plugin.emit("log", "Message A");
+      plugin.emit("log", "Message B");
+      plugin.emit("log", "Message A"); // suppressed
+      plugin.emit("log", "Message C");
+
+      expect(logs).toHaveLength(3);
+    });
+  });
+
+  describe("DeckStateManager log forwarding", () => {
+    it("forwards DeckStateManager logs", async () => {
+      plugin = createMockPlugin(FULL_CAPABILITIES);
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+
+      const logs: string[] = [];
+      bridge.on("log", (m: string) => logs.push(m));
+
+      plugin.emit("track", {
+        deckId: "1A",
+        track: { title: "Song", artist: "Artist" },
+      });
+
+      // DeckStateManager emits log messages on track load
+      expect(logs.some((m) => m.includes("Track loaded"))).toBe(true);
+    });
+  });
+});

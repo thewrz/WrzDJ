@@ -39,6 +39,12 @@ export function BridgeControls({ status, selectedEventCode }: BridgeControlsProp
 
       {error && <div className="error-message">{error}</div>}
 
+      {status.stopReason && !status.isRunning && (
+        <div style={{ color: '#f59e0b', fontSize: '0.8rem', marginBottom: '0.5rem', padding: '6px 8px', background: '#2a2000', borderRadius: '4px' }}>
+          Bridge stopped: {status.stopReason}
+        </div>
+      )}
+
       {!status.isRunning ? (
         <>
           <div className="bridge-controls">

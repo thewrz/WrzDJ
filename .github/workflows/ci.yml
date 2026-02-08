@@ -121,6 +121,10 @@ jobs:
           cache: "npm"
           cache-dependency-path: bridge-app/package-lock.json
 
+      - name: Install bridge dependencies
+        working-directory: bridge
+        run: npm ci
+
       - name: Install dependencies
         run: npm ci
 

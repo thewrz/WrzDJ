@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import type { AuthState, BridgeSettings, BridgeStatus, EventInfo } from '../shared/types.js';
+import type { AuthState, BridgeSettings, BridgeStatus, EventInfo, PluginMeta } from '../shared/types.js';
 import { IPC_CHANNELS } from '../shared/types.js';
 
 const bridgeApi = {
@@ -12,6 +12,10 @@ const bridgeApi = {
 
   getAuthState: (): Promise<AuthState> =>
     ipcRenderer.invoke(IPC_CHANNELS.AUTH_GET_STATE),
+
+  // Plugins
+  listPluginMeta: (): Promise<readonly PluginMeta[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.PLUGINS_LIST_META),
 
   // Events
   fetchEvents: (): Promise<readonly EventInfo[]> =>

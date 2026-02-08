@@ -2,6 +2,7 @@ import { ipcMain, type BrowserWindow } from 'electron';
 import { login, verifyToken, buildAuthState } from './auth-service.js';
 import { fetchBridgeApiKey } from './bridge-api-key-service.js';
 import { fetchEvents } from './events-service.js';
+import { listPluginMeta } from '@bridge/plugin-registry.js';
 import { BridgeRunner } from './bridge-runner.js';
 import * as store from './store.js';
 import { IPC_CHANNELS } from '../shared/types.js';
@@ -59,6 +60,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
 
     return buildAuthState(apiUrl, username);
+  });
+
+  // --- Plugins ---
+
+  ipcMain.handle(IPC_CHANNELS.PLUGINS_LIST_META, () => {
+    return listPluginMeta();
   });
 
   // --- Events ---

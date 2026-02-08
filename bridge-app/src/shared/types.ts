@@ -13,6 +13,8 @@ export interface BridgeStatus {
   readonly eventName: string | null;
   readonly currentTrack: TrackDisplay | null;
   readonly deckStates: readonly DeckDisplay[];
+  /** Reason the bridge was stopped automatically (e.g. event deleted/expired) */
+  readonly stopReason: string | null;
 }
 
 /** Track info for display in the GUI */
@@ -37,12 +39,41 @@ export interface DeckDisplay {
 
 /** Bridge detection settings */
 export interface BridgeSettings {
+  readonly protocol: string;
+  readonly pluginConfig?: Record<string, unknown>;
   readonly liveThresholdSeconds: number;
   readonly pauseGraceSeconds: number;
   readonly nowPlayingPauseSeconds: number;
   readonly useFaderDetection: boolean;
   readonly masterDeckPriority: boolean;
   readonly minPlaySeconds: number;
+}
+
+/** Describes a user-configurable option exposed by a plugin */
+export interface PluginConfigOption {
+  readonly key: string;
+  readonly label: string;
+  readonly type: 'number' | 'string' | 'boolean';
+  readonly default: number | string | boolean;
+  readonly description?: string;
+  readonly min?: number;
+  readonly max?: number;
+}
+
+/** Plugin capabilities (what data it can provide) */
+export interface PluginCapabilities {
+  readonly multiDeck: boolean;
+  readonly playState: boolean;
+  readonly faderLevel: boolean;
+  readonly masterDeck: boolean;
+  readonly albumMetadata: boolean;
+}
+
+/** Serializable plugin metadata for IPC */
+export interface PluginMeta {
+  readonly info: { readonly id: string; readonly name: string; readonly description: string };
+  readonly capabilities: PluginCapabilities;
+  readonly configOptions: readonly PluginConfigOption[];
 }
 
 /** Event info from the backend */
@@ -69,6 +100,7 @@ export const IPC_CHANNELS = {
   AUTH_GET_STATE: 'auth:getState',
   AUTH_CHANGED: 'auth:changed',
   EVENTS_FETCH: 'events:fetch',
+  PLUGINS_LIST_META: 'plugins:listMeta',
   BRIDGE_START: 'bridge:start',
   BRIDGE_STOP: 'bridge:stop',
   BRIDGE_STATUS: 'bridge:status',
@@ -79,6 +111,7 @@ export const IPC_CHANNELS = {
 
 /** Default bridge settings (fader off for 3rd-party mixer compat, master deck priority off) */
 export const DEFAULT_SETTINGS: BridgeSettings = {
+  protocol: 'stagelinq',
   liveThresholdSeconds: 15,
   pauseGraceSeconds: 3,
   nowPlayingPauseSeconds: 10,

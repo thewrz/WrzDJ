@@ -11,6 +11,9 @@ export const config = {
   /** Event code this bridge is serving */
   eventCode: process.env.WRZDJ_EVENT_CODE || "",
 
+  /** Plugin to use for equipment detection (default: stagelinq) */
+  plugin: process.env.WRZDJ_PLUGIN || "stagelinq",
+
   /** Minimum seconds before reporting a new track (debounce threshold) */
   minPlaySeconds: parseInt(process.env.MIN_PLAY_SECONDS || "5", 10),
 
