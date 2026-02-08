@@ -704,6 +704,91 @@ class TestDisplaySettings:
         )
         assert response.status_code == 401
 
+    def test_get_display_settings_returns_manual_setting_not_computed(
+        self, client: TestClient, auth_headers: dict, test_event: Event, db: Session
+    ):
+        """Test GET display-settings returns manual hide setting, not computed state.
+
+        When no track is playing but manual_hide is False, the endpoint should
+        return now_playing_hidden=False (the DJ's intent), not True (the computed
+        kiosk state that factors in empty title).
+        """
+        from app.models.now_playing import NowPlaying
+
+        # Create a NowPlaying with empty title (no track) but manual_hide=False
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="",
+            artist="",
+            manual_hide_now_playing=False,
+        )
+        db.add(now_playing)
+        db.commit()
+
+        response = client.get(
+            f"/api/events/{test_event.code}/display-settings",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # Should return the manual setting (False), not the computed state (True)
+        assert data["now_playing_hidden"] is False
+
+    def test_get_display_settings_hidden_persists_across_polls(
+        self, client: TestClient, auth_headers: dict, test_event: Event, db: Session
+    ):
+        """Test that toggling to hidden persists on subsequent GET calls.
+
+        Regression test: previously the toggle would flip back on the next poll
+        because GET returned the computed state instead of the manual setting.
+        """
+        # Toggle to hidden
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_hidden": True},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["now_playing_hidden"] is True
+
+        # Subsequent GET should still return hidden=True
+        response = client.get(
+            f"/api/events/{test_event.code}/display-settings",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["now_playing_hidden"] is True
+
+    def test_get_display_settings_visible_persists_across_polls(
+        self, client: TestClient, auth_headers: dict, test_event: Event, db: Session
+    ):
+        """Test that toggling to visible persists on subsequent GET calls.
+
+        Regression test: previously the toggle would flip back to hidden on the
+        next poll when no track was playing.
+        """
+        # Toggle to hidden first, then to visible
+        client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_hidden": True},
+            headers=auth_headers,
+        )
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_hidden": False},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["now_playing_hidden"] is False
+
+        # Subsequent GET should still return hidden=False
+        response = client.get(
+            f"/api/events/{test_event.code}/display-settings",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["now_playing_hidden"] is False
+
     def test_update_display_settings_not_owner(
         self, client: TestClient, db: Session, test_user: User, auth_headers: dict
     ):
