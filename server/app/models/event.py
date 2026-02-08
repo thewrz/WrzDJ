@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -25,6 +25,10 @@ class Event(Base):
     # Tidal playlist sync
     tidal_playlist_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     tidal_sync_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Custom banner image
+    banner_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    banner_colors: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_by: Mapped["User"] = relationship("User", back_populates="events")
     requests: Mapped[list["Request"]] = relationship(

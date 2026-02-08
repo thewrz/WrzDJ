@@ -69,7 +69,7 @@ export default function EventsPage() {
     <div className="container">
       <div className="header">
         <h1>My Events</h1>
-        <div style={{ display: 'flex', gap: '1rem' }}>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
           {role === 'admin' && (
             <Link href="/admin">
               <button className="btn" style={{ background: '#6b21a8' }}>Admin</button>
@@ -78,6 +78,15 @@ export default function EventsPage() {
           <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
             Create Event
           </button>
+          <a
+            href="https://github.com/thewrz/WrzDJ/releases/latest"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-sm"
+            style={{ background: '#333', textDecoration: 'none', color: '#ededed' }}
+          >
+            Bridge App
+          </a>
           <button className="btn" style={{ background: '#333' }} onClick={logout}>
             Logout
           </button>

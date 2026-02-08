@@ -38,6 +38,17 @@ for PORT in 8000 3000; do
   fi
 done
 
+echo "==> Verifying uploads directory structure..."
+# The api_uploads Docker volume handles persistence, but ensure the banners
+# subdirectory exists inside it. On first deploy with an empty volume,
+# start.sh also creates this, but we verify here as a safety net.
+UPLOADS_VOLUME="api_uploads"
+if docker volume inspect "${UPLOADS_VOLUME}" > /dev/null 2>&1; then
+  echo "    Volume ${UPLOADS_VOLUME} exists"
+else
+  echo "    Volume ${UPLOADS_VOLUME} will be created by Docker Compose"
+fi
+
 echo "==> Rebuilding and starting stack..."
 docker compose -f "$COMPOSE_FILE" up -d --build
 

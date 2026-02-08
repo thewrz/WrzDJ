@@ -87,6 +87,21 @@ class Settings(BaseSettings):
     # Cache durations (1 hour for Spotify since popularity changes)
     search_cache_hours: int = 1
 
+    # File uploads
+    uploads_dir: str = ""  # defaults to server/uploads/ relative to project root
+    max_banner_size_mb: int = 5
+    banner_width: int = 1920
+    banner_height: int = 480
+
+    @property
+    def resolved_uploads_dir(self) -> str:
+        """Return uploads directory, defaulting to server/uploads/ if not set."""
+        if self.uploads_dir:
+            return self.uploads_dir
+        from pathlib import Path
+
+        return str(Path(__file__).resolve().parent.parent.parent / "uploads")
+
     # Bootstrap admin user (created on first startup if no users exist)
     bootstrap_admin_username: str | None = None
     bootstrap_admin_password: str | None = None

@@ -25,6 +25,9 @@ const mockKioskDisplay = {
   now_playing: null,
   now_playing_hidden: false,
   updated_at: new Date().toISOString(),
+  banner_url: null,
+  banner_kiosk_url: null,
+  banner_colors: null,
 };
 
 const mockNowPlaying = {

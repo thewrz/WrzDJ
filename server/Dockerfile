@@ -19,6 +19,9 @@ COPY . .
 # Make start script executable
 RUN chmod +x scripts/start.sh
 
+# Create uploads directory
+RUN mkdir -p /app/uploads/banners
+
 # Create non-root user
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser

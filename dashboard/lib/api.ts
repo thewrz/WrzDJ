@@ -31,6 +31,10 @@ export interface Event {
   // Tidal sync settings
   tidal_sync_enabled: boolean;
   tidal_playlist_id: string | null;
+  // Banner
+  banner_url: string | null;
+  banner_kiosk_url: string | null;
+  banner_colors: string[] | null;
 }
 
 export interface ArchivedEvent extends Event {
@@ -93,6 +97,9 @@ export interface KioskDisplay {
   now_playing: PublicRequestInfo | null;
   now_playing_hidden: boolean;
   updated_at: string;
+  banner_url: string | null;
+  banner_kiosk_url: string | null;
+  banner_colors: string[] | null;
 }
 
 export interface DisplaySettingsResponse {
@@ -569,6 +576,36 @@ class ApiClient {
       body: JSON.stringify({ tidal_track_id: tidalTrackId }),
     });
   }
+  // ========== Banner ==========
+
+  async uploadEventBanner(code: string, file: File): Promise<Event> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const headers = new Headers();
+    if (this.token) {
+      headers.set('Authorization', `Bearer ${this.token}`);
+    }
+    // Do NOT set Content-Type — browser sets it with multipart boundary
+
+    const response = await fetch(`${getApiUrl()}/api/events/${code}/banner`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new ApiError(error.detail || 'Upload failed', response.status);
+    }
+
+    return response.json();
+  }
+
+  async deleteEventBanner(code: string): Promise<Event> {
+    return this.fetch(`/api/events/${code}/banner`, { method: 'DELETE' });
+  }
+
   // ========== Admin ==========
 
   async getAdminStats(): Promise<SystemStats> {

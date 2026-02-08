@@ -184,7 +184,12 @@ export default function JoinEventPage() {
   if (showRequestList) {
     return (
       <div className="guest-request-list-container">
-        <div className="container" style={{ maxWidth: '500px', flex: 1 }}>
+        {event.banner_url && (
+          <div className="join-banner-bg">
+            <img src={event.banner_url} alt="" />
+          </div>
+        )}
+        <div className="container" style={{ maxWidth: '500px', flex: 1, position: 'relative', zIndex: 1 }}>
           <h2 style={{ marginBottom: '0.5rem' }}>{event.name}</h2>
           <p style={{ color: '#9ca3af', marginBottom: '1rem' }}>
             {guestRequests.length} {guestRequests.length === 1 ? 'request' : 'requests'}
@@ -320,7 +325,13 @@ export default function JoinEventPage() {
   }
 
   return (
-    <div className="container" style={{ maxWidth: '500px' }}>
+    <div className="join-page-wrapper">
+      {event.banner_url && (
+        <div className="join-banner-bg">
+          <img src={event.banner_url} alt="" />
+        </div>
+      )}
+      <div className="container" style={{ maxWidth: '500px', position: 'relative', zIndex: 1 }}>
       <div className="card">
         <h1 style={{ marginBottom: '0.5rem' }}>{event.name}</h1>
         <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>Request a song</p>
@@ -402,6 +413,7 @@ export default function JoinEventPage() {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

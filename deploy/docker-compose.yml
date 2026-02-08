@@ -31,6 +31,8 @@ services:
     build:
       context: ../server
       dockerfile: Dockerfile
+    volumes:
+      - api_uploads:/app/uploads
     environment:
       ENV: production
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-wrzdj}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-wrzdj}
@@ -47,6 +49,7 @@ services:
       BRIDGE_API_KEY: ${BRIDGE_API_KEY:-}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      UPLOADS_DIR: /app/uploads
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -75,3 +78,4 @@ services:
 
 volumes:
   postgres_data:
+  api_uploads:

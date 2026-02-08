@@ -1,5 +1,6 @@
 """Public API endpoints for kiosk display (no authentication required)."""
 
+import json
 from datetime import datetime
 from typing import Literal
 
@@ -53,6 +54,9 @@ class KioskDisplayResponse(BaseModel):
     now_playing: PublicRequestInfo | None
     now_playing_hidden: bool
     updated_at: datetime
+    banner_url: str | None = None
+    banner_kiosk_url: str | None = None
+    banner_colors: list[str] | None = None
 
 
 @router.get("/events/{code}/display", response_model=KioskDisplayResponse)
@@ -108,6 +112,18 @@ def get_kiosk_display(
     # Check if now playing should be hidden
     now_playing_is_hidden = is_now_playing_hidden(db, event.id)
 
+    # Build banner URLs from API host
+    banner_url = None
+    banner_kiosk_url = None
+    banner_colors = None
+    if event.banner_filename:
+        api_base = f"http://{request.headers.get('host', 'localhost:8000')}"
+        banner_url = f"{api_base}/uploads/{event.banner_filename}"
+        stem = event.banner_filename.rsplit(".", 1)[0]
+        banner_kiosk_url = f"{api_base}/uploads/{stem}_kiosk.webp"
+        if event.banner_colors:
+            banner_colors = json.loads(event.banner_colors)
+
     return KioskDisplayResponse(
         event=PublicEventInfo(code=event.code, name=event.name),
         qr_join_url=qr_join_url,
@@ -115,6 +131,9 @@ def get_kiosk_display(
         now_playing=now_playing,
         now_playing_hidden=now_playing_is_hidden,
         updated_at=datetime.utcnow(),
+        banner_url=banner_url,
+        banner_kiosk_url=banner_kiosk_url,
+        banner_colors=banner_colors,
     )
 
 

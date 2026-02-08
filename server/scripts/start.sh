@@ -34,6 +34,11 @@ alembic upgrade head
 echo "Checking bootstrap admin..."
 python -m app.scripts.bootstrap
 
+# Ensure uploads directory structure exists (Docker volume may be empty on first run)
+UPLOADS_DIR=${UPLOADS_DIR:-/app/uploads}
+echo "Ensuring uploads directories exist at $UPLOADS_DIR..."
+mkdir -p "$UPLOADS_DIR/banners"
+
 # Start the server
 PORT=${PORT:-8000}
 echo "Starting server on port $PORT..."

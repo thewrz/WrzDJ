@@ -59,6 +59,9 @@ export default function EventQueuePage() {
   const [searchingTidal, setSearchingTidal] = useState(false);
   const [linkingTrack, setLinkingTrack] = useState(false);
 
+  // Banner upload state
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+
   // Tidal device login state
   const [showTidalLogin, setShowTidalLogin] = useState(false);
   const [tidalLoginUrl, setTidalLoginUrl] = useState('');
@@ -390,6 +393,39 @@ export default function EventQueuePage() {
     }
   };
 
+  const handleBannerSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      alert('File size must be under 5MB');
+      e.target.value = '';
+      return;
+    }
+
+    setUploadingBanner(true);
+    try {
+      const updated = await api.uploadEventBanner(code, file);
+      setEvent(updated);
+    } catch (err) {
+      console.error('Banner upload failed:', err);
+      alert(err instanceof Error ? err.message : 'Failed to upload banner');
+    } finally {
+      setUploadingBanner(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleDeleteBanner = async () => {
+    try {
+      const updated = await api.deleteEventBanner(code);
+      setEvent(updated);
+    } catch (err) {
+      console.error('Failed to delete banner:', err);
+    }
+  };
+
   const filteredRequests = requests.filter((r) =>
     filter === 'all' ? true : r.status === filter
   );
@@ -557,34 +593,86 @@ export default function EventQueuePage() {
 
       {/* Kiosk Display Settings */}
       {!isExpiredOrArchived && (
-        <div
-          className="card"
-          style={{
-            marginBottom: '1rem',
-            padding: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <div>
-            <span style={{ fontWeight: 500 }}>Kiosk Display Settings</span>
-            <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
-              Control what guests see on the kiosk display
-            </p>
+        <div className="card" style={{ marginBottom: '1rem', padding: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <div>
+              <span style={{ fontWeight: 500 }}>Kiosk Display Settings</span>
+              <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
+                Control what guests see on the kiosk display
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <a
+                href={`/e/${code}/display`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-sm"
+                style={{ background: '#333', textDecoration: 'none', color: '#ededed' }}
+              >
+                Preview Kiosk
+              </a>
+              <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+                Now Playing:
+              </span>
+              <button
+                className={`btn btn-sm ${nowPlayingHidden ? 'btn-danger' : 'btn-success'}`}
+                style={{ minWidth: '100px' }}
+                onClick={handleToggleNowPlaying}
+                disabled={togglingNowPlaying}
+              >
+                {togglingNowPlaying ? '...' : nowPlayingHidden ? 'Hidden' : 'Visible'}
+              </button>
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
-              Now Playing:
-            </span>
-            <button
-              className={`btn btn-sm ${nowPlayingHidden ? 'btn-danger' : 'btn-success'}`}
-              style={{ minWidth: '100px' }}
-              onClick={handleToggleNowPlaying}
-              disabled={togglingNowPlaying}
-            >
-              {togglingNowPlaying ? '...' : nowPlayingHidden ? 'Hidden' : 'Visible'}
-            </button>
+
+          {/* Banner Upload */}
+          <div style={{ borderTop: '1px solid #333', paddingTop: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>Event Banner</span>
+                <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: '0.25rem 0 0' }}>
+                  Custom banner for kiosk display and join page (max 5MB)
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <label
+                  className="btn btn-sm btn-primary"
+                  style={{ cursor: 'pointer', margin: 0 }}
+                >
+                  {uploadingBanner ? 'Uploading...' : event.banner_url ? 'Replace' : 'Upload'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    style={{ display: 'none' }}
+                    onChange={handleBannerSelect}
+                    disabled={uploadingBanner}
+                  />
+                </label>
+                {event.banner_url && (
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={handleDeleteBanner}
+                    disabled={uploadingBanner}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+            {event.banner_url && (
+              <div style={{ marginTop: '0.75rem' }}>
+                <img
+                  src={event.banner_url}
+                  alt="Event banner"
+                  style={{
+                    width: '100%',
+                    maxHeight: '120px',
+                    objectFit: 'cover',
+                    borderRadius: '6px',
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -239,17 +239,37 @@ export default function KioskDisplayPage() {
         }
         .kiosk-container {
           height: 100vh;
-          background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+          background: var(--kiosk-bg, linear-gradient(135deg, #1a1a2e 0%, #16213e 100%));
           padding: 2rem;
           display: flex;
           flex-direction: column;
           overflow: hidden;
+          position: relative;
+        }
+        .kiosk-banner-bg {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 300px;
+          z-index: 0;
+          overflow: hidden;
+        }
+        .kiosk-banner-bg img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+          mask-image: linear-gradient(to bottom, black 0%, black 40%, transparent 100%);
+          -webkit-mask-image: linear-gradient(to bottom, black 0%, black 40%, transparent 100%);
         }
         .kiosk-header {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
           margin-bottom: 2rem;
+          position: relative;
+          z-index: 1;
         }
         .kiosk-event-name {
           font-size: 2.5rem;
@@ -274,6 +294,8 @@ export default function KioskDisplayPage() {
           grid-template-columns: 1fr 1fr 1fr;
           gap: 2rem;
           min-height: 0;
+          position: relative;
+          z-index: 1;
         }
         .kiosk-main-single {
           grid-template-columns: 1fr 1fr;
@@ -528,6 +550,8 @@ export default function KioskDisplayPage() {
           margin-top: 1.5rem;
           align-self: center;
           flex-shrink: 0;
+          position: relative;
+          z-index: 1;
           background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
           color: #fff;
           border: none;
@@ -698,7 +722,18 @@ export default function KioskDisplayPage() {
         }
       `}</style>
 
-      <div className="kiosk-container">
+      <div
+        className="kiosk-container"
+        style={display.banner_colors ? {
+          '--kiosk-bg': `linear-gradient(135deg, ${display.banner_colors[0] || '#1a1a2e'} 0%, ${display.banner_colors[1] || '#16213e'} 50%, ${display.banner_colors[2] || '#0f3460'} 100%)`,
+        } as React.CSSProperties : undefined}
+      >
+        {display.banner_kiosk_url && (
+          <div className="kiosk-banner-bg">
+            <img src={display.banner_kiosk_url} alt="" />
+          </div>
+        )}
+
         <div className="kiosk-header">
           <h1 className="kiosk-event-name">{display.event.name}</h1>
           <div className="kiosk-qr">

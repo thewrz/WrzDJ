@@ -56,6 +56,7 @@ NEXT_PUBLIC_API_URL="http://LAN_IP:8000" npm run dev
 - `.env` at repo root has all local dev config
 - Key vars: `DATABASE_URL`, `JWT_SECRET`, `SPOTIFY_CLIENT_ID/SECRET`, `CORS_ORIGINS`, `PUBLIC_URL`, `NEXT_PUBLIC_API_URL`
 - Turnstile vars (for self-registration CAPTCHA): `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`
+- Upload vars: `UPLOADS_DIR` (defaults to `server/uploads/` locally, `/app/uploads` in Docker)
 
 ## Running CI Checks Locally
 
@@ -182,6 +183,20 @@ NEW → ACCEPTED → PLAYING → PLAYED
 NEW → REJECTED
 ```
 
+### Banner / Image Upload
+- DJs upload banner images per event via `POST /api/events/{code}/banner` (multipart)
+- Backend (Pillow): validates format (JPEG/PNG/GIF/WebP), resizes to 1920x480, converts to WebP (quality 92)
+- Two variants saved: original and desaturated kiosk version (40% saturation, 80% brightness)
+- Dominant colors extracted via quantization (3 colors, darkened to 40% for theme-safe backgrounds)
+- Files stored in `{UPLOADS_DIR}/banners/`, served via FastAPI `StaticFiles` at `/uploads`
+- DB columns on `events`: `banner_filename` (String), `banner_colors` (JSON text)
+- Kiosk display: desaturated banner rendered as **absolute-positioned background layer** behind the header (event name + QR), full-width, no border-radius, with gradient fade-out to `--kiosk-bg` color. Header/main/button sit on top via `z-index: 1`.
+- Join page: original banner rendered as **absolute-positioned background** behind the header area, full-width, with `blur(2px) brightness(0.65)` and gradient fade to `#0a0a0a`
+- Delete endpoint: `DELETE /api/events/{code}/banner` — cleans up both file variants
+- Path traversal protection: resolved paths validated with `Path.is_relative_to()`
+- Service: `server/app/services/banner.py`
+- Migration: `server/alembic/versions/009_add_event_banner.py`
+
 ### Key Services
 - `server/app/services/request.py` — CRUD, deduplication, bulk accept
 - `server/app/services/vote.py` — idempotent voting with atomic increments
@@ -190,6 +205,7 @@ NEW → REJECTED
 - `server/app/services/admin.py` — user/event CRUD for admins, system stats, last-admin protection
 - `server/app/services/system_settings.py` — DB-backed singleton settings
 - `server/app/services/turnstile.py` — Cloudflare Turnstile CAPTCHA verification
+- `server/app/services/banner.py` — banner image processing (resize, WebP, desaturate, color extraction)
 
 ### Bridge Plugin System
 - Built-in plugins: StageLinQ (Denon), Traktor Broadcast, Pioneer PRO DJ LINK
@@ -239,3 +255,6 @@ NEW → REJECTED
 - Admin endpoints need `get_current_admin` dependency; DJ endpoints need `get_current_active_user` (not `get_current_user` which allows pending)
 - `EmailStr` requires `pydantic[email]` (includes `email-validator`) — already in pyproject.toml
 - Admin last-admin protection: verify `count_admins(db) > 1` before demoting/deleting/deactivating any admin
+- Banner upload uses `File(...)` not `UploadFile(...)` for proper FastAPI file validation
+- Banner colors stored as JSON string in DB — parse with `json.loads()` when reading, serialize with `json.dumps()` when writing
+- Deploy: `api_uploads` Docker volume persists uploaded files across container restarts

@@ -55,5 +55,11 @@ logs/
 *.db
 *.sqlite3
 
+# Uploaded files (keep directory structure via .gitkeep)
+server/uploads/*
+!server/uploads/banners/
+server/uploads/banners/*
+!server/uploads/banners/.gitkeep
+
 # LLM plan files
 llm-plans*.md
