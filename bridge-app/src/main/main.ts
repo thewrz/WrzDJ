@@ -1,7 +1,7 @@
 import started from 'electron-squirrel-startup';
 if (started) process.exit();
 
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
 import { registerIpcHandlers, getBridgeRunner } from './ipc-handlers.js';
 
@@ -39,6 +39,18 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  // Set Content Security Policy for all renderer pages
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'",
+        ],
+      },
+    });
+  });
+
   createWindow();
 
   app.on('activate', () => {

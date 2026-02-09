@@ -1,6 +1,6 @@
 """Admin API endpoints for user management, event oversight, and system settings."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -8,6 +8,7 @@ from app.api.deps import get_current_admin, get_db
 from app.models.event import Event
 from app.models.request import Request
 from app.models.user import User, UserRole
+from app.schemas.event import EventUpdate
 from app.schemas.system_settings import SystemSettingsOut, SystemSettingsUpdate
 from app.schemas.user import (
     AdminEventOut,
@@ -45,8 +46,8 @@ def admin_stats(
 
 @router.get("/users", response_model=PaginatedResponse)
 def admin_list_users(
-    page: int = 1,
-    limit: int = 20,
+    page: int = Query(default=1, ge=1, le=1000),
+    limit: int = Query(default=20, ge=1, le=100),
     role: str | None = None,
     db: Session = Depends(get_db),
     _admin: User = Depends(get_current_admin),
@@ -139,8 +140,8 @@ def admin_delete_user(
 
 @router.get("/events", response_model=PaginatedResponse)
 def admin_list_events(
-    page: int = 1,
-    limit: int = 20,
+    page: int = Query(default=1, ge=1, le=1000),
+    limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     _admin: User = Depends(get_current_admin),
 ) -> PaginatedResponse:
@@ -151,7 +152,7 @@ def admin_list_events(
 @router.patch("/events/{code}", response_model=AdminEventOut)
 def admin_update_event(
     code: str,
-    event_data: dict,
+    event_data: EventUpdate,
     db: Session = Depends(get_db),
     _admin: User = Depends(get_current_admin),
 ) -> AdminEventOut:
@@ -162,8 +163,8 @@ def admin_update_event(
     updated = update_event(
         db,
         event,
-        name=event_data.get("name"),
-        expires_at=event_data.get("expires_at"),
+        name=event_data.name,
+        expires_at=event_data.expires_at,
     )
     owner = db.query(User).filter(User.id == updated.created_by_user_id).first()
     req_count = db.query(func.count(Request.id)).filter(Request.event_id == updated.id).scalar()

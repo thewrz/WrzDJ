@@ -8,6 +8,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Query,
     Request,
     UploadFile,
     status,
@@ -78,7 +79,9 @@ def _get_banner_urls(event, request: Request | None) -> tuple[str | None, str | 
     if not event.banner_filename:
         return None, None
     # Banner files are served from the API server via /uploads/
-    api_base = f"http://{request.headers.get('host', 'localhost:8000')}" if request else ""
+    scheme = request.headers.get("x-forwarded-proto", "http") if request else "http"
+    host = request.headers.get("host", "localhost:8000") if request else "localhost:8000"
+    api_base = f"{scheme}://{host}" if request else ""
     banner_url = f"{api_base}/uploads/{event.banner_filename}"
     stem = event.banner_filename.rsplit(".", 1)[0]
     kiosk_url = f"{api_base}/uploads/{stem}_kiosk.webp"
@@ -441,7 +444,7 @@ def get_event_requests(
     code: str,
     status: RequestStatus | None = None,
     since: datetime | None = None,
-    limit: int = 100,
+    limit: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> list[RequestOut]:

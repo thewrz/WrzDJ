@@ -117,7 +117,9 @@ def get_kiosk_display(
     banner_kiosk_url = None
     banner_colors = None
     if event.banner_filename:
-        api_base = f"http://{request.headers.get('host', 'localhost:8000')}"
+        scheme = request.headers.get("x-forwarded-proto", "http")
+        host = request.headers.get("host", "localhost:8000")
+        api_base = f"{scheme}://{host}"
         banner_url = f"{api_base}/uploads/{event.banner_filename}"
         stem = event.banner_filename.rsplit(".", 1)[0]
         banner_kiosk_url = f"{api_base}/uploads/{stem}_kiosk.webp"

@@ -126,7 +126,7 @@ def check_device_login(db: Session, user: User) -> dict[str, Any]:
         logger.error(f"Tidal device login failed: {e}")
         with _login_lock:
             _device_logins.pop(user.id, None)
-        return {"complete": False, "error": str(e)}
+        return {"complete": False, "error": "Tidal login failed. Please try again."}
 
 
 def cancel_device_login(user: User) -> None:
