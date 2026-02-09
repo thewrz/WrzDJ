@@ -9,6 +9,7 @@ import type { DeckLiveEvent, DeckState } from '@bridge/deck-state.js';
 import type { NowPlayingPayload, BridgeStatusPayload } from '@bridge/types.js';
 import type { PluginConnectionEvent } from '@bridge/plugin-types.js';
 import { checkEventHealth } from './event-health-service.js';
+import { detectSubnetConflicts, formatConflictWarnings } from './network-check.js';
 import type { BridgeRunnerConfig, BridgeStatus, DeckDisplay, TrackDisplay } from '../shared/types.js';
 
 // Register built-in plugins
@@ -35,6 +36,7 @@ export class BridgeRunner extends EventEmitter {
   private lastPostTime = 0;
   private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
   private stopReason: string | null = null;
+  private networkWarnings: string[] = [];
 
   get isRunning(): boolean {
     return this.running;
@@ -52,6 +54,7 @@ export class BridgeRunner extends EventEmitter {
     this.currentTrack = null;
     this.connectedDevice = null;
     this.stopReason = null;
+    this.networkWarnings = [];
 
     const protocol = config.settings.protocol || 'stagelinq';
 
@@ -61,6 +64,15 @@ export class BridgeRunner extends EventEmitter {
     this.log(`Live Threshold: ${config.settings.liveThresholdSeconds}s`);
     this.log(`Fader Detection: ${config.settings.useFaderDetection}`);
     this.log(`Master Deck Priority: ${config.settings.masterDeckPriority}`);
+
+    // Check for network interface conflicts (affects broadcast-based protocols)
+    const conflicts = detectSubnetConflicts();
+    if (conflicts.length > 0) {
+      this.networkWarnings = formatConflictWarnings(conflicts);
+      for (const warning of this.networkWarnings) {
+        this.log(`WARNING: ${warning}`);
+      }
+    }
 
     // Create the plugin
     const plugin = getPlugin(protocol);
@@ -157,6 +169,7 @@ export class BridgeRunner extends EventEmitter {
       currentTrack: this.currentTrack,
       deckStates,
       stopReason: this.stopReason,
+      networkWarnings: this.networkWarnings,
     };
   }
 

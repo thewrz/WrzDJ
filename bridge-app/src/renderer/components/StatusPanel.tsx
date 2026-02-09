@@ -11,6 +11,15 @@ export function StatusPanel({ status }: StatusPanelProps) {
 
   return (
     <>
+      {/* Network warnings */}
+      {status.networkWarnings.length > 0 && (
+        <div className="network-warning">
+          {status.networkWarnings.map((warning, i) => (
+            <p key={i}>{warning}</p>
+          ))}
+        </div>
+      )}
+
       {/* Connection + Now Playing */}
       <div className="card">
         <div className="card-title">Status</div>

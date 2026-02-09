@@ -15,6 +15,8 @@ export interface BridgeStatus {
   readonly deckStates: readonly DeckDisplay[];
   /** Reason the bridge was stopped automatically (e.g. event deleted/expired) */
   readonly stopReason: string | null;
+  /** Network warnings (e.g. subnet conflicts) detected at bridge start */
+  readonly networkWarnings: readonly string[];
 }
 
 /** Track info for display in the GUI */
