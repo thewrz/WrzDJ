@@ -37,8 +37,13 @@ jobs:
         working-directory: bridge-app
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          # Convert date tag (2026.02.08.12) to valid semver (2026.208.12)
+          # NuGet/Squirrel requires 3-part semver, not 4-part date versions
+          TAG="${GITHUB_REF_NAME#v}"
+          IFS='.' read -r Y M D R <<< "$TAG"
+          SEMVER="${Y}.$((10#${M} * 100 + 10#${D})).${R:-0}"
+          echo "Tag $TAG → semver $SEMVER"
+          npm version "$SEMVER" --no-git-tag-version --allow-same-version
 
       - name: Build installers
         working-directory: bridge-app
@@ -165,7 +170,15 @@ jobs:
         shell: pwsh
         run: |
           iwr https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
-          $version = "${{ github.ref_name }}".TrimStart("v")
+          # Convert date tag (2026.02.08.12) to semver (2026.208.12) to match ARP
+          $tag = "${{ github.ref_name }}".TrimStart("v")
+          $parts = $tag.Split(".")
+          $y = [int]$parts[0]
+          $m = [int]$parts[1]
+          $d = [int]$parts[2]
+          $r = if ($parts.Length -gt 3) { [int]$parts[3] } else { 0 }
+          $version = "$y.$($m * 100 + $d).$r"
+          Write-Host "Tag $tag -> semver $version"
           $url = "https://github.com/thewrz/WrzDJ/releases/download/${{ github.ref_name }}/WrzDJ-Bridge.exe"
           .\wingetcreate.exe update TheWrz.WrzDJ-Bridge `
             --urls $url `
