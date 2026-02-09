@@ -24,6 +24,7 @@ const config: ForgeConfig = {
       loadingGif: './resources/installing.gif',
     }),
     new MakerDMG({
+      name: 'WrzDJ-Bridge',
       icon: './resources/icon.icns',
     }),
     new MakerAppImage({
