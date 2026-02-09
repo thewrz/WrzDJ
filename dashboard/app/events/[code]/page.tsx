@@ -62,6 +62,9 @@ export default function EventQueuePage() {
   // Banner upload state
   const [uploadingBanner, setUploadingBanner] = useState(false);
 
+  // Overlay URL copy feedback
+  const [overlayUrlCopied, setOverlayUrlCopied] = useState(false);
+
   // Tidal device login state
   const [showTidalLogin, setShowTidalLogin] = useState(false);
   const [tidalLoginUrl, setTidalLoginUrl] = useState('');
@@ -601,7 +604,7 @@ export default function EventQueuePage() {
                 Control what guests see on the kiosk display
               </p>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
               <a
                 href={`/e/${code}/display`}
                 target="_blank"
@@ -611,6 +614,28 @@ export default function EventQueuePage() {
               >
                 Preview Kiosk
               </a>
+              <a
+                href={`/e/${code}/overlay`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-sm"
+                style={{ background: '#333', textDecoration: 'none', color: '#ededed' }}
+              >
+                Stream Overlay
+              </a>
+              <button
+                className="btn btn-sm"
+                style={{ background: overlayUrlCopied ? '#22c55e' : '#333', padding: '0.25rem 0.5rem', fontSize: '0.75rem', transition: 'background 0.2s' }}
+                onClick={() => {
+                  const overlayUrl = `${window.location.origin}/e/${code}/overlay`;
+                  navigator.clipboard.writeText(overlayUrl);
+                  setOverlayUrlCopied(true);
+                  setTimeout(() => setOverlayUrlCopied(false), 2000);
+                }}
+                title="Copy overlay URL for OBS"
+              >
+                {overlayUrlCopied ? 'Copied!' : 'Copy URL'}
+              </button>
               <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
                 Now Playing:
               </span>
