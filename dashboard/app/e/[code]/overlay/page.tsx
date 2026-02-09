@@ -91,7 +91,7 @@ export default function StreamOverlayPage() {
       <style jsx global>{`
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body {
-          background: transparent !important;
+          background: transparent;
           overflow: hidden;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
