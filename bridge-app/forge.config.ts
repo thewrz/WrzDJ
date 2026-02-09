@@ -1,3 +1,5 @@
+import path from 'node:path';
+import fs from 'node:fs';
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerDMG } from '@electron-forge/maker-dmg';
@@ -19,7 +21,7 @@ const config: ForgeConfig = {
       name: 'wrzdj-bridge',
       authors: 'WrzDJ',
       setupIcon: './resources/icon.ico',
-      setupExe: 'wrzdj-bridge.exe',
+      setupExe: 'WrzDJ-Bridge.exe',
       noMsi: true,
       loadingGif: './resources/installing.gif',
     }),
@@ -37,6 +39,25 @@ const config: ForgeConfig = {
     }),
     new MakerZIP({}, ['darwin']),
   ],
+  hooks: {
+    postMake: async (_config, makeResults) => {
+      const renameExts = new Set(['.dmg', '.AppImage', '.zip', '.exe', '.nupkg']);
+      for (const result of makeResults) {
+        for (let i = 0; i < result.artifacts.length; i++) {
+          const oldPath = result.artifacts[i];
+          const ext = path.extname(oldPath);
+          if (renameExts.has(ext)) {
+            const newPath = path.join(path.dirname(oldPath), `WrzDJ-Bridge${ext}`);
+            if (oldPath !== newPath) {
+              fs.renameSync(oldPath, newPath);
+              result.artifacts[i] = newPath;
+            }
+          }
+        }
+      }
+      return makeResults;
+    },
+  },
   plugins: [
     new AutoUnpackNativesPlugin({}),
     new VitePlugin({
