@@ -12,6 +12,9 @@ from app.core.security_headers import SecurityHeadersMiddleware
 
 settings = get_settings()
 
+# Explicit CORS methods for non-wildcard origins — must include every HTTP method used by the API
+CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+
 app = FastAPI(
     title="WrzDJ API",
     description="Song request system for DJs",
@@ -45,7 +48,7 @@ else:
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_methods=CORS_ALLOW_METHODS,
         allow_headers=["Authorization", "Content-Type"],
     )
 
