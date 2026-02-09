@@ -59,6 +59,20 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Auto-hides "Now Playing" after 60 minutes of inactivity
 - Kiosk mode protections (disabled right-click, text selection)
 
+### Stream Overlay (OBS)
+- Transparent overlay at `/e/{code}/overlay` for OBS browser sources
+- Shows Now Playing track with album art and LIVE badge, plus the In Queue list with vote counts
+- Fully transparent background by default -- DJs control styling via OBS Custom CSS
+- Copy the overlay URL directly from the DJ dashboard with one click
+- **OBS setup**: Add a Browser Source, set width to 400, and use this Custom CSS:
+  ```css
+  html, body { background: transparent !important; margin: 0; overflow: hidden; }
+  ```
+  Or for a semi-transparent dark background:
+  ```css
+  html, body { background: rgba(10, 10, 10, 0.25) !important; margin: 0; overflow: hidden; }
+  ```
+
 ### Bridge (DJ Equipment Detection)
 - Plugin architecture supporting multiple DJ platforms
 - **Denon StageLinQ** -- auto-detect tracks from SC6000, Prime 4, etc. over LAN with full per-deck data
