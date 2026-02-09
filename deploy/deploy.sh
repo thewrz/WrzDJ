@@ -6,18 +6,31 @@ set -euo pipefail
 #
 # Safely rebuilds the Docker stack by:
 # 1. Stopping existing containers
-# 2. Killing any process holding ports 8000/3000
+# 2. Killing any process holding service ports (configurable via PORT_API / PORT_FRONTEND)
 # 3. Rebuilding and starting fresh
 # 4. Waiting for API health check to pass
+#
+# Reads deploy/.env if present for PORT_API (default 8000) and PORT_FRONTEND (default 3000)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 
+# Load env file if present (for PORT_API / PORT_FRONTEND overrides)
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/.env"
+  set +a
+fi
+
+PORT_API="${PORT_API:-8000}"
+PORT_FRONTEND="${PORT_FRONTEND:-3000}"
+
 echo "==> Stopping existing containers..."
 docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>/dev/null || true
 
-echo "==> Checking for processes holding ports 8000 and 3000..."
-for PORT in 8000 3000; do
+echo "==> Checking for processes holding ports $PORT_API and $PORT_FRONTEND..."
+for PORT in $PORT_API $PORT_FRONTEND; do
   PIDS=$(ss -tlnp | grep ":${PORT}" | grep -oP 'pid=\K[0-9]+' | sort -u || true)
   if [ -n "${PIDS:-}" ]; then
     for PID in $PIDS; do
@@ -56,7 +69,7 @@ echo "==> Waiting for API to become healthy..."
 MAX_WAIT=60
 ELAPSED=0
 while [ $ELAPSED -lt $MAX_WAIT ]; do
-  if curl -sf http://127.0.0.1:8000/health > /dev/null 2>&1; then
+  if curl -sf "http://127.0.0.1:${PORT_API}/health" > /dev/null 2>&1; then
     echo "    API healthy after ${ELAPSED}s"
     break
   fi

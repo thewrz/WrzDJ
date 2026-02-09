@@ -39,9 +39,9 @@ services:
       - key: SPOTIFY_CLIENT_SECRET
         sync: false # Set manually in Render dashboard
       - key: CORS_ORIGINS
-        value: https://app.wrzdj.com,https://wrzdj-web.onrender.com  # Add your custom domain after setup
+        sync: false # Set to https://app.yourdomain.com in Render dashboard
       - key: PUBLIC_URL
-        value: https://app.wrzdj.com  # Update to your custom domain
+        sync: false # Set to https://app.yourdomain.com in Render dashboard
       - key: BOOTSTRAP_ADMIN_USERNAME
         sync: false
       - key: BOOTSTRAP_ADMIN_PASSWORD
@@ -60,4 +60,4 @@ services:
         - dashboard/**
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        value: https://apI.wrzdj.com # Update to your custom domain
+        sync: false # Set to https://api.yourdomain.com in Render dashboard
