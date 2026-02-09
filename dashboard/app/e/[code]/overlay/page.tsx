@@ -103,7 +103,7 @@ export default function StreamOverlayPage() {
 
       <div style={{
         maxWidth: '400px',
-        background: 'rgba(10, 10, 10, 0.75)',
+        background: 'rgba(10, 10, 10, 0.5)',
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',
         borderRadius: '12px',
@@ -226,7 +226,7 @@ export default function StreamOverlayPage() {
               fontWeight: 600,
               marginBottom: '8px',
             }}>
-              UP NEXT
+              IN QUEUE
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {upNext.map((item, index) => (
