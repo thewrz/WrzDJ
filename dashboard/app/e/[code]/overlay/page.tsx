@@ -103,9 +103,7 @@ export default function StreamOverlayPage() {
 
       <div style={{
         maxWidth: '400px',
-        background: 'rgba(10, 10, 10, 0.5)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
+        background: 'transparent',
         borderRadius: '12px',
         overflow: 'hidden',
         color: '#fff',
