@@ -202,7 +202,15 @@ npm run dev
 
 ### 7. (Optional) Run the bridge
 
-For live track detection, the bridge connects to your DJ equipment. Use the desktop app (recommended) or run the CLI bridge:
+For live track detection, the bridge connects to your DJ equipment and reports "Now Playing" data to the WrzDJ server.
+
+> **The bridge requires a running WrzDJ server.** You must complete steps 1-6 above (or deploy the server) before the bridge can connect. The bridge authenticates against the server API and pushes track data to it -- without a server, the bridge has nothing to talk to.
+
+**Option A: Desktop app (recommended)**
+
+Download from [Releases](https://github.com/thewrz/WrzDJ/releases) (Windows `.exe`, macOS `.dmg`, Linux `.AppImage`). Sign in with your WrzDJ account, select your event, choose your DJ protocol, and click Start.
+
+**Option B: CLI bridge**
 
 ```bash
 cd bridge
@@ -212,7 +220,10 @@ cp .env.example .env
 npm start
 ```
 
-Or use the desktop app instead -- see [Bridge Desktop App](#bridge-desktop-app) above.
+**Bridge requirements:**
+- A running WrzDJ server (local or deployed) with at least one event created
+- DJ equipment on the same network (StageLinQ/Pioneer) or Traktor Broadcast configured
+- Node.js 22+ (CLI bridge only; the desktop app bundles its own runtime)
 
 ---
 
@@ -252,7 +263,13 @@ cp deploy/.env.example deploy/.env  # Fill in secure values
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
-See `deploy/DEPLOYMENT.md` for full nginx and SSL setup instructions.
+Set up nginx with the provided setup script:
+```bash
+APP_DOMAIN=app.yourdomain.com API_DOMAIN=api.yourdomain.com ./deploy/setup-nginx.sh
+sudo certbot --nginx -d app.yourdomain.com -d api.yourdomain.com
+```
+
+See `deploy/DEPLOYMENT.md` for full setup instructions.
 
 ### Required Backend Environment Variables
 

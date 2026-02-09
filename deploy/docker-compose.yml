@@ -4,9 +4,9 @@
 #   1. Copy deploy/.env.example to deploy/.env and fill in values
 #   2. Run: docker compose -f deploy/docker-compose.yml up -d --build
 #
-# Domain model:
-#   - Frontend: https://app.wrzdj.com -> web:3000
-#   - Backend:  https://api.wrzdj.com -> api:8000
+# Domain model (subdomain):
+#   - Frontend: https://app.yourdomain.com -> web:3000
+#   - Backend:  https://api.yourdomain.com -> api:8000
 #
 # Use a reverse proxy (nginx/caddy/traefik) to route subdomains.
 
@@ -42,8 +42,8 @@ services:
       TIDAL_CLIENT_ID: ${TIDAL_CLIENT_ID:-}
       TIDAL_CLIENT_SECRET: ${TIDAL_CLIENT_SECRET:-}
       TIDAL_REDIRECT_URI: ${TIDAL_REDIRECT_URI:-}
-      CORS_ORIGINS: ${CORS_ORIGINS:-https://app.wrzdj.com}
-      PUBLIC_URL: ${PUBLIC_URL:-https://app.wrzdj.com}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required (e.g. https://app.yourdomain.com)}
+      PUBLIC_URL: ${PUBLIC_URL:?PUBLIC_URL is required (e.g. https://app.yourdomain.com)}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       BRIDGE_API_KEY: ${BRIDGE_API_KEY:-}
@@ -51,7 +51,7 @@ services:
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       UPLOADS_DIR: /app/uploads
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${PORT_API:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -68,9 +68,9 @@ services:
       context: ../dashboard
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.wrzdj.com}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required (e.g. https://api.yourdomain.com)}
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${PORT_FRONTEND:-3000}:3000"
     depends_on:
       api:
         condition: service_healthy

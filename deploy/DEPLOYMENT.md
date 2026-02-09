@@ -68,17 +68,19 @@ Fill in all required values in `deploy/.env`:
 sudo apt update
 sudo apt install -y nginx certbot python3-certbot-nginx
 
-# Copy nginx configs (update domain names as needed)
-sudo cp deploy/nginx/api.wrzdj.com.conf /etc/nginx/sites-available/api.yourdomain.com
-sudo cp deploy/nginx/app.wrzdj.com.conf /etc/nginx/sites-available/app.yourdomain.com
+# Generate and install nginx configs from templates
+# Replace yourdomain.com with your actual domain
+APP_DOMAIN=app.yourdomain.com API_DOMAIN=api.yourdomain.com ./deploy/setup-nginx.sh
 
-# Edit configs to replace wrzdj.com with your domain
-sudo sed -i 's/wrzdj.com/yourdomain.com/g' /etc/nginx/sites-available/api.yourdomain.com
-sudo sed -i 's/wrzdj.com/yourdomain.com/g' /etc/nginx/sites-available/app.yourdomain.com
-
-# Enable sites
-sudo ln -sf /etc/nginx/sites-available/api.yourdomain.com /etc/nginx/sites-enabled/
-sudo ln -sf /etc/nginx/sites-available/app.yourdomain.com /etc/nginx/sites-enabled/
+# The setup script will:
+# - Generate configs from deploy/nginx/*.conf.template
+# - Install them to /etc/nginx/sites-available/
+# - Symlink to sites-enabled/
+# - Test and reload nginx
+#
+# Optional: customize ports (default 8000/3000)
+# APP_DOMAIN=app.yourdomain.com API_DOMAIN=api.yourdomain.com \
+#   PORT_API=9000 PORT_FRONTEND=4000 ./deploy/setup-nginx.sh
 
 # Remove default site (optional)
 sudo rm -f /etc/nginx/sites-enabled/default
@@ -86,8 +88,7 @@ sudo rm -f /etc/nginx/sites-enabled/default
 # Hide nginx version (security hardening)
 sudo sed -i 's/# server_tokens off;/server_tokens off;/' /etc/nginx/nginx.conf
 
-# Test and start nginx
-sudo nginx -t
+# Start nginx
 sudo systemctl enable nginx
 sudo systemctl start nginx
 ```
@@ -208,7 +209,8 @@ Check if containers are running:
 docker compose -f deploy/docker-compose.yml ps
 ```
 
-Ensure nginx is proxying to correct ports (api: 8000, web: 3000).
+Ensure nginx is proxying to correct ports (defaults: api on 8000, web on 3000).
+If you changed `PORT_API` or `PORT_FRONTEND`, re-run `setup-nginx.sh` with the same values.
 
 ## Security Checklist
 
