@@ -33,9 +33,45 @@ jobs:
         working-directory: bridge-app
         run: npm ci
 
+      - name: Set version from tag
+        working-directory: bridge-app
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
       - name: Build installers
         working-directory: bridge-app
         run: npm run make
+
+      - name: Verify silent install (Windows)
+        if: matrix.platform == 'win32'
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path "bridge-app/out/make/squirrel.windows/x64/WrzDJ-Bridge.exe" -ErrorAction Stop
+          Write-Host "Installer found: $($exe.FullName) ($([math]::Round($exe.Length/1MB, 1)) MB)"
+
+          # Run silent install — should exit with code 0 and no GUI
+          $proc = Start-Process -FilePath $exe.FullName -ArgumentList "--silent" -Wait -PassThru -NoNewWindow
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "Silent install failed with exit code $($proc.ExitCode)"
+            exit 1
+          }
+          Write-Host "Silent install completed successfully (exit code 0)"
+
+          # Verify the app appears in installed programs
+          $installed = Get-ChildItem "$env:LOCALAPPDATA\wrzdj-bridge" -ErrorAction SilentlyContinue
+          if ($installed) {
+            Write-Host "App installed to: $env:LOCALAPPDATA\wrzdj-bridge"
+          } else {
+            Write-Host "WARNING: Install directory not found at expected location"
+          }
+
+          # Clean up — run uninstall
+          $update = "$env:LOCALAPPDATA\wrzdj-bridge\Update.exe"
+          if (Test-Path $update) {
+            Start-Process -FilePath $update -ArgumentList "--uninstall" -Wait -NoNewWindow
+            Write-Host "Uninstall completed"
+          }
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -118,3 +154,20 @@ jobs:
           prerelease: false
           files: |
             artifacts/**/*
+
+  update-winget:
+    name: Update winget manifest
+    needs: [create-release]
+    runs-on: windows-latest
+    steps:
+      - name: Update winget package
+        shell: pwsh
+        run: |
+          iwr https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $url = "https://github.com/thewrz/WrzDJ/releases/download/${{ github.ref_name }}/WrzDJ-Bridge.exe"
+          .\wingetcreate.exe update TheWrz.WrzDJ-Bridge `
+            --urls $url `
+            --version $version `
+            --token ${{ secrets.WINGET_PAT }} `
+            --submit

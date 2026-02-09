@@ -20,6 +20,7 @@ const config: ForgeConfig = {
     new MakerSquirrel({
       name: 'wrzdj-bridge',
       authors: 'WrzDJ',
+      description: 'DJ equipment bridge for WrzDJ song request system',
       setupIcon: './resources/icon.ico',
       setupExe: 'WrzDJ-Bridge.exe',
       noMsi: true,
