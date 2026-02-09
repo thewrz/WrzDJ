@@ -10,6 +10,7 @@ const INITIAL_STATUS: BridgeStatus = {
   currentTrack: null,
   deckStates: [],
   stopReason: null,
+  networkWarnings: [],
 };
 
 export function useBridgeStatus() {

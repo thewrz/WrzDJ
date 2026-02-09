@@ -5,6 +5,12 @@ import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
 import { registerIpcHandlers, getBridgeRunner } from './ipc-handlers.js';
 
+// Catch unhandled rejections from third-party libraries (e.g. stagelinq retry failures)
+// so they log a warning instead of crashing the process.
+process.on('unhandledRejection', (reason) => {
+  console.warn('[UnhandledRejection]', reason instanceof Error ? reason.message : reason);
+});
+
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
 

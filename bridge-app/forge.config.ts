@@ -41,6 +41,29 @@ const config: ForgeConfig = {
     new MakerZIP({}, ['darwin']),
   ],
   hooks: {
+    postPackage: async (_config, options) => {
+      if (options.platform === 'linux') {
+        const outDir = options.outputPaths[0];
+
+        // Remove chrome-sandbox — AppImages can't set SUID on the extracted binary.
+        const sandboxPath = path.join(outDir, 'chrome-sandbox');
+        if (fs.existsSync(sandboxPath)) {
+          fs.unlinkSync(sandboxPath);
+        }
+
+        // Wrap the binary so --no-sandbox is passed as a real CLI argument.
+        // Chromium's sandbox init runs before Node.js, so appendSwitch() is too late.
+        const binName = 'wrzdj-bridge';
+        const binPath = path.join(outDir, binName);
+        const realBinPath = path.join(outDir, `${binName}.real`);
+        fs.renameSync(binPath, realBinPath);
+        fs.writeFileSync(
+          binPath,
+          `#!/bin/bash\nexec "$(dirname "$(readlink -f "$0")")/${binName}.real" --no-sandbox "$@"\n`,
+          { mode: 0o755 },
+        );
+      }
+    },
     postMake: async (_config, makeResults) => {
       const renameExts = new Set(['.dmg', '.AppImage', '.zip', '.exe', '.nupkg']);
       for (const result of makeResults) {

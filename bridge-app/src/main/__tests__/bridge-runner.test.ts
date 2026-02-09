@@ -49,15 +49,24 @@ vi.mock('../event-health-service.js', () => ({
   checkEventHealth: vi.fn(),
 }));
 
+// Mock network check — default to no conflicts
+vi.mock('../network-check.js', () => ({
+  detectSubnetConflicts: vi.fn(() => []),
+  formatConflictWarnings: vi.fn(() => []),
+}));
+
 // Mock fetch for postBridgeStatus calls
 const mockFetch = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve('') });
 global.fetch = mockFetch;
 
 import { BridgeRunner } from '../bridge-runner.js';
 import { checkEventHealth } from '../event-health-service.js';
+import { detectSubnetConflicts, formatConflictWarnings } from '../network-check.js';
 import type { BridgeRunnerConfig } from '../../shared/types.js';
 
 const mockedCheckEventHealth = vi.mocked(checkEventHealth);
+const mockedDetectSubnetConflicts = vi.mocked(detectSubnetConflicts);
+const mockedFormatConflictWarnings = vi.mocked(formatConflictWarnings);
 
 const TEST_CONFIG: BridgeRunnerConfig = {
   apiUrl: 'https://api.wrzdj.com',
@@ -209,5 +218,76 @@ describe('BridgeRunner', () => {
     const lastStatus = statusChanges[statusChanges.length - 1];
     expect(lastStatus.isRunning).toBe(false);
     expect(lastStatus.stopReason).toBe('Event was deleted');
+  });
+
+  it('includes empty networkWarnings when no conflicts', async () => {
+    await runner.start(TEST_CONFIG);
+    const status = runner.getStatus();
+    expect(status.networkWarnings).toEqual([]);
+  });
+
+  it('includes networkWarnings when subnet conflicts detected', async () => {
+    mockedDetectSubnetConflicts.mockReturnValue([
+      {
+        subnet: '192.168.1.0/24',
+        interfaces: [
+          { name: 'eth0', address: '192.168.1.100' },
+          { name: 'wlan0', address: '192.168.1.200' },
+        ],
+      },
+    ]);
+    mockedFormatConflictWarnings.mockReturnValue([
+      'Multiple interfaces on subnet 192.168.1.0/24: eth0 (192.168.1.100), wlan0 (192.168.1.200). This may cause DJ equipment connection failures — consider disabling one interface.',
+    ]);
+
+    await runner.start(TEST_CONFIG);
+    const status = runner.getStatus();
+    expect(status.networkWarnings).toHaveLength(1);
+    expect(status.networkWarnings[0]).toContain('192.168.1.0/24');
+  });
+
+  it('clears networkWarnings on restart', async () => {
+    mockedDetectSubnetConflicts.mockReturnValueOnce([
+      {
+        subnet: '192.168.1.0/24',
+        interfaces: [
+          { name: 'eth0', address: '192.168.1.100' },
+          { name: 'wlan0', address: '192.168.1.200' },
+        ],
+      },
+    ]);
+    mockedFormatConflictWarnings.mockReturnValueOnce(['Warning message']);
+
+    await runner.start(TEST_CONFIG);
+    expect(runner.getStatus().networkWarnings).toHaveLength(1);
+
+    await runner.stop();
+
+    // Second start with no conflicts
+    mockedDetectSubnetConflicts.mockReturnValue([]);
+    mockedFormatConflictWarnings.mockReturnValue([]);
+
+    await runner.start(TEST_CONFIG);
+    expect(runner.getStatus().networkWarnings).toEqual([]);
+  });
+
+  it('logs networkWarnings when conflicts detected', async () => {
+    const logs: string[] = [];
+    runner.on('log', (msg: string) => logs.push(msg));
+
+    mockedDetectSubnetConflicts.mockReturnValue([
+      {
+        subnet: '192.168.1.0/24',
+        interfaces: [
+          { name: 'eth0', address: '192.168.1.100' },
+          { name: 'wlan0', address: '192.168.1.200' },
+        ],
+      },
+    ]);
+    mockedFormatConflictWarnings.mockReturnValue(['Conflict warning text']);
+
+    await runner.start(TEST_CONFIG);
+
+    expect(logs.some((l) => l.includes('WARNING: Conflict warning text'))).toBe(true);
   });
 });
