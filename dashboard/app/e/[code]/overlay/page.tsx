@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { api, ApiError, KioskDisplay, NowPlayingInfo } from '@/lib/api';
 
@@ -12,6 +12,10 @@ export default function StreamOverlayPage() {
   const [nowPlaying, setNowPlaying] = useState<NowPlayingInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ message: string; status: number } | null>(null);
+
+  // Sticky now-playing: keep showing last track for 10s after it goes null
+  const [lastKnownNowPlaying, setLastKnownNowPlaying] = useState<NowPlayingInfo | null>(null);
+  const staleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const loadData = useCallback(async (): Promise<boolean> => {
     try {
@@ -72,6 +76,32 @@ export default function StreamOverlayPage() {
     };
   }, [loadData]);
 
+  // Sticky now-playing effect
+  useEffect(() => {
+    if (nowPlaying) {
+      if (staleTimerRef.current) {
+        clearTimeout(staleTimerRef.current);
+        staleTimerRef.current = null;
+      }
+      setLastKnownNowPlaying(nowPlaying);
+    } else if (lastKnownNowPlaying) {
+      if (!staleTimerRef.current) {
+        staleTimerRef.current = setTimeout(() => {
+          staleTimerRef.current = null;
+          setLastKnownNowPlaying(null);
+        }, 10_000);
+      }
+    }
+  }, [nowPlaying, lastKnownNowPlaying]);
+
+  useEffect(() => {
+    return () => {
+      if (staleTimerRef.current) {
+        clearTimeout(staleTimerRef.current);
+      }
+    };
+  }, []);
+
   if (loading) {
     return null;
   }
@@ -81,13 +111,15 @@ export default function StreamOverlayPage() {
   }
 
   const isHidden = display.now_playing_hidden;
-  const activeTrack = isHidden ? null : (nowPlaying || (display.now_playing ? {
+  // Use sticky (lastKnownNowPlaying) instead of raw nowPlaying to avoid flickering
+  const stickyNowPlaying = lastKnownNowPlaying ?? nowPlaying;
+  const activeTrack = isHidden ? null : (stickyNowPlaying || (display.now_playing ? {
     title: display.now_playing.title,
     artist: display.now_playing.artist,
     album_art_url: display.now_playing.artwork_url,
     source: 'request',
   } : null));
-  const isLive = nowPlaying?.source === 'stagelinq' || nowPlaying?.source === 'pioneer' || nowPlaying?.source === 'traktor';
+  const isLive = stickyNowPlaying?.source === 'stagelinq' || stickyNowPlaying?.source === 'pioneer' || stickyNowPlaying?.source === 'traktor';
   const upNext = display.accepted_queue.slice(0, 5);
 
   return (

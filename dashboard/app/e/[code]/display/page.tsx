@@ -23,6 +23,11 @@ export default function KioskDisplayPage() {
   const [stagelinqNowPlaying, setStagelinqNowPlaying] = useState<NowPlayingInfo | null>(null);
   const [playHistory, setPlayHistory] = useState<PlayHistoryItem[]>([]);
 
+  // Sticky now-playing: keep showing last track for 10s after it goes null
+  const [lastKnownNowPlaying, setLastKnownNowPlaying] = useState<NowPlayingInfo | null>(null);
+  const [nowPlayingFading, setNowPlayingFading] = useState(false);
+  const staleTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   // Request modal state
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,6 +107,38 @@ export default function KioskDisplayPage() {
       }
     };
   }, [loadDisplay]);
+
+  // Sticky now-playing effect
+  useEffect(() => {
+    if (stagelinqNowPlaying) {
+      // New data arrived — show it immediately, cancel any pending fade
+      if (staleTimerRef.current) {
+        clearTimeout(staleTimerRef.current);
+        staleTimerRef.current = null;
+      }
+      setLastKnownNowPlaying(stagelinqNowPlaying);
+      setNowPlayingFading(false);
+    } else if (lastKnownNowPlaying) {
+      // Data went null — start 10s grace, then clear
+      if (!staleTimerRef.current) {
+        setNowPlayingFading(true);
+        staleTimerRef.current = setTimeout(() => {
+          staleTimerRef.current = null;
+          setLastKnownNowPlaying(null);
+          setNowPlayingFading(false);
+        }, 10_000);
+      }
+    }
+  }, [stagelinqNowPlaying, lastKnownNowPlaying]);
+
+  // Cleanup stale timer on unmount
+  useEffect(() => {
+    return () => {
+      if (staleTimerRef.current) {
+        clearTimeout(staleTimerRef.current);
+      }
+    };
+  }, []);
 
   // Inactivity timeout
   const resetInactivityTimer = useCallback(() => {
@@ -314,6 +351,10 @@ export default function KioskDisplayPage() {
           padding: 2rem;
           display: flex;
           flex-direction: column;
+          transition: opacity 1s ease-out;
+        }
+        .now-playing-section.fading {
+          opacity: 0.5;
         }
         .now-playing-label {
           color: #22c55e;
@@ -792,18 +833,20 @@ export default function KioskDisplayPage() {
           // Check if now playing should be hidden (manual hide or auto-hide after 60 min)
           const isHidden = display.now_playing_hidden;
 
-          const nowPlaying = isHidden ? null : (stagelinqNowPlaying || (display.now_playing ? {
+          // Use sticky (lastKnownNowPlaying) instead of raw stagelinqNowPlaying to avoid flickering
+          const stickyNowPlaying = lastKnownNowPlaying ?? stagelinqNowPlaying;
+          const nowPlaying = isHidden ? null : (stickyNowPlaying || (display.now_playing ? {
             title: display.now_playing.title,
             artist: display.now_playing.artist,
             album_art_url: display.now_playing.artwork_url,
             source: 'request',
           } : null));
-          const isStageLinQ = stagelinqNowPlaying?.source === 'stagelinq';
+          const isStageLinQ = stickyNowPlaying?.source === 'stagelinq';
 
           return (
             <div className={`kiosk-main ${nowPlaying ? '' : 'kiosk-main-single'}`}>
               {nowPlaying && (
-                <div className="now-playing-section">
+                <div className={`now-playing-section ${nowPlayingFading ? 'fading' : ''}`}>
                   <div className="now-playing-label">
                     Now Playing
                     {isStageLinQ && <span className="live-badge">LIVE</span>}
