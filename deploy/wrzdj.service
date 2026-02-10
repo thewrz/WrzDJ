@@ -1,0 +1,17 @@
+[Unit]
+Description=WrzDJ Application Stack
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/wrzdj/deploy
+User=wrzdj
+Group=wrzdj
+ExecStart=/usr/bin/docker compose --env-file /opt/wrzdj/deploy/.env up -d
+ExecStop=/usr/bin/docker compose down
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

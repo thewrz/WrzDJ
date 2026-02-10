@@ -14,9 +14,26 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEMPLATE_DIR="$SCRIPT_DIR/nginx"
 
+# Use sudo only when not running as root
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+  SUDO="sudo"
+fi
+
 # Required variables
 : "${APP_DOMAIN:?APP_DOMAIN is required (e.g. app.example.com)}"
 : "${API_DOMAIN:?API_DOMAIN is required (e.g. api.example.com)}"
+
+# Validate domain names (prevent path traversal and config injection)
+validate_domain() {
+  local domain="$1"
+  if [[ ! "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]]; then
+    echo "ERROR: Invalid domain name: $domain" >&2
+    exit 1
+  fi
+}
+validate_domain "$APP_DOMAIN"
+validate_domain "$API_DOMAIN"
 
 # Optional with defaults
 export PORT_API="${PORT_API:-8000}"
@@ -48,21 +65,27 @@ if [ -d /etc/nginx/sites-available ]; then
   echo ""
   echo "==> Installing to nginx"
 
-  sudo cp "$TEMPLATE_DIR/$API_DOMAIN.conf" "/etc/nginx/sites-available/$API_DOMAIN"
-  sudo cp "$TEMPLATE_DIR/$APP_DOMAIN.conf" "/etc/nginx/sites-available/$APP_DOMAIN"
-
-  sudo ln -sf "/etc/nginx/sites-available/$API_DOMAIN" "/etc/nginx/sites-enabled/$API_DOMAIN"
-  sudo ln -sf "/etc/nginx/sites-available/$APP_DOMAIN" "/etc/nginx/sites-enabled/$APP_DOMAIN"
+  if [ -n "$SUDO" ] && [ -x /usr/local/bin/wrzdj-nginx-install ]; then
+    # Use wrapper script (validates names, does cp + ln together)
+    $SUDO /usr/local/bin/wrzdj-nginx-install "$TEMPLATE_DIR/$API_DOMAIN.conf"
+    $SUDO /usr/local/bin/wrzdj-nginx-install "$TEMPLATE_DIR/$APP_DOMAIN.conf"
+  else
+    # Running as root — direct cp/ln
+    cp "$TEMPLATE_DIR/$API_DOMAIN.conf" "/etc/nginx/sites-available/$API_DOMAIN"
+    cp "$TEMPLATE_DIR/$APP_DOMAIN.conf" "/etc/nginx/sites-available/$APP_DOMAIN"
+    ln -sf "/etc/nginx/sites-available/$API_DOMAIN" "/etc/nginx/sites-enabled/$API_DOMAIN"
+    ln -sf "/etc/nginx/sites-available/$APP_DOMAIN" "/etc/nginx/sites-enabled/$APP_DOMAIN"
+  fi
 
   echo "    Installed: /etc/nginx/sites-available/$API_DOMAIN"
   echo "    Installed: /etc/nginx/sites-available/$APP_DOMAIN"
 
   echo ""
   echo "==> Testing nginx config"
-  if sudo nginx -t; then
+  if $SUDO nginx -t; then
     echo ""
     echo "==> Reloading nginx"
-    sudo systemctl reload nginx
+    $SUDO systemctl reload nginx
     echo "    Done!"
   else
     echo ""
@@ -79,5 +102,5 @@ fi
 
 echo ""
 echo "==> Next steps:"
-echo "    1. Set up SSL: sudo certbot --nginx -d $API_DOMAIN -d $APP_DOMAIN"
+echo "    1. Set up SSL: sudo wrzdj-certbot --nginx -d $API_DOMAIN -d $APP_DOMAIN"
 echo "    2. Verify: curl -I https://$API_DOMAIN/health"

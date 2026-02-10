@@ -33,14 +33,67 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 free -h
 ```
 
+## Initial Server Setup
+
+Run these steps once as **root** to create the dedicated `wrzdj` deploy user.
+
+### Install prerequisites (as root)
+
+```bash
+# SSH in as root
+ssh root@your-server-ip
+
+# Install Docker (if not already installed)
+# See https://docs.docker.com/engine/install/ubuntu/
+
+# Install nginx and certbot
+apt update
+apt install -y nginx certbot python3-certbot-nginx
+```
+
+### Create the deploy user
+
+```bash
+# Run the user setup script (from repo, or copy it to the server first)
+./deploy/setup-user.sh
+```
+
+This script:
+- Creates a `wrzdj` user with home directory
+- Adds `wrzdj` to the `docker` group
+- Installs wrapper scripts for safe nginx/certbot operations
+- Installs limited sudoers (no wildcards — wrapper scripts only)
+- Copies SSH keys from root
+- Creates `/opt/wrzdj/` with correct ownership
+
+### Switch to the deploy user
+
+All subsequent steps should be run as `wrzdj`:
+
+```bash
+su - wrzdj
+
+# Or SSH directly (after setup-user.sh copies keys)
+ssh wrzdj@your-server-ip
+```
+
+### Optional: disable root SSH login
+
+Once you've verified SSH access as `wrzdj`:
+
+```bash
+# As root, before logging out
+sed -i 's/^PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
+systemctl restart sshd
+```
+
 ## Deployment Steps
 
 ### 1. Clone the repository
 
 ```bash
-cd /opt
-git clone https://github.com/yourusername/WrzDJ.git
-cd WrzDJ
+cd /opt/wrzdj
+git clone https://github.com/yourusername/WrzDJ.git .
 ```
 
 ### 2. Configure environment
@@ -61,13 +114,11 @@ Fill in all required values in `deploy/.env`:
 - `SPOTIFY_CLIENT_ID` - from Spotify Developer Dashboard
 - `SPOTIFY_CLIENT_SECRET` - from Spotify Developer Dashboard
 
-### 3. Install and configure nginx
+### 3. Configure nginx
+
+nginx and certbot should already be installed from the root setup step above.
 
 ```bash
-# Install nginx and certbot
-sudo apt update
-sudo apt install -y nginx certbot python3-certbot-nginx
-
 # Generate and install nginx configs from templates
 # Replace yourdomain.com with your actual domain
 APP_DOMAIN=app.yourdomain.com API_DOMAIN=api.yourdomain.com ./deploy/setup-nginx.sh
@@ -98,20 +149,20 @@ sudo systemctl start nginx
 **Important:** DNS must be pointing to your server before running certbot.
 
 ```bash
-# Get certificates (certbot will update nginx configs automatically)
-sudo certbot --nginx -d api.yourdomain.com
-sudo certbot --nginx -d app.yourdomain.com
+# Get certificates (uses wrzdj-certbot wrapper for safe execution)
+sudo wrzdj-certbot --nginx -d api.yourdomain.com
+sudo wrzdj-certbot --nginx -d app.yourdomain.com
 
 # Verify auto-renewal is enabled
 sudo systemctl status certbot.timer
 
 # Test renewal (dry run)
-sudo certbot renew --dry-run
+sudo wrzdj-certbot renew --dry-run
 ```
 
 Certificates auto-renew via systemd timer. Manual renewal if needed:
 ```bash
-sudo certbot renew
+sudo wrzdj-certbot renew
 sudo systemctl reload nginx
 ```
 
@@ -134,6 +185,32 @@ docker compose -f deploy/docker-compose.yml exec api \
 - API health: https://api.yourdomain.com/health
 - API docs: https://api.yourdomain.com/docs
 - Login with admin credentials
+
+### 8. (Optional) Enable auto-start on boot
+
+Install the systemd service so the Docker Compose stack starts automatically after reboots:
+
+```bash
+# Copy the service file
+sudo cp deploy/wrzdj.service /etc/systemd/system/wrzdj.service
+
+# Enable and start
+sudo systemctl daemon-reload
+sudo systemctl enable wrzdj
+sudo systemctl start wrzdj
+
+# Verify
+sudo systemctl status wrzdj
+```
+
+The service runs `docker compose up -d` as the `wrzdj` user. It depends on `docker.service` and waits for the network to be online.
+
+To manage the service:
+```bash
+sudo systemctl stop wrzdj      # Stop all containers
+sudo systemctl restart wrzdj   # Restart all containers
+sudo systemctl status wrzdj    # Check status
+```
 
 ## Maintenance
 
@@ -178,7 +255,7 @@ cat backup.sql | docker compose -f deploy/docker-compose.yml exec -T db \
 
 Certbot auto-renews certificates. To manually renew:
 ```bash
-sudo certbot renew
+sudo wrzdj-certbot renew
 sudo systemctl reload nginx
 ```
 
@@ -223,10 +300,13 @@ If you changed `PORT_API` or `PORT_FRONTEND`, re-run `setup-nginx.sh` with the s
 - [ ] Login lockout enabled (auto-enabled in production)
 
 ### Server Security
+- [ ] Dedicated `wrzdj` deploy user (not running as root)
+- [ ] Root SSH login disabled (`PermitRootLogin no`)
 - [ ] HTTPS enabled (certbot)
 - [ ] Firewall configured (only 80, 443, 22 open)
 - [ ] nginx version hidden (`server_tokens off`)
 - [ ] SSH key authentication (disable password auth)
+- [ ] Limited sudo via `/etc/sudoers.d/wrzdj` (nginx, certbot, systemd only)
 
 ### Security Headers (verify in browser dev tools)
 - [ ] `Strict-Transport-Security` (HSTS)
