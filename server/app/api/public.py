@@ -53,6 +53,7 @@ class KioskDisplayResponse(BaseModel):
     accepted_queue: list[PublicRequestInfo]
     now_playing: PublicRequestInfo | None
     now_playing_hidden: bool
+    requests_open: bool = True
     updated_at: datetime
     banner_url: str | None = None
     banner_kiosk_url: str | None = None
@@ -135,6 +136,7 @@ def get_kiosk_display(
         accepted_queue=accepted_queue,
         now_playing=now_playing,
         now_playing_hidden=now_playing_is_hidden,
+        requests_open=event.requests_open,
         updated_at=datetime.utcnow(),
         banner_url=banner_url,
         banner_kiosk_url=banner_kiosk_url,

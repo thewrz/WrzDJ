@@ -237,7 +237,11 @@ export default function KioskDisplayPage() {
         closeModal();
       }, 2500);
     } catch (err) {
-      console.error('Submit failed:', err);
+      if (err instanceof ApiError && err.status === 403) {
+        closeModal();
+        loadDisplay();
+        return;
+      }
     } finally {
       setSubmitting(false);
     }
@@ -951,9 +955,28 @@ export default function KioskDisplayPage() {
           );
         })()}
 
-        <button className="request-button" onClick={() => setShowRequestModal(true)}>
-          🎵 Request a Song
-        </button>
+        {display.requests_open ? (
+          <button className="request-button" onClick={() => setShowRequestModal(true)}>
+            🎵 Request a Song
+          </button>
+        ) : (
+          <div style={{
+            marginTop: '1.5rem',
+            alignSelf: 'center',
+            flexShrink: 0,
+            position: 'relative',
+            zIndex: 1,
+            background: 'rgba(255,255,255,0.08)',
+            color: '#9ca3af',
+            padding: '1rem 2rem',
+            fontSize: '1.1rem',
+            fontWeight: 500,
+            borderRadius: '1rem',
+            textAlign: 'center',
+          }}>
+            Requests are closed
+          </div>
+        )}
       </div>
 
       {showRequestModal && (

@@ -132,7 +132,11 @@ export default function JoinEventPage() {
       setSubmitIsDuplicate(result.is_duplicate ?? false);
       setSubmitVoteCount(result.vote_count);
     } catch (err) {
-      console.error('Submit failed:', err);
+      if (err instanceof ApiError && err.status === 403) {
+        setEvent((prev) => prev ? { ...prev, requests_open: false } : prev);
+        setSelectedSong(null);
+        return;
+      }
       setSubmitError('Failed to submit request. Please try again.');
     } finally {
       setSubmitting(false);
@@ -237,11 +241,20 @@ export default function JoinEventPage() {
           )}
         </div>
 
-        <div className="sticky-bottom-button">
-          <button className="btn btn-primary" onClick={resetForm}>
-            Request a Song
-          </button>
-        </div>
+        {event.requests_open && (
+          <div className="sticky-bottom-button">
+            <button className="btn btn-primary" onClick={resetForm}>
+              Request a Song
+            </button>
+          </div>
+        )}
+        {!event.requests_open && (
+          <div className="sticky-bottom-button">
+            <div style={{ textAlign: 'center', color: '#9ca3af', padding: '0.75rem' }}>
+              Requests are closed for this event
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -318,6 +331,26 @@ export default function JoinEventPage() {
             >
               Back
             </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!event.requests_open) {
+    return (
+      <div className="join-page-wrapper">
+        {event.banner_url && (
+          <div className="join-banner-bg">
+            <img src={event.banner_url} alt="" />
+          </div>
+        )}
+        <div className="container" style={{ maxWidth: '500px', position: 'relative', zIndex: 1 }}>
+          <div className="card" style={{ textAlign: 'center' }}>
+            <h1 style={{ marginBottom: '0.5rem' }}>{event.name}</h1>
+            <p style={{ color: '#9ca3af', marginTop: '1rem' }}>
+              Requests are closed for this event
+            </p>
           </div>
         </div>
       </div>

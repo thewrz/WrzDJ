@@ -30,6 +30,9 @@ class Event(Base):
     now_playing_auto_hide_minutes: Mapped[int] = mapped_column(
         Integer, default=10, nullable=False, server_default="10"
     )
+    requests_open: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False, server_default="1"
+    )
 
     # Custom banner image
     banner_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)

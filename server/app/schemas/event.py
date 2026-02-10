@@ -27,6 +27,7 @@ class DisplaySettingsUpdate(BaseModel):
 
     now_playing_hidden: bool | None = None
     now_playing_auto_hide_minutes: int | None = Field(default=None, ge=1, le=1440)
+    requests_open: bool | None = None
 
 
 class DisplaySettingsResponse(BaseModel):
@@ -35,6 +36,7 @@ class DisplaySettingsResponse(BaseModel):
     status: str = "ok"
     now_playing_hidden: bool
     now_playing_auto_hide_minutes: int = 10
+    requests_open: bool = True
 
 
 class EventOut(BaseModel):
@@ -55,6 +57,8 @@ class EventOut(BaseModel):
     banner_url: str | None = None
     banner_kiosk_url: str | None = None
     banner_colors: list[str] | None = None
+    # Requests open/closed
+    requests_open: bool = True
 
     class Config:
         from_attributes = True

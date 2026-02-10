@@ -13,6 +13,8 @@ export interface Event {
   banner_url: string | null;
   banner_kiosk_url: string | null;
   banner_colors: string[] | null;
+  // Requests open/closed
+  requests_open: boolean;
 }
 
 export interface ArchivedEvent extends Event {
@@ -74,6 +76,7 @@ export interface KioskDisplay {
   accepted_queue: PublicRequestInfo[];
   now_playing: PublicRequestInfo | null;
   now_playing_hidden: boolean;
+  requests_open: boolean;
   updated_at: string;
   banner_url: string | null;
   banner_kiosk_url: string | null;
@@ -84,6 +87,7 @@ export interface DisplaySettingsResponse {
   status: string;
   now_playing_hidden: boolean;
   now_playing_auto_hide_minutes: number;
+  requests_open: boolean;
 }
 
 export interface SearchResult {
