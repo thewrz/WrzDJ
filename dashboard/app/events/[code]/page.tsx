@@ -48,6 +48,9 @@ export default function EventQueuePage() {
   // Now playing visibility toggle
   const [nowPlayingHidden, setNowPlayingHidden] = useState(false);
   const [togglingNowPlaying, setTogglingNowPlaying] = useState(false);
+  const [autoHideMinutes, setAutoHideMinutes] = useState(10);
+  const [autoHideInput, setAutoHideInput] = useState('10');
+  const [savingAutoHide, setSavingAutoHide] = useState(false);
 
   // Bridge connection state
   const [bridgeConnected, setBridgeConnected] = useState(false);
@@ -87,7 +90,7 @@ export default function EventQueuePage() {
         api.getEvent(code),
         api.getRequests(code),
         api.getPlayHistory(code).catch(() => ({ items: [], total: 0 })),
-        api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false })),
+        api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false, now_playing_auto_hide_minutes: 10 })),
         api.getTidalStatus().catch(() => ({ linked: false, user_id: null, expires_at: null })),
         api.getNowPlaying(code).catch(() => null),
       ]);
@@ -96,6 +99,11 @@ export default function EventQueuePage() {
       setPlayHistory(historyData.items);
       setPlayHistoryTotal(historyData.total);
       setNowPlayingHidden(displaySettings.now_playing_hidden);
+      const serverAutoHide = displaySettings.now_playing_auto_hide_minutes ?? 10;
+      setAutoHideMinutes(serverAutoHide);
+      if (!savingAutoHide) {
+        setAutoHideInput(String(serverAutoHide));
+      }
       setTidalStatus(tidalStatusData);
       setTidalSyncEnabled(eventData.tidal_sync_enabled ?? false);
       setBridgeConnected(nowPlayingData?.bridge_connected ?? false);
@@ -266,6 +274,21 @@ export default function EventQueuePage() {
       console.error('Failed to toggle now playing visibility:', err);
     } finally {
       setTogglingNowPlaying(false);
+    }
+  };
+
+  const handleSaveAutoHide = async () => {
+    const value = parseInt(autoHideInput, 10);
+    if (isNaN(value) || value < 1 || value > 1440) return;
+    setSavingAutoHide(true);
+    try {
+      const result = await api.setNowPlayingVisibility(code, nowPlayingHidden, value);
+      setAutoHideMinutes(result.now_playing_auto_hide_minutes);
+      setAutoHideInput(String(result.now_playing_auto_hide_minutes));
+    } catch (err) {
+      console.error('Failed to update auto-hide timeout:', err);
+    } finally {
+      setSavingAutoHide(false);
     }
   };
 
@@ -651,6 +674,41 @@ export default function EventQueuePage() {
               >
                 {togglingNowPlaying ? '...' : nowPlayingHidden ? 'Hidden' : 'Visible'}
               </button>
+            </div>
+          </div>
+
+          {/* Auto-hide timeout */}
+          <div style={{ borderTop: '1px solid #333', paddingTop: '1rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>Auto-hide after</span>
+              <input
+                type="number"
+                min={1}
+                max={1440}
+                value={autoHideInput}
+                onChange={(e) => setAutoHideInput(e.target.value)}
+                style={{
+                  width: '70px',
+                  padding: '0.25rem 0.5rem',
+                  background: '#2a2a2a',
+                  border: '1px solid #444',
+                  borderRadius: '4px',
+                  color: '#ededed',
+                  fontSize: '0.875rem',
+                  textAlign: 'center',
+                }}
+              />
+              <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>minutes of inactivity</span>
+              {parseInt(autoHideInput, 10) !== autoHideMinutes && (
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={handleSaveAutoHide}
+                  disabled={savingAutoHide || isNaN(parseInt(autoHideInput, 10)) || parseInt(autoHideInput, 10) < 1 || parseInt(autoHideInput, 10) > 1440}
+                  style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                >
+                  {savingAutoHide ? '...' : 'Save'}
+                </button>
+              )}
             </div>
           </div>
 

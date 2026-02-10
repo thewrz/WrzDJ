@@ -9,7 +9,7 @@
 import { EventEmitter } from "events";
 
 import { DeckStateManager } from "./deck-state-manager.js";
-import type { DeckLiveEvent, DeckStateManagerConfig } from "./deck-state.js";
+import type { DeckLiveEvent, DeckStateManagerConfig, TrackInfo } from "./deck-state.js";
 import type {
   EquipmentSourcePlugin,
   PluginConnectionEvent,
@@ -24,6 +24,9 @@ const VIRTUAL_DECK_ID = "1";
 
 /** Suppress duplicate log messages within this window */
 const LOG_DEDUP_WINDOW_MS = 60_000;
+
+/** Heartbeat interval — emits 'heartbeat' event to keep bridge_last_seen fresh */
+const HEARTBEAT_INTERVAL_MS = 120_000;
 
 /**
  * PluginBridge connects an EquipmentSourcePlugin to a DeckStateManager,
@@ -40,6 +43,7 @@ export class PluginBridge extends EventEmitter {
   private readonly deckManager: DeckStateManager;
   private running = false;
   private readonly recentLogs = new Map<string, number>();
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(plugin: EquipmentSourcePlugin, config: DeckStateManagerConfig) {
     super();
@@ -96,9 +100,23 @@ export class PluginBridge extends EventEmitter {
   }
 
   private cleanup(): void {
+    this.stopHeartbeat();
+    this.emit("clearNowPlaying");
     this.deckManager.destroy();
     this.plugin.removeAllListeners();
     this.recentLogs.clear();
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => this.emit("heartbeat"), HEARTBEAT_INTERVAL_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer !== null) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
   }
 
   private wireEvents(): void {
@@ -129,6 +147,12 @@ export class PluginBridge extends EventEmitter {
     });
 
     this.plugin.on("connection", (event: PluginConnectionEvent) => {
+      if (event.connected) {
+        this.startHeartbeat();
+      } else {
+        this.stopHeartbeat();
+        this.emit("clearNowPlaying");
+      }
       this.emit("connection", event);
     });
 
@@ -176,8 +200,28 @@ export class PluginBridge extends EventEmitter {
     return deckId;
   }
 
+  /**
+   * Check if a track is a duplicate of the current track on a deck.
+   * Compares title and artist case-insensitively with trimmed whitespace.
+   */
+  private isTrackDuplicate(deckId: string, track: TrackInfo): boolean {
+    const current = this.deckManager.getDeckState(deckId).track;
+    if (!current) return false;
+
+    return (
+      current.title.toLowerCase().trim() === track.title.toLowerCase().trim() &&
+      current.artist.toLowerCase().trim() === track.artist.toLowerCase().trim()
+    );
+  }
+
   private handleTrack(event: PluginTrackEvent): void {
     const deckId = this.normalizeDeckId(event.deckId);
+
+    // Skip duplicate track re-emissions (e.g. StageLinQ play-state changes)
+    if (event.track !== null && this.isTrackDuplicate(deckId, event.track)) {
+      return;
+    }
+
     this.deckManager.updateTrackInfo(deckId, event.track);
 
     // Synthesize play state for plugins that lack it

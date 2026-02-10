@@ -17,6 +17,7 @@
  */
 import { config, validateConfig } from "./config.js";
 import {
+  clearNowPlaying,
   postBridgeStatus,
   postNowPlaying,
   shouldSkipTrack,
@@ -85,6 +86,16 @@ async function main(): Promise<void> {
     await postNowPlaying(track.title, track.artist, track.album, deckId);
   });
 
+  // Handle heartbeat — keep bridge_last_seen fresh on the backend
+  pluginBridge.on("heartbeat", async () => {
+    await postBridgeStatus(true);
+  });
+
+  // Handle authoritative now-playing clear
+  pluginBridge.on("clearNowPlaying", async () => {
+    await clearNowPlaying();
+  });
+
   // Handle connection status
   pluginBridge.on("connection", async (event: PluginConnectionEvent) => {
     if (event.connected) {
@@ -102,6 +113,7 @@ async function main(): Promise<void> {
     if (pluginBridge) {
       await pluginBridge.stop();
     }
+    await clearNowPlaying();
     await postBridgeStatus(false);
     process.exit(0);
   };

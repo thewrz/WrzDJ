@@ -789,6 +789,86 @@ class TestDisplaySettings:
         assert response.status_code == 200
         assert response.json()["now_playing_hidden"] is False
 
+    def test_get_display_settings_includes_auto_hide_minutes(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test that GET display-settings includes auto_hide_minutes with default of 10."""
+        response = client.get(
+            f"/api/events/{test_event.code}/display-settings",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["now_playing_auto_hide_minutes"] == 10
+
+    def test_update_display_settings_auto_hide_minutes(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test that PATCH persists auto_hide_minutes."""
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_hidden": False, "now_playing_auto_hide_minutes": 30},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["now_playing_auto_hide_minutes"] == 30
+
+        # Verify it persists on GET
+        response = client.get(
+            f"/api/events/{test_event.code}/display-settings",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["now_playing_auto_hide_minutes"] == 30
+
+    def test_update_display_settings_auto_hide_minutes_validation(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test that auto_hide_minutes rejects 0 and 1441."""
+        # 0 is below minimum (1)
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_hidden": False, "now_playing_auto_hide_minutes": 0},
+            headers=auth_headers,
+        )
+        assert response.status_code == 422
+
+        # 1441 is above maximum (1440)
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_hidden": False, "now_playing_auto_hide_minutes": 1441},
+            headers=auth_headers,
+        )
+        assert response.status_code == 422
+
+    def test_update_display_settings_auto_hide_minutes_optional(
+        self, client: TestClient, auth_headers: dict, test_event: Event, db: Session
+    ):
+        """Test that omitting auto_hide_minutes doesn't change the value."""
+        # First set it to a custom value
+        client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_hidden": False, "now_playing_auto_hide_minutes": 30},
+            headers=auth_headers,
+        )
+
+        # Then update only now_playing_hidden without auto_hide_minutes
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_hidden": True},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+        # auto_hide_minutes should still be 30
+        response = client.get(
+            f"/api/events/{test_event.code}/display-settings",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["now_playing_auto_hide_minutes"] == 30
+
     def test_update_display_settings_not_owner(
         self, client: TestClient, db: Session, test_user: User, auth_headers: dict
     ):

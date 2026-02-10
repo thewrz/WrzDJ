@@ -121,6 +121,30 @@ export async function postNowPlaying(
 }
 
 /**
+ * Clear now-playing on the backend (authoritative clear on disconnect/shutdown).
+ */
+export async function clearNowPlaying(): Promise<void> {
+  const endpoint = `/api/bridge/nowplaying/${config.eventCode}`;
+  try {
+    const response = await fetch(`${config.apiUrl}${endpoint}`, {
+      method: "DELETE",
+      headers: {
+        "X-Bridge-API-Key": config.apiKey,
+      },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`[Bridge] DELETE ${endpoint} failed: HTTP ${response.status}: ${text}`);
+    } else {
+      console.log(`[Bridge] DELETE ${endpoint} succeeded`);
+    }
+  } catch (err) {
+    console.error(`[Bridge] DELETE ${endpoint} failed: ${(err as Error).message}`);
+  }
+}
+
+/**
  * Post bridge connection status to the backend.
  */
 export async function postBridgeStatus(

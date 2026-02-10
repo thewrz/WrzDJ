@@ -254,9 +254,14 @@ def update_display_settings(
     """Update display settings for an event (e.g., hide/show now playing on kiosk)."""
     set_now_playing_visibility(db, event.id, settings.now_playing_hidden)
 
+    if settings.now_playing_auto_hide_minutes is not None:
+        event.now_playing_auto_hide_minutes = settings.now_playing_auto_hide_minutes
+        db.commit()
+
     return DisplaySettingsResponse(
         status="ok",
         now_playing_hidden=settings.now_playing_hidden,
+        now_playing_auto_hide_minutes=event.now_playing_auto_hide_minutes,
     )
 
 
@@ -271,6 +276,7 @@ def get_display_settings(
     return DisplaySettingsResponse(
         status="ok",
         now_playing_hidden=hidden,
+        now_playing_auto_hide_minutes=event.now_playing_auto_hide_minutes,
     )
 
 
