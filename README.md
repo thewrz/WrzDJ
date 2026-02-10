@@ -6,7 +6,7 @@
 
 # WrzDJ
 
-A modern, real-time song request system for DJs. Guests scan a QR code to submit requests -- no app install, no login. DJs manage everything from a live dashboard with automatic track detection from DJ equipment via a plugin system supporting Denon StageLinQ, Pioneer PRO DJ LINK, Traktor Broadcast, and more.
+A modern, real-time song request system for DJs. Guests scan a QR code to submit requests -- no app install, no login. DJs manage everything from a live dashboard with automatic track detection from DJ equipment via a plugin system supporting Denon StageLinQ, Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast, and more.
 
 <p align="center">
   <img src="docs/images/dashboard.png" alt="WrzDJ Dashboard" width="800">
@@ -19,7 +19,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 ## What Makes WrzDJ Different
 
 - **Zero friction for guests** -- scan a QR code, search Spotify, submit a request. Done.
-- **Live track detection** -- the bridge connects to DJ equipment via plugins (Denon StageLinQ, Pioneer PRO DJ LINK, Traktor Broadcast), so the kiosk and dashboard update in real-time as the DJ plays.
+- **Live track detection** -- the bridge connects to DJ equipment via plugins (Denon StageLinQ, Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast), so the kiosk and dashboard update in real-time as the DJ plays.
 - **Automatic request matching** -- when the DJ plays a requested song, WrzDJ detects it via fuzzy matching and moves it through the workflow automatically.
 - **Tidal playlist sync** -- accepted requests are auto-added to a Tidal playlist, ready for the SC6000 to load.
 - **Desktop app for the bridge** -- no terminal needed. Sign in, pick your event, click Start.
@@ -77,6 +77,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Plugin architecture supporting multiple DJ platforms
 - **Denon StageLinQ** -- auto-detect tracks from SC6000, Prime 4, etc. over LAN with full per-deck data
 - **Pioneer PRO DJ LINK** -- connect to CDJ-3000, CDJ-2000NXS2, etc. over Ethernet with full per-deck data, on-air status, and master deck detection
+- **Serato DJ** -- watch Serato's binary session files for per-deck track metadata with album info
 - **Traktor Broadcast** -- receive track metadata via Traktor's built-in Icecast broadcast
 - Robust deck state machine with configurable thresholds
 - Master deck priority and channel fader detection (StageLinQ)
@@ -93,7 +94,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Cross-platform Electron app (Windows `.exe`, macOS `.dmg`, Linux `.AppImage`)
 - Sign in with your WrzDJ account -- no API keys to copy/paste
 - Select your active event from a dropdown
-- Choose DJ protocol (StageLinQ, Pioneer PRO DJ LINK, Traktor Broadcast) with dynamic config options
+- Choose DJ protocol (StageLinQ, Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast) with dynamic config options
 - One-click Start/Stop for track detection
 - Real-time status panel: connected devices, current track, per-deck states
 - Configurable detection settings (live threshold, pause grace, fader detection, master deck priority)
@@ -123,18 +124,18 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
                                |
                         [Bridge Service]
                           (plugin system)
-                        /       |        \
-              StageLinQ    PRO DJ LINK   Icecast
-               (LAN)       (Ethernet)    (local)
-                 |              |            |
-           [Denon CDJs]   [Pioneer CDJs]  [Traktor Pro]
+                      /       |        |        \
+            StageLinQ   PRO DJ LINK  Session    Icecast
+              (LAN)      (Ethernet)   (file)    (local)
+                |             |          |          |
+          [Denon CDJs]  [Pioneer CDJs] [Serato]  [Traktor Pro]
 ```
 
 | Service | Stack | Directory |
 |---------|-------|-----------|
 | Backend | Python, FastAPI, SQLAlchemy 2.0, PostgreSQL, Alembic | `server/` |
 | Frontend | Next.js 16, React 18, TypeScript, vanilla CSS | `dashboard/` |
-| Bridge | Node.js, TypeScript, plugin architecture (StageLinQ, Pioneer PRO DJ LINK, Traktor Broadcast) | `bridge/` |
+| Bridge | Node.js, TypeScript, plugin architecture (StageLinQ, Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast) | `bridge/` |
 | Bridge App | Electron, React, Vite, electron-forge | `bridge-app/` |
 
 ### Supported DJ Equipment
@@ -152,6 +153,11 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - XDJ-1000MK2 / XDJ-700
 - DJM-900NXS2 / DJM-750MK2 mixer (for on-air detection)
 - Requires Ethernet connection (CDJs on same LAN, not USB-only)
+
+**Serato (via session file monitoring)**
+- Serato DJ Pro / Serato DJ Lite (any controller or setup)
+- Per-deck track detection with album metadata
+- No network configuration required -- reads session files from disk
 
 **Native Instruments (via Traktor Broadcast)**
 - Traktor Pro 3 / Pro 4 (any controller or setup with broadcast enabled)
@@ -236,7 +242,7 @@ npm start
 
 **Bridge requirements:**
 - A running WrzDJ server (local or deployed) with at least one event created
-- DJ equipment on the same network (StageLinQ/Pioneer) or Traktor Broadcast configured
+- DJ equipment on the same network (StageLinQ/Pioneer), Serato running on the same machine, or Traktor Broadcast configured
 - Node.js 22+ (CLI bridge only; the desktop app bundles its own runtime)
 
 ---
@@ -389,7 +395,7 @@ WrzDJ/
     Dockerfile
   bridge/              # DJ equipment bridge (Node.js)
     src/               # TypeScript source
-      plugins/         # DJ software plugins (StageLinQ, Pioneer, Traktor)
+      plugins/         # DJ software plugins (StageLinQ, Pioneer, Serato, Traktor)
     Dockerfile
   bridge-app/          # Electron desktop app for the bridge
     src/
