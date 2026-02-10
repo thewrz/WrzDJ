@@ -9,15 +9,27 @@ from starlette.responses import JSONResponse
 from app.core.config import get_settings
 
 
+def _get_trusted_proxies() -> set[str]:
+    """Return the set of trusted proxy IPs from settings."""
+    settings = get_settings()
+    return {ip.strip() for ip in settings.trusted_proxies.split(",") if ip.strip()}
+
+
 def get_client_ip(request: Request) -> str:
-    """Get client IP, respecting X-Forwarded-For header from trusted proxies."""
-    # Check for forwarded IP (set by nginx/load balancer)
+    """Get client IP, respecting X-Forwarded-For only from trusted proxies."""
+    direct_ip = get_remote_address(request)
     forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        # Take the first IP in the chain (original client)
+    if forwarded_for and direct_ip in _get_trusted_proxies():
         return forwarded_for.split(",")[0].strip()
-    # Fall back to direct connection IP
-    return get_remote_address(request)
+    return direct_ip
+
+
+MAX_FINGERPRINT_LENGTH = 64
+
+
+def get_client_fingerprint(request: Request) -> str:
+    """Extract client fingerprint (IP) from the request, truncated to safe length."""
+    return get_client_ip(request)[:MAX_FINGERPRINT_LENGTH]
 
 
 # Create limiter instance with IP-based key function

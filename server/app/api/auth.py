@@ -109,19 +109,18 @@ async def register(
             detail="CAPTCHA verification failed",
         )
 
-    # Check username uniqueness
+    # Check username and email uniqueness (generic message to prevent enumeration)
     if get_user_by_username(db, reg_data.username):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Username already exists",
+            detail="Registration failed. Username or email already in use.",
         )
 
-    # Check email uniqueness
     existing_email = db.query(User).filter(User.email == reg_data.email).first()
     if existing_email:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered",
+            detail="Registration failed. Username or email already in use.",
         )
 
     # Create pending user

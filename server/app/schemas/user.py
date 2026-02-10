@@ -75,7 +75,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     confirm_password: str
-    turnstile_token: str = ""
+    turnstile_token: str = Field("", max_length=2048)
 
     @field_validator("username")
     @classmethod

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db
+from app.api.deps import get_current_admin, get_db
 from app.core.bridge_auth import verify_bridge_api_key
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
@@ -32,13 +32,13 @@ router = APIRouter()
 
 @router.get("/bridge/apikey")
 def get_bridge_api_key(
-    _user: User = Depends(get_current_active_user),
+    _user: User = Depends(get_current_admin),
 ) -> dict:
     """
-    Return the server's bridge API key to an authenticated user.
+    Return the server's bridge API key to an admin user.
 
     The GUI uses this so the DJ doesn't have to manually paste the key.
-    The CLI bridge and all bridge POST endpoints remain unchanged.
+    Restricted to admins to prevent non-owners from impersonating the bridge.
     """
     settings = get_settings()
     if not settings.bridge_api_key:
@@ -121,7 +121,9 @@ def delete_now_playing(
 
 
 @router.get("/public/e/{code}/nowplaying", response_model=NowPlayingResponse | None)
+@limiter.limit("60/minute")
 def get_public_now_playing(
+    request: Request,
     code: str,
     db: Session = Depends(get_db),
 ) -> NowPlayingResponse | None:
@@ -145,7 +147,9 @@ def get_public_now_playing(
 
 
 @router.get("/public/e/{code}/history", response_model=PlayHistoryResponse)
+@limiter.limit("60/minute")
 def get_public_history(
+    request: Request,
     code: str,
     limit: int = 20,
     offset: int = 0,

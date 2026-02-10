@@ -4,25 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.core.rate_limit import limiter
+from app.core.rate_limit import get_client_fingerprint, limiter
 from app.models.request import Request as SongRequest
 from app.schemas.vote import VoteResponse
 from app.services.event import EventLookupResult, get_event_by_code_with_status
 from app.services.vote import RequestNotFoundError, add_vote, has_voted, remove_vote
 
 router = APIRouter()
-
-MAX_FINGERPRINT_LENGTH = 64
-
-
-def _get_client_fingerprint(request: Request) -> str:
-    """Extract client fingerprint (IP) from the request, truncated to safe length."""
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        ip = forwarded_for.split(",")[0].strip()
-        return ip[:MAX_FINGERPRINT_LENGTH]
-    host = request.client.host if request.client else "unknown"
-    return host[:MAX_FINGERPRINT_LENGTH]
 
 
 def _validate_request_votable(db: Session, request_id: int) -> SongRequest:
@@ -49,7 +37,7 @@ def vote_for_request(
 ) -> VoteResponse:
     """Upvote a song request. Idempotent: voting twice has no effect."""
     _validate_request_votable(db, request_id)
-    client_fingerprint = _get_client_fingerprint(request)
+    client_fingerprint = get_client_fingerprint(request)
 
     try:
         song_request, is_new = add_vote(db, request_id, client_fingerprint)
@@ -72,7 +60,7 @@ def unvote_request(
 ) -> VoteResponse:
     """Remove vote from a song request. Idempotent."""
     _validate_request_votable(db, request_id)
-    client_fingerprint = _get_client_fingerprint(request)
+    client_fingerprint = get_client_fingerprint(request)
 
     try:
         song_request, was_removed = remove_vote(db, request_id, client_fingerprint)

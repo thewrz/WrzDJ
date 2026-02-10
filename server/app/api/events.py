@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db, get_owned_event
 from app.core.config import get_settings
-from app.core.rate_limit import limiter
+from app.core.rate_limit import get_client_fingerprint, limiter
 from app.models.event import Event
 from app.models.request import RequestStatus
 from app.models.user import User
@@ -176,6 +176,7 @@ def list_archived_events(
 
 
 @router.get("/{code}", response_model=EventOut)
+@limiter.limit("60/minute")
 def get_event(code: str, request: Request, db: Session = Depends(get_db)) -> EventOut:
     event, lookup_result = get_event_by_code_with_status(db, code)
 
@@ -336,9 +337,6 @@ def submit_request(
     if lookup_result == EventLookupResult.ARCHIVED:
         raise HTTPException(status_code=410, detail="Event has been archived")
 
-    # Get client fingerprint from IP
-    client_ip = request.client.host if request.client else None
-
     song_request, is_duplicate = create_request(
         db=db,
         event=event,
@@ -348,7 +346,7 @@ def submit_request(
         source=request_data.source.value,
         source_url=request_data.source_url,
         artwork_url=request_data.artwork_url,
-        client_fingerprint=client_ip,
+        client_fingerprint=get_client_fingerprint(request),
     )
 
     return RequestOut(

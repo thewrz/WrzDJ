@@ -6,6 +6,10 @@ import { QRCodeSVG } from 'qrcode.react';
 import { api, ApiError, KioskDisplay, SearchResult, NowPlayingInfo, PlayHistoryItem } from '@/lib/api';
 
 const INACTIVITY_TIMEOUT = 60000; // 60 seconds
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
+function safeColor(c: string | undefined, fallback: string): string {
+  return c && HEX_COLOR_RE.test(c) ? c : fallback;
+}
 
 export default function KioskDisplayPage() {
   const params = useParams();
@@ -762,7 +766,7 @@ export default function KioskDisplayPage() {
       <div
         className="kiosk-container"
         style={display.banner_colors ? {
-          '--kiosk-bg': `linear-gradient(135deg, ${display.banner_colors[0] || '#1a1a2e'} 0%, ${display.banner_colors[1] || '#16213e'} 50%, ${display.banner_colors[2] || '#0f3460'} 100%)`,
+          '--kiosk-bg': `linear-gradient(135deg, ${safeColor(display.banner_colors[0], '#1a1a2e')} 0%, ${safeColor(display.banner_colors[1], '#16213e')} 50%, ${safeColor(display.banner_colors[2], '#0f3460')} 100%)`,
         } as React.CSSProperties : undefined}
       >
         {display.banner_kiosk_url && (

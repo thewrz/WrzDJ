@@ -30,24 +30,29 @@ class TestGetBridgeApiKey:
         assert response.status_code == 401
 
     @patch("app.api.bridge.get_settings")
-    def test_returns_api_key_with_valid_jwt(
-        self, mock_settings, client: TestClient, auth_headers: dict
+    def test_returns_api_key_with_admin_jwt(
+        self, mock_settings, client: TestClient, admin_headers: dict
     ):
-        """Returns the bridge API key for authenticated users."""
+        """Returns the bridge API key for admin users."""
         mock_settings.return_value.bridge_api_key = "my-secret-bridge-key"
 
-        response = client.get("/api/bridge/apikey", headers=auth_headers)
+        response = client.get("/api/bridge/apikey", headers=admin_headers)
         assert response.status_code == 200
         assert response.json() == {"bridge_api_key": "my-secret-bridge-key"}
 
+    def test_returns_403_for_non_admin(self, client: TestClient, auth_headers: dict):
+        """Returns 403 when a non-admin user tries to get the API key."""
+        response = client.get("/api/bridge/apikey", headers=auth_headers)
+        assert response.status_code == 403
+
     @patch("app.api.bridge.get_settings")
     def test_returns_503_when_key_not_configured(
-        self, mock_settings, client: TestClient, auth_headers: dict
+        self, mock_settings, client: TestClient, admin_headers: dict
     ):
         """Returns 503 when BRIDGE_API_KEY is not set on the server."""
         mock_settings.return_value.bridge_api_key = ""
 
-        response = client.get("/api/bridge/apikey", headers=auth_headers)
+        response = client.get("/api/bridge/apikey", headers=admin_headers)
         assert response.status_code == 503
         assert "not configured" in response.json()["detail"]
 

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.core.config import get_settings
-from app.core.rate_limit import limiter
+from app.core.rate_limit import get_client_fingerprint, limiter
 from app.models.request import Request as SongRequest
 from app.models.request import RequestStatus
 from app.services.event import EventLookupResult, get_event_by_code_with_status
@@ -60,6 +60,7 @@ class KioskDisplayResponse(BaseModel):
 
 
 @router.get("/events/{code}/display", response_model=KioskDisplayResponse)
+@limiter.limit("60/minute")
 def get_kiosk_display(
     code: str,
     request: Request,
@@ -176,19 +177,6 @@ def get_public_requests(
     )
 
 
-MAX_FINGERPRINT_LENGTH = 64
-
-
-def _get_client_fingerprint(request: Request) -> str:
-    """Extract client fingerprint (IP) from the request, truncated to safe length."""
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        ip = forwarded_for.split(",")[0].strip()
-        return ip[:MAX_FINGERPRINT_LENGTH]
-    host = request.client.host if request.client else "unknown"
-    return host[:MAX_FINGERPRINT_LENGTH]
-
-
 @router.get("/events/{code}/has-requested", response_model=HasRequestedResponse)
 @limiter.limit("30/minute")
 def check_has_requested(
@@ -208,7 +196,7 @@ def check_has_requested(
     if lookup_result == EventLookupResult.ARCHIVED:
         raise HTTPException(status_code=410, detail="Event has been archived")
 
-    fingerprint = _get_client_fingerprint(request)
+    fingerprint = get_client_fingerprint(request)
 
     has_requested = (
         db.query(SongRequest)
