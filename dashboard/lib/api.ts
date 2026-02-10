@@ -376,6 +376,16 @@ class ApiClient {
     return this.fetch(`/api/events/${code}/display-settings`);
   }
 
+  /**
+   * Open or close song requests for an event.
+   */
+  async setRequestsOpen(code: string, open: boolean): Promise<DisplaySettingsResponse> {
+    return this.fetch(`/api/events/${code}/display-settings`, {
+      method: 'PATCH',
+      body: JSON.stringify({ requests_open: open }),
+    });
+  }
+
   // ========== Tidal Integration ==========
 
   /**

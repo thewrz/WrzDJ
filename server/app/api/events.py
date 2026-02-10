@@ -129,6 +129,7 @@ def _event_to_out(
         banner_url=banner_url,
         banner_kiosk_url=banner_kiosk_url,
         banner_colors=banner_colors,
+        requests_open=event.requests_open,
     )
 
 
@@ -259,11 +260,16 @@ def update_display_settings(
         event.now_playing_auto_hide_minutes = settings.now_playing_auto_hide_minutes
         db.commit()
 
+    if settings.requests_open is not None:
+        event.requests_open = settings.requests_open
+        db.commit()
+
     hidden = get_manual_hide_setting(db, event.id)
     return DisplaySettingsResponse(
         status="ok",
         now_playing_hidden=hidden,
         now_playing_auto_hide_minutes=event.now_playing_auto_hide_minutes,
+        requests_open=event.requests_open,
     )
 
 
@@ -279,6 +285,7 @@ def get_display_settings(
         status="ok",
         now_playing_hidden=hidden,
         now_playing_auto_hide_minutes=event.now_playing_auto_hide_minutes,
+        requests_open=event.requests_open,
     )
 
 
@@ -344,6 +351,9 @@ def submit_request(
 
     if lookup_result == EventLookupResult.ARCHIVED:
         raise HTTPException(status_code=410, detail="Event has been archived")
+
+    if not event.requests_open:
+        raise HTTPException(status_code=403, detail="Requests are closed for this event")
 
     song_request, is_duplicate = create_request(
         db=db,

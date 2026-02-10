@@ -52,6 +52,10 @@ export default function EventQueuePage() {
   const [autoHideInput, setAutoHideInput] = useState('10');
   const [savingAutoHide, setSavingAutoHide] = useState(false);
 
+  // Requests open/closed toggle
+  const [requestsOpen, setRequestsOpen] = useState(true);
+  const [togglingRequests, setTogglingRequests] = useState(false);
+
   // Bridge connection state
   const [bridgeConnected, setBridgeConnected] = useState(false);
 
@@ -90,7 +94,7 @@ export default function EventQueuePage() {
         api.getEvent(code),
         api.getRequests(code),
         api.getPlayHistory(code).catch(() => ({ items: [], total: 0 })),
-        api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false, now_playing_auto_hide_minutes: 10 })),
+        api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false, now_playing_auto_hide_minutes: 10, requests_open: true })),
         api.getTidalStatus().catch(() => ({ linked: false, user_id: null, expires_at: null })),
         api.getNowPlaying(code).catch(() => null),
       ]);
@@ -99,6 +103,7 @@ export default function EventQueuePage() {
       setPlayHistory(historyData.items);
       setPlayHistoryTotal(historyData.total);
       setNowPlayingHidden(displaySettings.now_playing_hidden);
+      setRequestsOpen(displaySettings.requests_open ?? true);
       const serverAutoHide = displaySettings.now_playing_auto_hide_minutes ?? 10;
       setAutoHideMinutes(serverAutoHide);
       if (!savingAutoHide) {
@@ -289,6 +294,19 @@ export default function EventQueuePage() {
       console.error('Failed to update auto-hide timeout:', err);
     } finally {
       setSavingAutoHide(false);
+    }
+  };
+
+  const handleToggleRequests = async () => {
+    setTogglingRequests(true);
+    try {
+      const newOpen = !requestsOpen;
+      await api.setRequestsOpen(code, newOpen);
+      setRequestsOpen(newOpen);
+    } catch (err) {
+      console.error('Failed to toggle requests:', err);
+    } finally {
+      setTogglingRequests(false);
     }
   };
 
@@ -662,6 +680,17 @@ export default function EventQueuePage() {
                 title="Copy overlay URL for OBS"
               >
                 {overlayUrlCopied ? 'Copied!' : 'Copy URL'}
+              </button>
+              <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+                Requests:
+              </span>
+              <button
+                className={`btn btn-sm ${requestsOpen ? 'btn-success' : 'btn-danger'}`}
+                style={{ minWidth: '100px' }}
+                onClick={handleToggleRequests}
+                disabled={togglingRequests}
+              >
+                {togglingRequests ? '...' : requestsOpen ? 'Open' : 'Closed'}
               </button>
               <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
                 Now Playing:

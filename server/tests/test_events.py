@@ -928,6 +928,106 @@ class TestDisplaySettings:
         assert response.status_code == 404
 
 
+class TestRequestsOpen:
+    """Tests for requests open/closed toggle."""
+
+    def test_toggle_requests_open(self, client: TestClient, auth_headers: dict, test_event: Event):
+        """Test PATCH requests_open to false returns requests_open: false."""
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"requests_open": False},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["requests_open"] is False
+
+        # Verify it persists on GET
+        response = client.get(
+            f"/api/events/{test_event.code}/display-settings",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["requests_open"] is False
+
+    def test_submit_request_when_closed(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test submitting a request when requests are closed returns 403."""
+        # Close requests
+        client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"requests_open": False},
+            headers=auth_headers,
+        )
+
+        # Try to submit a request
+        response = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={"artist": "Test Artist", "title": "Test Song"},
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Requests are closed for this event"
+
+    def test_submit_request_when_reopened(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test that closing then reopening requests allows submission."""
+        # Close requests
+        client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"requests_open": False},
+            headers=auth_headers,
+        )
+
+        # Reopen requests
+        client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"requests_open": True},
+            headers=auth_headers,
+        )
+
+        # Submit should succeed
+        response = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={"artist": "Test Artist", "title": "Test Song"},
+        )
+        assert response.status_code == 200
+
+    def test_kiosk_display_when_requests_closed(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test kiosk endpoint still returns 200 with requests_open: false."""
+        # Close requests
+        client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"requests_open": False},
+            headers=auth_headers,
+        )
+
+        # Kiosk should still work (not 410)
+        response = client.get(f"/api/public/events/{test_event.code}/display")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["requests_open"] is False
+
+    def test_requests_open_default_true(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test that a new event has requests_open defaulting to true."""
+        response = client.get(
+            f"/api/events/{test_event.code}/display-settings",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["requests_open"] is True
+
+        # Also check via EventOut
+        response = client.get(f"/api/events/{test_event.code}")
+        assert response.status_code == 200
+        assert response.json()["requests_open"] is True
+
+
 class TestKioskDisplayNowPlayingHidden:
     """Tests for now_playing_hidden field in kiosk display response."""
 
