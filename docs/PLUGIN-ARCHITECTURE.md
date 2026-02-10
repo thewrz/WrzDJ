@@ -156,6 +156,43 @@ Connects to Denon DJ equipment (SC6000, SC Live, etc.) over the local network us
 
 **Configuration:** No user-configurable options (`configOptions: []`). The plugin discovers devices via StageLinQ network announcements.
 
+### Serato DJ (`serato`)
+
+**File:** `bridge/src/plugins/serato-plugin.ts`
+
+Watches Serato DJ's binary session files for track metadata. When Serato loads a track to a deck, it appends an OENT/ADAT chunk to the active session file in `Music/_Serato_/History/Sessions/`. The plugin polls the file for growth and parses new binary data to extract track info.
+
+| Capability | Value |
+|------------|-------|
+| `multiDeck` | `true` |
+| `playState` | `false` |
+| `faderLevel` | `false` |
+| `masterDeck` | `false` |
+| `albumMetadata` | `true` |
+
+**Configuration:**
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `seratoPath` | `string` | (auto-detect) | Path to Serato sessions folder |
+| `pollInterval` | `number` | `1000` | How often to check for new track data (ms) |
+
+**How it works:**
+
+1. On start, locates the most recent `.session` file in the sessions directory
+2. Polls the file for new bytes at the configured interval
+3. Parses new OENT/ADAT chunks and emits `track` events per deck
+4. Watches the directory for new session files (Serato creates a new one each session)
+5. Deduplicates identical consecutive tracks per deck
+
+**Limitations:**
+
+- Cannot detect play/pause state — only "track loaded to deck"
+- PluginBridge synthesizes play state from metadata changes
+- No fader or master deck information available
+
+**No npm dependencies** — uses only Node.js built-ins for file I/O and binary parsing.
+
 ### Traktor Broadcast (`traktor-broadcast`)
 
 **File:** `bridge/src/plugins/traktor-broadcast-plugin.ts`
@@ -339,11 +376,15 @@ bridge/src/
   plugins/
     index.ts                   # Side-effect import: registers all built-in plugins
     pioneer-prolink-plugin.ts  # Pioneer PRO DJ LINK integration
+    serato-plugin.ts           # Serato DJ session file watcher
+    serato-session-parser.ts   # Binary parser for Serato session files
     stagelinq-plugin.ts        # Denon StageLinQ integration
     traktor-broadcast-plugin.ts # Traktor Broadcast/Icecast integration
   __tests__/
     deck-state-manager.test.ts # Deck state machine tests
     pioneer-prolink-plugin.test.ts # Pioneer plugin tests
+    serato-plugin.test.ts      # Serato plugin lifecycle and event tests
+    serato-session-parser.test.ts # Serato binary parser tests
     stagelinq-plugin.test.ts   # StageLinQ plugin tests
     plugin-bridge.test.ts      # PluginBridge synthesis and event forwarding tests
     plugin-registry.test.ts    # Registry CRUD tests

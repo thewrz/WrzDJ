@@ -317,6 +317,75 @@ describe("PluginBridge", () => {
     });
   });
 
+  describe("Multi-deck no-play-state plugin (Serato-like)", () => {
+    const SERATO_CAPABILITIES: PluginCapabilities = {
+      multiDeck: true,
+      playState: false,
+      faderLevel: false,
+      masterDeck: false,
+      albumMetadata: true,
+    };
+
+    beforeEach(async () => {
+      plugin = createMockPlugin(SERATO_CAPABILITIES);
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+    });
+
+    it("preserves original deck IDs (multiDeck is true)", () => {
+      plugin.emit("track", {
+        deckId: "2",
+        track: { title: "Song A", artist: "DJ", album: "Album" },
+      });
+
+      const state = bridge.manager.getDeckState("2");
+      expect(state.track?.title).toBe("Song A");
+      expect(state.track?.album).toBe("Album");
+    });
+
+    it("synthesizes play state on track load", () => {
+      plugin.emit("track", {
+        deckId: "1",
+        track: { title: "Song B", artist: "DJ" },
+      });
+
+      const state = bridge.manager.getDeckState("1");
+      expect(state.isPlaying).toBe(true);
+    });
+
+    it("tracks multiple decks independently", () => {
+      plugin.emit("track", {
+        deckId: "1",
+        track: { title: "Deck 1 Track", artist: "DJ" },
+      });
+      plugin.emit("track", {
+        deckId: "2",
+        track: { title: "Deck 2 Track", artist: "DJ" },
+      });
+
+      const state1 = bridge.manager.getDeckState("1");
+      const state2 = bridge.manager.getDeckState("2");
+      expect(state1.track?.title).toBe("Deck 1 Track");
+      expect(state2.track?.title).toBe("Deck 2 Track");
+    });
+
+    it("emits deckLive for first deck that reaches threshold", () => {
+      const liveEvents: DeckLiveEvent[] = [];
+      bridge.on("deckLive", (e: DeckLiveEvent) => liveEvents.push(e));
+
+      plugin.emit("track", {
+        deckId: "1",
+        track: { title: "Track 1", artist: "DJ" },
+      });
+
+      vi.advanceTimersByTime(16_000);
+
+      expect(liveEvents).toHaveLength(1);
+      expect(liveEvents[0].deckId).toBe("1");
+      expect(liveEvents[0].track.title).toBe("Track 1");
+    });
+  });
+
   describe("Log throttling", () => {
     beforeEach(async () => {
       plugin = createMockPlugin(FULL_CAPABILITIES);
