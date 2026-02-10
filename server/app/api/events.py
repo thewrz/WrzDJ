@@ -16,9 +16,10 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db
+from app.api.deps import get_current_active_user, get_db, get_owned_event
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
+from app.models.event import Event
 from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.event import (
@@ -36,7 +37,6 @@ from app.services.event import (
     create_event,
     delete_event,
     get_archived_events_for_user,
-    get_event_by_code_for_owner,
     get_event_by_code_with_status,
     get_events_for_user,
     get_expired_events_for_user,
@@ -63,6 +63,16 @@ settings = get_settings()
 # Maximum number of requests to export in a single CSV
 # Set to 10,000 to prevent memory issues and excessive download times
 MAX_EXPORT_REQUESTS = 10000
+
+# Maximum number of play history entries to export in a single CSV
+MAX_EXPORT_PLAY_HISTORY = 10000
+
+
+def _content_disposition(filename: str) -> str:
+    """Build an RFC 6266 Content-Disposition header value for a download."""
+    safe_filename = filename.replace('"', '\\"')
+    ascii_filename = quote(filename, safe="")
+    return f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{ascii_filename}"
 
 
 def _get_base_url(request: Request | None) -> str | None:
@@ -183,16 +193,11 @@ def get_event(code: str, request: Request, db: Session = Depends(get_db)) -> Eve
 
 @router.patch("/{code}", response_model=EventOut)
 def update_event_endpoint(
-    code: str,
     event_data: EventUpdate,
     request: Request,
+    event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
 ) -> EventOut:
-    event = get_event_by_code_for_owner(db, code, current_user)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
     updated = update_event(
         db,
         event,
@@ -204,29 +209,20 @@ def update_event_endpoint(
 
 @router.delete("/{code}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_event_endpoint(
-    code: str,
+    event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
 ) -> None:
     """Delete an event and all its requests."""
-    event = get_event_by_code_for_owner(db, code, current_user)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
     delete_event(db, event)
 
 
 @router.post("/{code}/archive", response_model=EventOut)
 def archive_event_endpoint(
-    code: str,
     request: Request,
+    event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
 ) -> EventOut:
     """Archive an event."""
-    event = get_event_by_code_for_owner(db, code, current_user)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
     if event.archived_at is not None:
         raise HTTPException(status_code=400, detail="Event is already archived")
 
@@ -236,16 +232,11 @@ def archive_event_endpoint(
 
 @router.post("/{code}/unarchive", response_model=EventOut)
 def unarchive_event_endpoint(
-    code: str,
     request: Request,
+    event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
 ) -> EventOut:
     """Unarchive an event."""
-    event = get_event_by_code_for_owner(db, code, current_user)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
     if event.archived_at is None:
         raise HTTPException(status_code=400, detail="Event is not archived")
 
@@ -255,16 +246,11 @@ def unarchive_event_endpoint(
 
 @router.patch("/{code}/display-settings", response_model=DisplaySettingsResponse)
 def update_display_settings(
-    code: str,
     settings: DisplaySettingsUpdate,
+    event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
 ) -> DisplaySettingsResponse:
     """Update display settings for an event (e.g., hide/show now playing on kiosk)."""
-    event = get_event_by_code_for_owner(db, code, current_user)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
     set_now_playing_visibility(db, event.id, settings.now_playing_hidden)
 
     return DisplaySettingsResponse(
@@ -275,15 +261,10 @@ def update_display_settings(
 
 @router.get("/{code}/display-settings", response_model=DisplaySettingsResponse)
 def get_display_settings(
-    code: str,
+    event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
 ) -> DisplaySettingsResponse:
     """Get current display settings for an event."""
-    event = get_event_by_code_for_owner(db, code, current_user)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
     hidden = get_manual_hide_setting(db, event.id)
 
     return DisplaySettingsResponse(
@@ -295,16 +276,11 @@ def get_display_settings(
 @router.get("/{code}/export/csv")
 @limiter.limit("5/minute")
 def export_event_csv(
-    code: str,
     request: Request,
+    event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
 ) -> StreamingResponse:
     """Export event requests as CSV. Owner can export regardless of event status."""
-    event = get_event_by_code_for_owner(db, code, current_user)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
     # Get all requests for the event (no status filter, limited for safety)
     requests = get_requests_for_event(db, event, status=None, since=None, limit=MAX_EXPORT_REQUESTS)
 
@@ -312,37 +288,21 @@ def export_event_csv(
     csv_content = export_requests_to_csv(event, requests)
     filename = generate_export_filename(event)
 
-    # Properly encode filename for Content-Disposition header (RFC 6266)
-    safe_filename = filename.replace('"', '\\"')
-    ascii_filename = quote(filename, safe="")
-
-    content_disposition = (
-        f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{ascii_filename}"
-    )
     return StreamingResponse(
         iter([csv_content]),
         media_type="text/csv",
-        headers={"Content-Disposition": content_disposition},
+        headers={"Content-Disposition": _content_disposition(filename)},
     )
-
-
-# Maximum number of play history entries to export in a single CSV
-MAX_EXPORT_PLAY_HISTORY = 10000
 
 
 @router.get("/{code}/export/play-history/csv")
 @limiter.limit("5/minute")
 def export_play_history_csv(
-    code: str,
     request: Request,
+    event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
 ) -> StreamingResponse:
     """Export play history as CSV. Owner can export regardless of event status."""
-    event = get_event_by_code_for_owner(db, code, current_user)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
     # Get all play history entries for the event (limited for safety)
     history_items, _ = get_play_history(db, event.id, limit=MAX_EXPORT_PLAY_HISTORY, offset=0)
 
@@ -350,17 +310,10 @@ def export_play_history_csv(
     csv_content = export_play_history_to_csv(event, history_items)
     filename = generate_play_history_export_filename(event)
 
-    # Properly encode filename for Content-Disposition header (RFC 6266)
-    safe_filename = filename.replace('"', '\\"')
-    ascii_filename = quote(filename, safe="")
-
-    content_disposition = (
-        f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{ascii_filename}"
-    )
     return StreamingResponse(
         iter([csv_content]),
         media_type="text/csv",
-        headers={"Content-Disposition": content_disposition},
+        headers={"Content-Disposition": _content_disposition(filename)},
     )
 
 
@@ -418,17 +371,12 @@ def submit_request(
 @router.post("/{code}/requests/accept-all")
 @limiter.limit("10/minute")
 def accept_all_requests_endpoint(
-    code: str,
     request: Request,
     background_tasks: BackgroundTasks,
+    event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
 ):
     """Accept all NEW requests for an event in one operation."""
-    event = get_event_by_code_for_owner(db, code, current_user)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
     accepted = accept_all_new_requests(db, event)
 
     # Trigger Tidal sync for each accepted request if enabled
@@ -441,18 +389,13 @@ def accept_all_requests_endpoint(
 
 @router.get("/{code}/requests", response_model=list[RequestOut])
 def get_event_requests(
-    code: str,
     status: RequestStatus | None = None,
     since: datetime | None = None,
     limit: int = Query(default=100, ge=1, le=500),
+    event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
 ) -> list[RequestOut]:
     # Owner can view requests regardless of event status
-    event = get_event_by_code_for_owner(db, code, current_user)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
     requests = get_requests_for_event(db, event, status, since, limit)
     return [
         RequestOut(
@@ -476,18 +419,17 @@ def get_event_requests(
 @router.post("/{code}/banner", response_model=EventOut)
 @limiter.limit("10/minute")
 def upload_banner(
-    code: str,
     request: Request,
     file: UploadFile = File(...),
+    event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
 ) -> EventOut:
     """Upload a custom banner image for the event."""
-    from app.services.banner import delete_banner_files, process_banner_upload
-
-    event = get_event_by_code_for_owner(db, code, current_user)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
+    from app.services.banner import (
+        delete_banner_files,
+        process_banner_upload,
+        save_banner_to_event,
+    )
 
     # Delete old banner files if replacing
     delete_banner_files(event.banner_filename)
@@ -497,32 +439,20 @@ def upload_banner(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    event.banner_filename = banner_filename
-    event.banner_colors = json.dumps(colors)
-    db.commit()
-    db.refresh(event)
+    save_banner_to_event(db, event, banner_filename, colors)
 
     return _event_to_out(event, request)
 
 
 @router.delete("/{code}/banner", response_model=EventOut)
 def delete_banner(
-    code: str,
     request: Request,
+    event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
 ) -> EventOut:
     """Delete the event's custom banner image."""
-    from app.services.banner import delete_banner_files
+    from app.services.banner import delete_banner_from_event
 
-    event = get_event_by_code_for_owner(db, code, current_user)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
-    delete_banner_files(event.banner_filename)
-    event.banner_filename = None
-    event.banner_colors = None
-    db.commit()
-    db.refresh(event)
+    delete_banner_from_event(db, event)
 
     return _event_to_out(event, request)

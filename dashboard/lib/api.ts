@@ -1,3 +1,52 @@
+import type {
+  AdminEvent,
+  AdminUser,
+  ArchivedEvent,
+  DisplaySettingsResponse,
+  Event,
+  GuestRequestListResponse,
+  HasRequestedResponse,
+  KioskDisplay,
+  NowPlayingInfo,
+  PaginatedResponse,
+  PlayHistoryResponse,
+  SearchResult,
+  SongRequest,
+  SystemSettings,
+  SystemStats,
+  TidalEventSettings,
+  TidalSearchResult,
+  TidalSyncResult,
+  TidalStatus,
+  VoteResponse,
+} from './api-types';
+
+export type {
+  AdminEvent,
+  AdminUser,
+  ArchivedEvent,
+  DisplaySettingsResponse,
+  Event,
+  GuestRequestInfo,
+  GuestRequestListResponse,
+  HasRequestedResponse,
+  KioskDisplay,
+  NowPlayingInfo,
+  PaginatedResponse,
+  PlayHistoryItem,
+  PlayHistoryResponse,
+  PublicRequestInfo,
+  SearchResult,
+  SongRequest,
+  SystemSettings,
+  SystemStats,
+  TidalEventSettings,
+  TidalSearchResult,
+  TidalSyncResult,
+  TidalStatus,
+  VoteResponse,
+} from './api-types';
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -18,170 +67,6 @@ function getApiUrl(): string {
   }
   // SSR fallback
   return 'http://localhost:8000';
-}
-
-export interface Event {
-  id: number;
-  code: string;
-  name: string;
-  created_at: string;
-  expires_at: string;
-  is_active: boolean;
-  join_url: string | null;
-  // Tidal sync settings
-  tidal_sync_enabled: boolean;
-  tidal_playlist_id: string | null;
-  // Banner
-  banner_url: string | null;
-  banner_kiosk_url: string | null;
-  banner_colors: string[] | null;
-}
-
-export interface ArchivedEvent extends Event {
-  status: 'expired' | 'archived';
-  request_count: number;
-  archived_at: string | null;
-}
-
-export interface SongRequest {
-  id: number;
-  event_id: number;
-  song_title: string;
-  artist: string;
-  source: string;
-  source_url: string | null;
-  artwork_url: string | null;
-  note: string | null;
-  status: 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
-  created_at: string;
-  updated_at: string;
-  is_duplicate?: boolean;
-  // Tidal sync status
-  tidal_track_id: string | null;
-  tidal_sync_status: 'pending' | 'synced' | 'not_found' | 'error' | null;
-  // Voting
-  vote_count: number;
-}
-
-export interface PublicRequestInfo {
-  id: number;
-  title: string;
-  artist: string;
-  artwork_url: string | null;
-  vote_count: number;
-}
-
-export interface GuestRequestInfo extends PublicRequestInfo {
-  status: 'new' | 'accepted';
-}
-
-export interface GuestRequestListResponse {
-  event: { code: string; name: string };
-  requests: GuestRequestInfo[];
-}
-
-export interface HasRequestedResponse {
-  has_requested: boolean;
-}
-
-export interface VoteResponse {
-  status: string;
-  vote_count: number;
-  has_voted: boolean;
-}
-
-export interface KioskDisplay {
-  event: { code: string; name: string };
-  qr_join_url: string;
-  accepted_queue: PublicRequestInfo[];
-  now_playing: PublicRequestInfo | null;
-  now_playing_hidden: boolean;
-  updated_at: string;
-  banner_url: string | null;
-  banner_kiosk_url: string | null;
-  banner_colors: string[] | null;
-}
-
-export interface DisplaySettingsResponse {
-  status: string;
-  now_playing_hidden: boolean;
-}
-
-export interface SearchResult {
-  artist: string;
-  title: string;
-  album: string | null;
-  popularity: number;
-  spotify_id: string | null;
-  album_art: string | null;
-  preview_url: string | null;
-  url: string | null;
-}
-
-/** StageLinQ now-playing track info */
-export interface NowPlayingInfo {
-  title: string;
-  artist: string;
-  album: string | null;
-  album_art_url: string | null;
-  spotify_uri: string | null;
-  started_at: string;
-  source: string;
-  matched_request_id: number | null;
-  bridge_connected: boolean;
-}
-
-/** Single entry in play history */
-export interface PlayHistoryItem {
-  id: number;
-  title: string;
-  artist: string;
-  album: string | null;
-  album_art_url: string | null;
-  spotify_uri: string | null;
-  matched_request_id: number | null;
-  source: string;
-  started_at: string;
-  ended_at: string | null;
-  play_order: number;
-}
-
-/** Paginated play history response */
-export interface PlayHistoryResponse {
-  items: PlayHistoryItem[];
-  total: number;
-}
-
-/** Tidal account status */
-export interface TidalStatus {
-  linked: boolean;
-  user_id: string | null;
-  expires_at: string | null;
-}
-
-/** Tidal search result */
-export interface TidalSearchResult {
-  track_id: string;
-  title: string;
-  artist: string;
-  album: string | null;
-  duration_seconds: number | null;
-  cover_url: string | null;
-  tidal_url: string | null;
-}
-
-/** Tidal event settings */
-export interface TidalEventSettings {
-  tidal_sync_enabled: boolean;
-  tidal_playlist_id: string | null;
-}
-
-/** Tidal sync result */
-export interface TidalSyncResult {
-  request_id: number;
-  status: 'pending' | 'synced' | 'not_found' | 'error';
-  tidal_track_id: string | null;
-  error: string | null;
 }
 
 class ApiClient {
@@ -223,6 +108,47 @@ class ApiClient {
     return response.json();
   }
 
+  /**
+   * Fetch a public (no-auth) endpoint and parse JSON response.
+   * Throws ApiError on non-OK responses.
+   */
+  private async publicFetch<T>(url: string): Promise<T> {
+    const response = await fetch(url);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+      throw new ApiError(error.detail || 'Request failed', response.status);
+    }
+    return response.json();
+  }
+
+  /**
+   * Download a CSV blob from an authenticated endpoint and trigger browser download.
+   * Parses filename from Content-Disposition header, falling back to the provided default.
+   */
+  private async downloadCsvBlob(url: string, defaultFilename: string): Promise<void> {
+    const headers = new Headers();
+    if (this.token) {
+      headers.set('Authorization', `Bearer ${this.token}`);
+    }
+
+    const response = await fetch(url, { headers });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Export failed' }));
+      throw new ApiError(error.detail || 'Export failed', response.status);
+    }
+
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    const contentDisposition = response.headers.get('Content-Disposition');
+    const filenameMatch = contentDisposition?.match(/filename=([^;]+)/);
+    a.download = filenameMatch ? filenameMatch[1].replace(/"/g, '') : defaultFilename;
+    a.click();
+    URL.revokeObjectURL(blobUrl);
+  }
+
   async login(username: string, password: string): Promise<{ access_token: string }> {
     const formData = new URLSearchParams();
     formData.append('username', username);
@@ -248,11 +174,7 @@ class ApiClient {
   }
 
   async getPublicSettings(): Promise<{ registration_enabled: boolean; turnstile_site_key: string }> {
-    const response = await fetch(`${getApiUrl()}/api/auth/settings`);
-    if (!response.ok) {
-      throw new ApiError('Failed to load settings', response.status);
-    }
-    return response.json();
+    return this.publicFetch(`${getApiUrl()}/api/auth/settings`);
   }
 
   async register(data: {
@@ -367,83 +289,29 @@ class ApiClient {
   }
 
   async exportEventCsv(code: string): Promise<void> {
-    const headers = new Headers();
-    if (this.token) {
-      headers.set('Authorization', `Bearer ${this.token}`);
-    }
-
-    const response = await fetch(`${getApiUrl()}/api/events/${code}/export/csv`, {
-      headers,
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Export failed' }));
-      throw new ApiError(error.detail || 'Export failed', response.status);
-    }
-
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const contentDisposition = response.headers.get('Content-Disposition');
-    const filenameMatch = contentDisposition?.match(/filename=([^;]+)/);
-    a.download = filenameMatch ? filenameMatch[1].replace(/"/g, '') : `${code}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    return this.downloadCsvBlob(
+      `${getApiUrl()}/api/events/${code}/export/csv`,
+      `${code}.csv`
+    );
   }
 
   async exportPlayHistoryCsv(code: string): Promise<void> {
-    const headers = new Headers();
-    if (this.token) {
-      headers.set('Authorization', `Bearer ${this.token}`);
-    }
-
-    const response = await fetch(`${getApiUrl()}/api/events/${code}/export/play-history/csv`, {
-      headers,
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Export failed' }));
-      throw new ApiError(error.detail || 'Export failed', response.status);
-    }
-
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const contentDisposition = response.headers.get('Content-Disposition');
-    const filenameMatch = contentDisposition?.match(/filename=([^;]+)/);
-    a.download = filenameMatch ? filenameMatch[1].replace(/"/g, '') : `${code}_play_history.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    return this.downloadCsvBlob(
+      `${getApiUrl()}/api/events/${code}/export/play-history/csv`,
+      `${code}_play_history.csv`
+    );
   }
 
   async checkHasRequested(code: string): Promise<HasRequestedResponse> {
-    const response = await fetch(`${getApiUrl()}/api/public/events/${code}/has-requested`);
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
-      throw new ApiError(error.detail || 'Request failed', response.status);
-    }
-    return response.json();
+    return this.publicFetch(`${getApiUrl()}/api/public/events/${code}/has-requested`);
   }
 
   async getPublicRequests(code: string): Promise<GuestRequestListResponse> {
-    const response = await fetch(`${getApiUrl()}/api/public/events/${code}/requests`);
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
-      throw new ApiError(error.detail || 'Request failed', response.status);
-    }
-    return response.json();
+    return this.publicFetch(`${getApiUrl()}/api/public/events/${code}/requests`);
   }
 
   async getKioskDisplay(code: string): Promise<KioskDisplay> {
-    // Public endpoint, no auth needed
-    const response = await fetch(`${getApiUrl()}/api/public/events/${code}/display`);
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
-      throw new ApiError(error.detail || 'Request failed', response.status);
-    }
-    return response.json();
+    return this.publicFetch(`${getApiUrl()}/api/public/events/${code}/display`);
   }
 
   /**
@@ -466,14 +334,9 @@ class ApiClient {
    * Get play history for an event.
    */
   async getPlayHistory(code: string, limit: number = 100, offset: number = 0): Promise<PlayHistoryResponse> {
-    const response = await fetch(
+    return this.publicFetch(
       `${getApiUrl()}/api/public/e/${code}/history?limit=${limit}&offset=${offset}`
     );
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
-      throw new ApiError(error.detail || 'Request failed', response.status);
-    }
-    return response.json();
   }
 
   /**
@@ -678,48 +541,6 @@ class ApiClient {
       body: JSON.stringify(data),
     });
   }
-}
-
-export interface SystemStats {
-  total_users: number;
-  active_users: number;
-  pending_users: number;
-  total_events: number;
-  active_events: number;
-  total_requests: number;
-}
-
-export interface AdminUser {
-  id: number;
-  username: string;
-  is_active: boolean;
-  role: string;
-  created_at: string;
-  event_count: number;
-}
-
-export interface AdminEvent {
-  id: number;
-  code: string;
-  name: string;
-  owner_username: string;
-  owner_id: number;
-  created_at: string;
-  expires_at: string;
-  is_active: boolean;
-  request_count: number;
-}
-
-export interface SystemSettings {
-  registration_enabled: boolean;
-  search_rate_limit_per_minute: number;
-}
-
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  page: number;
-  limit: number;
 }
 
 export const api = new ApiClient();

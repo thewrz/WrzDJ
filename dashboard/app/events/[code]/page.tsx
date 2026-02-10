@@ -6,6 +6,10 @@ import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/auth';
 import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem, TidalStatus, TidalSearchResult } from '@/lib/api';
+import { DeleteEventModal } from './components/DeleteEventModal';
+import { TidalLoginModal } from './components/TidalLoginModal';
+import { TidalTrackPickerModal } from './components/TidalTrackPickerModal';
+import { PlayHistorySection } from './components/PlayHistorySection';
 
 // Removed 'played' from filter since played tracks appear in Play History section
 type StatusFilter = 'all' | 'new' | 'accepted' | 'playing' | 'rejected';
@@ -983,338 +987,44 @@ export default function EventQueuePage() {
         </div>
       )}
 
-      {/* Play History Section */}
-      {playHistory.length > 0 && (
-        <div className="card" style={{ marginTop: '2rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <h2 style={{ margin: 0, fontSize: '1.25rem' }}>
-              Play History
-              <span style={{ color: '#9ca3af', fontWeight: 'normal', marginLeft: '0.5rem' }}>
-                ({playHistoryTotal} {playHistoryTotal === 1 ? 'track' : 'tracks'})
-              </span>
-            </h2>
-            <button
-              className="btn btn-sm"
-              style={{ background: '#8b5cf6', padding: '0.25rem 0.75rem' }}
-              onClick={handleExportPlayHistoryCsv}
-              disabled={exportingHistory}
-            >
-              {exportingHistory ? 'Exporting...' : 'Export Play History'}
-            </button>
-          </div>
-          <div className="request-list">
-            {playHistory.map((item) => (
-              <div key={item.id} className="request-item" style={{ padding: '0.75rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
-                  {item.album_art_url ? (
-                    <img
-                      src={item.album_art_url}
-                      alt={item.title}
-                      style={{
-                        width: '48px',
-                        height: '48px',
-                        borderRadius: '4px',
-                        objectFit: 'cover',
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: '48px',
-                        height: '48px',
-                        borderRadius: '4px',
-                        background: '#333',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#9ca3af',
-                      }}
-                    >
-                      <svg
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
-                      </svg>
-                    </div>
-                  )}
-                  <div className="request-info" style={{ flex: 1 }}>
-                    <h3 style={{ margin: 0 }}>{item.title}</h3>
-                    <p style={{ margin: '0.25rem 0 0', color: '#9ca3af' }}>{item.artist}</p>
-                    <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#6b7280' }}>
-                      {new Date(item.started_at).toLocaleTimeString()}
-                    </p>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span
-                    className="badge"
-                    style={{
-                      background: item.source === 'stagelinq' ? '#8b5cf6' : '#3b82f6',
-                      color: '#fff',
-                      padding: '0.25rem 0.5rem',
-                      borderRadius: '0.25rem',
-                      fontSize: '0.75rem',
-                    }}
-                  >
-                    {item.source === 'stagelinq' ? 'Live' : 'Manual'}
-                  </span>
-                  {item.matched_request_id && (
-                    <span
-                      className="badge"
-                      style={{
-                        background: '#10b981',
-                        color: '#fff',
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '0.25rem',
-                        fontSize: '0.75rem',
-                      }}
-                    >
-                      Requested
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <PlayHistorySection
+        items={playHistory}
+        total={playHistoryTotal}
+        exporting={exportingHistory}
+        onExport={handleExportPlayHistoryCsv}
+      />
 
       {showDeleteConfirm && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-          onClick={() => !deleting && setShowDeleteConfirm(false)}
-        >
-          <div
-            className="card"
-            style={{ maxWidth: '400px', margin: '1rem' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginBottom: '1rem' }}>Delete Event?</h2>
-            <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>
-              This will permanently delete "{event.name}" and all {requests.length} song requests. This action cannot be undone.
-            </p>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button
-                className="btn btn-danger"
-                onClick={handleDeleteEvent}
-                disabled={deleting}
-                style={{ flex: 1 }}
-              >
-                {deleting ? 'Deleting...' : 'Delete Event'}
-              </button>
-              <button
-                className="btn"
-                style={{ background: '#333' }}
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={deleting}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeleteEventModal
+          eventName={event.name}
+          requestCount={requests.length}
+          deleting={deleting}
+          onConfirm={handleDeleteEvent}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
       )}
 
-      {/* Tidal Device Login Modal */}
       {showTidalLogin && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-        >
-          <div
-            className="card"
-            style={{ maxWidth: '400px', margin: '1rem', textAlign: 'center' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginBottom: '1rem' }}>Connect Tidal</h2>
-            <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>
-              Visit the link below and enter the code to connect your Tidal account:
-            </p>
-            <a
-              href={tidalLoginUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'block',
-                padding: '0.75rem',
-                background: '#0066ff',
-                color: 'white',
-                borderRadius: '0.5rem',
-                textDecoration: 'none',
-                marginBottom: '1rem',
-                fontWeight: 500,
-              }}
-            >
-              Open Tidal Login
-            </a>
-            <div
-              style={{
-                padding: '1rem',
-                background: '#1a1a1a',
-                borderRadius: '0.5rem',
-                marginBottom: '1.5rem',
-              }}
-            >
-              <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
-                Your code:
-              </p>
-              <p style={{ fontSize: '1.5rem', fontWeight: 'bold', letterSpacing: '0.25rem' }}>
-                {tidalLoginCode}
-              </p>
-            </div>
-            {tidalLoginPolling && (
-              <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginBottom: '1rem' }}>
-                Waiting for authorization...
-              </p>
-            )}
-            <button
-              className="btn"
-              style={{ background: '#333' }}
-              onClick={handleCancelTidalLogin}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        <TidalLoginModal
+          loginUrl={tidalLoginUrl}
+          userCode={tidalLoginCode}
+          polling={tidalLoginPolling}
+          onCancel={handleCancelTidalLogin}
+        />
       )}
 
-      {/* Tidal Track Picker Modal */}
       {showTidalPicker !== null && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-          onClick={() => !linkingTrack && setShowTidalPicker(null)}
-        >
-          <div
-            className="card"
-            style={{ maxWidth: '500px', maxHeight: '80vh', margin: '1rem', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginBottom: '1rem' }}>Link Tidal Track</h2>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-              <input
-                type="text"
-                className="input"
-                placeholder="Search Tidal..."
-                value={tidalSearchQuery}
-                onChange={(e) => setTidalSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearchTidal()}
-                style={{ flex: 1 }}
-              />
-              <button
-                className="btn btn-primary"
-                onClick={handleSearchTidal}
-                disabled={searchingTidal}
-              >
-                {searchingTidal ? '...' : 'Search'}
-              </button>
-            </div>
-            <div style={{ overflowY: 'auto', flex: 1 }}>
-              {tidalSearchResults.length === 0 ? (
-                <p style={{ color: '#9ca3af', textAlign: 'center' }}>
-                  {searchingTidal ? 'Searching...' : 'Search for a track to link'}
-                </p>
-              ) : (
-                tidalSearchResults.map((track) => (
-                  <div
-                    key={track.track_id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      padding: '0.75rem',
-                      borderBottom: '1px solid #333',
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => handleLinkTidalTrack(showTidalPicker, track.track_id)}
-                  >
-                    {track.cover_url ? (
-                      <img
-                        src={track.cover_url}
-                        alt={track.title}
-                        style={{ width: '48px', height: '48px', borderRadius: '4px' }}
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          width: '48px',
-                          height: '48px',
-                          borderRadius: '4px',
-                          background: '#333',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#9ca3af',
-                        }}
-                      >
-                        <span style={{ fontSize: '1.5rem' }}>T</span>
-                      </div>
-                    )}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 500 }}>{track.title}</div>
-                      <div style={{ color: '#9ca3af', fontSize: '0.875rem' }}>{track.artist}</div>
-                      {track.album && (
-                        <div style={{ color: '#6b7280', fontSize: '0.75rem' }}>{track.album}</div>
-                      )}
-                    </div>
-                    {linkingTrack && (
-                      <span style={{ color: '#9ca3af' }}>...</span>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-            <div style={{ marginTop: '1rem' }}>
-              <button
-                className="btn"
-                style={{ background: '#333', width: '100%' }}
-                onClick={() => setShowTidalPicker(null)}
-                disabled={linkingTrack}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <TidalTrackPickerModal
+          requestId={showTidalPicker}
+          searchQuery={tidalSearchQuery}
+          searchResults={tidalSearchResults}
+          searching={searchingTidal}
+          linking={linkingTrack}
+          onSearchQueryChange={setTidalSearchQuery}
+          onSearch={handleSearchTidal}
+          onSelectTrack={handleLinkTidalTrack}
+          onCancel={() => setShowTidalPicker(null)}
+        />
       )}
     </div>
   );
