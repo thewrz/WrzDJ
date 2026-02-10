@@ -535,9 +535,10 @@ class TestIsNowPlayingHidden:
         # Event with 5-minute timeout, track started 3min ago => visible
         assert is_now_playing_hidden(db, test_event.id, auto_hide_minutes=5) is False
 
-    def test_bridge_last_seen_resets_timer(self, db: Session, test_event: Event):
-        """bridge_last_seen resets the auto-hide timer."""
+    def test_bridge_last_seen_does_not_reset_timer(self, db: Session, test_event: Event):
+        """bridge_last_seen does NOT reset the auto-hide timer (heartbeats ignored)."""
         # Track started 15min ago, bridge_last_seen 3min ago, default 10min timeout
+        # Should be hidden because started_at is 15min ago (exceeds 10min timeout)
         now_playing = NowPlaying(
             event_id=test_event.id,
             title="Test Track",
@@ -548,7 +549,7 @@ class TestIsNowPlayingHidden:
         db.add(now_playing)
         db.commit()
 
-        assert is_now_playing_hidden(db, test_event.id) is False
+        assert is_now_playing_hidden(db, test_event.id) is True
 
 
 class TestGetManualHideSetting:

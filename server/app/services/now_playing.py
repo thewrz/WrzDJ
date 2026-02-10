@@ -21,7 +21,7 @@ from app.models.request import Request, RequestStatus
 from app.services.spotify import _call_spotify_api
 
 # Default auto-hide timeout: 10 minutes of no activity
-# (track change, bridge heartbeat, or manual show).
+# (track change or manual show).
 # Can be overridden per-event via event.now_playing_auto_hide_minutes
 NOW_PLAYING_AUTO_HIDE_MINUTES = 10
 
@@ -46,7 +46,7 @@ def is_now_playing_hidden(db: Session, event_id: int, auto_hide_minutes: int | N
     1. No track is playing (empty title)
     2. manual_hide_now_playing is True
     3. More than auto_hide_minutes since last activity
-       (started_at, last_shown_at, or bridge_last_seen)
+       (started_at or last_shown_at)
 
     Args:
         auto_hide_minutes: Per-event timeout override. Falls back to NOW_PLAYING_AUTO_HIDE_MINUTES.
@@ -62,8 +62,7 @@ def is_now_playing_hidden(db: Session, event_id: int, auto_hide_minutes: int | N
         return True
 
     # Auto-hide: check if more than N minutes since last activity.
-    # Activity signals: started_at (track change), last_shown_at (DJ toggle),
-    # and bridge_last_seen (bridge heartbeat — proves track is still live).
+    # Activity signals: started_at (track change), last_shown_at (DJ toggle).
     timeout = auto_hide_minutes if auto_hide_minutes is not None else NOW_PLAYING_AUTO_HIDE_MINUTES
     now = utcnow()
     last_activity = now_playing.started_at
@@ -78,14 +77,6 @@ def is_now_playing_hidden(db: Session, event_id: int, auto_hide_minutes: int | N
             last_shown = last_shown.replace(tzinfo=UTC)
         if last_shown > last_activity:
             last_activity = last_shown
-
-    # Bridge heartbeat keeps the timer alive while the bridge is actively connected
-    if now_playing.bridge_last_seen:
-        bridge_seen = now_playing.bridge_last_seen
-        if bridge_seen.tzinfo is None:
-            bridge_seen = bridge_seen.replace(tzinfo=UTC)
-        if bridge_seen > last_activity:
-            last_activity = bridge_seen
 
     if now - last_activity > timedelta(minutes=timeout):
         return True

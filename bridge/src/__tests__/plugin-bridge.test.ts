@@ -648,6 +648,24 @@ describe("PluginBridge", () => {
 
       expect(clears).toHaveLength(0);
     });
+
+    it("emits clearNowPlaying when last deck ends with no candidate", () => {
+      const clears: unknown[] = [];
+      bridge.on("clearNowPlaying", () => clears.push(true));
+
+      // Load track on deck, play it past threshold, then stop it
+      plugin.emit("track", {
+        deckId: "1A",
+        track: { title: "Song", artist: "Artist" },
+      });
+      plugin.emit("playState", { deckId: "1A", isPlaying: true });
+      vi.advanceTimersByTime(15000); // past liveThresholdSeconds
+
+      plugin.emit("playState", { deckId: "1A", isPlaying: false });
+      vi.advanceTimersByTime(3000); // past pauseGraceSeconds
+
+      expect(clears).toHaveLength(1);
+    });
   });
 
   describe("DeckStateManager log forwarding", () => {

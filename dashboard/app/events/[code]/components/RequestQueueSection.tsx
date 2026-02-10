@@ -37,6 +37,7 @@ export function RequestQueueSection({
       new: requests.filter((r) => r.status === 'new').length,
       accepted: requests.filter((r) => r.status === 'accepted').length,
       playing: requests.filter((r) => r.status === 'playing').length,
+      played: requests.filter((r) => r.status === 'played').length,
       rejected: requests.filter((r) => r.status === 'rejected').length,
     }),
     [requests]
@@ -51,7 +52,7 @@ export function RequestQueueSection({
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
         <div className="tabs" style={{ marginBottom: 0 }}>
-          {(['all', 'new', 'accepted', 'playing', 'rejected'] as StatusFilter[]).map((status) => (
+          {(['all', 'new', 'accepted', 'playing', 'played', 'rejected'] as StatusFilter[]).map((status) => (
             <button
               key={status}
               className={`tab ${filter === status ? 'active' : ''}`}

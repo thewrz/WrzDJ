@@ -997,6 +997,46 @@ describe("DeckStateManager", () => {
       expect(manager.getCurrentNowPlayingDeckId()).toBe("1");
     });
 
+    it("emits nowPlayingCleared when last playing deck ends with no candidate", () => {
+      const clearedHandler = vi.fn();
+      manager.on("nowPlayingCleared", clearedHandler);
+
+      // Deck 1 becomes now playing
+      manager.updateTrackInfo("1", track1);
+      manager.updatePlayState("1", true);
+      vi.advanceTimersByTime(15000);
+      expect(manager.getCurrentNowPlayingDeckId()).toBe("1");
+
+      // Deck 1 stops — grace period expires, no other deck available
+      manager.updatePlayState("1", false);
+      vi.advanceTimersByTime(3000); // grace period
+
+      expect(manager.getCurrentNowPlayingDeckId()).toBeNull();
+      expect(clearedHandler).toHaveBeenCalledTimes(1);
+    });
+
+    it("does NOT emit nowPlayingCleared when another deck takes over", () => {
+      const clearedHandler = vi.fn();
+      manager.on("nowPlayingCleared", clearedHandler);
+
+      // Deck 1 becomes now playing
+      manager.updateTrackInfo("1", track1);
+      manager.updatePlayState("1", true);
+      vi.advanceTimersByTime(15000);
+
+      // Deck 2 starts and reaches threshold
+      manager.updateTrackInfo("2", track2);
+      manager.updatePlayState("2", true);
+      vi.advanceTimersByTime(15000);
+
+      // Deck 1 stops — grace period expires, deck 2 should take over
+      manager.updatePlayState("1", false);
+      vi.advanceTimersByTime(3000);
+
+      expect(manager.getCurrentNowPlayingDeckId()).toBe("2");
+      expect(clearedHandler).not.toHaveBeenCalled();
+    });
+
     it("non-now-playing deck load/unload does NOT trigger scan", () => {
       const deckLiveHandler = vi.fn();
       manager.on("deckLive", deckLiveHandler);
