@@ -237,7 +237,11 @@ export default function KioskDisplayPage() {
         closeModal();
       }, 2500);
     } catch (err) {
-      console.error('Submit failed:', err);
+      if (err instanceof ApiError && err.status === 403) {
+        closeModal();
+        loadDisplay();
+        return;
+      }
     } finally {
       setSubmitting(false);
     }

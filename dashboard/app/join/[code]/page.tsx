@@ -132,7 +132,11 @@ export default function JoinEventPage() {
       setSubmitIsDuplicate(result.is_duplicate ?? false);
       setSubmitVoteCount(result.vote_count);
     } catch (err) {
-      console.error('Submit failed:', err);
+      if (err instanceof ApiError && err.status === 403) {
+        setEvent((prev) => prev ? { ...prev, requests_open: false } : prev);
+        setSelectedSong(null);
+        return;
+      }
       setSubmitError('Failed to submit request. Please try again.');
     } finally {
       setSubmitting(false);
