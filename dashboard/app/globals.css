@@ -259,6 +259,31 @@ a {
   color: #9ca3af;
 }
 
+/* Scrollable list utility */
+.scrollable-list {
+  max-height: 680px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #444 transparent;
+}
+
+.scrollable-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollable-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollable-list::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 3px;
+}
+
+.scrollable-list::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
 /* Fade-out animation for confirmation card */
 @keyframes fade-out {
   from { opacity: 1; transform: translateY(0); }

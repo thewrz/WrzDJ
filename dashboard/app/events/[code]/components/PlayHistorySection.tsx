@@ -46,7 +46,7 @@ export function PlayHistorySection({ items, total, exporting, onExport }: PlayHi
           {exporting ? 'Exporting...' : 'Export Play History'}
         </button>
       </div>
-      <div className="request-list">
+      <div className="request-list scrollable-list">
         {items.map((item) => (
           <div key={item.id} className="request-item" style={{ padding: '0.75rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>

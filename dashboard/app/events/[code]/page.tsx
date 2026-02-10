@@ -10,9 +10,12 @@ import { DeleteEventModal } from './components/DeleteEventModal';
 import { TidalLoginModal } from './components/TidalLoginModal';
 import { TidalTrackPickerModal } from './components/TidalTrackPickerModal';
 import { PlayHistorySection } from './components/PlayHistorySection';
-
-// Removed 'played' from filter since played tracks appear in Play History section
-type StatusFilter = 'all' | 'new' | 'accepted' | 'playing' | 'rejected';
+import { RequestQueueSection } from './components/RequestQueueSection';
+import { KioskControlsCard } from './components/KioskControlsCard';
+import { StreamOverlayCard } from './components/StreamOverlayCard';
+import { BridgeStatusCard } from './components/BridgeStatusCard';
+import { CloudProvidersCard } from './components/CloudProvidersCard';
+import { EventCustomizationCard } from './components/EventCustomizationCard';
 
 function toLocalDateTimeString(date: Date): string {
   const pad = (n: number) => n.toString().padStart(2, '0');
@@ -30,7 +33,6 @@ export default function EventQueuePage() {
   const [playHistory, setPlayHistory] = useState<PlayHistoryItem[]>([]);
   const [playHistoryTotal, setPlayHistoryTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<StatusFilter>('all');
   const [updating, setUpdating] = useState<number | null>(null);
   const [acceptingAll, setAcceptingAll] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -72,9 +74,6 @@ export default function EventQueuePage() {
 
   // Banner upload state
   const [uploadingBanner, setUploadingBanner] = useState(false);
-
-  // Overlay URL copy feedback
-  const [overlayUrlCopied, setOverlayUrlCopied] = useState(false);
 
   // Tidal device login state
   const [showTidalLogin, setShowTidalLogin] = useState(false);
@@ -385,7 +384,6 @@ export default function EventQueuePage() {
     setSyncingRequest(requestId);
     try {
       const result = await api.syncRequestToTidal(requestId);
-      // Update the request in the list
       setRequests((prev) =>
         prev.map((r) =>
           r.id === requestId
@@ -474,18 +472,6 @@ export default function EventQueuePage() {
     }
   };
 
-  const filteredRequests = requests.filter((r) =>
-    filter === 'all' ? true : r.status === filter
-  );
-
-  const statusCounts = {
-    all: requests.length,
-    new: requests.filter((r) => r.status === 'new').length,
-    accepted: requests.filter((r) => r.status === 'accepted').length,
-    playing: requests.filter((r) => r.status === 'playing').length,
-    rejected: requests.filter((r) => r.status === 'rejected').length,
-  };
-
   if (isLoading || !isAuthenticated) {
     return (
       <div className="container">
@@ -533,6 +519,7 @@ export default function EventQueuePage() {
 
   return (
     <div className="container">
+      {/* 1. Header */}
       <div className="header">
         <div>
           <Link href="/events" style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
@@ -560,7 +547,7 @@ export default function EventQueuePage() {
                 </span>
                 <button
                   className="btn btn-sm"
-                  style={{ background: '#3b82f6', padding: '0.25rem 0.5rem' }}
+                  style={{ background: '#3b82f6' }}
                   onClick={handleExportCsv}
                   disabled={exporting}
                 >
@@ -568,7 +555,6 @@ export default function EventQueuePage() {
                 </button>
                 <button
                   className="btn btn-danger btn-sm"
-                  style={{ padding: '0.25rem 0.5rem' }}
                   onClick={() => setShowDeleteConfirm(true)}
                 >
                   Delete
@@ -606,14 +592,13 @@ export default function EventQueuePage() {
                 </span>
                 <button
                   className="btn btn-sm"
-                  style={{ background: '#333', padding: '0.25rem 0.5rem' }}
+                  style={{ background: '#333' }}
                   onClick={handleEditExpiry}
                 >
                   Edit
                 </button>
                 <button
                   className="btn btn-danger btn-sm"
-                  style={{ padding: '0.25rem 0.5rem' }}
                   onClick={() => setShowDeleteConfirm(true)}
                 >
                   Delete
@@ -629,7 +614,7 @@ export default function EventQueuePage() {
           {!isExpiredOrArchived && (
             <>
               <div className="qr-container">
-                <QRCodeSVG value={joinUrl} size={150} />
+                <QRCodeSVG value={joinUrl} size={100} />
               </div>
               <p style={{ color: '#9ca3af', fontSize: '0.75rem', marginTop: '0.5rem' }}>
                 Scan to join
@@ -639,441 +624,21 @@ export default function EventQueuePage() {
         </div>
       </div>
 
-      {/* Kiosk Display Settings */}
-      {!isExpiredOrArchived && (
-        <div className="card" style={{ marginBottom: '1rem', padding: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <div>
-              <span style={{ fontWeight: 500 }}>Kiosk Display Settings</span>
-              <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
-                Control what guests see on the kiosk display
-              </p>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <a
-                href={`/e/${code}/display`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-sm"
-                style={{ background: '#333', textDecoration: 'none', color: '#ededed' }}
-              >
-                Preview Kiosk
-              </a>
-              <a
-                href={`/e/${code}/overlay`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-sm"
-                style={{ background: '#333', textDecoration: 'none', color: '#ededed' }}
-              >
-                Stream Overlay
-              </a>
-              <button
-                className="btn btn-sm"
-                style={{ background: overlayUrlCopied ? '#22c55e' : '#333', padding: '0.25rem 0.5rem', fontSize: '0.75rem', transition: 'background 0.2s' }}
-                onClick={() => {
-                  const overlayUrl = `${window.location.origin}/e/${code}/overlay`;
-                  navigator.clipboard.writeText(overlayUrl);
-                  setOverlayUrlCopied(true);
-                  setTimeout(() => setOverlayUrlCopied(false), 2000);
-                }}
-                title="Copy overlay URL for OBS"
-              >
-                {overlayUrlCopied ? 'Copied!' : 'Copy URL'}
-              </button>
-              <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
-                Requests:
-              </span>
-              <button
-                className={`btn btn-sm ${requestsOpen ? 'btn-success' : 'btn-danger'}`}
-                style={{ minWidth: '100px' }}
-                onClick={handleToggleRequests}
-                disabled={togglingRequests}
-              >
-                {togglingRequests ? '...' : requestsOpen ? 'Open' : 'Closed'}
-              </button>
-              <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
-                Now Playing:
-              </span>
-              <button
-                className={`btn btn-sm ${nowPlayingHidden ? 'btn-danger' : 'btn-success'}`}
-                style={{ minWidth: '100px' }}
-                onClick={handleToggleNowPlaying}
-                disabled={togglingNowPlaying}
-              >
-                {togglingNowPlaying ? '...' : nowPlayingHidden ? 'Hidden' : 'Visible'}
-              </button>
-            </div>
-          </div>
+      {/* 2. Request Queue */}
+      <RequestQueueSection
+        requests={requests}
+        isExpiredOrArchived={isExpiredOrArchived}
+        tidalSyncEnabled={tidalSyncEnabled}
+        updating={updating}
+        acceptingAll={acceptingAll}
+        syncingRequest={syncingRequest}
+        onUpdateStatus={updateStatus}
+        onAcceptAll={handleAcceptAll}
+        onSyncToTidal={handleSyncToTidal}
+        onOpenTidalPicker={handleOpenTidalPicker}
+      />
 
-          {/* Auto-hide timeout */}
-          <div style={{ borderTop: '1px solid #333', paddingTop: '1rem', marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>Auto-hide after</span>
-              <input
-                type="number"
-                min={1}
-                max={1440}
-                value={autoHideInput}
-                onChange={(e) => setAutoHideInput(e.target.value)}
-                style={{
-                  width: '70px',
-                  padding: '0.25rem 0.5rem',
-                  background: '#2a2a2a',
-                  border: '1px solid #444',
-                  borderRadius: '4px',
-                  color: '#ededed',
-                  fontSize: '0.875rem',
-                  textAlign: 'center',
-                }}
-              />
-              <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>minutes of inactivity</span>
-              {parseInt(autoHideInput, 10) !== autoHideMinutes && (
-                <button
-                  className="btn btn-sm btn-primary"
-                  onClick={handleSaveAutoHide}
-                  disabled={savingAutoHide || isNaN(parseInt(autoHideInput, 10)) || parseInt(autoHideInput, 10) < 1 || parseInt(autoHideInput, 10) > 1440}
-                  style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
-                >
-                  {savingAutoHide ? '...' : 'Save'}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Banner Upload */}
-          <div style={{ borderTop: '1px solid #333', paddingTop: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
-              <div>
-                <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>Event Banner</span>
-                <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: '0.25rem 0 0' }}>
-                  Custom banner for kiosk display and join page (max 5MB)
-                </p>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <label
-                  className="btn btn-sm btn-primary"
-                  style={{ cursor: 'pointer', margin: 0 }}
-                >
-                  {uploadingBanner ? 'Uploading...' : event.banner_url ? 'Replace' : 'Upload'}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/gif,image/webp"
-                    style={{ display: 'none' }}
-                    onChange={handleBannerSelect}
-                    disabled={uploadingBanner}
-                  />
-                </label>
-                {event.banner_url && (
-                  <button
-                    className="btn btn-sm btn-danger"
-                    onClick={handleDeleteBanner}
-                    disabled={uploadingBanner}
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            </div>
-            {event.banner_url && (
-              <div style={{ marginTop: '0.75rem' }}>
-                <img
-                  src={event.banner_url}
-                  alt="Event banner"
-                  style={{
-                    width: '100%',
-                    maxHeight: '120px',
-                    objectFit: 'cover',
-                    borderRadius: '6px',
-                  }}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Bridge Status */}
-      {!isExpiredOrArchived && (
-        <div
-          className="card"
-          style={{
-            marginBottom: '1rem',
-            padding: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <div>
-            <span style={{ fontWeight: 500 }}>Bridge Status</span>
-            <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
-              Denon StageLinQ bridge connection for live track detection
-            </p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span
-              style={{
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                background: bridgeConnected ? '#10b981' : '#6b7280',
-                display: 'inline-block',
-              }}
-            />
-            <span style={{ color: bridgeConnected ? '#10b981' : '#9ca3af', fontSize: '0.875rem' }}>
-              {bridgeConnected ? 'Bridge Connected' : 'Bridge Not Connected'}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Tidal Sync Settings */}
-      {!isExpiredOrArchived && (
-        <div
-          className="card"
-          style={{
-            marginBottom: '1rem',
-            padding: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <div>
-            <span style={{ fontWeight: 500 }}>Tidal Playlist Sync</span>
-            <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
-              Auto-add accepted requests to a Tidal playlist for SC6000
-            </p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            {tidalStatus?.linked ? (
-              <>
-                <span style={{ color: '#10b981', fontSize: '0.875rem' }}>
-                  Tidal Connected
-                </span>
-                <button
-                  className={`btn btn-sm ${tidalSyncEnabled ? 'btn-success' : ''}`}
-                  style={{
-                    minWidth: '100px',
-                    background: tidalSyncEnabled ? undefined : '#333',
-                  }}
-                  onClick={handleToggleTidalSync}
-                  disabled={togglingTidalSync}
-                >
-                  {togglingTidalSync ? '...' : tidalSyncEnabled ? 'Enabled' : 'Disabled'}
-                </button>
-                <button
-                  className="btn btn-sm"
-                  style={{ background: '#666', fontSize: '0.75rem' }}
-                  onClick={handleDisconnectTidal}
-                  title="Disconnect Tidal account"
-                >
-                  Disconnect
-                </button>
-              </>
-            ) : (
-              <button
-                className="btn btn-sm"
-                style={{ background: '#0066ff' }}
-                onClick={handleConnectTidal}
-              >
-                Connect Tidal
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-        <div className="tabs" style={{ marginBottom: 0 }}>
-          {(['all', 'new', 'accepted', 'playing', 'rejected'] as StatusFilter[]).map((status) => (
-            <button
-              key={status}
-              className={`tab ${filter === status ? 'active' : ''}`}
-              onClick={() => setFilter(status)}
-            >
-              {status.charAt(0).toUpperCase() + status.slice(1)} ({statusCounts[status]})
-            </button>
-          ))}
-        </div>
-        {!isExpiredOrArchived && statusCounts.new > 0 && (
-          <button
-            className="btn btn-success btn-sm"
-            onClick={handleAcceptAll}
-            disabled={acceptingAll}
-            style={{ marginLeft: 'auto' }}
-          >
-            {acceptingAll ? 'Accepting...' : `Accept All (${statusCounts.new})`}
-          </button>
-        )}
-      </div>
-
-      {filteredRequests.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center' }}>
-          <p style={{ color: '#9ca3af' }}>
-            {filter === 'all'
-              ? 'No requests yet. Share the QR code with your guests!'
-              : `No ${filter} requests.`}
-          </p>
-        </div>
-      ) : (
-        <div className="request-list">
-          {filteredRequests.map((request) => (
-            <div key={request.id} className="request-item">
-              <div className="request-info">
-                <h3>
-                  {request.song_title}
-                  {request.source_url && (
-                    <a
-                      href={request.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ marginLeft: '0.5rem', fontSize: '0.75rem' }}
-                    >
-                      ↗
-                    </a>
-                  )}
-                </h3>
-                <p>{request.artist}</p>
-                {request.note && <div className="note">{request.note}</div>}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-                  <p style={{ fontSize: '0.75rem', margin: 0 }}>
-                    {new Date(request.created_at).toLocaleTimeString()}
-                  </p>
-                  {request.vote_count > 0 && (
-                    <span
-                      style={{
-                        background: request.vote_count >= 5 ? '#f59e0b' : '#3b82f6',
-                        color: '#fff',
-                        padding: '0.125rem 0.5rem',
-                        borderRadius: '1rem',
-                        fontSize: '0.7rem',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {request.vote_count} {request.vote_count === 1 ? 'vote' : 'votes'}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                {/* Tidal Sync Status */}
-                {tidalSyncEnabled && request.status === 'accepted' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    {request.tidal_sync_status === 'synced' && (
-                      <span
-                        title="Synced to Tidal"
-                        style={{
-                          color: '#10b981',
-                          fontSize: '1rem',
-                          cursor: 'default',
-                        }}
-                      >
-                        T
-                      </span>
-                    )}
-                    {request.tidal_sync_status === 'pending' && (
-                      <span
-                        title="Syncing..."
-                        style={{
-                          color: '#f59e0b',
-                          fontSize: '0.875rem',
-                        }}
-                      >
-                        ...
-                      </span>
-                    )}
-                    {request.tidal_sync_status === 'not_found' && (
-                      <button
-                        className="btn btn-sm"
-                        style={{ background: '#f59e0b', padding: '0.125rem 0.375rem', fontSize: '0.75rem' }}
-                        onClick={() => handleOpenTidalPicker(request.id)}
-                        title="Track not found - click to link manually"
-                      >
-                        Link
-                      </button>
-                    )}
-                    {request.tidal_sync_status === 'error' && (
-                      <button
-                        className="btn btn-sm"
-                        style={{ background: '#ef4444', padding: '0.125rem 0.375rem', fontSize: '0.75rem' }}
-                        onClick={() => handleSyncToTidal(request.id)}
-                        disabled={syncingRequest === request.id}
-                        title="Sync failed - click to retry"
-                      >
-                        {syncingRequest === request.id ? '...' : 'Retry'}
-                      </button>
-                    )}
-                    {!request.tidal_sync_status && (
-                      <button
-                        className="btn btn-sm"
-                        style={{ background: '#0066ff', padding: '0.125rem 0.375rem', fontSize: '0.75rem' }}
-                        onClick={() => handleSyncToTidal(request.id)}
-                        disabled={syncingRequest === request.id}
-                        title="Sync to Tidal"
-                      >
-                        {syncingRequest === request.id ? '...' : 'Sync'}
-                      </button>
-                    )}
-                  </div>
-                )}
-                <span className={`badge badge-${request.status}`}>{request.status}</span>
-                {!isExpiredOrArchived && (
-                  <div className="request-actions">
-                    {request.status === 'new' && (
-                      <>
-                        <button
-                          className="btn btn-success btn-sm"
-                          onClick={() => updateStatus(request.id, 'accepted')}
-                          disabled={updating === request.id}
-                        >
-                          Accept
-                        </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => updateStatus(request.id, 'rejected')}
-                          disabled={updating === request.id}
-                        >
-                          Reject
-                        </button>
-                      </>
-                    )}
-                    {request.status === 'accepted' && (
-                      <>
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => updateStatus(request.id, 'playing')}
-                          disabled={updating === request.id}
-                        >
-                          Playing
-                        </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => updateStatus(request.id, 'rejected')}
-                          disabled={updating === request.id}
-                        >
-                          Reject
-                        </button>
-                      </>
-                    )}
-                    {request.status === 'playing' && (
-                      <button
-                        className="btn btn-warning btn-sm"
-                        onClick={() => updateStatus(request.id, 'played')}
-                        disabled={updating === request.id}
-                      >
-                        Played
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
+      {/* 3. Play History */}
       <PlayHistorySection
         items={playHistory}
         total={playHistoryTotal}
@@ -1081,6 +646,57 @@ export default function EventQueuePage() {
         onExport={handleExportPlayHistoryCsv}
       />
 
+      {/* 4. Kiosk Controls */}
+      {!isExpiredOrArchived && (
+        <KioskControlsCard
+          code={code}
+          requestsOpen={requestsOpen}
+          togglingRequests={togglingRequests}
+          onToggleRequests={handleToggleRequests}
+          nowPlayingHidden={nowPlayingHidden}
+          togglingNowPlaying={togglingNowPlaying}
+          onToggleNowPlaying={handleToggleNowPlaying}
+          autoHideInput={autoHideInput}
+          autoHideMinutes={autoHideMinutes}
+          savingAutoHide={savingAutoHide}
+          onAutoHideInputChange={setAutoHideInput}
+          onSaveAutoHide={handleSaveAutoHide}
+        />
+      )}
+
+      {/* 5. Stream Overlay */}
+      {!isExpiredOrArchived && (
+        <StreamOverlayCard code={code} />
+      )}
+
+      {/* 6. Bridge Status */}
+      {!isExpiredOrArchived && (
+        <BridgeStatusCard bridgeConnected={bridgeConnected} />
+      )}
+
+      {/* 7. Cloud Providers */}
+      {!isExpiredOrArchived && (
+        <CloudProvidersCard
+          tidalStatus={tidalStatus}
+          tidalSyncEnabled={tidalSyncEnabled}
+          togglingTidalSync={togglingTidalSync}
+          onToggleTidalSync={handleToggleTidalSync}
+          onConnectTidal={handleConnectTidal}
+          onDisconnectTidal={handleDisconnectTidal}
+        />
+      )}
+
+      {/* 8. Event Customization */}
+      {!isExpiredOrArchived && (
+        <EventCustomizationCard
+          event={event}
+          uploadingBanner={uploadingBanner}
+          onBannerSelect={handleBannerSelect}
+          onDeleteBanner={handleDeleteBanner}
+        />
+      )}
+
+      {/* Modals */}
       {showDeleteConfirm && (
         <DeleteEventModal
           eventName={event.name}
