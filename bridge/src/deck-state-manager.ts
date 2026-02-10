@@ -528,7 +528,7 @@ export class DeckStateManager extends EventEmitter {
 
       const state = this.decks.get(deckId)!;
 
-      if (state.state === "PLAYING" && state.isPlaying && !state.hasBeenReported) {
+      if (state.state === "PLAYING" && !state.hasBeenReported) {
         // Check fader if enabled
         if (this.config.useFaderDetection && state.faderLevel === 0) {
           this.emitLog(`Deck ${deckId}: Switch candidate skipped (fader down)`);

@@ -25,7 +25,8 @@ class EventUpdate(BaseModel):
 class DisplaySettingsUpdate(BaseModel):
     """Request body for updating display settings."""
 
-    now_playing_hidden: bool
+    now_playing_hidden: bool | None = None
+    now_playing_auto_hide_minutes: int | None = Field(default=None, ge=1, le=1440)
 
 
 class DisplaySettingsResponse(BaseModel):
@@ -33,6 +34,7 @@ class DisplaySettingsResponse(BaseModel):
 
     status: str = "ok"
     now_playing_hidden: bool
+    now_playing_auto_hide_minutes: int = 10
 
 
 class EventOut(BaseModel):

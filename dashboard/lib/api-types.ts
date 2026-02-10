@@ -83,6 +83,7 @@ export interface KioskDisplay {
 export interface DisplaySettingsResponse {
   status: string;
   now_playing_hidden: boolean;
+  now_playing_auto_hide_minutes: number;
 }
 
 export interface SearchResult {

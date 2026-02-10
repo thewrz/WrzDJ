@@ -110,8 +110,10 @@ def get_kiosk_display(
             artwork_url=event.now_playing.artwork_url,
         )
 
-    # Check if now playing should be hidden
-    now_playing_is_hidden = is_now_playing_hidden(db, event.id)
+    # Check if now playing should be hidden (using per-event timeout)
+    now_playing_is_hidden = is_now_playing_hidden(
+        db, event.id, auto_hide_minutes=event.now_playing_auto_hide_minutes
+    )
 
     # Build banner URLs from API host
     banner_url = None

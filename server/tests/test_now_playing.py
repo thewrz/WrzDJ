@@ -467,7 +467,7 @@ class TestIsNowPlayingHidden:
         assert is_now_playing_hidden(db, test_event.id) is True
 
     def test_hidden_after_auto_timeout(self, db: Session, test_event: Event):
-        """Hidden after 60 minutes of inactivity."""
+        """Hidden after default 10 minutes of inactivity."""
         now_playing = NowPlaying(
             event_id=test_event.id,
             title="Test Track",
@@ -480,12 +480,12 @@ class TestIsNowPlayingHidden:
         assert is_now_playing_hidden(db, test_event.id) is True
 
     def test_visible_within_timeout(self, db: Session, test_event: Event):
-        """Visible within 60 minute timeout."""
+        """Visible within default 10 minute timeout."""
         now_playing = NowPlaying(
             event_id=test_event.id,
             title="Test Track",
             artist="Test Artist",
-            started_at=utcnow() - timedelta(minutes=30),
+            started_at=utcnow() - timedelta(minutes=5),
         )
         db.add(now_playing)
         db.commit()
@@ -494,13 +494,56 @@ class TestIsNowPlayingHidden:
 
     def test_last_shown_at_resets_timer(self, db: Session, test_event: Event):
         """last_shown_at resets the auto-hide timer."""
-        # Track started 90 minutes ago but was shown 30 minutes ago
+        # Track started 15 minutes ago but was shown 5 minutes ago
         now_playing = NowPlaying(
             event_id=test_event.id,
             title="Test Track",
             artist="Test Artist",
-            started_at=utcnow() - timedelta(minutes=90),
-            last_shown_at=utcnow() - timedelta(minutes=30),
+            started_at=utcnow() - timedelta(minutes=15),
+            last_shown_at=utcnow() - timedelta(minutes=5),
+        )
+        db.add(now_playing)
+        db.commit()
+
+        assert is_now_playing_hidden(db, test_event.id) is False
+
+    def test_hidden_after_custom_auto_timeout(self, db: Session, test_event: Event):
+        """Hidden after custom per-event auto-hide timeout."""
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            started_at=utcnow() - timedelta(minutes=6),
+        )
+        db.add(now_playing)
+        db.commit()
+
+        # Event with 5-minute timeout, track started 6min ago => hidden
+        assert is_now_playing_hidden(db, test_event.id, auto_hide_minutes=5) is True
+
+    def test_visible_within_custom_timeout(self, db: Session, test_event: Event):
+        """Visible within custom per-event timeout."""
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            started_at=utcnow() - timedelta(minutes=3),
+        )
+        db.add(now_playing)
+        db.commit()
+
+        # Event with 5-minute timeout, track started 3min ago => visible
+        assert is_now_playing_hidden(db, test_event.id, auto_hide_minutes=5) is False
+
+    def test_bridge_last_seen_resets_timer(self, db: Session, test_event: Event):
+        """bridge_last_seen resets the auto-hide timer."""
+        # Track started 15min ago, bridge_last_seen 3min ago, default 10min timeout
+        now_playing = NowPlaying(
+            event_id=test_event.id,
+            title="Test Track",
+            artist="Test Artist",
+            started_at=utcnow() - timedelta(minutes=15),
+            bridge_last_seen=utcnow() - timedelta(minutes=3),
         )
         db.add(now_playing)
         db.commit()

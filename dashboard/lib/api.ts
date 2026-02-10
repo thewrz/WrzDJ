@@ -342,12 +342,30 @@ class ApiClient {
   /**
    * Set now playing visibility on kiosk display.
    * When hidden=true, the now playing section will be hidden on the kiosk.
-   * When hidden=false, the now playing section will be shown and the 60-minute timer resets.
+   * When hidden=false, the now playing section will be shown and the auto-hide timer resets.
    */
-  async setNowPlayingVisibility(code: string, hidden: boolean): Promise<DisplaySettingsResponse> {
+  async setNowPlayingVisibility(
+    code: string,
+    hidden: boolean,
+    autoHideMinutes?: number,
+  ): Promise<DisplaySettingsResponse> {
+    const body: Record<string, unknown> = { now_playing_hidden: hidden };
+    if (autoHideMinutes !== undefined) {
+      body.now_playing_auto_hide_minutes = autoHideMinutes;
+    }
     return this.fetch(`/api/events/${code}/display-settings`, {
       method: 'PATCH',
-      body: JSON.stringify({ now_playing_hidden: hidden }),
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * Update only the auto-hide timeout without affecting visibility state.
+   */
+  async setAutoHideMinutes(code: string, minutes: number): Promise<DisplaySettingsResponse> {
+    return this.fetch(`/api/events/${code}/display-settings`, {
+      method: 'PATCH',
+      body: JSON.stringify({ now_playing_auto_hide_minutes: minutes }),
     });
   }
 

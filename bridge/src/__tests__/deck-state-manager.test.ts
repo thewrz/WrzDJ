@@ -769,6 +769,41 @@ describe("DeckStateManager", () => {
       expect(manager.getCurrentNowPlayingDeckId()).toBeNull();
     });
 
+    it("both decks pause simultaneously — paused PLAYING deck becomes candidate", () => {
+      const deckLiveHandler = vi.fn();
+      manager.on("deckLive", deckLiveHandler);
+
+      // Deck 1 becomes now-playing
+      manager.updateTrackInfo("1", track1);
+      manager.updatePlayState("1", true);
+      vi.advanceTimersByTime(15000);
+      expect(deckLiveHandler).toHaveBeenCalledTimes(1);
+      expect(manager.getCurrentNowPlayingDeckId()).toBe("1");
+
+      // Deck 2 reaches PLAYING (blocked by priority — not reported)
+      manager.updateTrackInfo("2", track2);
+      manager.updatePlayState("2", true);
+      vi.advanceTimersByTime(15000);
+      expect(deckLiveHandler).toHaveBeenCalledTimes(1);
+
+      // Both decks pause near the same time (deck 2 pauses 500ms later)
+      manager.updatePlayState("1", false);
+      vi.advanceTimersByTime(500);
+      manager.updatePlayState("2", false);
+
+      // Deck 1 grace period expires (3s from its pause = 2500ms more)
+      // Deck 2 is paused but still in PLAYING state (within its own grace period)
+      vi.advanceTimersByTime(2500);
+
+      // Deck 2 (paused but PLAYING) should become the new candidate
+      expect(deckLiveHandler).toHaveBeenCalledTimes(2);
+      expect(manager.getCurrentNowPlayingDeckId()).toBe("2");
+      expect(deckLiveHandler).toHaveBeenLastCalledWith({
+        deckId: "2",
+        track: track2,
+      });
+    });
+
     it("respects fader and master deck priority when switching", () => {
       const deckLiveHandler = vi.fn();
       manager.on("deckLive", deckLiveHandler);

@@ -271,6 +271,20 @@ describe('BridgeRunner', () => {
     expect(runner.getStatus().networkWarnings).toEqual([]);
   });
 
+  it('calls DELETE /bridge/nowplaying/{code} on stop', async () => {
+    await runner.start(TEST_CONFIG);
+    mockFetch.mockClear();
+
+    await runner.stop();
+
+    // Should have called DELETE /bridge/nowplaying/ABC123 and POST /bridge/status
+    const deleteCall = mockFetch.mock.calls.find(
+      (call) => typeof call[0] === 'string' && call[0].includes('/bridge/nowplaying/') && call[1]?.method === 'DELETE',
+    );
+    expect(deleteCall).toBeDefined();
+    expect(deleteCall![0]).toContain('/bridge/nowplaying/ABC123');
+  });
+
   it('logs networkWarnings when conflicts detected', async () => {
     const logs: string[] = [];
     runner.on('log', (msg: string) => logs.push(msg));

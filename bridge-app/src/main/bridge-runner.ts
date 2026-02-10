@@ -130,6 +130,7 @@ export class BridgeRunner extends EventEmitter {
     }
 
     try {
+      await this.clearNowPlaying();
       await this.postBridgeStatus(false);
     } catch {
       // Best effort on shutdown
@@ -210,6 +211,16 @@ export class BridgeRunner extends EventEmitter {
         this.emitStatus();
         await this.postBridgeStatus(false);
       }
+    });
+
+    // Handle heartbeat — keep bridge_last_seen fresh on the backend
+    this.pluginBridge.on('heartbeat', async () => {
+      await this.postBridgeStatus(true, this.connectedDevice ?? undefined);
+    });
+
+    // Handle authoritative now-playing clear
+    this.pluginBridge.on('clearNowPlaying', async () => {
+      await this.clearNowPlaying();
     });
 
     // Forward plugin ready
@@ -324,6 +335,29 @@ export class BridgeRunner extends EventEmitter {
     };
 
     await this.postWithRetry('/api/bridge/status', payload);
+  }
+
+  private async clearNowPlaying(): Promise<void> {
+    if (!this.config) return;
+
+    const endpoint = `/api/bridge/nowplaying/${this.config.eventCode}`;
+    try {
+      const response = await fetch(`${this.config.apiUrl}${endpoint}`, {
+        method: 'DELETE',
+        headers: {
+          'X-Bridge-API-Key': this.config.apiKey,
+        },
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        this.log(`DELETE ${endpoint} failed: HTTP ${response.status}: ${text}`);
+      } else {
+        this.log(`DELETE ${endpoint} succeeded`);
+      }
+    } catch (err) {
+      this.log(`DELETE ${endpoint} failed: ${(err as Error).message}`);
+    }
   }
 
   // --- Event health check ---
