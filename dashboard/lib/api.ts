@@ -360,6 +360,16 @@ class ApiClient {
   }
 
   /**
+   * Update only the auto-hide timeout without affecting visibility state.
+   */
+  async setAutoHideMinutes(code: string, minutes: number): Promise<DisplaySettingsResponse> {
+    return this.fetch(`/api/events/${code}/display-settings`, {
+      method: 'PATCH',
+      body: JSON.stringify({ now_playing_auto_hide_minutes: minutes }),
+    });
+  }
+
+  /**
    * Get current display settings for an event.
    */
   async getDisplaySettings(code: string): Promise<DisplaySettingsResponse> {

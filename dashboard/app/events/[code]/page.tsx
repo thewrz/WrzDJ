@@ -282,7 +282,7 @@ export default function EventQueuePage() {
     if (isNaN(value) || value < 1 || value > 1440) return;
     setSavingAutoHide(true);
     try {
-      const result = await api.setNowPlayingVisibility(code, nowPlayingHidden, value);
+      const result = await api.setAutoHideMinutes(code, value);
       setAutoHideMinutes(result.now_playing_auto_hide_minutes);
       setAutoHideInput(String(result.now_playing_auto_hide_minutes));
     } catch (err) {

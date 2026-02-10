@@ -869,6 +869,35 @@ class TestDisplaySettings:
         assert response.status_code == 200
         assert response.json()["now_playing_auto_hide_minutes"] == 30
 
+    def test_update_auto_hide_only_does_not_change_hidden(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test that PATCH with only auto_hide_minutes does not change now_playing_hidden.
+
+        Regression test for multi-tab race: Tab A toggles visibility to hidden,
+        Tab B saves auto-hide and should not silently undo the visibility change.
+        """
+        # Set hidden=True
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_hidden": True},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["now_playing_hidden"] is True
+
+        # PATCH with only auto_hide_minutes (simulates Tab B saving auto-hide)
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_auto_hide_minutes": 5},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["now_playing_auto_hide_minutes"] == 5
+        # Hidden should still be True — not reset by the auto-hide PATCH
+        assert data["now_playing_hidden"] is True
+
     def test_update_display_settings_not_owner(
         self, client: TestClient, db: Session, test_user: User, auth_headers: dict
     ):
