@@ -21,7 +21,9 @@ const nextConfig = {
         // Allow OBS/streaming tools to embed overlay pages
         source: '/e/:code/overlay',
         headers: [
-          { key: 'X-Frame-Options', value: 'ALLOWALL' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors *" },
+          // Remove X-Frame-Options for this route (CSP frame-ancestors takes precedence)
+          { key: 'X-Frame-Options', value: '' },
         ],
       },
     ];

@@ -1,5 +1,7 @@
 """Rate limiting middleware using slowapi."""
 
+from functools import lru_cache
+
 from fastapi import Request, Response
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
@@ -9,18 +11,34 @@ from starlette.responses import JSONResponse
 from app.core.config import get_settings
 
 
-def _get_trusted_proxies() -> set[str]:
-    """Return the set of trusted proxy IPs from settings."""
+@lru_cache(maxsize=1)
+def _get_trusted_proxies() -> frozenset[str]:
+    """Return the set of trusted proxy IPs from settings (cached at first call)."""
     settings = get_settings()
-    return {ip.strip() for ip in settings.trusted_proxies.split(",") if ip.strip()}
+    return frozenset(ip.strip() for ip in settings.trusted_proxies.split(",") if ip.strip())
 
 
 def get_client_ip(request: Request) -> str:
-    """Get client IP, respecting X-Forwarded-For only from trusted proxies."""
+    """Get client IP, preferring X-Real-IP set by nginx over X-Forwarded-For.
+
+    Priority:
+    1. X-Real-IP (nginx overwrites this with the actual connecting client IP)
+    2. X-Forwarded-For first entry (only if direct connection is a trusted proxy)
+    3. Direct connection IP
+    """
     direct_ip = get_remote_address(request)
+
+    # Prefer X-Real-IP — nginx sets this to the real client IP and it cannot be
+    # spoofed by the client (nginx overwrites, not appends)
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip and direct_ip in _get_trusted_proxies():
+        return real_ip.strip()
+
+    # Fallback: X-Forwarded-For from a trusted proxy
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for and direct_ip in _get_trusted_proxies():
         return forwarded_for.split(",")[0].strip()
+
     return direct_ip
 
 

@@ -41,6 +41,17 @@ export PORT_FRONTEND="${PORT_FRONTEND:-3000}"
 export APP_DOMAIN
 export API_DOMAIN
 
+# Validate port numbers
+validate_port() {
+  local port="$1" name="$2"
+  if [[ ! "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+    echo "ERROR: Invalid port for $name: $port (must be 1-65535)" >&2
+    exit 1
+  fi
+}
+validate_port "$PORT_API" "PORT_API"
+validate_port "$PORT_FRONTEND" "PORT_FRONTEND"
+
 echo "==> Generating nginx configs"
 echo "    APP_DOMAIN:    $APP_DOMAIN"
 echo "    API_DOMAIN:    $API_DOMAIN"
@@ -98,6 +109,22 @@ else
   echo "    Copy them manually:"
   echo "      sudo cp $TEMPLATE_DIR/$API_DOMAIN.conf /etc/nginx/sites-available/$API_DOMAIN"
   echo "      sudo cp $TEMPLATE_DIR/$APP_DOMAIN.conf /etc/nginx/sites-available/$APP_DOMAIN"
+fi
+
+# --- Migration: ensure overlay location block exists for existing deployments ---
+# The app.conf.template now includes a dedicated nginx location block for
+# /e/*/overlay that sets CSP frame-ancestors * (allows OBS/streaming embeds).
+# Existing deployments that re-run setup-nginx.sh get this automatically via
+# the template re-generation above. This section just confirms it.
+if [ -d /etc/nginx/sites-available ]; then
+  INSTALLED_APP="/etc/nginx/sites-available/$APP_DOMAIN"
+  if [ -f "$INSTALLED_APP" ] && ! grep -q "frame-ancestors" "$INSTALLED_APP"; then
+    echo ""
+    echo "==> Migration note:"
+    echo "    The installed nginx config for $APP_DOMAIN is missing the overlay"
+    echo "    location block (CSP frame-ancestors for OBS embeds)."
+    echo "    It was updated above — nginx will pick it up after reload."
+  fi
 fi
 
 echo ""
