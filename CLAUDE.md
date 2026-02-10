@@ -5,7 +5,7 @@
 WrzDJ is a DJ song request management system with four services:
 - **Backend**: Python FastAPI (`server/`) — SQLAlchemy 2.0, PostgreSQL, Alembic migrations
 - **Frontend**: Next.js 16+ with React 18 (`dashboard/`) — TypeScript, vanilla CSS (dark theme)
-- **Bridge**: Node.js DJ equipment integration (`bridge/`) — plugin system for Denon StageLinQ, Traktor Broadcast, Pioneer PRO DJ LINK
+- **Bridge**: Node.js DJ equipment integration (`bridge/`) — plugin system for Denon StageLinQ, Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast
 - **Bridge App**: Electron GUI for the bridge (`bridge-app/`) — React + Vite, cross-platform installers
 
 ## Git Workflow
@@ -80,7 +80,7 @@ npm test -- --run         # Vitest (28 tests)
 ### Bridge (from `bridge/`)
 ```bash
 npx tsc --noEmit          # TypeScript type check
-npm test -- --run         # Vitest (159 tests)
+npm test -- --run         # Vitest (209 tests)
 ```
 
 ### Bridge App (from `bridge-app/`)
@@ -208,13 +208,17 @@ NEW → REJECTED
 - `server/app/services/banner.py` — banner image processing (resize, WebP, desaturate, color extraction)
 
 ### Bridge Plugin System
-- Built-in plugins: StageLinQ (Denon), Traktor Broadcast, Pioneer PRO DJ LINK
+- Built-in plugins: StageLinQ (Denon), Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast
 - Plugins self-describe via `info`, `capabilities`, and `configOptions`
 - `PluginConfigOption` declares type (`number`/`string`/`boolean`), default, min/max, label
 - Registry provides `getPluginMeta()`/`listPluginMeta()` for serializable metadata (safe for IPC)
 - Bridge-app SettingsPanel is fully data-driven from plugin metadata — no hardcoded plugin UI
 - Adding a plugin with `configOptions` auto-surfaces those settings in the UI
 - Pioneer plugin uses `alphatheta-connect` npm library for PRO DJ LINK protocol (maintained fork of `prolink-connect` with encrypted Rekordbox DB support)
+- Serato plugin watches binary session files (`Music/_Serato_/History/Sessions/`) — no npm deps, pure TS binary parsing + `fs` polling
+- Serato capabilities: `multiDeck: true`, `albumMetadata: true`, `playState: false` (synthesized by PluginBridge)
+- Serato parser: `serato-session-parser.ts` — OENT/ADAT chunk parsing, UTF-16 BE text decoding, OS-specific path detection
+- Traktor plugin uses only Node.js built-ins (`http` module) — no npm deps, no externalization needed
 - See `docs/PLUGIN-ARCHITECTURE.md` for full details
 
 ### Bridge App Architecture
@@ -231,7 +235,7 @@ NEW → REJECTED
 - `AutoUnpackNativesPlugin` unpacks `.node` native files from asar to `app.asar.unpacked/`
 - Native module compilation: `npm install --ignore-scripts` then `npx electron-rebuild`
 - `alphatheta-connect` uses `better-sqlite3-multiple-ciphers` natively — no `overrides` needed
-- Traktor plugin uses only Node.js built-ins — no externalization needed
+- Serato and Traktor plugins use only Node.js built-ins — no externalization needed
 
 ### Release System
 - GitHub Actions release workflow: `.github/workflows/release.yml`
@@ -258,3 +262,35 @@ NEW → REJECTED
 - Banner upload uses `File(...)` not `UploadFile(...)` for proper FastAPI file validation
 - Banner colors stored as JSON string in DB — parse with `json.loads()` when reading, serialize with `json.dumps()` when writing
 - Deploy: `api_uploads` Docker volume persists uploaded files across container restarts
+
+## Upstream Dependency Health Checks
+
+Bridge plugins depend on community-maintained open-source projects for protocol support. **Periodically check the health of these upstream dependencies** — if a library goes unmaintained, breaks, or changes its API, the corresponding plugin may need updates or a replacement library.
+
+### Critical Plugin Dependencies (npm)
+
+| Package | Plugin | GitHub | What to check |
+|---------|--------|--------|---------------|
+| `stagelinq` | StageLinQ (Denon) | [chrisle/StageLinq](https://github.com/chrisle/StageLinq) | New releases, open issues, protocol changes from Denon firmware updates |
+| `alphatheta-connect` | Pioneer PRO DJ LINK | [chrisle/alphatheta-connect](https://github.com/chrisle/alphatheta-connect) | New releases, PRO DJ LINK protocol changes, Rekordbox DB encryption updates, `better-sqlite3-multiple-ciphers` compat |
+
+### Reference Implementations (no runtime dependency, used for format research)
+
+| Project | Plugin | GitHub | What to check |
+|---------|--------|--------|---------------|
+| `serato-tags` | Serato DJ | [Holzhaus/serato-tags](https://github.com/Holzhaus/serato-tags) | Session file format changes in new Serato versions |
+| `SSL-API` | Serato DJ | [bkstein/SSL-API](https://github.com/bkstein/SSL-API) | ADAT field tag additions/changes |
+| `whats-now-playing` | Serato DJ | [whatsnowplaying/whats-now-playing](https://github.com/whatsnowplaying/whats-now-playing) | Serato session parsing updates |
+| `traktor_nowplaying` | Traktor Broadcast | [radusuciu/traktor_nowplaying](https://github.com/radusuciu/traktor_nowplaying) | ICY metadata format changes |
+
+### Plugins with No External Dependencies
+
+- **Traktor Broadcast** — pure Node.js `http` module (Icecast protocol is stable)
+- **Serato DJ** — pure Node.js `fs` + binary parsing (session file format is reverse-engineered)
+
+### When to Check
+
+- Before major version bumps of bridge/bridge-app
+- When a DJ reports equipment detection issues after updating their DJ software
+- When `npm audit` or Dependabot flags vulnerabilities in `stagelinq` or `alphatheta-connect`
+- Quarterly, as part of general maintenance — check for new releases, breaking changes, and community activity
