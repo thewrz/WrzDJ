@@ -57,6 +57,24 @@ server {
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
 
+    # OBS/streaming overlay — allow embedding from any origin
+    location ~ ^/e/[^/]+/overlay {
+        # Override server-level framing restrictions for this path
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://${API_DOMAIN} https://i.scdn.co https://resources.tidal.com; media-src 'self' data:; connect-src 'self' https://${API_DOMAIN}; frame-src https://challenges.cloudflare.com; frame-ancestors *" always;
+        # Omit X-Frame-Options entirely (CSP frame-ancestors takes precedence)
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+        proxy_pass http://127.0.0.1:${PORT_FRONTEND};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     # Frontend -> Next.js
     location / {
         proxy_pass http://127.0.0.1:${PORT_FRONTEND};

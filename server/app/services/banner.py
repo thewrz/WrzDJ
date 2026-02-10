@@ -4,13 +4,21 @@ Handles upload validation, resizing, WebP conversion, desaturation for kiosk,
 and dominant color extraction.
 """
 
+from __future__ import annotations
+
+import json
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import UploadFile
 from PIL import Image, ImageEnhance
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+
+if TYPE_CHECKING:
+    from app.models.event import Event
 
 settings = get_settings()
 
@@ -194,3 +202,32 @@ def _kiosk_filename(banner_filename: str) -> str:
     """Derive the kiosk variant filename from the main banner filename."""
     stem = banner_filename.rsplit(".", 1)[0]
     return f"{stem}_kiosk.webp"
+
+
+def save_banner_to_event(db: Session, event: Event, filename: str, colors: list[str]) -> None:
+    """Persist banner metadata on an event and commit.
+
+    Args:
+        db: Database session.
+        event: The event to update.
+        filename: The banner filename (relative to uploads dir).
+        colors: Dominant color hex strings extracted from the banner.
+    """
+    event.banner_filename = filename
+    event.banner_colors = json.dumps(colors)
+    db.commit()
+    db.refresh(event)
+
+
+def delete_banner_from_event(db: Session, event: Event) -> None:
+    """Remove banner files from disk, clear DB fields, and commit.
+
+    Args:
+        db: Database session.
+        event: The event whose banner should be removed.
+    """
+    delete_banner_files(event.banner_filename)
+    event.banner_filename = None
+    event.banner_colors = None
+    db.commit()
+    db.refresh(event)

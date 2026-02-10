@@ -308,6 +308,13 @@ If you changed `PORT_API` or `PORT_FRONTEND`, re-run `setup-nginx.sh` with the s
 - [ ] SSH key authentication (disable password auth)
 - [ ] Limited sudo via `/etc/sudoers.d/wrzdj` (nginx, certbot, systemd only)
 
+> **Note on Docker group membership:** The `wrzdj` user is added to the `docker` group,
+> which is functionally equivalent to root access on the host (any docker group member
+> can mount the host filesystem via `docker run -v /:/host`). The sudoers restrictions
+> still provide defense-in-depth against accidental misuse and limit the attack surface
+> if only the shell is compromised without docker CLI access. For stronger isolation,
+> consider rootless Docker or Podman.
+
 ### Security Headers (verify in browser dev tools)
 - [ ] `Strict-Transport-Security` (HSTS)
 - [ ] `X-Content-Type-Options: nosniff`

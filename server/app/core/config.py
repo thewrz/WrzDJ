@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     # StageLinQ Bridge
     bridge_api_key: str = ""
 
+    # Trusted proxy IPs for X-Forwarded-For (comma-separated)
+    # Set to nginx/load balancer IPs in production; empty = trust direct connection only
+    trusted_proxies: str = "127.0.0.1,::1"
+
     # CORS - comma-separated origins or "*" for all (dev only)
     # Production: https://app.wrzdj.com
     cors_origins: str = "*"

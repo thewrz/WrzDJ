@@ -5,8 +5,10 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
+from app.models.event import Event
 from app.models.user import User, UserRole
 from app.services.auth import decode_token, get_user_by_username
+from app.services.event import get_event_by_code_for_owner
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -54,3 +56,15 @@ def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
             detail="Admin access required",
         )
     return current_user
+
+
+def get_owned_event(
+    code: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> Event:
+    """Get an event owned by the current user, or raise 404."""
+    event = get_event_by_code_for_owner(db, code, current_user)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return event

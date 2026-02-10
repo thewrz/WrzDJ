@@ -6,6 +6,10 @@ import { QRCodeSVG } from 'qrcode.react';
 import { api, ApiError, KioskDisplay, SearchResult, NowPlayingInfo, PlayHistoryItem } from '@/lib/api';
 
 const INACTIVITY_TIMEOUT = 60000; // 60 seconds
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
+function safeColor(c: string | undefined, fallback: string): string {
+  return c && HEX_COLOR_RE.test(c) ? c : fallback;
+}
 
 export default function KioskDisplayPage() {
   const params = useParams();
@@ -720,12 +724,49 @@ export default function KioskDisplayPage() {
           color: #22c55e;
           font-weight: bold;
         }
+        .success-vote-count {
+          color: #9ca3af;
+          margin-top: 0.5rem;
+        }
+        .search-result-art {
+          width: 48px;
+          height: 48px;
+          border-radius: 4px;
+          object-fit: cover;
+        }
+        .search-result-placeholder {
+          width: 48px;
+          height: 48px;
+          border-radius: 4px;
+          background: rgba(255,255,255,0.1);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: rgba(255,255,255,0.5);
+        }
+        .search-result-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .search-result-title {
+          font-weight: 500;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .search-result-artist {
+          color: #9ca3af;
+          font-size: 0.875rem;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
       `}</style>
 
       <div
         className="kiosk-container"
         style={display.banner_colors ? {
-          '--kiosk-bg': `linear-gradient(135deg, ${display.banner_colors[0] || '#1a1a2e'} 0%, ${display.banner_colors[1] || '#16213e'} 50%, ${display.banner_colors[2] || '#0f3460'} 100%)`,
+          '--kiosk-bg': `linear-gradient(135deg, ${safeColor(display.banner_colors[0], '#1a1a2e')} 0%, ${safeColor(display.banner_colors[1], '#16213e')} 50%, ${safeColor(display.banner_colors[2], '#0f3460')} 100%)`,
         } as React.CSSProperties : undefined}
       >
         {display.banner_kiosk_url && (
@@ -887,7 +928,7 @@ export default function KioskDisplayPage() {
                   {submitIsDuplicate ? 'Vote Added!' : 'Request Submitted!'}
                 </p>
                 {submitIsDuplicate && submitVoteCount > 0 && (
-                  <p style={{ color: '#9ca3af', marginTop: '0.5rem' }}>
+                  <p className="success-vote-count">
                     {submitVoteCount} {submitVoteCount === 1 ? 'person wants' : 'people want'} this song!
                   </p>
                 )}
@@ -946,18 +987,18 @@ export default function KioskDisplayPage() {
                           <img
                             src={result.album_art}
                             alt={result.title}
-                            style={{ width: 48, height: 48, borderRadius: 4, objectFit: 'cover' }}
+                            className="search-result-art"
                           />
                         ) : (
-                          <div style={{ width: 48, height: 48, borderRadius: 4, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.5)' }}>
+                          <div className="search-result-placeholder">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
                               <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
                             </svg>
                           </div>
                         )}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.title}</div>
-                          <div style={{ color: '#9ca3af', fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.artist}</div>
+                        <div className="search-result-info">
+                          <div className="search-result-title">{result.title}</div>
+                          <div className="search-result-artist">{result.artist}</div>
                         </div>
                       </button>
                     ))}

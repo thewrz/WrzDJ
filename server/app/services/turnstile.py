@@ -16,6 +16,9 @@ async def verify_turnstile_token(token: str, remote_ip: str | None = None) -> bo
     settings = get_settings()
 
     if not settings.turnstile_secret_key:
+        if settings.is_production:
+            # Reject registration when CAPTCHA is not configured in production
+            return False
         # No key configured — skip verification (dev mode)
         return True
 

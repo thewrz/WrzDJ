@@ -13,5 +13,15 @@ ExecStart=/usr/bin/docker compose --env-file /opt/wrzdj/deploy/.env up -d
 ExecStop=/usr/bin/docker compose down
 TimeoutStartSec=120
 
+# Sandboxing — limit blast radius if service is compromised
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+
 [Install]
 WantedBy=multi-user.target

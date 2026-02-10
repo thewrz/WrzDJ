@@ -116,18 +116,30 @@ echo "    Installing wrapper scripts to /usr/local/bin/"
 cat > /usr/local/bin/wrzdj-nginx-install << 'WRAPPER'
 #!/bin/bash
 set -euo pipefail
-# Install an nginx config file safely (no path traversal)
-src="$1"
+# Install an nginx config file safely (no path traversal, no arbitrary source)
+ALLOWED_DIR="/opt/wrzdj/deploy/nginx"
+
+src="$(realpath "$1")"
 name="$(basename "$1" .conf)"
+
+# Validate source is under the allowed directory
+if [[ "$src" != "$ALLOWED_DIR"/* ]]; then
+  echo "ERROR: Source file must be under $ALLOWED_DIR (got: $src)" >&2
+  exit 1
+fi
+
+# Validate destination name (no slashes, dots-only, etc.)
 if [[ ! "$name" =~ ^[a-zA-Z0-9.-]+$ ]]; then
   echo "ERROR: Invalid config name: $name" >&2
   exit 1
 fi
+
 cp -- "$src" "/etc/nginx/sites-available/$name"
 ln -sf "/etc/nginx/sites-available/$name" "/etc/nginx/sites-enabled/$name"
 echo "Installed: /etc/nginx/sites-available/$name"
 WRAPPER
-chmod 755 /usr/local/bin/wrzdj-nginx-install
+chmod 750 /usr/local/bin/wrzdj-nginx-install
+chown root:wrzdj /usr/local/bin/wrzdj-nginx-install
 
 cat > /usr/local/bin/wrzdj-certbot << 'WRAPPER'
 #!/bin/bash
@@ -155,7 +167,7 @@ case "${1:-}" in
       echo "Usage: wrzdj-certbot --nginx -d domain1 [-d domain2 ...]" >&2
       exit 1
     fi
-    exec /usr/bin/certbot --nginx "${domains[@]}"
+    exec /usr/bin/certbot --nginx --non-interactive "${domains[@]}"
     ;;
   renew)
     if [ "${2:-}" = "--dry-run" ]; then
@@ -169,7 +181,8 @@ case "${1:-}" in
     ;;
 esac
 WRAPPER
-chmod 755 /usr/local/bin/wrzdj-certbot
+chmod 750 /usr/local/bin/wrzdj-certbot
+chown root:wrzdj /usr/local/bin/wrzdj-certbot
 
 echo "    Installed wrzdj-nginx-install and wrzdj-certbot"
 

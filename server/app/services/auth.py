@@ -41,9 +41,16 @@ def decode_token(token: str) -> TokenData | None:
         return None
 
 
+# Pre-computed hash for timing equalization when user is not found.
+# Prevents attackers from enumerating valid usernames via response time differences.
+_DUMMY_HASH = get_password_hash("dummy-timing-equalization")
+
+
 def authenticate_user(db: Session, username: str, password: str) -> User | None:
     user = db.query(User).filter(User.username == username).first()
     if not user:
+        # Perform a dummy bcrypt check to equalize timing with the found-user path
+        verify_password(password, _DUMMY_HASH)
         return None
     if not verify_password(password, user.password_hash):
         return None
