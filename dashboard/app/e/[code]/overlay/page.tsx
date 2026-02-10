@@ -17,10 +17,14 @@ export default function StreamOverlayPage() {
     try {
       const [kioskData, nowPlayingData] = await Promise.all([
         api.getKioskDisplay(code),
-        api.getNowPlaying(code).catch(() => null),
+        api.getNowPlaying(code).catch((): undefined => undefined),
       ]);
       setDisplay(kioskData);
-      setNowPlaying(nowPlayingData);
+      // Only update now-playing when the fetch succeeded;
+      // on transient network errors (undefined), preserve the previous value
+      if (nowPlayingData !== undefined) {
+        setNowPlaying(nowPlayingData);
+      }
       setError(null);
       return true;
     } catch (err) {

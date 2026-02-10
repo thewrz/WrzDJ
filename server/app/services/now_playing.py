@@ -20,7 +20,7 @@ from app.models.play_history import PlayHistory
 from app.models.request import Request, RequestStatus
 from app.services.spotify import _call_spotify_api
 
-# Auto-hide timeout: 60 minutes of no track change
+# Auto-hide timeout: 60 minutes of no activity (track change, bridge heartbeat, or manual show)
 NOW_PLAYING_AUTO_HIDE_MINUTES = 60
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,9 @@ def is_now_playing_hidden(db: Session, event_id: int) -> bool:
     if now_playing.manual_hide_now_playing:
         return True
 
-    # Auto-hide: check if more than 60 minutes since last activity
+    # Auto-hide: check if more than 60 minutes since last activity.
+    # Activity signals: started_at (track change), last_shown_at (DJ toggle),
+    # and bridge_last_seen (bridge heartbeat — proves track is still live).
     now = utcnow()
     last_activity = now_playing.started_at
 
@@ -69,6 +71,14 @@ def is_now_playing_hidden(db: Session, event_id: int) -> bool:
             last_shown = last_shown.replace(tzinfo=UTC)
         if last_shown > last_activity:
             last_activity = last_shown
+
+    # Bridge heartbeat keeps the timer alive while the bridge is actively connected
+    if now_playing.bridge_last_seen:
+        bridge_seen = now_playing.bridge_last_seen
+        if bridge_seen.tzinfo is None:
+            bridge_seen = bridge_seen.replace(tzinfo=UTC)
+        if bridge_seen > last_activity:
+            last_activity = bridge_seen
 
     if now - last_activity > timedelta(minutes=NOW_PLAYING_AUTO_HIDE_MINUTES):
         return True
