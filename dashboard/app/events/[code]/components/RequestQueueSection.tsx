@@ -82,7 +82,7 @@ export function RequestQueueSection({
           </p>
         </div>
       ) : (
-        <div className="request-list scrollable-list">
+        <div className="request-list scrollable-list" style={{ marginBottom: '1rem' }}>
           {filteredRequests.map((request) => (
             <div key={request.id} className="request-item">
               <div className="request-info">
