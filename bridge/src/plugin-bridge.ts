@@ -129,6 +129,10 @@ export class PluginBridge extends EventEmitter {
       this.emit("log", message);
     });
 
+    this.deckManager.on("nowPlayingCleared", () => {
+      this.emit("clearNowPlaying");
+    });
+
     // Wire plugin events
     this.plugin.on("track", (event: PluginTrackEvent) => {
       this.handleTrack(event);

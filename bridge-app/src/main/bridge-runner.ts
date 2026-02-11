@@ -220,6 +220,8 @@ export class BridgeRunner extends EventEmitter {
 
     // Handle authoritative now-playing clear
     this.pluginBridge.on('clearNowPlaying', async () => {
+      this.currentTrack = null;
+      this.emitStatus();
       await this.clearNowPlaying();
     });
 

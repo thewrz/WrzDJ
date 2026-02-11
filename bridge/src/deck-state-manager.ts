@@ -564,6 +564,7 @@ export class DeckStateManager extends EventEmitter {
 
     // No other deck found - clear current now playing
     this.emitLog('No switch candidate found, clearing now-playing deck');
+    this.emit("nowPlayingCleared");
   }
 
   /**

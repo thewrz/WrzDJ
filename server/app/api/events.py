@@ -258,11 +258,11 @@ def update_display_settings(
 
     if settings.now_playing_auto_hide_minutes is not None:
         event.now_playing_auto_hide_minutes = settings.now_playing_auto_hide_minutes
-        db.commit()
 
     if settings.requests_open is not None:
         event.requests_open = settings.requests_open
-        db.commit()
+
+    db.commit()
 
     hidden = get_manual_hide_setting(db, event.id)
     return DisplaySettingsResponse(

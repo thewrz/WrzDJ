@@ -43,13 +43,16 @@ export default function KioskDisplayPage() {
   // Inactivity timer
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Track whether initial load succeeded (ref avoids stale closure in useCallback)
+  const hasLoadedRef = useRef(false);
+
   // Load kiosk display data and StageLinQ data
   const loadDisplay = useCallback(async (): Promise<boolean> => {
     try {
       const [kioskData, nowPlayingData, historyData] = await Promise.all([
         api.getKioskDisplay(code),
         api.getNowPlaying(code).catch((): undefined => undefined),
-        api.getPlayHistory(code).catch(() => ({ items: [], total: 0 })),
+        api.getPlayHistory(code).catch((): undefined => undefined),
       ]);
       setDisplay(kioskData);
       // Only update stagelinq now-playing when the fetch succeeded;
@@ -57,17 +60,23 @@ export default function KioskDisplayPage() {
       if (nowPlayingData !== undefined) {
         setStagelinqNowPlaying(nowPlayingData);
       }
-      setPlayHistory(historyData.items);
+      if (historyData !== undefined) {
+        setPlayHistory(historyData.items);
+      }
       setError(null);
+      hasLoadedRef.current = true;
       return true; // Continue polling
     } catch (err) {
       if (err instanceof ApiError) {
-        setError({ message: err.message, status: err.status });
-        // Stop polling on terminal errors (404, 410)
+        // Only show error UI on terminal errors or if we have no display data yet;
+        // on transient errors with existing data, silently retry to avoid flickering
         if (err.status === 404 || err.status === 410) {
+          setError({ message: err.message, status: err.status });
           return false;
         }
-      } else {
+      }
+      // For transient errors: only set error if this is the initial load (no data yet)
+      if (!hasLoadedRef.current) {
         setError({ message: 'Event not found or expired', status: 0 });
       }
       return true; // Continue polling for transient errors
