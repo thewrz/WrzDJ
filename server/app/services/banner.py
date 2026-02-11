@@ -192,8 +192,7 @@ def delete_banner_files(banner_filename: str | None) -> None:
         if not filepath.is_relative_to(uploads_dir):
             continue
         try:
-            if filepath.exists():
-                filepath.unlink()
+            filepath.unlink(missing_ok=True)
         except OSError:
             pass  # nosec B110
 

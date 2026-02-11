@@ -7,7 +7,11 @@ from app.models.user import User
 from app.schemas.request import RequestOut, RequestUpdate
 from app.services.event import set_now_playing
 from app.services.now_playing import add_manual_play
-from app.services.request import get_request_by_id, update_request_status
+from app.services.request import (
+    InvalidStatusTransitionError,
+    get_request_by_id,
+    update_request_status,
+)
 from app.services.tidal import sync_request_to_tidal
 
 router = APIRouter()
@@ -29,7 +33,10 @@ def update_request(
     if request.event.created_by_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this request")
 
-    updated = update_request_status(db, request, update_data.status)
+    try:
+        updated = update_request_status(db, request, update_data.status)
+    except InvalidStatusTransitionError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     # Sync to Tidal when request is accepted (non-blocking background task)
     if update_data.status == RequestStatus.ACCEPTED:

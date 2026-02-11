@@ -1,7 +1,10 @@
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi import Request as FastAPIRequest
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
@@ -28,6 +31,19 @@ app = FastAPI(
 # Rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+logger = logging.getLogger(__name__)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: FastAPIRequest, exc: Exception) -> JSONResponse:
+    """Catch unhandled exceptions and return a generic 500 response."""
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    content = {"detail": "Internal server error"}
+    if not settings.is_production:
+        content["debug"] = str(exc)
+    return JSONResponse(status_code=500, content=content)
+
 
 # Security headers (added first, runs last in middleware chain)
 app.add_middleware(SecurityHeadersMiddleware)

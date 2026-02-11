@@ -1,10 +1,12 @@
 """Admin API endpoints for user management, event oversight, and system settings."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import Request as FastAPIRequest
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin, get_db
+from app.core.rate_limit import limiter
 from app.models.event import Event
 from app.models.request import Request
 from app.models.user import User, UserRole
@@ -36,7 +38,9 @@ router = APIRouter()
 
 
 @router.get("/stats", response_model=SystemStats)
+@limiter.limit("120/minute")
 def admin_stats(
+    request: FastAPIRequest,
     db: Session = Depends(get_db),
     _admin: User = Depends(get_current_admin),
 ) -> SystemStats:
@@ -45,7 +49,9 @@ def admin_stats(
 
 
 @router.get("/users", response_model=PaginatedResponse)
+@limiter.limit("120/minute")
 def admin_list_users(
+    request: FastAPIRequest,
     page: int = Query(default=1, ge=1, le=1000),
     limit: int = Query(default=20, ge=1, le=100),
     role: str | None = None,
@@ -139,7 +145,9 @@ def admin_delete_user(
 
 
 @router.get("/events", response_model=PaginatedResponse)
+@limiter.limit("120/minute")
 def admin_list_events(
+    request: FastAPIRequest,
     page: int = Query(default=1, ge=1, le=1000),
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -195,7 +203,9 @@ def admin_delete_event(
 
 
 @router.get("/settings", response_model=SystemSettingsOut)
+@limiter.limit("120/minute")
 def admin_get_settings(
+    request: FastAPIRequest,
     db: Session = Depends(get_db),
     _admin: User = Depends(get_current_admin),
 ) -> SystemSettingsOut:

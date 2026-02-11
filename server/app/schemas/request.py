@@ -1,11 +1,12 @@
 from datetime import datetime
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_serializer, field_validator
 
 from app.core.validation import normalize_single_line, normalize_text
 from app.models.request import RequestSource, RequestStatus, TidalSyncStatus
 
-DANGEROUS_URL_SCHEMES = {"javascript", "data", "vbscript"}
+ALLOWED_URL_SCHEMES = {"http", "https", "spotify"}
 
 
 class RequestCreate(BaseModel):
@@ -29,12 +30,12 @@ class RequestCreate(BaseModel):
 
     @field_validator("source_url", "artwork_url")
     @classmethod
-    def reject_dangerous_schemes(cls, v: str | None) -> str | None:
+    def validate_url_scheme(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        scheme = v.split(":", 1)[0].lower().strip()
-        if scheme in DANGEROUS_URL_SCHEMES:
-            raise ValueError(f"URL scheme '{scheme}' is not allowed")
+        scheme = urlparse(v).scheme.lower()
+        if scheme not in ALLOWED_URL_SCHEMES:
+            raise ValueError(f"URL scheme '{scheme or '(empty)'}' is not allowed")
         return v
 
 

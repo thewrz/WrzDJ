@@ -87,6 +87,20 @@ class TestVoteService:
         remove_vote(db, test_request.id, "192.168.1.1")
         assert test_request.vote_count == 0
 
+    def test_vote_count_clamped_at_zero_on_remove(self, db: Session, test_request: Request):
+        """Test that vote_count stays at 0 when removing a vote with count already at 0."""
+        # Add a vote then manually set count to 0 to simulate inconsistency
+        add_vote(db, test_request.id, "192.168.1.50")
+        test_request.vote_count = 0
+        db.commit()
+        db.refresh(test_request)
+        assert test_request.vote_count == 0
+
+        # Remove the vote — SQL should clamp to 0, not go to -1
+        request, was_removed = remove_vote(db, test_request.id, "192.168.1.50")
+        assert was_removed is True
+        assert request.vote_count == 0
+
 
 class TestVoteEndpoints:
     """Tests for vote API endpoints."""

@@ -1,6 +1,6 @@
 """Vote service for managing request upvotes."""
 
-from sqlalchemy import update
+from sqlalchemy import case, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -82,19 +82,19 @@ def remove_vote(db: Session, request_id: int, client_fingerprint: str) -> tuple[
 
     try:
         db.delete(existing)
-        # Atomic decrement, clamped to 0 via GREATEST
+        # Atomic decrement, clamped to 0 at SQL level
         db.execute(
             update(Request)
             .where(Request.id == request_id)
-            .values(vote_count=Request.vote_count - 1)
+            .values(
+                vote_count=case(
+                    (Request.vote_count > 0, Request.vote_count - 1),
+                    else_=0,
+                )
+            )
         )
         db.commit()
         db.refresh(song_request)
-        # Defensive: ensure non-negative in application layer too
-        if song_request.vote_count < 0:
-            song_request.vote_count = 0
-            db.commit()
-            db.refresh(song_request)
         return song_request, True
     except Exception:
         db.rollback()
