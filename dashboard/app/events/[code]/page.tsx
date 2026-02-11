@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
@@ -90,6 +90,8 @@ export default function EventQueuePage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
+  const hasLoadedRef = useRef(false);
+
   const loadData = useCallback(async (): Promise<boolean> => {
     try {
       const [eventData, requestsData, historyData, displaySettings, tidalStatusData, nowPlayingData] = await Promise.all([
@@ -121,6 +123,7 @@ export default function EventQueuePage() {
       }
       setEventStatus('active');
       setError(null);
+      hasLoadedRef.current = true;
       return true; // Continue polling
     } catch (err) {
       if (err instanceof ApiError && err.status === 410) {
@@ -151,8 +154,8 @@ export default function EventQueuePage() {
           return false; // Stop polling on 404
         }
       }
-      // For transient errors: only set error if this is the initial load (no event yet)
-      if (!event) {
+      // For transient errors: only set error if this is the initial load (no data yet)
+      if (!hasLoadedRef.current) {
         setError({ message: 'Failed to load event', status: 0 });
       }
       return true; // Continue polling for transient errors
@@ -312,8 +315,8 @@ export default function EventQueuePage() {
       const newOpen = !requestsOpen;
       await api.setRequestsOpen(code, newOpen);
       setRequestsOpen(newOpen);
-    } catch (err) {
-      console.error('Failed to toggle requests:', err);
+    } catch {
+      // Silently fail — next poll will restore the server state
     } finally {
       setTogglingRequests(false);
     }

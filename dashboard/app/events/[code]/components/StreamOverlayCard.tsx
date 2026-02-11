@@ -9,11 +9,15 @@ interface StreamOverlayCardProps {
 export function StreamOverlayCard({ code }: StreamOverlayCardProps) {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     const overlayUrl = `${window.location.origin}/e/${code}/overlay`;
-    navigator.clipboard.writeText(overlayUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(overlayUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API unavailable (non-HTTPS or permission denied)
+    }
   };
 
   return (

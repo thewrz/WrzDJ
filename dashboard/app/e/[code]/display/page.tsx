@@ -43,6 +43,9 @@ export default function KioskDisplayPage() {
   // Inactivity timer
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Track whether initial load succeeded (ref avoids stale closure in useCallback)
+  const hasLoadedRef = useRef(false);
+
   // Load kiosk display data and StageLinQ data
   const loadDisplay = useCallback(async (): Promise<boolean> => {
     try {
@@ -61,6 +64,7 @@ export default function KioskDisplayPage() {
         setPlayHistory(historyData.items);
       }
       setError(null);
+      hasLoadedRef.current = true;
       return true; // Continue polling
     } catch (err) {
       if (err instanceof ApiError) {
@@ -71,8 +75,8 @@ export default function KioskDisplayPage() {
           return false;
         }
       }
-      // For transient errors: only set error if this is the initial load (no display yet)
-      if (!display) {
+      // For transient errors: only set error if this is the initial load (no data yet)
+      if (!hasLoadedRef.current) {
         setError({ message: 'Event not found or expired', status: 0 });
       }
       return true; // Continue polling for transient errors

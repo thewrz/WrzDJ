@@ -31,17 +31,14 @@ export function RequestQueueSection({
 }: RequestQueueSectionProps) {
   const [filter, setFilter] = useState<StatusFilter>('all');
 
-  const statusCounts = useMemo(
-    () => ({
-      all: requests.length,
-      new: requests.filter((r) => r.status === 'new').length,
-      accepted: requests.filter((r) => r.status === 'accepted').length,
-      playing: requests.filter((r) => r.status === 'playing').length,
-      played: requests.filter((r) => r.status === 'played').length,
-      rejected: requests.filter((r) => r.status === 'rejected').length,
-    }),
-    [requests]
-  );
+  const statusCounts = useMemo(() => {
+    const counts = { all: requests.length, new: 0, accepted: 0, playing: 0, played: 0, rejected: 0 };
+    for (const r of requests) {
+      const s = r.status as keyof typeof counts;
+      if (s in counts) counts[s]++;
+    }
+    return counts;
+  }, [requests]);
 
   const filteredRequests = useMemo(
     () => requests.filter((r) => (filter === 'all' ? true : r.status === filter)),

@@ -73,7 +73,7 @@ import { api } from '@/lib/api';
 
 describe('KioskDisplayPage', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('Three-column layout', () => {
@@ -181,6 +181,64 @@ describe('KioskDisplayPage', () => {
 
       // One history item has matched_request_id, should show badge
       expect(screen.getByText('Requested')).toBeInTheDocument();
+    });
+  });
+
+  describe('Requests open/closed', () => {
+    it('shows request button when requests_open is true', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        requests_open: true,
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Test Event');
+
+      expect(screen.getByRole('button', { name: /request a song/i })).toBeInTheDocument();
+      expect(screen.queryByText('Requests are closed')).not.toBeInTheDocument();
+    });
+
+    it('shows closed status when requests_open is false', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        requests_open: false,
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Test Event');
+
+      expect(screen.getByText('Requests are closed')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /request a song/i })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Transient error resilience', () => {
+    it('preserves display state when API call fails transiently', async () => {
+      // Persistent success mock — ensures interval polls always have a fallback
+      vi.mocked(api.getKioskDisplay).mockResolvedValue(mockKioskDisplay);
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      // Wait for initial load
+      await screen.findByText('Test Event');
+      expect(screen.getByText('Song 1')).toBeInTheDocument();
+
+      // Queue a one-shot failure; the persistent mockResolvedValue still handles subsequent polls
+      vi.mocked(api.getKioskDisplay).mockRejectedValueOnce(new Error('Network error'));
+
+      // The existing display data should still be visible (not replaced with error)
+      await vi.waitFor(() => {
+        expect(screen.getByText('Test Event')).toBeInTheDocument();
+        expect(screen.getByText('Song 1')).toBeInTheDocument();
+      });
     });
   });
 
