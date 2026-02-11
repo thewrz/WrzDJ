@@ -84,7 +84,7 @@ jobs:
           }
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: bridge-app-${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}
           path: bridge-app/out/make/**/*
@@ -107,7 +107,7 @@ jobs:
             docker-compose.yml
 
       - name: Upload deploy bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: deploy-scripts
           path: wrzdj-deploy-scripts.tar.gz
