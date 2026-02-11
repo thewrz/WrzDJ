@@ -10,10 +10,14 @@ WrzDJ is a DJ song request management system with four services:
 
 ## Git Workflow
 
-**Always use feature branches and PRs — never commit directly to `main`.**
+**CRITICAL: Create a new branch BEFORE making any code changes. Never edit code while on `main`.**
+
+1. **First action** for any task: `git checkout -b <type>/short-description`
+2. Only then start writing code
+3. After work is done, push and open a PR
 
 ```bash
-# Create a feature branch before starting work
+# ALWAYS do this FIRST, before touching any code
 git checkout -b feat/short-description
 
 # After work is done, push and open a PR
@@ -23,6 +27,7 @@ gh pr create --title "feat: Short description" --body "..."
 
 - Branch naming: `feat/`, `fix/`, `refactor/`, `docs/`, `chore/` prefixes
 - PR into `main` — never push directly to `main`
+- Never commit directly to `main` — all changes go through PRs
 - Run all CI checks locally before pushing (see below)
 
 ## Local Development
