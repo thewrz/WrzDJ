@@ -8,19 +8,25 @@ export function SettingsPanel() {
   const [settings, setSettings] = useState<BridgeSettings>(DEFAULT_SETTINGS);
   const [plugins, setPlugins] = useState<readonly PluginMeta[]>([]);
   const [open, setOpen] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const bridgeStatus = useBridgeStatus();
 
   useEffect(() => {
-    api.getSettings().then(setSettings).catch(() => {});
-    api.listPluginMeta().then(setPlugins).catch(() => {});
+    api.getSettings().then(setSettings).catch((err: unknown) => {
+      setSaveError(err instanceof Error ? err.message : 'Failed to load settings');
+    });
+    api.listPluginMeta().then(setPlugins).catch(() => {
+      // Plugin list failure is non-critical
+    });
   }, []);
 
   const update = useCallback(async (partial: Partial<BridgeSettings>) => {
+    setSaveError(null);
     try {
       const updated = await api.updateSettings(partial);
       setSettings(updated);
-    } catch {
-      // Silently fail - settings will be stale but functional
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save settings');
     }
   }, []);
 
@@ -37,6 +43,12 @@ export function SettingsPanel() {
         Detection Settings
         <span style={{ fontSize: '0.75rem' }}>{open ? '▼' : '▶'}</span>
       </div>
+
+      {saveError && (
+        <div className="error-message" style={{ marginBottom: '0.5rem' }}>
+          {saveError}
+        </div>
+      )}
 
       {open && (
         <div>

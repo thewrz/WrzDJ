@@ -17,20 +17,30 @@ export type EventHealthStatus = 'active' | 'not_found' | 'expired' | 'error';
  *   410 → expired (event expired or archived)
  *   other → error (network issue, server error — don't act on this)
  */
+const HEALTH_CHECK_TIMEOUT_MS = 10_000;
+
 export async function checkEventHealth(
   apiUrl: string,
   eventCode: string,
 ): Promise<EventHealthStatus> {
   try {
-    const response = await fetch(
-      `${apiUrl}/api/public/e/${encodeURIComponent(eventCode)}/nowplaying`,
-    );
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
 
-    if (response.ok) return 'active';
-    if (response.status === 404) return 'not_found';
-    if (response.status === 410) return 'expired';
+    try {
+      const response = await fetch(
+        `${apiUrl}/api/public/e/${encodeURIComponent(eventCode)}/nowplaying`,
+        { signal: controller.signal },
+      );
 
-    return 'error';
+      if (response.ok) return 'active';
+      if (response.status === 404) return 'not_found';
+      if (response.status === 410) return 'expired';
+
+      return 'error';
+    } finally {
+      clearTimeout(timeoutId);
+    }
   } catch {
     return 'error';
   }

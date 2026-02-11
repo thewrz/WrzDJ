@@ -9,10 +9,13 @@ interface BridgeControlsProps {
 
 export function BridgeControls({ status, selectedEventCode }: BridgeControlsProps) {
   const [starting, setStarting] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const busy = starting || stopping;
+
   const handleStart = async () => {
-    if (!selectedEventCode) return;
+    if (!selectedEventCode || busy) return;
 
     setStarting(true);
     setError(null);
@@ -26,10 +29,16 @@ export function BridgeControls({ status, selectedEventCode }: BridgeControlsProp
   };
 
   const handleStop = async () => {
+    if (busy) return;
+
+    setStopping(true);
+    setError(null);
     try {
       await api.stopBridge();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to stop bridge');
+    } finally {
+      setStopping(false);
     }
   };
 
@@ -51,7 +60,7 @@ export function BridgeControls({ status, selectedEventCode }: BridgeControlsProp
             <button
               className="btn btn-success"
               onClick={handleStart}
-              disabled={starting || !selectedEventCode}
+              disabled={busy || !selectedEventCode}
             >
               {starting ? 'Starting...' : 'Start Bridge'}
             </button>
@@ -68,8 +77,8 @@ export function BridgeControls({ status, selectedEventCode }: BridgeControlsProp
             <span className="status-dot status-dot-green" />
             <span>Running for event <strong>{status.eventCode}</strong></span>
           </div>
-          <button className="btn btn-danger btn-sm" onClick={handleStop}>
-            Stop Bridge
+          <button className="btn btn-danger btn-sm" onClick={handleStop} disabled={busy}>
+            {stopping ? 'Stopping...' : 'Stop Bridge'}
           </button>
         </div>
       )}

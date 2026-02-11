@@ -47,6 +47,7 @@ export class DeckStateManager extends EventEmitter {
   private readonly config: DeckStateManagerConfig;
   private readonly decks: Map<string, DeckState>;
   private readonly timers: Map<string, NodeJS.Timeout>;
+  private destroyed = false;
 
   /** The deck currently reported as "now playing" - has priority over other decks */
   private currentNowPlayingDeckId: string | null = null;
@@ -260,6 +261,7 @@ export class DeckStateManager extends EventEmitter {
    * Start the threshold timer for transitioning CUEING -> PLAYING.
    */
   private startThresholdTimer(deckId: string, accumulatedTime: number): void {
+    if (this.destroyed) return;
     const thresholdMs = this.config.liveThresholdSeconds * 1000;
     const remainingMs = Math.max(0, thresholdMs - accumulatedTime);
 
@@ -274,6 +276,7 @@ export class DeckStateManager extends EventEmitter {
    * Start the grace period timer for transitioning PLAYING -> ENDED.
    */
   private startGracePeriodTimer(deckId: string): void {
+    if (this.destroyed) return;
     const graceMs = this.config.pauseGraceSeconds * 1000;
 
     const timer = setTimeout(() => {
@@ -478,6 +481,7 @@ export class DeckStateManager extends EventEmitter {
    * If timer expires and another deck is playing, switch to that deck.
    */
   private startNowPlayingSwitchTimer(): void {
+    if (this.destroyed) return;
     this.clearNowPlayingSwitchTimer();
 
     const pauseMs = this.config.nowPlayingPauseSeconds * 1000;
@@ -633,6 +637,7 @@ export class DeckStateManager extends EventEmitter {
    * manager.destroy(); // Clean up when done
    */
   destroy(): void {
+    this.destroyed = true;
     for (const timer of this.timers.values()) {
       clearTimeout(timer);
     }

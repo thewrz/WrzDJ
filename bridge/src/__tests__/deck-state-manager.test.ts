@@ -1132,5 +1132,28 @@ describe("DeckStateManager", () => {
       vi.advanceTimersByTime(15000);
       expect(deckLiveHandler).toHaveBeenCalledTimes(1);
     });
+
+    it("prevents new timers from being created after destroy", () => {
+      const deckLiveHandler = vi.fn();
+      manager.on("deckLive", deckLiveHandler);
+
+      // Destroy the manager before any tracks
+      manager.destroy();
+
+      // Now try to use the manager — these should not create timers
+      manager.updateTrackInfo("1", {
+        title: "Ghost Song",
+        artist: "Ghost Artist",
+      });
+      manager.updatePlayState("1", true);
+      manager.updateFaderLevel("1", 1.0);
+      manager.setMasterDeck("1");
+
+      // Advance past all possible timer thresholds
+      vi.advanceTimersByTime(60_000);
+
+      // No deckLive events should have been emitted
+      expect(deckLiveHandler).not.toHaveBeenCalled();
+    });
   });
 });

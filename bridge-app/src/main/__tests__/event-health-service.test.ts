@@ -17,6 +17,7 @@ describe('checkEventHealth', () => {
     expect(result).toBe('active');
     expect(mockFetch).toHaveBeenCalledWith(
       'https://api.wrzdj.com/api/public/e/ABC123/nowplaying',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 
@@ -55,6 +56,24 @@ describe('checkEventHealth', () => {
 
     expect(mockFetch).toHaveBeenCalledWith(
       'https://api.wrzdj.com/api/public/e/A%20B%2FC/nowplaying',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+  });
+
+  it('passes an AbortSignal to fetch', async () => {
+    mockFetch.mockResolvedValue({ ok: true, status: 200 });
+
+    await checkEventHealth('https://api.wrzdj.com', 'ABC123');
+
+    const [, options] = mockFetch.mock.calls[0];
+    expect(options).toBeDefined();
+    expect(options.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('returns "error" when fetch is aborted (timeout)', async () => {
+    mockFetch.mockRejectedValue(new DOMException('The operation was aborted.', 'AbortError'));
+
+    const result = await checkEventHealth('https://api.wrzdj.com', 'ABC123');
+    expect(result).toBe('error');
   });
 });
