@@ -3,7 +3,7 @@
 # NOTE: This container must run with network_mode: host (or --network host)
 # for StageLinQ UDP broadcast discovery to work.
 
-FROM node:20-alpine
+FROM node:25-alpine
 
 WORKDIR /app
 
