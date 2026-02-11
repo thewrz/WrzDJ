@@ -6,7 +6,9 @@ import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/auth';
 import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem, TidalStatus, TidalSearchResult } from '@/lib/api';
+import type { NowPlayingInfo } from '@/lib/api-types';
 import { DeleteEventModal } from './components/DeleteEventModal';
+import { NowPlayingBadge } from './components/NowPlayingBadge';
 import { TidalLoginModal } from './components/TidalLoginModal';
 import { TidalTrackPickerModal } from './components/TidalTrackPickerModal';
 import { PlayHistorySection } from './components/PlayHistorySection';
@@ -58,8 +60,9 @@ export default function EventQueuePage() {
   const [requestsOpen, setRequestsOpen] = useState(true);
   const [togglingRequests, setTogglingRequests] = useState(false);
 
-  // Bridge connection state
+  // Bridge / now-playing state
   const [bridgeConnected, setBridgeConnected] = useState(false);
+  const [nowPlaying, setNowPlaying] = useState<NowPlayingInfo | null>(null);
 
   // Tidal sync state
   const [tidalStatus, setTidalStatus] = useState<TidalStatus | null>(null);
@@ -111,6 +114,7 @@ export default function EventQueuePage() {
       setTidalStatus(tidalStatusData);
       setTidalSyncEnabled(eventData.tidal_sync_enabled ?? false);
       setBridgeConnected(nowPlayingData?.bridge_connected ?? false);
+      setNowPlaying(nowPlayingData ?? null);
       setEventStatus('active');
       setError(null);
       return true; // Continue polling
@@ -607,6 +611,9 @@ export default function EventQueuePage() {
             )}
           </div>
         </div>
+        {!isExpiredOrArchived && nowPlaying && (
+          <NowPlayingBadge nowPlaying={nowPlaying} />
+        )}
         <div style={{ textAlign: 'center' }}>
           <div className="code" style={{ fontSize: '2rem', color: isExpiredOrArchived ? '#6b7280' : '#3b82f6' }}>
             {event.code}
