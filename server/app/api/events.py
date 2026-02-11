@@ -145,6 +145,7 @@ def create_new_event(
 
 
 @router.get("", response_model=list[EventOut])
+@limiter.limit("60/minute")
 def list_events(
     request: Request,
     db: Session = Depends(get_db),
@@ -155,6 +156,7 @@ def list_events(
 
 
 @router.get("/archived", response_model=list[EventOut])
+@limiter.limit("60/minute")
 def list_archived_events(
     request: Request,
     db: Session = Depends(get_db),
@@ -404,7 +406,9 @@ def accept_all_requests_endpoint(
 
 
 @router.get("/{code}/requests", response_model=list[RequestOut])
+@limiter.limit("60/minute")
 def get_event_requests(
+    request: Request,
     status: RequestStatus | None = None,
     since: datetime | None = None,
     limit: int = Query(default=100, ge=1, le=500),

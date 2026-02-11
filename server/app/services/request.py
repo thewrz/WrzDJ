@@ -7,6 +7,19 @@ from app.models.event import Event
 from app.models.request import Request, RequestStatus
 from app.services.vote import add_vote
 
+# Valid state transitions for request status
+VALID_TRANSITIONS: dict[RequestStatus, set[RequestStatus]] = {
+    RequestStatus.NEW: {RequestStatus.ACCEPTED, RequestStatus.REJECTED},
+    RequestStatus.ACCEPTED: {RequestStatus.PLAYING, RequestStatus.REJECTED},
+    RequestStatus.PLAYING: {RequestStatus.PLAYED},
+    RequestStatus.REJECTED: {RequestStatus.NEW},
+    RequestStatus.PLAYED: set(),
+}
+
+
+class InvalidStatusTransitionError(ValueError):
+    """Raised when an invalid status transition is attempted."""
+
 
 def compute_dedupe_key(artist: str, title: str) -> str:
     """Compute a deduplication key from normalized artist and title."""
@@ -87,7 +100,17 @@ def get_requests_for_event(
 
 
 def update_request_status(db: Session, request: Request, status: RequestStatus) -> Request:
-    """Update the status of a request."""
+    """Update the status of a request.
+
+    Raises:
+        InvalidStatusTransitionError: If the transition is not allowed.
+    """
+    current = RequestStatus(request.status)
+    allowed = VALID_TRANSITIONS.get(current, set())
+    if status not in allowed:
+        raise InvalidStatusTransitionError(
+            f"Cannot transition from '{current.value}' to '{status.value}'"
+        )
     request.status = status.value
     request.updated_at = datetime.utcnow()
     db.commit()

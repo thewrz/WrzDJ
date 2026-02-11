@@ -1,5 +1,7 @@
 """Tests for input validation and sanitization."""
 
+import pytest
+
 from app.core.validation import (
     is_safe_string,
     normalize_single_line,
@@ -7,6 +9,7 @@ from app.core.validation import (
     validate_event_code,
     validate_length,
 )
+from app.schemas.request import RequestCreate
 
 
 class TestNormalizeText:
@@ -108,3 +111,46 @@ class TestValidateLength:
         """Test None input."""
         assert validate_length(None, min_len=0, max_len=10) is True
         assert validate_length(None, min_len=1, max_len=10) is False
+
+
+class TestURLSchemeAllowlist:
+    """Tests for URL scheme validation on request source_url and artwork_url."""
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://open.spotify.com/track/abc123",
+            "http://example.com/image.jpg",
+            "spotify:track:6rqhFgbbKwnb9MLmUQDhG6",
+        ],
+    )
+    def test_allowed_schemes(self, url: str):
+        """Test that http, https, and spotify schemes are allowed."""
+        req = RequestCreate(artist="A", title="T", source_url=url)
+        assert req.source_url == url
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "javascript:alert(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "vbscript:MsgBox",
+            "//evil.com/payload",
+            "ftp://example.com/file",
+        ],
+    )
+    def test_rejected_schemes(self, url: str):
+        """Test that dangerous or unknown schemes are rejected."""
+        with pytest.raises(Exception):
+            RequestCreate(artist="A", title="T", source_url=url)
+
+    def test_artwork_url_rejects_dangerous(self):
+        """Test that artwork_url also validates schemes."""
+        with pytest.raises(Exception):
+            RequestCreate(artist="A", title="T", artwork_url="javascript:void(0)")
+
+    def test_none_urls_allowed(self):
+        """Test that None URLs pass validation."""
+        req = RequestCreate(artist="A", title="T", source_url=None, artwork_url=None)
+        assert req.source_url is None
+        assert req.artwork_url is None

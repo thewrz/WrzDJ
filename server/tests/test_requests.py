@@ -167,7 +167,18 @@ class TestUpdateRequestStatus:
     def test_update_status_to_played(
         self, client: TestClient, auth_headers: dict, test_request: Request
     ):
-        """Test marking a request as played."""
+        """Test marking a request as played (via valid transition path)."""
+        # Must follow valid path: NEW -> ACCEPTED -> PLAYING -> PLAYED
+        client.patch(
+            f"/api/requests/{test_request.id}",
+            json={"status": "accepted"},
+            headers=auth_headers,
+        )
+        client.patch(
+            f"/api/requests/{test_request.id}",
+            json={"status": "playing"},
+            headers=auth_headers,
+        )
         response = client.patch(
             f"/api/requests/{test_request.id}",
             json={"status": "played"},
@@ -204,3 +215,90 @@ class TestUpdateRequestStatus:
             headers=auth_headers,
         )
         assert response.status_code == 404
+
+
+class TestStatusStateMachine:
+    """Tests for request status transition validation."""
+
+    def test_invalid_new_to_played(
+        self, client: TestClient, auth_headers: dict, test_request: Request
+    ):
+        """NEW -> PLAYED is not a valid transition."""
+        response = client.patch(
+            f"/api/requests/{test_request.id}",
+            json={"status": "played"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 400
+        assert "Cannot transition" in response.json()["detail"]
+
+    def test_invalid_new_to_playing(
+        self, client: TestClient, auth_headers: dict, test_request: Request
+    ):
+        """NEW -> PLAYING is not a valid transition."""
+        response = client.patch(
+            f"/api/requests/{test_request.id}",
+            json={"status": "playing"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 400
+
+    def test_invalid_played_to_any(
+        self, client: TestClient, auth_headers: dict, test_request: Request
+    ):
+        """PLAYED is a terminal state — no transitions allowed."""
+        # Move to PLAYED via valid path
+        client.patch(
+            f"/api/requests/{test_request.id}",
+            json={"status": "accepted"},
+            headers=auth_headers,
+        )
+        client.patch(
+            f"/api/requests/{test_request.id}",
+            json={"status": "playing"},
+            headers=auth_headers,
+        )
+        client.patch(
+            f"/api/requests/{test_request.id}",
+            json={"status": "played"},
+            headers=auth_headers,
+        )
+        # Try to transition from PLAYED
+        response = client.patch(
+            f"/api/requests/{test_request.id}",
+            json={"status": "new"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 400
+
+    def test_rejected_to_new(self, client: TestClient, auth_headers: dict, test_request: Request):
+        """REJECTED -> NEW is valid (re-queue)."""
+        client.patch(
+            f"/api/requests/{test_request.id}",
+            json={"status": "rejected"},
+            headers=auth_headers,
+        )
+        response = client.patch(
+            f"/api/requests/{test_request.id}",
+            json={"status": "new"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "new"
+
+    def test_accepted_to_rejected(
+        self, client: TestClient, auth_headers: dict, test_request: Request
+    ):
+        """ACCEPTED -> REJECTED is valid."""
+        client.patch(
+            f"/api/requests/{test_request.id}",
+            json={"status": "accepted"},
+            headers=auth_headers,
+        )
+        response = client.patch(
+            f"/api/requests/{test_request.id}",
+            json={"status": "rejected"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "rejected"

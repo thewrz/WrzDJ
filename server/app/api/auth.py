@@ -70,7 +70,8 @@ def login(
 
 
 @router.get("/me", response_model=UserOut)
-def get_me(current_user: User = Depends(get_current_user)) -> User:
+@limiter.limit("60/minute")
+def get_me(request: Request, current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
