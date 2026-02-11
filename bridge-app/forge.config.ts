@@ -71,7 +71,7 @@ const config: ForgeConfig = {
           const oldPath = result.artifacts[i];
           const ext = path.extname(oldPath);
           if (renameExts.has(ext)) {
-            const archSuffix = ext === '.dmg' ? `-${result.arch}` : '';
+            const archSuffix = ext === '.dmg' || ext === '.zip' ? `-${result.arch}` : '';
             const newPath = path.join(path.dirname(oldPath), `WrzDJ-Bridge${archSuffix}${ext}`);
             if (oldPath !== newPath) {
               fs.renameSync(oldPath, newPath);
