@@ -1,9 +1,11 @@
 """Service for StageLinQ now-playing and play history management."""
 
 import logging
+import re
 from datetime import UTC, datetime
 from difflib import SequenceMatcher
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 
@@ -26,6 +28,47 @@ from app.services.spotify import _call_spotify_api
 NOW_PLAYING_AUTO_HIDE_MINUTES = 10
 
 logger = logging.getLogger(__name__)
+
+# Generic mix suffixes that guests almost never include in requests.
+# These get stripped before fuzzy comparison so "Banana (Original Mix)" matches "Banana".
+# Named remixes, Instrumental, Acoustic, Live, VIP, Dub Mix, A Cappella are preserved.
+_GENERIC_SUFFIXES = (
+    r"original\s+mix|extended\s+mix|radio\s+edit|club\s+mix|"
+    r"album\s+version|single\s+version|full\s+length(?:\s+version)?|"
+    r"main\s+mix|short\s+(?:edit|mix)|long\s+(?:mix|version)|"
+    r"original\s+version|original|extended"
+)
+GENERIC_SUFFIX_PAREN_RE = re.compile(
+    rf"\s*[\(\[]\s*(?:{_GENERIC_SUFFIXES})\s*[\)\]]\s*", re.IGNORECASE
+)
+GENERIC_SUFFIX_DASH_RE = re.compile(rf"\s+-\s+(?:{_GENERIC_SUFFIXES})\s*$", re.IGNORECASE)
+FEAT_RE = re.compile(r"\b(?:featuring|feat\.?|ft\.?|with)(?=\s)", re.IGNORECASE)
+MULTI_SPACE_RE = re.compile(r"\s{2,}")
+
+
+def normalize_track_title(title: str) -> str:
+    """Normalize a track title for fuzzy matching.
+
+    Strips generic mix suffixes (Original Mix, Extended Mix, Radio Edit, etc.)
+    but preserves named remixes (e.g. "Skrillex Remix"), special versions
+    (Instrumental, Acoustic, Live, VIP, Dub Mix, A Cappella), and arbitrary
+    parenthetical content (e.g. "2024 Remaster").
+    """
+    result = GENERIC_SUFFIX_PAREN_RE.sub("", title)
+    result = GENERIC_SUFFIX_DASH_RE.sub("", result)
+    result = MULTI_SPACE_RE.sub(" ", result).strip()
+    return result
+
+
+def normalize_artist(artist: str) -> str:
+    """Normalize artist name for fuzzy matching.
+
+    Canonicalizes feat/ft/featuring/with → "feat." so that
+    "Artist feat. Singer" matches "Artist featuring Singer".
+    """
+    result = FEAT_RE.sub("feat.", artist)
+    result = MULTI_SPACE_RE.sub(" ", result).strip()
+    return result
 
 
 def get_event_by_code_for_bridge(db: Session, code: str) -> Event | None:
@@ -169,40 +212,64 @@ def fuzzy_match_score(a: str, b: str) -> float:
     return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
 
 
-def fuzzy_match_accepted_request(
+def fuzzy_match_pending_request(
     db: Session, event_id: int, title: str, artist: str, threshold: float = 0.8
 ) -> Request | None:
     """
-    Find an accepted request that fuzzy-matches the given track.
+    Find a NEW or ACCEPTED request that fuzzy-matches the given track.
 
-    Only matches against requests with status='accepted'.
+    Normalizes titles (strips generic suffixes like "Original Mix") and artists
+    (canonicalizes feat/ft/featuring) before comparison so DJ equipment metadata
+    differences don't prevent matches.
+
+    Title similarity is weighted 0.7, artist 0.3 (title matters more).
+    Prefers ACCEPTED over NEW at equal scores (DJ intent matters).
     Returns the best match above threshold, or None.
     """
-    accepted = (
+    candidates = (
         db.query(Request)
         .filter(
             Request.event_id == event_id,
-            Request.status == RequestStatus.ACCEPTED.value,
+            or_(
+                Request.status == RequestStatus.NEW.value,
+                Request.status == RequestStatus.ACCEPTED.value,
+            ),
         )
         .all()
     )
 
+    norm_title = normalize_track_title(title)
+    norm_artist = normalize_artist(artist)
+
     best_match = None
     best_score = 0.0
 
-    for req in accepted:
-        title_score = fuzzy_match_score(req.song_title, title)
-        artist_score = fuzzy_match_score(req.artist, artist)
-        combined = (title_score + artist_score) / 2
+    for req in candidates:
+        req_title = normalize_track_title(req.song_title)
+        req_artist = normalize_artist(req.artist)
+
+        title_score = fuzzy_match_score(req_title, norm_title)
+        artist_score = fuzzy_match_score(req_artist, norm_artist)
+        combined = title_score * 0.7 + artist_score * 0.3
 
         if combined > threshold and combined > best_score:
             best_match = req
             best_score = combined
+        elif (
+            combined > threshold
+            and combined == best_score
+            and best_match is not None
+            and req.status == RequestStatus.ACCEPTED.value
+            and best_match.status == RequestStatus.NEW.value
+        ):
+            # Prefer ACCEPTED over NEW at equal scores
+            best_match = req
 
     if best_match:
         logger.info(
             f"Fuzzy matched '{title}' by '{artist}' to request "
-            f"'{best_match.song_title}' by '{best_match.artist}' (score: {best_score:.2f})"
+            f"'{best_match.song_title}' by '{best_match.artist}' "
+            f"(score: {best_score:.2f}, status: {best_match.status})"
         )
 
     return best_match
@@ -297,8 +364,8 @@ def handle_now_playing_update(
         now_playing.album_art_url = spotify_data["album_art_url"]
         now_playing.spotify_uri = spotify_data["spotify_uri"]
 
-    # Step 5: Fuzzy match against accepted requests
-    matched_request = fuzzy_match_accepted_request(db, event.id, title, artist)
+    # Step 5: Fuzzy match against new/accepted requests
+    matched_request = fuzzy_match_pending_request(db, event.id, title, artist)
     if matched_request:
         matched_request.status = RequestStatus.PLAYING.value
         matched_request.updated_at = utcnow()

@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-bridge-app:
-    name: Build Bridge App (${{ matrix.platform }})
+    name: Build Bridge App (${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }})
     strategy:
       matrix:
         include:
@@ -14,6 +14,10 @@ jobs:
             platform: linux
           - os: macos-latest
             platform: darwin
+            arch: arm64
+          - os: macos-13
+            platform: darwin
+            arch: x64
           - os: windows-latest
             platform: win32
     runs-on: ${{ matrix.os }}
@@ -47,7 +51,7 @@ jobs:
 
       - name: Build installers
         working-directory: bridge-app
-        run: npm run make
+        run: npm run make ${{ matrix.arch && format('-- --arch {0}', matrix.arch) || '' }}
 
       - name: Verify silent install (Windows)
         if: matrix.platform == 'win32'
@@ -82,7 +86,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bridge-app-${{ matrix.platform }}
+          name: bridge-app-${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}
           path: bridge-app/out/make/**/*
           if-no-files-found: warn
 
@@ -145,7 +149,8 @@ jobs:
           | Platform | Artifact |
           |----------|----------|
           | Windows | \`bridge-app-win32\` |
-          | macOS | \`bridge-app-darwin\` |
+          | macOS (Apple Silicon) | \`bridge-app-darwin-arm64\` |
+          | macOS (Intel) | \`bridge-app-darwin-x64\` |
           | Linux | \`bridge-app-linux\` |
           | Deploy Scripts | \`wrzdj-deploy-scripts.tar.gz\` |
           EOF
