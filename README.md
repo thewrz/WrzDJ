@@ -9,9 +9,15 @@
 A modern, real-time song request system for DJs. Guests scan a QR code to submit requests -- no app install, no login. DJs manage everything from a live dashboard with automatic track detection from DJ equipment via a plugin system supporting Denon StageLinQ, Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast, and more.
 
 <p align="center">
-  <img src="docs/images/dashboard.png" alt="WrzDJ Dashboard" width="800">
+  <img src="docs/images/screenshot-dashboard.png" alt="WrzDJ DJ Dashboard" width="800">
   <br>
-  <em>DJ dashboard — manage requests, QR code for guests, bridge status, and Tidal sync</em>
+  <em>DJ dashboard -- manage requests, QR code for guests, live Now Playing detection, and kiosk controls</em>
+</p>
+
+<p align="center">
+  <img src="docs/images/screenshot-join-web-page-mobile.png" alt="WrzDJ Guest Join Page (Mobile)" width="300">
+  <br>
+  <em>Guest join page -- scan a QR code, browse the queue, and request a song (no app, no login)</em>
 </p>
 
 ---
@@ -134,7 +140,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 | Service | Stack | Directory |
 |---------|-------|-----------|
 | Backend | Python, FastAPI, SQLAlchemy 2.0, PostgreSQL, Alembic | `server/` |
-| Frontend | Next.js 16, React 18, TypeScript, vanilla CSS | `dashboard/` |
+| Frontend | Next.js 16, React 19, TypeScript, vanilla CSS | `dashboard/` |
 | Bridge | Node.js, TypeScript, plugin architecture (StageLinQ, Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast) | `bridge/` |
 | Bridge App | Electron, React, Vite, electron-forge | `bridge-app/` |
 
