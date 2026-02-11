@@ -146,11 +146,13 @@ export default function EventQueuePage() {
       }
 
       if (err instanceof ApiError) {
-        setError({ message: err.message, status: err.status });
         if (err.status === 404) {
+          setError({ message: err.message, status: err.status });
           return false; // Stop polling on 404
         }
-      } else {
+      }
+      // For transient errors: only set error if this is the initial load (no event yet)
+      if (!event) {
         setError({ message: 'Failed to load event', status: 0 });
       }
       return true; // Continue polling for transient errors

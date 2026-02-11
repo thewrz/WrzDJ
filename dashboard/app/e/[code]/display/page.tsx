@@ -64,12 +64,15 @@ export default function KioskDisplayPage() {
       return true; // Continue polling
     } catch (err) {
       if (err instanceof ApiError) {
-        setError({ message: err.message, status: err.status });
-        // Stop polling on terminal errors (404, 410)
+        // Only show error UI on terminal errors or if we have no display data yet;
+        // on transient errors with existing data, silently retry to avoid flickering
         if (err.status === 404 || err.status === 410) {
+          setError({ message: err.message, status: err.status });
           return false;
         }
-      } else {
+      }
+      // For transient errors: only set error if this is the initial load (no display yet)
+      if (!display) {
         setError({ message: 'Event not found or expired', status: 0 });
       }
       return true; // Continue polling for transient errors
