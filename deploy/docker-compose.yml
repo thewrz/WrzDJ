@@ -49,6 +49,7 @@ services:
       BRIDGE_API_KEY: ${BRIDGE_API_KEY:-}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TRUSTED_PROXIES: "127.0.0.1,::1,172.16.0.0/12"
       UPLOADS_DIR: /app/uploads
     ports:
       - "127.0.0.1:${PORT_API:-8000}:8000"
