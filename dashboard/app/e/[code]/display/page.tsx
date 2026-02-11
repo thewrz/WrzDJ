@@ -49,7 +49,7 @@ export default function KioskDisplayPage() {
       const [kioskData, nowPlayingData, historyData] = await Promise.all([
         api.getKioskDisplay(code),
         api.getNowPlaying(code).catch((): undefined => undefined),
-        api.getPlayHistory(code).catch(() => ({ items: [], total: 0 })),
+        api.getPlayHistory(code).catch((): undefined => undefined),
       ]);
       setDisplay(kioskData);
       // Only update stagelinq now-playing when the fetch succeeded;
@@ -57,7 +57,9 @@ export default function KioskDisplayPage() {
       if (nowPlayingData !== undefined) {
         setStagelinqNowPlaying(nowPlayingData);
       }
-      setPlayHistory(historyData.items);
+      if (historyData !== undefined) {
+        setPlayHistory(historyData.items);
+      }
       setError(null);
       return true; // Continue polling
     } catch (err) {

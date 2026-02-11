@@ -95,15 +95,17 @@ export default function EventQueuePage() {
       const [eventData, requestsData, historyData, displaySettings, tidalStatusData, nowPlayingData] = await Promise.all([
         api.getEvent(code),
         api.getRequests(code),
-        api.getPlayHistory(code).catch(() => ({ items: [], total: 0 })),
+        api.getPlayHistory(code).catch((): undefined => undefined),
         api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false, now_playing_auto_hide_minutes: 10, requests_open: true })),
         api.getTidalStatus().catch(() => ({ linked: false, user_id: null, expires_at: null })),
-        api.getNowPlaying(code).catch(() => null),
+        api.getNowPlaying(code).catch((): undefined => undefined),
       ]);
       setEvent(eventData);
       setRequests(requestsData);
-      setPlayHistory(historyData.items);
-      setPlayHistoryTotal(historyData.total);
+      if (historyData !== undefined) {
+        setPlayHistory(historyData.items);
+        setPlayHistoryTotal(historyData.total);
+      }
       setNowPlayingHidden(displaySettings.now_playing_hidden);
       setRequestsOpen(displaySettings.requests_open ?? true);
       const serverAutoHide = displaySettings.now_playing_auto_hide_minutes ?? 10;
@@ -113,8 +115,10 @@ export default function EventQueuePage() {
       }
       setTidalStatus(tidalStatusData);
       setTidalSyncEnabled(eventData.tidal_sync_enabled ?? false);
-      setBridgeConnected(nowPlayingData?.bridge_connected ?? false);
-      setNowPlaying(nowPlayingData ?? null);
+      if (nowPlayingData !== undefined) {
+        setBridgeConnected(nowPlayingData?.bridge_connected ?? false);
+        setNowPlaying(nowPlayingData ?? null);
+      }
       setEventStatus('active');
       setError(null);
       return true; // Continue polling
