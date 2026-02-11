@@ -121,7 +121,7 @@ def delete_now_playing(
 
 
 @router.get("/public/e/{code}/nowplaying", response_model=NowPlayingResponse | None)
-@limiter.limit("60/minute")
+@limiter.limit("180/minute")
 def get_public_now_playing(
     request: Request,
     code: str,
@@ -147,7 +147,7 @@ def get_public_now_playing(
 
 
 @router.get("/public/e/{code}/history", response_model=PlayHistoryResponse)
-@limiter.limit("60/minute")
+@limiter.limit("180/minute")
 def get_public_history(
     request: Request,
     code: str,

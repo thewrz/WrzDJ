@@ -61,7 +61,7 @@ class KioskDisplayResponse(BaseModel):
 
 
 @router.get("/events/{code}/display", response_model=KioskDisplayResponse)
-@limiter.limit("60/minute")
+@limiter.limit("180/minute")
 def get_kiosk_display(
     code: str,
     request: Request,
