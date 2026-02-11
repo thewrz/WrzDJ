@@ -71,9 +71,18 @@ function getApiUrl(): string {
 
 class ApiClient {
   private token: string | null = null;
+  private onUnauthorized: (() => void) | null = null;
 
   setToken(token: string | null) {
     this.token = token;
+  }
+
+  /**
+   * Register a callback for 401 responses on authenticated endpoints.
+   * Used by AuthProvider to auto-logout on token expiration.
+   */
+  setUnauthorizedHandler(handler: (() => void) | null) {
+    this.onUnauthorized = handler;
   }
 
   private async fetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -97,6 +106,9 @@ class ApiClient {
     });
 
     if (!response.ok) {
+      if (response.status === 401 && this.onUnauthorized) {
+        this.onUnauthorized();
+      }
       const error = await response.json().catch(() => ({ detail: 'Request failed' }));
       throw new ApiError(error.detail || 'Request failed', response.status);
     }
@@ -134,6 +146,9 @@ class ApiClient {
     const response = await fetch(url, { headers });
 
     if (!response.ok) {
+      if (response.status === 401 && this.onUnauthorized) {
+        this.onUnauthorized();
+      }
       const error = await response.json().catch(() => ({ detail: 'Export failed' }));
       throw new ApiError(error.detail || 'Export failed', response.status);
     }
@@ -163,7 +178,12 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      throw new Error('Invalid credentials');
+      if (response.status === 401) {
+        throw new Error('Invalid credentials');
+      } else if (response.status === 429) {
+        throw new Error('Too many attempts. Try again later.');
+      }
+      throw new Error('Login failed. Please try again.');
     }
 
     return response.json();
@@ -486,6 +506,9 @@ class ApiClient {
     });
 
     if (!response.ok) {
+      if (response.status === 401 && this.onUnauthorized) {
+        this.onUnauthorized();
+      }
       const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
       throw new ApiError(error.detail || 'Upload failed', response.status);
     }

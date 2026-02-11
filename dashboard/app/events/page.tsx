@@ -14,6 +14,7 @@ export default function EventsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newEventName, setNewEventName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -33,8 +34,8 @@ export default function EventsPage() {
     try {
       const data = await api.getEvents();
       setEvents(data);
-    } catch (err) {
-      console.error('Failed to load events:', err);
+    } catch {
+      setErrorMsg('Failed to load events');
     } finally {
       setLoadingEvents(false);
     }
@@ -51,7 +52,7 @@ export default function EventsPage() {
       setNewEventName('');
       setShowCreate(false);
     } catch (err) {
-      console.error('Failed to create event:', err);
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to create event');
     } finally {
       setCreating(false);
     }
@@ -67,6 +68,11 @@ export default function EventsPage() {
 
   return (
     <div className="container">
+      {errorMsg && (
+        <div style={{ background: '#7f1d1d', color: '#fca5a5', padding: '0.75rem 1rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          {errorMsg}
+        </div>
+      )}
       <div className="header">
         <h1>My Events</h1>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -106,6 +112,7 @@ export default function EventsPage() {
                 placeholder="Friday Night Party"
                 value={newEventName}
                 onChange={(e) => setNewEventName(e.target.value)}
+                maxLength={100}
                 required
               />
             </div>

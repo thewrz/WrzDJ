@@ -178,14 +178,14 @@ export function RequestQueueSection({
                         <button
                           className="btn btn-success btn-sm"
                           onClick={() => onUpdateStatus(request.id, 'accepted')}
-                          disabled={updating === request.id}
+                          disabled={updating !== null}
                         >
                           Accept
                         </button>
                         <button
                           className="btn btn-danger btn-sm"
                           onClick={() => onUpdateStatus(request.id, 'rejected')}
-                          disabled={updating === request.id}
+                          disabled={updating !== null}
                         >
                           Reject
                         </button>
@@ -196,14 +196,14 @@ export function RequestQueueSection({
                         <button
                           className="btn btn-primary btn-sm"
                           onClick={() => onUpdateStatus(request.id, 'playing')}
-                          disabled={updating === request.id}
+                          disabled={updating !== null}
                         >
                           Playing
                         </button>
                         <button
                           className="btn btn-danger btn-sm"
                           onClick={() => onUpdateStatus(request.id, 'rejected')}
-                          disabled={updating === request.id}
+                          disabled={updating !== null}
                         >
                           Reject
                         </button>
@@ -213,7 +213,7 @@ export function RequestQueueSection({
                       <button
                         className="btn btn-warning btn-sm"
                         onClick={() => onUpdateStatus(request.id, 'played')}
-                        disabled={updating === request.id}
+                        disabled={updating !== null}
                       >
                         Played
                       </button>

@@ -36,7 +36,7 @@ describe('ApiClient', () => {
     it('throws on invalid credentials', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
-        json: async () => ({ detail: 'Invalid credentials' }),
+        status: 401,
       });
 
       await expect(api.login('bad', 'creds')).rejects.toThrow('Invalid credentials');
@@ -397,6 +397,58 @@ describe('ApiClient', () => {
       });
 
       await expect(api.getEvent('INVALID')).rejects.toThrow('Request failed');
+    });
+  });
+
+  describe('401 unauthorized handler', () => {
+    it('calls onUnauthorized when authenticated endpoint returns 401', async () => {
+      const handler = vi.fn();
+      api.setToken('expired-token');
+      api.setUnauthorizedHandler(handler);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ detail: 'Not authenticated' }),
+      });
+
+      await expect(api.getEvents()).rejects.toThrow('Not authenticated');
+      expect(handler).toHaveBeenCalledOnce();
+
+      api.setUnauthorizedHandler(null);
+    });
+
+    it('does not call onUnauthorized for login 401 (raw fetch)', async () => {
+      const handler = vi.fn();
+      api.setUnauthorizedHandler(handler);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+      });
+
+      await expect(api.login('user', 'wrong')).rejects.toThrow('Invalid credentials');
+      // login uses raw fetch, not this.fetch(), so handler should NOT fire
+      expect(handler).not.toHaveBeenCalled();
+
+      api.setUnauthorizedHandler(null);
+    });
+  });
+
+  describe('login error differentiation', () => {
+    it('returns "Invalid credentials" for 401', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 401 });
+      await expect(api.login('user', 'wrong')).rejects.toThrow('Invalid credentials');
+    });
+
+    it('returns "Too many attempts" for 429', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 429 });
+      await expect(api.login('user', 'pass')).rejects.toThrow('Too many attempts. Try again later.');
+    });
+
+    it('returns generic message for other errors', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
+      await expect(api.login('user', 'pass')).rejects.toThrow('Login failed. Please try again.');
     });
   });
 });

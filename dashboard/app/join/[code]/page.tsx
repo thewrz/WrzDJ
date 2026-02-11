@@ -194,7 +194,7 @@ export default function JoinEventPage() {
           </div>
         )}
         <div className="container" style={{ maxWidth: '500px', flex: 1, position: 'relative', zIndex: 1 }}>
-          <h2 style={{ marginBottom: '0.5rem' }}>{event.name}</h2>
+          <h2 style={{ marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{event.name}</h2>
           <p style={{ color: '#9ca3af', marginBottom: '1rem' }}>
             {guestRequests.length} {guestRequests.length === 1 ? 'request' : 'requests'}
           </p>
@@ -347,7 +347,7 @@ export default function JoinEventPage() {
         )}
         <div className="container" style={{ maxWidth: '500px', position: 'relative', zIndex: 1 }}>
           <div className="card" style={{ textAlign: 'center' }}>
-            <h1 style={{ marginBottom: '0.5rem' }}>{event.name}</h1>
+            <h1 style={{ marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{event.name}</h1>
             <p style={{ color: '#9ca3af', marginTop: '1rem' }}>
               Requests are closed for this event
             </p>
@@ -366,7 +366,7 @@ export default function JoinEventPage() {
       )}
       <div className="container" style={{ maxWidth: '500px', position: 'relative', zIndex: 1 }}>
       <div className="card">
-        <h1 style={{ marginBottom: '0.5rem' }}>{event.name}</h1>
+        <h1 style={{ marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{event.name}</h1>
         <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>Request a song</p>
 
         <form onSubmit={handleSearch}>

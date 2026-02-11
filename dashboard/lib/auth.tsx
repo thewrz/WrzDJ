@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
 import { api } from './api';
 
 export type UserRole = 'admin' | 'dj' | 'pending';
@@ -20,10 +20,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [role, setRole] = useState<UserRole | null>(null);
 
+  const logout = useCallback(() => {
+    localStorage.removeItem('token');
+    api.setToken(null);
+    api.setUnauthorizedHandler(null);
+    setIsAuthenticated(false);
+    setRole(null);
+  }, []);
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
       api.setToken(token);
+      api.setUnauthorizedHandler(() => {
+        logout();
+        window.location.href = '/login';
+      });
       api.getMe()
         .then((user) => {
           setIsAuthenticated(true);
@@ -37,22 +49,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       setIsLoading(false);
     }
-  }, []);
+  }, [logout]);
 
   const login = async (username: string, password: string) => {
     const { access_token } = await api.login(username, password);
     localStorage.setItem('token', access_token);
     api.setToken(access_token);
+    api.setUnauthorizedHandler(() => {
+      logout();
+      window.location.href = '/login';
+    });
     const user = await api.getMe();
     setRole(user.role as UserRole);
     setIsAuthenticated(true);
-  };
-
-  const logout = () => {
-    localStorage.removeItem('token');
-    api.setToken(null);
-    setIsAuthenticated(false);
-    setRole(null);
   };
 
   return (
