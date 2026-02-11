@@ -75,6 +75,9 @@ export default function EventQueuePage() {
   const [searchingTidal, setSearchingTidal] = useState(false);
   const [linkingTrack, setLinkingTrack] = useState(false);
 
+  // Inline action error (auto-dismissing)
+  const [actionError, setActionError] = useState<string | null>(null);
+
   // Banner upload state
   const [uploadingBanner, setUploadingBanner] = useState(false);
 
@@ -89,6 +92,13 @@ export default function EventQueuePage() {
       router.push('/login');
     }
   }, [isAuthenticated, isLoading, router]);
+
+  // Auto-dismiss action errors after 5 seconds
+  useEffect(() => {
+    if (!actionError) return;
+    const timer = setTimeout(() => setActionError(null), 5000);
+    return () => clearTimeout(timer);
+  }, [actionError]);
 
   const hasLoadedRef = useRef(false);
 
@@ -205,7 +215,7 @@ export default function EventQueuePage() {
         prev.map((r) => (r.id === requestId ? updated : r))
       );
     } catch (err) {
-      console.error('Failed to update status:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to update status');
     } finally {
       setUpdating(null);
     }
@@ -218,7 +228,7 @@ export default function EventQueuePage() {
       const updatedRequests = await api.getRequests(code);
       setRequests(updatedRequests);
     } catch (err) {
-      console.error('Failed to accept all requests:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to accept all requests');
     } finally {
       setAcceptingAll(false);
     }
@@ -241,7 +251,7 @@ export default function EventQueuePage() {
       setEvent(updated);
       setEditingExpiry(false);
     } catch (err) {
-      console.error('Failed to update expiry:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to update expiry');
     } finally {
       setUpdatingExpiry(false);
     }
@@ -253,7 +263,7 @@ export default function EventQueuePage() {
       await api.deleteEvent(code);
       router.push('/events');
     } catch (err) {
-      console.error('Failed to delete event:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to delete event');
       setDeleting(false);
       setShowDeleteConfirm(false);
     }
@@ -264,7 +274,7 @@ export default function EventQueuePage() {
     try {
       await api.exportEventCsv(code);
     } catch (err) {
-      console.error('Failed to export:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to export');
     } finally {
       setExporting(false);
     }
@@ -275,7 +285,7 @@ export default function EventQueuePage() {
     try {
       await api.exportPlayHistoryCsv(code);
     } catch (err) {
-      console.error('Failed to export play history:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to export play history');
     } finally {
       setExportingHistory(false);
     }
@@ -288,7 +298,7 @@ export default function EventQueuePage() {
       await api.setNowPlayingVisibility(code, newHidden);
       setNowPlayingHidden(newHidden);
     } catch (err) {
-      console.error('Failed to toggle now playing visibility:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to toggle now playing');
     } finally {
       setTogglingNowPlaying(false);
     }
@@ -303,7 +313,7 @@ export default function EventQueuePage() {
       setAutoHideMinutes(result.now_playing_auto_hide_minutes);
       setAutoHideInput(String(result.now_playing_auto_hide_minutes));
     } catch (err) {
-      console.error('Failed to update auto-hide timeout:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to update auto-hide timeout');
     } finally {
       setSavingAutoHide(false);
     }
@@ -356,7 +366,7 @@ export default function EventQueuePage() {
           } else if (result.error) {
             clearInterval(pollInterval);
             setTidalLoginPolling(false);
-            alert(`Tidal login failed: ${result.error}`);
+            setActionError(`Tidal login failed: ${result.error}`);
           }
         } catch (err) {
           console.error('Failed to check Tidal auth:', err);
@@ -458,7 +468,7 @@ export default function EventQueuePage() {
 
     const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) {
-      alert('File size must be under 5MB');
+      setActionError('File size must be under 5MB');
       e.target.value = '';
       return;
     }
@@ -468,8 +478,7 @@ export default function EventQueuePage() {
       const updated = await api.uploadEventBanner(code, file);
       setEvent(updated);
     } catch (err) {
-      console.error('Banner upload failed:', err);
-      alert(err instanceof Error ? err.message : 'Failed to upload banner');
+      setActionError(err instanceof Error ? err.message : 'Failed to upload banner');
     } finally {
       setUploadingBanner(false);
       e.target.value = '';
@@ -481,7 +490,7 @@ export default function EventQueuePage() {
       const updated = await api.deleteEventBanner(code);
       setEvent(updated);
     } catch (err) {
-      console.error('Failed to delete banner:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to delete banner');
     }
   };
 
@@ -532,13 +541,19 @@ export default function EventQueuePage() {
 
   return (
     <div className="container">
+      {actionError && (
+        <div style={{ background: '#7f1d1d', color: '#fca5a5', padding: '0.75rem 1rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+          {actionError}
+        </div>
+      )}
+
       {/* 1. Header */}
       <div className="header">
         <div>
           <Link href="/events" style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
             &larr; Back to Events
           </Link>
-          <h1 style={{ marginTop: '0.5rem' }}>{event.name}</h1>
+          <h1 style={{ marginTop: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{event.name}</h1>
           <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>
             {isExpiredOrArchived ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
