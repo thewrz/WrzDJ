@@ -129,6 +129,12 @@ def validate_settings(settings: Settings) -> None:
                 "set to your frontend domain (e.g., https://app.wrzdj.com)"
             )
 
+    if not settings.bridge_api_key:
+        print(
+            "WARNING: BRIDGE_API_KEY not set - bridge service will not be able to authenticate",
+            file=sys.stderr,
+        )
+
     if not settings.spotify_client_id or not settings.spotify_client_secret:
         # Warning only, not fatal
         print(
