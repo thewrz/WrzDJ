@@ -265,18 +265,34 @@ def add_track_to_playlist(
     track_id: str,
 ) -> bool:
     """Add a track to a Tidal playlist."""
+    return add_tracks_to_playlist(db, user, playlist_id, [track_id])
+
+
+def add_tracks_to_playlist(
+    db: Session,
+    user: User,
+    playlist_id: str,
+    track_ids: list[str],
+) -> bool:
+    """Add multiple tracks to a Tidal playlist in one batch API call.
+
+    Duplicates are automatically skipped by Tidal's API (allow_duplicates=False).
+    """
+    if not track_ids:
+        return True
+
     session = get_tidal_session(db, user)
     if not session:
         return False
 
     try:
         playlist = session.playlist(playlist_id)
-        playlist.add([track_id])
-        logger.info(f"Added track {track_id} to playlist {playlist_id}")
+        playlist.add(track_ids)  # allow_duplicates=False by default → skips dupes
+        logger.info(f"Added {len(track_ids)} track(s) to playlist {playlist_id}")
         return True
 
     except Exception as e:
-        logger.error(f"Failed to add track to playlist: {e}")
+        logger.error(f"Failed to add tracks to playlist: {e}")
         return False
 
 

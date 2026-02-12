@@ -38,6 +38,7 @@ def create_request(
     source_url: str | None = None,
     artwork_url: str | None = None,
     client_fingerprint: str | None = None,
+    raw_search_query: str | None = None,
 ) -> tuple[Request, bool]:
     """
     Create a new song request.
@@ -74,6 +75,7 @@ def create_request(
         artwork_url=artwork_url,
         client_fingerprint=client_fingerprint,
         dedupe_key=dedupe_key,
+        raw_search_query=raw_search_query,
     )
     db.add(request)
     db.commit()

@@ -12,7 +12,8 @@ from app.services.request import (
     get_request_by_id,
     update_request_status,
 )
-from app.services.tidal import sync_request_to_tidal
+from app.services.sync.orchestrator import sync_request_to_services
+from app.services.sync.registry import get_connected_adapters
 
 router = APIRouter()
 
@@ -38,11 +39,10 @@ def update_request(
     except InvalidStatusTransitionError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Sync to Tidal when request is accepted (non-blocking background task)
+    # Sync to connected services when request is accepted (non-blocking background task)
     if update_data.status == RequestStatus.ACCEPTED:
-        event = request.event
-        if event.tidal_sync_enabled and event.created_by.tidal_access_token:
-            background_tasks.add_task(sync_request_to_tidal, db, request)
+        if get_connected_adapters(request.event.created_by):
+            background_tasks.add_task(sync_request_to_services, db, request)
 
     # Auto-set now_playing when a request is set to "playing"
     if update_data.status == RequestStatus.PLAYING:

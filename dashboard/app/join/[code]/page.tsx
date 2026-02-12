@@ -127,7 +127,7 @@ export default function JoinEventPage() {
     setSubmitting(true);
     setSubmitError('');
     try {
-      const result = await api.submitRequest(code, selectedSong.artist, selectedSong.title, note || undefined, selectedSong.url || undefined, selectedSong.album_art || undefined);
+      const result = await api.submitRequest(code, selectedSong.artist, selectedSong.title, note || undefined, selectedSong.url || undefined, selectedSong.album_art || undefined, searchQuery || undefined);
       setSubmitted(true);
       setSubmitIsDuplicate(result.is_duplicate ?? false);
       setSubmitVoteCount(result.vote_count);

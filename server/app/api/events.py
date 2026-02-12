@@ -56,7 +56,8 @@ from app.services.now_playing import (
     set_now_playing_visibility,
 )
 from app.services.request import accept_all_new_requests, create_request, get_requests_for_event
-from app.services.tidal import sync_request_to_tidal
+from app.services.sync.orchestrator import sync_requests_batch
+from app.services.sync.registry import get_connected_adapters
 
 router = APIRouter()
 settings = get_settings()
@@ -367,6 +368,7 @@ def submit_request(
         source_url=request_data.source_url,
         artwork_url=request_data.artwork_url,
         client_fingerprint=get_client_fingerprint(request),
+        raw_search_query=request_data.raw_search_query,
     )
 
     return RequestOut(
@@ -397,10 +399,10 @@ def accept_all_requests_endpoint(
     """Accept all NEW requests for an event in one operation."""
     accepted = accept_all_new_requests(db, event)
 
-    # Trigger Tidal sync for each accepted request if enabled
-    if event.tidal_sync_enabled and event.created_by.tidal_access_token:
-        for req in accepted:
-            background_tasks.add_task(sync_request_to_tidal, db, req)
+    # Trigger batch sync — one background task for all accepted requests
+    # Uses sequential search + batch playlist add to avoid API rate limiting
+    if accepted and get_connected_adapters(event.created_by):
+        background_tasks.add_task(sync_requests_batch, db, accepted)
 
     return AcceptAllResponse(status="ok", accepted_count=len(accepted))
 
