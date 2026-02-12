@@ -111,3 +111,13 @@ class TidalSyncAdapter(PlaylistSyncAdapter):
         track_id: str,
     ) -> bool:
         return tidal_service.add_track_to_playlist(db, user, playlist_id, track_id)
+
+    def add_tracks_to_playlist(
+        self,
+        db: Session,
+        user: User,
+        playlist_id: str,
+        track_ids: list[str],
+    ) -> bool:
+        """Batch add using Tidal's native batch API (skips duplicates)."""
+        return tidal_service.add_tracks_to_playlist(db, user, playlist_id, track_ids)

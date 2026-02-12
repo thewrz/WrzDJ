@@ -106,6 +106,24 @@ class PlaylistSyncAdapter(ABC):
     ) -> bool:
         """Add a track to a playlist. Returns True on success."""
 
+    def add_tracks_to_playlist(
+        self,
+        db: Session,
+        user: User,
+        playlist_id: str,
+        track_ids: list[str],
+    ) -> bool:
+        """Batch add tracks to a playlist. Default: loop single adds.
+
+        Override for services that support batch operations.
+        Implementations should handle duplicate detection — tracks already
+        on the playlist should be silently skipped, not cause errors.
+        """
+        for track_id in track_ids:
+            if not self.add_to_playlist(db, user, playlist_id, track_id):
+                return False
+        return True
+
     def sync_track(
         self,
         db: Session,

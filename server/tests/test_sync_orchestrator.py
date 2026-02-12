@@ -10,7 +10,13 @@ from app.models.event import Event
 from app.models.request import Request, RequestStatus, TidalSyncStatus
 from app.models.user import User
 from app.services.sync.base import SyncResult, SyncStatus, TrackMatch
-from app.services.sync.orchestrator import MultiSyncResult, sync_request_to_services
+from app.services.sync.orchestrator import (
+    MultiSyncResult,
+    _is_already_synced,
+    _persist_sync_result,
+    sync_request_to_services,
+    sync_requests_batch,
+)
 from app.services.sync.registry import _clear_adapters, register_adapter
 
 
@@ -81,6 +87,22 @@ def accepted_request_no_query(db: Session, tidal_event: Event) -> Request:
     return request
 
 
+def _make_accepted_request(db: Session, event: Event, title: str, artist: str, key: str) -> Request:
+    """Helper to create accepted requests for batch tests."""
+    request = Request(
+        event_id=event.id,
+        song_title=title,
+        artist=artist,
+        source="spotify",
+        status=RequestStatus.ACCEPTED.value,
+        dedupe_key=key,
+    )
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+    return request
+
+
 class MockAdapter:
     """Mock adapter for testing."""
 
@@ -89,6 +111,8 @@ class MockAdapter:
         self._connected = connected
         self._sync_result = sync_result
         self._sync_enabled = sync_enabled
+        self.search_calls = []
+        self.batch_add_calls = []
 
     @property
     def service_name(self):
@@ -115,6 +139,26 @@ class MockAdapter:
             ),
             playlist_id="mock_playlist_456",
         )
+
+    def search_track(self, db, user, normalized, intent=None):
+        self.search_calls.append(normalized)
+        return TrackMatch(
+            service=self._name,
+            track_id=f"track_{normalized.raw_title.lower().replace(' ', '_')}",
+            title=normalized.raw_title,
+            artist=normalized.raw_artist,
+            match_confidence=0.95,
+        )
+
+    def ensure_playlist(self, db, user, event):
+        return event.tidal_playlist_id or "mock_playlist"
+
+    def add_to_playlist(self, db, user, playlist_id, track_id):
+        return True
+
+    def add_tracks_to_playlist(self, db, user, playlist_id, track_ids):
+        self.batch_add_calls.append(track_ids)
+        return True
 
 
 @pytest.fixture(autouse=True)
@@ -284,3 +328,300 @@ class TestSyncRequestToServices:
 
         assert len(result.results) == 1
         assert result.results[0].service == "tidal"
+
+
+class TestIsAlreadySynced:
+    def test_tidal_legacy_synced(self, db, tidal_event):
+        request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "dedup_synced")
+        request.tidal_sync_status = TidalSyncStatus.SYNCED.value
+        db.commit()
+        assert _is_already_synced(request, "tidal") is True
+
+    def test_tidal_legacy_not_synced(self, db, tidal_event):
+        request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "dedup_none")
+        assert _is_already_synced(request, "tidal") is False
+
+    def test_tidal_legacy_error_not_synced(self, db, tidal_event):
+        request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "dedup_err")
+        request.tidal_sync_status = TidalSyncStatus.ERROR.value
+        db.commit()
+        assert _is_already_synced(request, "tidal") is False
+
+    def test_json_synced(self, db, tidal_event):
+        request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "dedup_json")
+        request.sync_results_json = json.dumps([{"service": "beatport", "status": "added"}])
+        db.commit()
+        assert _is_already_synced(request, "beatport") is True
+
+    def test_json_not_found_not_synced(self, db, tidal_event):
+        request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "dedup_nf")
+        request.sync_results_json = json.dumps([{"service": "beatport", "status": "not_found"}])
+        db.commit()
+        assert _is_already_synced(request, "beatport") is False
+
+    def test_different_service_not_synced(self, db, tidal_event):
+        request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "dedup_diff")
+        request.sync_results_json = json.dumps([{"service": "tidal", "status": "added"}])
+        db.commit()
+        assert _is_already_synced(request, "beatport") is False
+
+    def test_invalid_json_not_synced(self, db, tidal_event):
+        request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "dedup_bad")
+        request.sync_results_json = "not json"
+        db.commit()
+        assert _is_already_synced(request, "tidal") is False
+
+
+class TestPersistSyncResult:
+    def test_persist_added(self, db, tidal_event):
+        request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "persist_add")
+        result = SyncResult(
+            service="tidal",
+            status=SyncStatus.ADDED,
+            track_match=TrackMatch(
+                service="tidal",
+                track_id="123",
+                title="Strobe",
+                artist="deadmau5",
+                match_confidence=0.95,
+            ),
+            playlist_id="playlist_abc",
+        )
+        _persist_sync_result(request, result)
+        db.commit()
+
+        data = json.loads(request.sync_results_json)
+        assert len(data) == 1
+        assert data[0]["service"] == "tidal"
+        assert data[0]["status"] == "added"
+        assert data[0]["track_id"] == "123"
+        assert request.tidal_track_id == "123"
+        assert request.tidal_sync_status == TidalSyncStatus.SYNCED.value
+
+    def test_persist_upserts_same_service(self, db, tidal_event):
+        """Second result for same service replaces the first."""
+        request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "persist_ups")
+        # First: error
+        _persist_sync_result(
+            request, SyncResult(service="tidal", status=SyncStatus.ERROR, error="failed")
+        )
+        # Second: success
+        _persist_sync_result(
+            request,
+            SyncResult(
+                service="tidal",
+                status=SyncStatus.ADDED,
+                track_match=TrackMatch(
+                    service="tidal",
+                    track_id="456",
+                    title="Strobe",
+                    artist="deadmau5",
+                    match_confidence=0.9,
+                ),
+            ),
+        )
+        db.commit()
+
+        data = json.loads(request.sync_results_json)
+        assert len(data) == 1  # Replaced, not appended
+        assert data[0]["status"] == "added"
+        assert data[0]["track_id"] == "456"
+
+    def test_persist_multiple_services(self, db, tidal_event):
+        request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "persist_multi")
+        _persist_sync_result(
+            request,
+            SyncResult(
+                service="tidal",
+                status=SyncStatus.ADDED,
+                track_match=TrackMatch(
+                    service="tidal",
+                    track_id="1",
+                    title="Strobe",
+                    artist="deadmau5",
+                    match_confidence=0.9,
+                ),
+            ),
+        )
+        _persist_sync_result(request, SyncResult(service="beatport", status=SyncStatus.NOT_FOUND))
+        db.commit()
+
+        data = json.loads(request.sync_results_json)
+        assert len(data) == 2
+        services = {d["service"] for d in data}
+        assert services == {"tidal", "beatport"}
+
+
+class TestSyncRequestsBatch:
+    def test_batch_happy_path(self, db, tidal_event, tidal_user):
+        """Batch sync: all tracks found, single batch add."""
+        r1 = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "batch_1")
+        r2 = _make_accepted_request(db, tidal_event, "Ghosts", "deadmau5", "batch_2")
+        r3 = _make_accepted_request(db, tidal_event, "Faxing Berlin", "deadmau5", "batch_3")
+
+        adapter = MockAdapter("tidal")
+        register_adapter(adapter)
+
+        sync_requests_batch(db, [r1, r2, r3])
+
+        # Verify single batch add call with all 3 track IDs
+        assert len(adapter.batch_add_calls) == 1
+        assert len(adapter.batch_add_calls[0]) == 3
+
+        # Verify all requests have synced status
+        for r in [r1, r2, r3]:
+            db.refresh(r)
+            assert r.tidal_sync_status == TidalSyncStatus.SYNCED.value
+            data = json.loads(r.sync_results_json)
+            assert data[0]["status"] == "added"
+
+    def test_batch_partial_not_found(self, db, tidal_event, tidal_user):
+        """Some tracks found, some not — found tracks still batch-added."""
+        r1 = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "batch_p1")
+        r2 = _make_accepted_request(db, tidal_event, "Unknown", "Nobody", "batch_p2")
+
+        class PartialAdapter(MockAdapter):
+            def search_track(self, db, user, normalized, intent=None):
+                if "Unknown" in normalized.raw_title:
+                    return None
+                return super().search_track(db, user, normalized, intent)
+
+        adapter = PartialAdapter("tidal")
+        register_adapter(adapter)
+
+        sync_requests_batch(db, [r1, r2])
+
+        # r1 synced, r2 not found
+        db.refresh(r1)
+        assert r1.tidal_sync_status == TidalSyncStatus.SYNCED.value
+
+        db.refresh(r2)
+        assert r2.tidal_sync_status == TidalSyncStatus.NOT_FOUND.value
+
+        # Only 1 track in batch add
+        assert len(adapter.batch_add_calls) == 1
+        assert len(adapter.batch_add_calls[0]) == 1
+
+    def test_batch_skips_already_synced(self, db, tidal_event, tidal_user):
+        """Requests already synced are skipped entirely."""
+        r1 = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "batch_s1")
+        r1.tidal_sync_status = TidalSyncStatus.SYNCED.value
+        db.commit()
+
+        r2 = _make_accepted_request(db, tidal_event, "Ghosts", "deadmau5", "batch_s2")
+
+        adapter = MockAdapter("tidal")
+        register_adapter(adapter)
+
+        sync_requests_batch(db, [r1, r2])
+
+        # Only r2 was searched (r1 skipped)
+        assert len(adapter.search_calls) == 1
+        assert adapter.search_calls[0].raw_title == "Ghosts"
+
+        # Only 1 track in batch add
+        assert len(adapter.batch_add_calls) == 1
+        assert len(adapter.batch_add_calls[0]) == 1
+
+    def test_batch_all_already_synced(self, db, tidal_event, tidal_user):
+        """When all requests are already synced, no API calls made."""
+        r1 = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "batch_a1")
+        r1.tidal_sync_status = TidalSyncStatus.SYNCED.value
+        db.commit()
+
+        adapter = MockAdapter("tidal")
+        register_adapter(adapter)
+
+        sync_requests_batch(db, [r1])
+
+        assert len(adapter.search_calls) == 0
+        assert len(adapter.batch_add_calls) == 0
+
+    def test_batch_add_failure(self, db, tidal_event, tidal_user):
+        """When batch add fails, all found requests get ERROR status."""
+        r1 = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "batch_f1")
+        r2 = _make_accepted_request(db, tidal_event, "Ghosts", "deadmau5", "batch_f2")
+
+        class FailAddAdapter(MockAdapter):
+            def add_tracks_to_playlist(self, db, user, playlist_id, track_ids):
+                self.batch_add_calls.append(track_ids)
+                return False
+
+        adapter = FailAddAdapter("tidal")
+        register_adapter(adapter)
+
+        sync_requests_batch(db, [r1, r2])
+
+        for r in [r1, r2]:
+            db.refresh(r)
+            assert r.tidal_sync_status == TidalSyncStatus.ERROR.value
+
+    def test_batch_playlist_failure(self, db, tidal_event, tidal_user):
+        """When playlist creation fails, all found tracks get ERROR."""
+        r1 = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "batch_pl1")
+
+        class NoPlaylistAdapter(MockAdapter):
+            def ensure_playlist(self, db, user, event):
+                return None
+
+        adapter = NoPlaylistAdapter("tidal")
+        register_adapter(adapter)
+
+        sync_requests_batch(db, [r1])
+
+        db.refresh(r1)
+        assert r1.tidal_sync_status == TidalSyncStatus.ERROR.value
+
+    def test_batch_empty_list(self, db):
+        """Empty request list is a no-op."""
+        adapter = MockAdapter("tidal")
+        register_adapter(adapter)
+
+        sync_requests_batch(db, [])
+
+        assert len(adapter.search_calls) == 0
+
+    def test_batch_no_adapters(self, db, tidal_event, tidal_user):
+        """No adapters registered — no-op."""
+        r1 = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "batch_na1")
+        sync_requests_batch(db, [r1])
+
+        db.refresh(r1)
+        assert r1.tidal_sync_status is None
+
+    def test_batch_search_exception(self, db, tidal_event, tidal_user):
+        """Search exception for one track doesn't block others."""
+        r1 = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "batch_e1")
+        r2 = _make_accepted_request(db, tidal_event, "BadTrack", "Error", "batch_e2")
+
+        class PartialErrorAdapter(MockAdapter):
+            def search_track(self, db, user, normalized, intent=None):
+                self.search_calls.append(normalized)
+                if "BadTrack" in normalized.raw_title:
+                    raise RuntimeError("API timeout")
+                return super().search_track(db, user, normalized, intent)
+
+        adapter = PartialErrorAdapter("tidal")
+        register_adapter(adapter)
+
+        sync_requests_batch(db, [r1, r2])
+
+        # r1 succeeded, r2 got error
+        db.refresh(r1)
+        assert r1.tidal_sync_status == TidalSyncStatus.SYNCED.value
+
+        db.refresh(r2)
+        assert r2.tidal_sync_status == TidalSyncStatus.ERROR.value
+
+    def test_batch_sync_disabled_skipped(self, db, tidal_event, tidal_user):
+        """Adapters with sync disabled are skipped in batch mode too."""
+        r1 = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "batch_dis1")
+
+        adapter = MockAdapter("tidal", sync_enabled=False)
+        register_adapter(adapter)
+
+        sync_requests_batch(db, [r1])
+
+        assert len(adapter.search_calls) == 0
+        db.refresh(r1)
+        assert r1.tidal_sync_status is None
