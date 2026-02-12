@@ -1,8 +1,7 @@
-from datetime import datetime
-
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.time import utcnow
 from app.models.event import Event
 from app.models.request import Request
 from app.models.user import User, UserRole
@@ -147,7 +146,7 @@ def get_system_stats(db: Session) -> dict:
         .filter(
             Event.is_active == True,  # noqa: E712
             Event.archived_at == None,  # noqa: E711
-            Event.expires_at > datetime.utcnow(),
+            Event.expires_at > utcnow(),
         )
         .count()
     )

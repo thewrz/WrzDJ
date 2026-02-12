@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.core.config import get_settings
 from app.core.rate_limit import get_client_fingerprint, limiter
+from app.core.time import utcnow
 from app.models.request import Request as SongRequest
 from app.models.request import RequestStatus
 from app.services.event import EventLookupResult, get_event_by_code_with_status
@@ -137,7 +138,7 @@ def get_kiosk_display(
         now_playing=now_playing,
         now_playing_hidden=now_playing_is_hidden,
         requests_open=event.requests_open,
-        updated_at=datetime.utcnow(),
+        updated_at=utcnow(),
         banner_url=banner_url,
         banner_kiosk_url=banner_kiosk_url,
         banner_colors=banner_colors,

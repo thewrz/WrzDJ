@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.time import utcnow
 from app.models.base import Base
 
 
@@ -15,6 +16,6 @@ class RequestVote(Base):
         ForeignKey("requests.id", ondelete="CASCADE"), index=True
     )
     client_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     request: Mapped["Request"] = relationship("Request", back_populates="votes")

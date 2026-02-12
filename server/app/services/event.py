@@ -6,6 +6,7 @@ from enum import Enum
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.time import utcnow
 from app.models.event import Event
 from app.models.request import Request
 from app.models.user import User
@@ -33,7 +34,7 @@ def compute_event_status(event: Event) -> EventStatus:
     """Compute the status of an event based on its state."""
     if event.archived_at is not None:
         return EventStatus.ARCHIVED
-    if event.expires_at <= datetime.utcnow() or not event.is_active:
+    if event.expires_at <= utcnow() or not event.is_active:
         return EventStatus.EXPIRED
     return EventStatus.ACTIVE
 
@@ -47,7 +48,7 @@ def create_event(db: Session, name: str, user: User, expires_hours: int = 6) -> 
         if not existing:
             break
 
-    expires_at = datetime.utcnow() + timedelta(hours=expires_hours)
+    expires_at = utcnow() + timedelta(hours=expires_hours)
     event = Event(code=code, name=name, created_by_user_id=user.id, expires_at=expires_at)
     db.add(event)
     db.commit()
@@ -71,7 +72,7 @@ def get_event_by_code_with_status(db: Session, code: str) -> tuple[Event | None,
     if event.archived_at is not None:
         return event, EventLookupResult.ARCHIVED
 
-    if event.expires_at <= datetime.utcnow() or not event.is_active:
+    if event.expires_at <= utcnow() or not event.is_active:
         return event, EventLookupResult.EXPIRED
 
     return event, EventLookupResult.FOUND
@@ -159,7 +160,7 @@ def delete_event(db: Session, event: Event) -> None:
 def set_now_playing(db: Session, event: Event, request_id: int | None) -> Event:
     """Set the now playing request for an event."""
     event.now_playing_request_id = request_id
-    event.now_playing_updated_at = datetime.utcnow()
+    event.now_playing_updated_at = utcnow()
     db.commit()
     db.refresh(event)
     return event
@@ -167,7 +168,7 @@ def set_now_playing(db: Session, event: Event, request_id: int | None) -> Event:
 
 def archive_event(db: Session, event: Event) -> Event:
     """Archive an event by setting archived_at timestamp."""
-    event.archived_at = datetime.utcnow()
+    event.archived_at = utcnow()
     db.commit()
     db.refresh(event)
     return event
@@ -215,7 +216,7 @@ def get_expired_events_for_user(db: Session, user: User) -> list[tuple[Event, in
         .filter(
             Event.created_by_user_id == user.id,
             Event.archived_at == None,
-            (Event.expires_at <= datetime.utcnow()) | (Event.is_active == False),
+            (Event.expires_at <= utcnow()) | (Event.is_active == False),
         )
         .group_by(Event.id)
         .order_by(Event.expires_at.desc())

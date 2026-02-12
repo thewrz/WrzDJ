@@ -1,7 +1,7 @@
 """Pytest configuration and fixtures for WrzDJ tests."""
 
 from collections.abc import Generator
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.deps import get_db
+from app.core.time import utcnow
 from app.main import app
 from app.models.base import Base
 from app.models.event import Event
@@ -141,7 +142,7 @@ def test_event(db: Session, test_user: User) -> Event:
         code="TEST01",
         name="Test Event",
         created_by_user_id=test_user.id,
-        expires_at=datetime.utcnow() + timedelta(hours=6),
+        expires_at=utcnow() + timedelta(hours=6),
     )
     db.add(event)
     db.commit()
