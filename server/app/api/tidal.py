@@ -79,7 +79,7 @@ def cancel_auth(
 
 
 @router.get("/status", response_model=TidalStatus)
-async def get_status(
+def get_status(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> TidalStatus:
@@ -110,7 +110,7 @@ def disconnect(
 
 @router.get("/search", response_model=list[TidalSearchResult])
 @limiter.limit(lambda: f"{settings.search_rate_limit_per_minute}/minute")
-async def search(
+def search(
     request: Request,
     q: str = Query(..., min_length=1),
     limit: int = Query(default=10, ge=1, le=50),
@@ -123,7 +123,7 @@ async def search(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tidal account not linked",
         )
-    return await search_tidal_tracks(db, current_user, q, limit)
+    return search_tidal_tracks(db, current_user, q, limit)
 
 
 @router.get("/events/{event_id}/settings", response_model=TidalEventSettings)
@@ -179,7 +179,7 @@ def update_event_settings(
 
 
 @router.post("/requests/{request_id}/sync", response_model=TidalSyncResult)
-async def sync_request(
+def sync_request(
     request_id: int,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_active_user),
@@ -194,11 +194,11 @@ async def sync_request(
     if event.created_by_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    return await sync_request_to_tidal(db, song_request)
+    return sync_request_to_tidal(db, song_request)
 
 
 @router.post("/requests/{request_id}/link", response_model=TidalSyncResult)
-async def link_track(
+def link_track(
     request_id: int,
     link_data: TidalManualLink,
     current_user: User = Depends(get_current_active_user),
@@ -213,4 +213,4 @@ async def link_track(
     if event.created_by_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    return await manual_link_track(db, song_request, link_data.tidal_track_id)
+    return manual_link_track(db, song_request, link_data.tidal_track_id)

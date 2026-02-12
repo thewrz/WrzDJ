@@ -159,9 +159,8 @@ class TestTidalDisconnect:
 class TestTidalManualLink:
     """Tests for manual track linking."""
 
-    @pytest.mark.asyncio
     @patch("app.services.tidal.add_track_to_playlist")
-    async def test_manual_link_success(
+    def test_manual_link_success(
         self,
         mock_add: MagicMock,
         db: Session,
@@ -170,7 +169,7 @@ class TestTidalManualLink:
         """Test successful manual track link."""
         mock_add.return_value = True
 
-        result = await manual_link_track(db, tidal_request, "manual_track_id")
+        result = manual_link_track(db, tidal_request, "manual_track_id")
 
         assert result.status == TidalSyncStatus.SYNCED
         assert result.tidal_track_id == "manual_track_id"
@@ -179,8 +178,7 @@ class TestTidalManualLink:
         assert tidal_request.tidal_track_id == "manual_track_id"
         assert tidal_request.tidal_sync_status == TidalSyncStatus.SYNCED.value
 
-    @pytest.mark.asyncio
-    async def test_manual_link_no_tidal_account(
+    def test_manual_link_no_tidal_account(
         self,
         db: Session,
         tidal_request: Request,
@@ -189,7 +187,7 @@ class TestTidalManualLink:
         tidal_request.event.created_by.tidal_access_token = None
         db.commit()
 
-        result = await manual_link_track(db, tidal_request, "track_id")
+        result = manual_link_track(db, tidal_request, "track_id")
 
         assert result.status == TidalSyncStatus.ERROR
         assert "not linked" in result.error

@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 import time
 from datetime import timedelta
 
@@ -21,14 +22,19 @@ SPOTIFY_TIMEOUT = (5, 10)  # 5s connect, 10s read
 MAX_RETRIES = 2
 INITIAL_BACKOFF = 0.5  # seconds
 
-# Initialize Spotify client with client credentials flow
+# Initialize Spotify client with client credentials flow (thread-safe)
 _sp: spotipy.Spotify | None = None
+_sp_lock = threading.Lock()
 
 
 def _get_spotify_client() -> spotipy.Spotify:
-    """Get or create the Spotify client."""
+    """Get or create the Spotify client (double-checked locking)."""
     global _sp
-    if _sp is None:
+    if _sp is not None:
+        return _sp
+    with _sp_lock:
+        if _sp is not None:
+            return _sp
         if not settings.spotify_client_id or not settings.spotify_client_secret:
             raise ValueError(
                 "Spotify credentials not configured. "
@@ -45,7 +51,7 @@ def _get_spotify_client() -> spotipy.Spotify:
     return _sp
 
 
-async def search_songs(db: Session, query: str) -> list[SearchResult]:
+def search_songs(db: Session, query: str) -> list[SearchResult]:
     """Search for songs using Spotify API with caching."""
     query = query.strip().lower()
     if not query:

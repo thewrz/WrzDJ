@@ -16,13 +16,12 @@ settings = get_settings()
 
 @router.get("", response_model=list[SearchResult])
 @limiter.limit(lambda: f"{settings.search_rate_limit_per_minute}/minute")
-async def search(
+def search(
     request: Request,
     q: str = Query(..., min_length=2, max_length=200),
     db: Session = Depends(get_db),
 ) -> list[SearchResult]:
-    results = await search_songs(db, q)
-    return results
+    return search_songs(db, q)
 
 
 @router.delete("/cache", response_model=CacheClearResponse)
