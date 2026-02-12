@@ -9,6 +9,8 @@ export interface Event {
   // Tidal sync settings
   tidal_sync_enabled: boolean;
   tidal_playlist_id: string | null;
+  // Beatport sync settings
+  beatport_sync_enabled: boolean;
   // Banner
   banner_url: string | null;
   banner_kiosk_url: string | null;
@@ -36,9 +38,13 @@ export interface SongRequest {
   created_at: string;
   updated_at: string;
   is_duplicate?: boolean;
+  // Search intent
+  raw_search_query: string | null;
   // Tidal sync status
   tidal_track_id: string | null;
   tidal_sync_status: 'pending' | 'synced' | 'not_found' | 'error' | null;
+  // Multi-service sync results (JSON string)
+  sync_results_json: string | null;
   // Voting
   vote_count: number;
 }
@@ -164,6 +170,47 @@ export interface TidalSyncResult {
   request_id: number;
   status: 'pending' | 'synced' | 'not_found' | 'error';
   tidal_track_id: string | null;
+  error: string | null;
+}
+
+/** Beatport account status */
+export interface BeatportStatus {
+  linked: boolean;
+  expires_at: string | null;
+}
+
+/** Beatport search result */
+export interface BeatportSearchResult {
+  track_id: string;
+  title: string;
+  artist: string;
+  mix_name: string | null;
+  label: string | null;
+  genre: string | null;
+  bpm: number | null;
+  key: string | null;
+  duration_seconds: number | null;
+  cover_url: string | null;
+  beatport_url: string | null;
+  release_date: string | null;
+}
+
+/** Beatport event settings */
+export interface BeatportEventSettings {
+  beatport_sync_enabled: boolean;
+}
+
+/** Per-service sync result entry from sync_results_json */
+export interface SyncResultEntry {
+  service: string;
+  status: 'matched' | 'added' | 'not_found' | 'error';
+  track_id: string | null;
+  track_title: string | null;
+  track_artist: string | null;
+  confidence: number | null;
+  url: string | null;
+  duration_seconds: number | null;
+  playlist_id: string | null;
   error: string | null;
 }
 

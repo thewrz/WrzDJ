@@ -245,6 +245,8 @@ def _persist_sync_result(request: Request, result: SyncResult) -> None:
             "track_title": result.track_match.title if result.track_match else None,
             "track_artist": result.track_match.artist if result.track_match else None,
             "confidence": result.track_match.match_confidence if result.track_match else None,
+            "url": result.track_match.url if result.track_match else None,
+            "duration_seconds": result.track_match.duration_seconds if result.track_match else None,
             "playlist_id": result.playlist_id,
             "error": result.error,
         }

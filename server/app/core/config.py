@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     tidal_client_secret: str = ""
     tidal_redirect_uri: str = ""
 
+    # Beatport API v4 (OAuth2 authorization code flow)
+    beatport_client_id: str = ""
+    beatport_client_secret: str = ""
+    beatport_redirect_uri: str = ""
+
     # StageLinQ Bridge
     bridge_api_key: str = ""
 

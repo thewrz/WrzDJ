@@ -67,5 +67,7 @@ def update_request(
         updated_at=updated.updated_at,
         tidal_track_id=updated.tidal_track_id,
         tidal_sync_status=updated.tidal_sync_status,
+        raw_search_query=updated.raw_search_query,
+        sync_results_json=updated.sync_results_json,
         vote_count=updated.vote_count,
     )

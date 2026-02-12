@@ -5,18 +5,19 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/auth';
-import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem, TidalStatus, TidalSearchResult } from '@/lib/api';
-import type { NowPlayingInfo } from '@/lib/api-types';
+import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem, TidalStatus, TidalSearchResult, BeatportStatus } from '@/lib/api';
+import type { BeatportSearchResult, NowPlayingInfo } from '@/lib/api-types';
 import { DeleteEventModal } from './components/DeleteEventModal';
 import { NowPlayingBadge } from './components/NowPlayingBadge';
 import { TidalLoginModal } from './components/TidalLoginModal';
-import { TidalTrackPickerModal } from './components/TidalTrackPickerModal';
+import { ServiceTrackPickerModal } from './components/ServiceTrackPickerModal';
 import { PlayHistorySection } from './components/PlayHistorySection';
 import { RequestQueueSection } from './components/RequestQueueSection';
 import { KioskControlsCard } from './components/KioskControlsCard';
 import { StreamOverlayCard } from './components/StreamOverlayCard';
 import { BridgeStatusCard } from './components/BridgeStatusCard';
 import { CloudProvidersCard } from './components/CloudProvidersCard';
+import { SyncReportPanel } from './components/SyncReportPanel';
 import { EventCustomizationCard } from './components/EventCustomizationCard';
 
 function toLocalDateTimeString(date: Date): string {
@@ -75,6 +76,20 @@ export default function EventQueuePage() {
   const [searchingTidal, setSearchingTidal] = useState(false);
   const [linkingTrack, setLinkingTrack] = useState(false);
 
+  // Beatport sync state
+  const [beatportStatus, setBeatportStatus] = useState<BeatportStatus | null>(null);
+  const [beatportSyncEnabled, setBeatportSyncEnabled] = useState(false);
+  const [togglingBeatportSync, setTogglingBeatportSync] = useState(false);
+  const [showBeatportPicker, setShowBeatportPicker] = useState<number | null>(null);
+  const [beatportSearchQuery, setBeatportSearchQuery] = useState('');
+  const [beatportSearchResults, setBeatportSearchResults] = useState<BeatportSearchResult[]>([]);
+  const [searchingBeatport, setSearchingBeatport] = useState(false);
+  const [linkingBeatportTrack, setLinkingBeatportTrack] = useState(false);
+
+  // Sync report panel state
+  const [syncReportExpanded, setSyncReportExpanded] = useState(false);
+  const [focusedSyncRequestId, setFocusedSyncRequestId] = useState<number | null>(null);
+
   // Inline action error (auto-dismissing)
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -104,12 +119,13 @@ export default function EventQueuePage() {
 
   const loadData = useCallback(async (): Promise<boolean> => {
     try {
-      const [eventData, requestsData, historyData, displaySettings, tidalStatusData, nowPlayingData] = await Promise.all([
+      const [eventData, requestsData, historyData, displaySettings, tidalStatusData, beatportStatusData, nowPlayingData] = await Promise.all([
         api.getEvent(code),
         api.getRequests(code),
         api.getPlayHistory(code).catch((): undefined => undefined),
         api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false, now_playing_auto_hide_minutes: 10, requests_open: true })),
         api.getTidalStatus().catch(() => ({ linked: false, user_id: null, expires_at: null })),
+        api.getBeatportStatus().catch(() => ({ linked: false, expires_at: null })),
         api.getNowPlaying(code).catch((): undefined => undefined),
       ]);
       setEvent(eventData);
@@ -127,6 +143,8 @@ export default function EventQueuePage() {
       }
       setTidalStatus(tidalStatusData);
       setTidalSyncEnabled(eventData.tidal_sync_enabled ?? false);
+      setBeatportStatus(beatportStatusData);
+      setBeatportSyncEnabled(eventData.beatport_sync_enabled ?? false);
       if (nowPlayingData !== undefined) {
         setBridgeConnected(nowPlayingData?.bridge_connected ?? false);
         setNowPlaying(nowPlayingData ?? null);
@@ -462,6 +480,105 @@ export default function EventQueuePage() {
     }
   };
 
+  const handleOpenBeatportPicker = (requestId: number) => {
+    const request = requests.find((r) => r.id === requestId);
+    if (request) {
+      setBeatportSearchQuery(`${request.artist} ${request.song_title}`);
+      setShowBeatportPicker(requestId);
+      setBeatportSearchResults([]);
+    }
+  };
+
+  const handleSearchBeatport = async () => {
+    if (!beatportSearchQuery.trim()) return;
+    setSearchingBeatport(true);
+    try {
+      const results = await api.searchBeatport(beatportSearchQuery);
+      setBeatportSearchResults(results);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Failed to search Beatport');
+    } finally {
+      setSearchingBeatport(false);
+    }
+  };
+
+  const handleLinkBeatportTrack = async (requestId: number, beatportTrackId: string) => {
+    setLinkingBeatportTrack(true);
+    try {
+      await api.linkBeatportTrack(requestId, beatportTrackId);
+      // Reload requests to get updated sync_results_json
+      const updatedRequests = await api.getRequests(code);
+      setRequests(updatedRequests);
+      setShowBeatportPicker(null);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Failed to link Beatport track');
+    } finally {
+      setLinkingBeatportTrack(false);
+    }
+  };
+
+  // Beatport handlers
+  const handleToggleBeatportSync = async () => {
+    if (!event) return;
+    setTogglingBeatportSync(true);
+    try {
+      const newEnabled = !beatportSyncEnabled;
+      await api.updateBeatportEventSettings(event.id, { beatport_sync_enabled: newEnabled });
+      setBeatportSyncEnabled(newEnabled);
+    } catch {
+      setActionError('Failed to toggle Beatport sync');
+    } finally {
+      setTogglingBeatportSync(false);
+    }
+  };
+
+  const handleConnectBeatport = async () => {
+    try {
+      const { auth_url } = await api.startBeatportAuth();
+      // Open Beatport OAuth in a popup window
+      const popup = window.open(auth_url, 'beatport-auth', 'width=600,height=700');
+      // Listen for the callback
+      const handleMessage = (event: MessageEvent) => {
+        if (event.data?.type === 'beatport-auth-callback' && event.data?.code) {
+          window.removeEventListener('message', handleMessage);
+          popup?.close();
+          api.completeBeatportAuth(event.data.code).then(() => {
+            setBeatportStatus({ linked: true, expires_at: null });
+          }).catch(() => {
+            setActionError('Failed to complete Beatport authentication');
+          });
+        }
+      };
+      window.addEventListener('message', handleMessage);
+      // Clean up listener after 10 minutes
+      setTimeout(() => window.removeEventListener('message', handleMessage), 10 * 60 * 1000);
+    } catch {
+      setActionError('Failed to start Beatport authentication');
+    }
+  };
+
+  const handleDisconnectBeatport = async () => {
+    try {
+      await api.disconnectBeatport();
+      setBeatportStatus({ linked: false, expires_at: null });
+      setBeatportSyncEnabled(false);
+    } catch {
+      setActionError('Failed to disconnect Beatport');
+    }
+  };
+
+  const handleScrollToSyncReport = (requestId: number) => {
+    setFocusedSyncRequestId(requestId);
+    setSyncReportExpanded(true);
+    // Scroll to sync report panel after a tick so it renders expanded
+    setTimeout(() => {
+      const panel = document.getElementById('sync-report-panel');
+      if (panel) {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
+  };
+
   const handleBannerSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -534,6 +651,11 @@ export default function EventQueuePage() {
       </div>
     );
   }
+
+  // Build list of connected + enabled services for sync badges
+  const connectedServices: string[] = [];
+  if (tidalStatus?.linked && tidalSyncEnabled) connectedServices.push('tidal');
+  if (beatportStatus?.linked && beatportSyncEnabled) connectedServices.push('beatport');
 
   // Use API's join_url if configured, otherwise use current origin
   const joinUrl = event.join_url || `${window.location.origin}/join/${event.code}`;
@@ -659,7 +781,7 @@ export default function EventQueuePage() {
       <RequestQueueSection
         requests={requests}
         isExpiredOrArchived={isExpiredOrArchived}
-        tidalSyncEnabled={tidalSyncEnabled}
+        connectedServices={connectedServices}
         updating={updating}
         acceptingAll={acceptingAll}
         syncingRequest={syncingRequest}
@@ -667,6 +789,20 @@ export default function EventQueuePage() {
         onAcceptAll={handleAcceptAll}
         onSyncToTidal={handleSyncToTidal}
         onOpenTidalPicker={handleOpenTidalPicker}
+        onScrollToSyncReport={handleScrollToSyncReport}
+      />
+
+      {/* 2b. Sync Report */}
+      <SyncReportPanel
+        requests={requests}
+        connectedServices={connectedServices}
+        expanded={syncReportExpanded}
+        onToggleExpanded={() => setSyncReportExpanded((prev) => !prev)}
+        focusedRequestId={focusedSyncRequestId}
+        onClearFocus={() => setFocusedSyncRequestId(null)}
+        onRetrySync={handleSyncToTidal}
+        onOpenTidalPicker={handleOpenTidalPicker}
+        onOpenBeatportPicker={handleOpenBeatportPicker}
       />
 
       {/* 3. Play History */}
@@ -714,6 +850,12 @@ export default function EventQueuePage() {
           onToggleTidalSync={handleToggleTidalSync}
           onConnectTidal={handleConnectTidal}
           onDisconnectTidal={handleDisconnectTidal}
+          beatportStatus={beatportStatus}
+          beatportSyncEnabled={beatportSyncEnabled}
+          togglingBeatportSync={togglingBeatportSync}
+          onToggleBeatportSync={handleToggleBeatportSync}
+          onConnectBeatport={handleConnectBeatport}
+          onDisconnectBeatport={handleDisconnectBeatport}
         />
       )}
 
@@ -748,16 +890,34 @@ export default function EventQueuePage() {
       )}
 
       {showTidalPicker !== null && (
-        <TidalTrackPickerModal
+        <ServiceTrackPickerModal
+          service="tidal"
           requestId={showTidalPicker}
           searchQuery={tidalSearchQuery}
-          searchResults={tidalSearchResults}
+          tidalResults={tidalSearchResults}
+          beatportResults={[]}
           searching={searchingTidal}
           linking={linkingTrack}
           onSearchQueryChange={setTidalSearchQuery}
           onSearch={handleSearchTidal}
           onSelectTrack={handleLinkTidalTrack}
           onCancel={() => setShowTidalPicker(null)}
+        />
+      )}
+
+      {showBeatportPicker !== null && (
+        <ServiceTrackPickerModal
+          service="beatport"
+          requestId={showBeatportPicker}
+          searchQuery={beatportSearchQuery}
+          tidalResults={[]}
+          beatportResults={beatportSearchResults}
+          searching={searchingBeatport}
+          linking={linkingBeatportTrack}
+          onSearchQueryChange={setBeatportSearchQuery}
+          onSearch={handleSearchBeatport}
+          onSelectTrack={handleLinkBeatportTrack}
+          onCancel={() => setShowBeatportPicker(null)}
         />
       )}
     </div>

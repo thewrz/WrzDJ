@@ -31,4 +31,9 @@ class User(Base):
     tidal_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     tidal_user_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    # Beatport OAuth tokens
+    beatport_access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    beatport_refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    beatport_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     events: Mapped[list["Event"]] = relationship("Event", back_populates="created_by")

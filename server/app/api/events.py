@@ -437,6 +437,10 @@ def get_event_requests(
             status=r.status,
             created_at=r.created_at,
             updated_at=r.updated_at,
+            tidal_track_id=r.tidal_track_id,
+            tidal_sync_status=r.tidal_sync_status,
+            raw_search_query=r.raw_search_query,
+            sync_results_json=r.sync_results_json,
             vote_count=r.vote_count,
         )
         for r in requests
