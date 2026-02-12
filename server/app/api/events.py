@@ -86,16 +86,21 @@ def _get_base_url(request: Request | None) -> str | None:
     return None
 
 
+def _get_api_base_url(request: Request) -> str:
+    """Get the API server's own base URL for constructing asset URLs (uploads, etc.)."""
+    return str(request.base_url).rstrip("/")
+
+
 def _get_banner_urls(event, request: Request | None) -> tuple[str | None, str | None]:
     """Get banner and kiosk banner URLs for an event."""
     if not event.banner_filename:
         return None, None
-    base_url = _get_base_url(request)
-    if not base_url:
+    if not request:
         return None, None
-    banner_url = f"{base_url}/uploads/{event.banner_filename}"
+    api_base = _get_api_base_url(request)
+    banner_url = f"{api_base}/uploads/{event.banner_filename}"
     stem = event.banner_filename.rsplit(".", 1)[0]
-    kiosk_url = f"{base_url}/uploads/{stem}_kiosk.webp"
+    kiosk_url = f"{api_base}/uploads/{stem}_kiosk.webp"
     return banner_url, kiosk_url
 
 
