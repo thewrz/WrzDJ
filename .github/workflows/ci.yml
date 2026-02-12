@@ -65,6 +65,13 @@ jobs:
           ENV: development
         run: pytest --cov=app --cov-report=xml --cov-report=term-missing
 
+      - name: Check Alembic migrations are up to date
+        env:
+          DATABASE_URL: postgresql+psycopg://wrzdj:wrzdj@localhost:5432/wrzdj_test
+          JWT_SECRET: test-secret-key
+          ENV: development
+        run: alembic check
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
@@ -98,11 +105,37 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
-      - name: Run tests
-        run: npm test -- --run
+      - name: Run tests with coverage
+        run: npm test -- --run --coverage
 
       - name: Security audit
         run: npm audit --audit-level=high
+
+  bridge:
+    name: Bridge Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bridge
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: bridge/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Run tests with coverage
+        run: npm test -- --run --coverage
 
   bridge-app:
     name: Bridge App Tests
@@ -131,9 +164,21 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
-      - name: Run tests
-        run: npm test -- --run
+      - name: Run tests with coverage
+        run: npm test -- --run --coverage
 
       - name: Security audit
         run: npm audit --audit-level=high
         continue-on-error: true
+
+  docker-build:
+    name: Docker Build Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t wrzdj-api-test server/
+
+      - name: Build frontend image
+        run: docker build --build-arg NEXT_PUBLIC_API_URL=http://localhost:8000 -t wrzdj-web-test dashboard/
