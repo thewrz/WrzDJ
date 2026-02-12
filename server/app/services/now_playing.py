@@ -1,12 +1,17 @@
 """Service for StageLinQ now-playing and play history management."""
 
 import logging
-import re
 from datetime import UTC, datetime
-from difflib import SequenceMatcher
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
+
+# Re-export normalizer functions for backward compatibility
+from app.services.track_normalizer import (  # noqa: F401
+    fuzzy_match_score,
+    normalize_artist,
+    normalize_track_title,
+)
 
 
 def utcnow() -> datetime:
@@ -28,47 +33,6 @@ from app.services.spotify import _call_spotify_api
 NOW_PLAYING_AUTO_HIDE_MINUTES = 10
 
 logger = logging.getLogger(__name__)
-
-# Generic mix suffixes that guests almost never include in requests.
-# These get stripped before fuzzy comparison so "Banana (Original Mix)" matches "Banana".
-# Named remixes, Instrumental, Acoustic, Live, VIP, Dub Mix, A Cappella are preserved.
-_GENERIC_SUFFIXES = (
-    r"original\s+mix|extended\s+mix|radio\s+edit|club\s+mix|"
-    r"album\s+version|single\s+version|full\s+length(?:\s+version)?|"
-    r"main\s+mix|short\s+(?:edit|mix)|long\s+(?:mix|version)|"
-    r"original\s+version|original|extended"
-)
-GENERIC_SUFFIX_PAREN_RE = re.compile(
-    rf"\s*[\(\[]\s*(?:{_GENERIC_SUFFIXES})\s*[\)\]]\s*", re.IGNORECASE
-)
-GENERIC_SUFFIX_DASH_RE = re.compile(rf"\s+-\s+(?:{_GENERIC_SUFFIXES})\s*$", re.IGNORECASE)
-FEAT_RE = re.compile(r"\b(?:featuring|feat\.?|ft\.?|with)(?=\s)", re.IGNORECASE)
-MULTI_SPACE_RE = re.compile(r"\s{2,}")
-
-
-def normalize_track_title(title: str) -> str:
-    """Normalize a track title for fuzzy matching.
-
-    Strips generic mix suffixes (Original Mix, Extended Mix, Radio Edit, etc.)
-    but preserves named remixes (e.g. "Skrillex Remix"), special versions
-    (Instrumental, Acoustic, Live, VIP, Dub Mix, A Cappella), and arbitrary
-    parenthetical content (e.g. "2024 Remaster").
-    """
-    result = GENERIC_SUFFIX_PAREN_RE.sub("", title)
-    result = GENERIC_SUFFIX_DASH_RE.sub("", result)
-    result = MULTI_SPACE_RE.sub(" ", result).strip()
-    return result
-
-
-def normalize_artist(artist: str) -> str:
-    """Normalize artist name for fuzzy matching.
-
-    Canonicalizes feat/ft/featuring/with → "feat." so that
-    "Artist feat. Singer" matches "Artist featuring Singer".
-    """
-    result = FEAT_RE.sub("feat.", artist)
-    result = MULTI_SPACE_RE.sub(" ", result).strip()
-    return result
 
 
 def get_event_by_code_for_bridge(db: Session, code: str) -> Event | None:
@@ -205,11 +169,6 @@ def archive_to_history(db: Session, now_playing: NowPlaying) -> PlayHistory:
     )
     db.add(history_entry)
     return history_entry
-
-
-def fuzzy_match_score(a: str, b: str) -> float:
-    """Compute similarity ratio between two strings (0.0 to 1.0)."""
-    return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
 
 
 def fuzzy_match_pending_request(

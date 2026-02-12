@@ -16,6 +16,7 @@ class RequestCreate(BaseModel):
     source: RequestSource = RequestSource.MANUAL
     source_url: str | None = Field(default=None, max_length=500)
     artwork_url: str | None = Field(default=None, max_length=500)
+    raw_search_query: str | None = Field(default=None, max_length=200)
 
     @field_validator("artist", "title")
     @classmethod
@@ -27,6 +28,14 @@ class RequestCreate(BaseModel):
     @classmethod
     def normalize_note(cls, v: str | None) -> str | None:
         return normalize_text(v)
+
+    @field_validator("raw_search_query")
+    @classmethod
+    def normalize_raw_search_query(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        normalized = normalize_single_line(v)
+        return normalized if normalized else v
 
     @field_validator("source_url", "artwork_url")
     @classmethod
@@ -56,6 +65,8 @@ class RequestOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     is_duplicate: bool = False
+    # Search intent
+    raw_search_query: str | None = None
     # Tidal sync status
     tidal_track_id: str | None = None
     tidal_sync_status: TidalSyncStatus | None = None

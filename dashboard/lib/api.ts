@@ -277,7 +277,8 @@ class ApiClient {
     title: string,
     note?: string,
     sourceUrl?: string,
-    artworkUrl?: string
+    artworkUrl?: string,
+    rawSearchQuery?: string
   ): Promise<SongRequest> {
     return this.fetch(`/api/events/${code}/requests`, {
       method: 'POST',
@@ -288,6 +289,7 @@ class ApiClient {
         source: 'spotify',
         source_url: sourceUrl,
         artwork_url: artworkUrl,
+        raw_search_query: rawSearchQuery,
       }),
     });
   }
