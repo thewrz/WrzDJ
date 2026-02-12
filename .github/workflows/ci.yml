@@ -70,7 +70,7 @@ jobs:
           DATABASE_URL: postgresql+psycopg://wrzdj:wrzdj@localhost:5432/wrzdj_test
           JWT_SECRET: test-secret-key
           ENV: development
-        run: alembic check
+        run: alembic upgrade head && alembic check
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
