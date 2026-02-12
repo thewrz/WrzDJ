@@ -1,3 +1,4 @@
+import logging
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -129,24 +130,23 @@ def validate_settings(settings: Settings) -> None:
                 "set to your frontend domain (e.g., https://app.wrzdj.com)"
             )
 
+    if not settings.is_production:
+        if settings.jwt_secret == "change-me-in-production":  # nosec B105
+            logging.warning(
+                "JWT_SECRET is using the default value. Set a unique secret for security."
+            )
+
     if not settings.bridge_api_key:
-        print(
-            "WARNING: BRIDGE_API_KEY not set - bridge service will not be able to authenticate",
-            file=sys.stderr,
-        )
+        logging.warning("BRIDGE_API_KEY not set - bridge service will not be able to authenticate")
 
     if not settings.spotify_client_id or not settings.spotify_client_secret:
-        # Warning only, not fatal
-        print(
-            "WARNING: SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET not set - "
-            "song search will not work",
-            file=sys.stderr,
+        logging.warning(
+            "SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET not set - song search will not work"
         )
 
     if errors:
-        print("Configuration errors:", file=sys.stderr)
         for error in errors:
-            print(f"  - {error}", file=sys.stderr)
+            logging.error("Configuration error: %s", error)
         sys.exit(1)
 
 
