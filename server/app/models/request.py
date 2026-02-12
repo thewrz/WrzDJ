@@ -4,6 +4,7 @@ from enum import Enum
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.time import utcnow
 from app.models.base import Base
 
 
@@ -42,10 +43,8 @@ class Request(Base):
     artwork_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default=RequestStatus.NEW.value, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
     client_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     dedupe_key: Mapped[str] = mapped_column(String(64), index=True)
 

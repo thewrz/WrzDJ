@@ -22,6 +22,7 @@ from app.core.rate_limit import get_client_fingerprint, limiter
 from app.models.event import Event
 from app.models.request import RequestStatus
 from app.models.user import User
+from app.schemas.common import AcceptAllResponse
 from app.schemas.event import (
     DisplaySettingsResponse,
     DisplaySettingsUpdate,
@@ -88,13 +89,12 @@ def _get_banner_urls(event, request: Request | None) -> tuple[str | None, str | 
     """Get banner and kiosk banner URLs for an event."""
     if not event.banner_filename:
         return None, None
-    # Banner files are served from the API server via /uploads/
-    scheme = request.headers.get("x-forwarded-proto", "http") if request else "http"
-    host = request.headers.get("host", "localhost:8000") if request else "localhost:8000"
-    api_base = f"{scheme}://{host}" if request else ""
-    banner_url = f"{api_base}/uploads/{event.banner_filename}"
+    base_url = _get_base_url(request)
+    if not base_url:
+        return None, None
+    banner_url = f"{base_url}/uploads/{event.banner_filename}"
     stem = event.banner_filename.rsplit(".", 1)[0]
-    kiosk_url = f"{api_base}/uploads/{stem}_kiosk.webp"
+    kiosk_url = f"{base_url}/uploads/{stem}_kiosk.webp"
     return banner_url, kiosk_url
 
 
@@ -386,14 +386,14 @@ def submit_request(
     )
 
 
-@router.post("/{code}/requests/accept-all")
+@router.post("/{code}/requests/accept-all", response_model=AcceptAllResponse)
 @limiter.limit("10/minute")
 def accept_all_requests_endpoint(
     request: Request,
     background_tasks: BackgroundTasks,
     event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-):
+) -> AcceptAllResponse:
     """Accept all NEW requests for an event in one operation."""
     accepted = accept_all_new_requests(db, event)
 
@@ -402,7 +402,7 @@ def accept_all_requests_endpoint(
         for req in accepted:
             background_tasks.add_task(sync_request_to_tidal, db, req)
 
-    return {"status": "ok", "accepted_count": len(accepted)}
+    return AcceptAllResponse(status="ok", accepted_count=len(accepted))
 
 
 @router.get("/{code}/requests", response_model=list[RequestOut])

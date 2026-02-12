@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.core.time import utcnow
 from app.models.event import Event
 from app.models.request import Request, RequestStatus
 from app.services.vote import add_vote
@@ -45,7 +46,7 @@ def create_request(
     dedupe_key = compute_dedupe_key(artist, title)
 
     # Check for duplicate in last 6 hours
-    six_hours_ago = datetime.utcnow() - timedelta(hours=6)
+    six_hours_ago = utcnow() - timedelta(hours=6)
     existing = (
         db.query(Request)
         .filter(
@@ -112,7 +113,7 @@ def update_request_status(db: Session, request: Request, status: RequestStatus) 
             f"Cannot transition from '{current.value}' to '{status.value}'"
         )
     request.status = status.value
-    request.updated_at = datetime.utcnow()
+    request.updated_at = utcnow()
     db.commit()
     db.refresh(request)
     return request
@@ -128,7 +129,7 @@ def accept_all_new_requests(db: Session, event: Event) -> list[Request]:
         )
         .all()
     )
-    now = datetime.utcnow()
+    now = utcnow()
     for req in new_requests:
         req.status = RequestStatus.ACCEPTED.value
         req.updated_at = now

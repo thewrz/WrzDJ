@@ -8,6 +8,7 @@ from app.core.bridge_auth import verify_bridge_api_key
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.models.user import User
+from app.schemas.common import BridgeApiKeyResponse, StatusResponse
 from app.schemas.now_playing import (
     BridgeStatusPayload,
     NowPlayingBridgePayload,
@@ -30,10 +31,10 @@ router = APIRouter()
 # --- Bridge API Key retrieval (JWT auth, for GUI) ---
 
 
-@router.get("/bridge/apikey")
+@router.get("/bridge/apikey", response_model=BridgeApiKeyResponse)
 def get_bridge_api_key(
     _user: User = Depends(get_current_admin),
-) -> dict:
+) -> BridgeApiKeyResponse:
     """
     Return the server's bridge API key to an admin user.
 
@@ -43,20 +44,20 @@ def get_bridge_api_key(
     settings = get_settings()
     if not settings.bridge_api_key:
         raise HTTPException(status_code=503, detail="Bridge API key not configured on server")
-    return {"bridge_api_key": settings.bridge_api_key}
+    return BridgeApiKeyResponse(bridge_api_key=settings.bridge_api_key)
 
 
 # --- Bridge Endpoints (API key auth) ---
 
 
-@router.post("/bridge/nowplaying")
+@router.post("/bridge/nowplaying", response_model=StatusResponse)
 @limiter.limit("60/minute")
 def post_now_playing(
     request: Request,
     payload: NowPlayingBridgePayload,
     db: Session = Depends(get_db),
     _: None = Depends(verify_bridge_api_key),
-) -> dict:
+) -> StatusResponse:
     """
     Bridge reports a new track playing.
 
@@ -74,17 +75,17 @@ def post_now_playing(
     )
     if not result:
         raise HTTPException(status_code=404, detail="Event not found")
-    return {"status": "ok"}
+    return StatusResponse(status="ok")
 
 
-@router.post("/bridge/status")
+@router.post("/bridge/status", response_model=StatusResponse)
 @limiter.limit("30/minute")
 def post_bridge_status(
     request: Request,
     payload: BridgeStatusPayload,
     db: Session = Depends(get_db),
     _: None = Depends(verify_bridge_api_key),
-) -> dict:
+) -> StatusResponse:
     """
     Bridge reports connection status.
 
@@ -94,17 +95,17 @@ def post_bridge_status(
     success = update_bridge_status(db, payload.event_code, payload.connected, payload.device_name)
     if not success:
         raise HTTPException(status_code=404, detail="Event not found")
-    return {"status": "ok"}
+    return StatusResponse(status="ok")
 
 
-@router.delete("/bridge/nowplaying/{code}")
+@router.delete("/bridge/nowplaying/{code}", response_model=StatusResponse)
 @limiter.limit("60/minute")
 def delete_now_playing(
     request: Request,
     code: str = Path(..., min_length=1, max_length=10),
     db: Session = Depends(get_db),
     _: None = Depends(verify_bridge_api_key),
-) -> dict:
+) -> StatusResponse:
     """
     Bridge signals track ended / deck cleared.
 
@@ -114,7 +115,7 @@ def delete_now_playing(
     success = clear_now_playing(db, code)
     if not success:
         raise HTTPException(status_code=404, detail="Event not found")
-    return {"status": "ok"}
+    return StatusResponse(status="ok")
 
 
 # --- Public Endpoints (no auth, for kiosk + guest UI) ---

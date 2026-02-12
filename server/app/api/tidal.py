@@ -13,6 +13,7 @@ from app.core.rate_limit import limiter
 from app.models.event import Event
 from app.models.request import Request as SongRequest
 from app.models.user import User
+from app.schemas.common import StatusMessageResponse, TidalAuthCheckResponse, TidalAuthStartResponse
 from app.schemas.tidal import (
     TidalEventSettings,
     TidalEventSettingsUpdate,
@@ -36,24 +37,24 @@ settings = get_settings()
 router = APIRouter()
 
 
-@router.post("/auth/start")
+@router.post("/auth/start", response_model=TidalAuthStartResponse)
 def start_auth(
     current_user: User = Depends(get_current_active_user),
-) -> dict:
+) -> TidalAuthStartResponse:
     """Start Tidal device login flow.
 
     Returns a URL and code for the user to visit and authorize.
     The frontend should poll /auth/check to wait for completion.
     """
     result = start_device_login(current_user)
-    return {
-        "verification_url": result["verification_url"],
-        "user_code": result["user_code"],
-        "message": "Visit the URL and enter the code to link your Tidal account",
-    }
+    return TidalAuthStartResponse(
+        verification_url=result["verification_url"],
+        user_code=result["user_code"],
+        message="Visit the URL and enter the code to link your Tidal account",
+    )
 
 
-@router.get("/auth/check")
+@router.get("/auth/check", response_model=TidalAuthCheckResponse)
 def check_auth(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -68,17 +69,17 @@ def check_auth(
     return check_device_login(db, current_user)
 
 
-@router.post("/auth/cancel")
+@router.post("/auth/cancel", response_model=StatusMessageResponse)
 def cancel_auth(
     current_user: User = Depends(get_current_active_user),
-) -> dict:
+) -> StatusMessageResponse:
     """Cancel pending device login."""
     cancel_device_login(current_user)
-    return {"status": "ok", "message": "Login cancelled"}
+    return StatusMessageResponse(status="ok", message="Login cancelled")
 
 
 @router.get("/status", response_model=TidalStatus)
-async def get_status(
+def get_status(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> TidalStatus:
@@ -97,19 +98,19 @@ async def get_status(
     )
 
 
-@router.post("/disconnect")
+@router.post("/disconnect", response_model=StatusMessageResponse)
 def disconnect(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
-) -> dict:
+) -> StatusMessageResponse:
     """Unlink Tidal account from current user."""
     disconnect_tidal(db, current_user)
-    return {"status": "ok", "message": "Tidal account disconnected"}
+    return StatusMessageResponse(status="ok", message="Tidal account disconnected")
 
 
 @router.get("/search", response_model=list[TidalSearchResult])
 @limiter.limit(lambda: f"{settings.search_rate_limit_per_minute}/minute")
-async def search(
+def search(
     request: Request,
     q: str = Query(..., min_length=1),
     limit: int = Query(default=10, ge=1, le=50),
@@ -122,7 +123,7 @@ async def search(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tidal account not linked",
         )
-    return await search_tidal_tracks(db, current_user, q, limit)
+    return search_tidal_tracks(db, current_user, q, limit)
 
 
 @router.get("/events/{event_id}/settings", response_model=TidalEventSettings)
@@ -178,7 +179,7 @@ def update_event_settings(
 
 
 @router.post("/requests/{request_id}/sync", response_model=TidalSyncResult)
-async def sync_request(
+def sync_request(
     request_id: int,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_active_user),
@@ -193,11 +194,11 @@ async def sync_request(
     if event.created_by_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    return await sync_request_to_tidal(db, song_request)
+    return sync_request_to_tidal(db, song_request)
 
 
 @router.post("/requests/{request_id}/link", response_model=TidalSyncResult)
-async def link_track(
+def link_track(
     request_id: int,
     link_data: TidalManualLink,
     current_user: User = Depends(get_current_active_user),
@@ -212,4 +213,4 @@ async def link_track(
     if event.created_by_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    return await manual_link_track(db, song_request, link_data.tidal_track_id)
+    return manual_link_track(db, song_request, link_data.tidal_track_id)

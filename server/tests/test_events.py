@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.core.time import utcnow
 from app.models.event import Event
 from app.models.request import Request, RequestStatus
 from app.models.user import User
@@ -107,7 +108,7 @@ class TestUpdateEvent:
 
     def test_update_event_expiry(self, client: TestClient, auth_headers: dict, test_event: Event):
         """Test updating event expiry."""
-        new_expiry = (datetime.utcnow() + timedelta(hours=12)).isoformat()
+        new_expiry = (utcnow() + timedelta(hours=12)).isoformat()
         response = client.patch(
             f"/api/events/{test_event.code}",
             json={"expires_at": new_expiry},
@@ -154,7 +155,7 @@ class TestDeleteEvent:
             code="DELME1",
             name="Event With Data",
             created_by_user_id=test_user.id,
-            expires_at=datetime.utcnow() + timedelta(hours=6),
+            expires_at=utcnow() + timedelta(hours=6),
         )
         db.add(event)
         db.flush()
@@ -207,7 +208,7 @@ class TestDeleteEvent:
             artist="The Doors",
             source="manual",
             matched_request_id=req2.id,
-            started_at=datetime.utcnow(),
+            started_at=utcnow(),
             play_order=1,
         )
         db.add(play_entry)
@@ -258,7 +259,7 @@ class TestExpiredEvents:
             code="EXPIR1",
             name="Expired Event",
             created_by_user_id=test_user.id,
-            expires_at=datetime.utcnow() - timedelta(hours=1),
+            expires_at=utcnow() - timedelta(hours=1),
         )
         db.add(expired_event)
         db.commit()
@@ -275,7 +276,7 @@ class TestExpiredEvents:
             code="EXPIR2",
             name="Expired Event",
             created_by_user_id=test_user.id,
-            expires_at=datetime.utcnow() - timedelta(hours=1),
+            expires_at=utcnow() - timedelta(hours=1),
         )
         db.add(expired_event)
         db.commit()
@@ -295,7 +296,7 @@ class TestExpiredEvents:
             code="EXPIR3",
             name="Expired Event",
             created_by_user_id=test_user.id,
-            expires_at=datetime.utcnow() - timedelta(hours=1),
+            expires_at=utcnow() - timedelta(hours=1),
         )
         db.add(expired_event)
         db.commit()
@@ -314,7 +315,7 @@ class TestExpiredEvents:
             code="EXPIR4",
             name="Expired Event",
             created_by_user_id=test_user.id,
-            expires_at=datetime.utcnow() - timedelta(hours=1),
+            expires_at=utcnow() - timedelta(hours=1),
         )
         db.add(expired_event)
         db.commit()
@@ -335,7 +336,7 @@ class TestExpiredEvents:
             code="EXPIR5",
             name="Expired Event",
             created_by_user_id=test_user.id,
-            expires_at=datetime.utcnow() - timedelta(hours=1),
+            expires_at=utcnow() - timedelta(hours=1),
         )
         db.add(expired_event)
         db.commit()
@@ -368,7 +369,7 @@ class TestArchiveEvents:
         self, client: TestClient, auth_headers: dict, test_event: Event, db: Session
     ):
         """Test archiving an already archived event returns 400."""
-        test_event.archived_at = datetime.utcnow()
+        test_event.archived_at = utcnow()
         db.commit()
 
         response = client.post(
@@ -383,7 +384,7 @@ class TestArchiveEvents:
     ):
         """Test unarchiving an event."""
         # First archive it
-        test_event.archived_at = datetime.utcnow()
+        test_event.archived_at = utcnow()
         db.commit()
 
         response = client.post(
@@ -409,7 +410,7 @@ class TestArchiveEvents:
         self, client: TestClient, test_event: Event, db: Session
     ):
         """Test that getting an archived event returns 410."""
-        test_event.archived_at = datetime.utcnow()
+        test_event.archived_at = utcnow()
         db.commit()
 
         response = client.get(f"/api/events/{test_event.code}")
@@ -420,7 +421,7 @@ class TestArchiveEvents:
         self, client: TestClient, test_event: Event, db: Session
     ):
         """Test that submitting to archived event returns 410."""
-        test_event.archived_at = datetime.utcnow()
+        test_event.archived_at = utcnow()
         db.commit()
 
         response = client.post(
@@ -439,8 +440,8 @@ class TestArchiveEvents:
             code="ARCHV1",
             name="Archived Event",
             created_by_user_id=test_user.id,
-            expires_at=datetime.utcnow() + timedelta(hours=6),
-            archived_at=datetime.utcnow(),
+            expires_at=utcnow() + timedelta(hours=6),
+            archived_at=utcnow(),
         )
         db.add(archived_event)
 
@@ -449,7 +450,7 @@ class TestArchiveEvents:
             code="EXPRD1",
             name="Expired Event",
             created_by_user_id=test_user.id,
-            expires_at=datetime.utcnow() - timedelta(hours=1),
+            expires_at=utcnow() - timedelta(hours=1),
         )
         db.add(expired_event)
         db.commit()
@@ -478,8 +479,8 @@ class TestArchiveEvents:
             code="ARCHV2",
             name="Archived With Requests",
             created_by_user_id=test_user.id,
-            expires_at=datetime.utcnow() + timedelta(hours=6),
-            archived_at=datetime.utcnow(),
+            expires_at=utcnow() + timedelta(hours=6),
+            archived_at=utcnow(),
         )
         db.add(archived_event)
         db.flush()
@@ -565,7 +566,7 @@ class TestCsvExport:
             code="OTHER1",
             name="Other User Event",
             created_by_user_id=other_user.id,
-            expires_at=datetime.utcnow() + timedelta(hours=6),
+            expires_at=utcnow() + timedelta(hours=6),
         )
         db.add(other_event)
         db.commit()
@@ -584,7 +585,7 @@ class TestCsvExport:
             code="EXPCSV",
             name="Expired CSV Event",
             created_by_user_id=test_user.id,
-            expires_at=datetime.utcnow() - timedelta(hours=1),
+            expires_at=utcnow() - timedelta(hours=1),
         )
         db.add(expired_event)
         db.commit()
@@ -603,8 +604,8 @@ class TestCsvExport:
             code="ARCSV1",
             name="Archived CSV Event",
             created_by_user_id=test_user.id,
-            expires_at=datetime.utcnow() + timedelta(hours=6),
-            archived_at=datetime.utcnow(),
+            expires_at=utcnow() + timedelta(hours=6),
+            archived_at=utcnow(),
         )
         db.add(archived_event)
         db.commit()
@@ -915,7 +916,7 @@ class TestDisplaySettings:
             code="OTHER3",
             name="Other User Event",
             created_by_user_id=other_user.id,
-            expires_at=datetime.utcnow() + timedelta(hours=6),
+            expires_at=utcnow() + timedelta(hours=6),
         )
         db.add(other_event)
         db.commit()
@@ -1062,15 +1063,13 @@ class TestKioskDisplayNowPlayingHidden:
         self, client: TestClient, test_event: Event, db: Session
     ):
         """Test that kiosk display shows visible when track is playing."""
-        from datetime import datetime
-
         from app.models.now_playing import NowPlaying
 
         now_playing = NowPlaying(
             event_id=test_event.id,
             title="Test Track",
             artist="Test Artist",
-            started_at=datetime.utcnow(),
+            started_at=utcnow(),
             manual_hide_now_playing=False,
         )
         db.add(now_playing)
@@ -1089,8 +1088,6 @@ class TestPlayHistoryCsvExport:
         self, client: TestClient, auth_headers: dict, test_event: Event, db: Session
     ):
         """Test exporting play history as CSV."""
-        from datetime import datetime
-
         from app.models.play_history import PlayHistory
 
         # Add play history entries
@@ -1101,8 +1098,8 @@ class TestPlayHistoryCsvExport:
             album="Album One",
             source="stagelinq",
             matched_request_id=None,
-            started_at=datetime.utcnow(),
-            ended_at=datetime.utcnow(),
+            started_at=utcnow(),
+            ended_at=utcnow(),
             play_order=1,
         )
         entry2 = PlayHistory(
@@ -1112,7 +1109,7 @@ class TestPlayHistoryCsvExport:
             album=None,
             source="manual",
             matched_request_id=42,
-            started_at=datetime.utcnow(),
+            started_at=utcnow(),
             ended_at=None,
             play_order=2,
         )
@@ -1161,7 +1158,7 @@ class TestPlayHistoryCsvExport:
             code="OTHER2",
             name="Other User Event",
             created_by_user_id=other_user.id,
-            expires_at=datetime.utcnow() + timedelta(hours=6),
+            expires_at=utcnow() + timedelta(hours=6),
         )
         db.add(other_event)
         db.commit()
@@ -1176,8 +1173,6 @@ class TestPlayHistoryCsvExport:
         self, client: TestClient, auth_headers: dict, test_event: Event, db: Session
     ):
         """Test that export includes both stagelinq and manual sources."""
-        from datetime import datetime
-
         from app.models.play_history import PlayHistory
 
         # Add stagelinq entry (live DJ tracking)
@@ -1188,8 +1183,8 @@ class TestPlayHistoryCsvExport:
             album=None,
             source="stagelinq",
             matched_request_id=None,
-            started_at=datetime.utcnow(),
-            ended_at=datetime.utcnow(),
+            started_at=utcnow(),
+            ended_at=utcnow(),
             play_order=1,
         )
         # Add manual entry (DJ marked request as played)
@@ -1200,8 +1195,8 @@ class TestPlayHistoryCsvExport:
             album=None,
             source="manual",
             matched_request_id=99,
-            started_at=datetime.utcnow(),
-            ended_at=datetime.utcnow(),
+            started_at=utcnow(),
+            ended_at=utcnow(),
             play_order=2,
         )
         db.add_all([stagelinq_entry, manual_entry])
@@ -1226,8 +1221,6 @@ class TestPlayHistoryCsvExport:
         self, client: TestClient, auth_headers: dict, test_event: Event, db: Session
     ):
         """Test that Was Requested column shows Yes/No correctly."""
-        from datetime import datetime
-
         from app.models.play_history import PlayHistory
 
         # Entry with matched request
@@ -1238,8 +1231,8 @@ class TestPlayHistoryCsvExport:
             album=None,
             source="stagelinq",
             matched_request_id=42,
-            started_at=datetime.utcnow(),
-            ended_at=datetime.utcnow(),
+            started_at=utcnow(),
+            ended_at=utcnow(),
             play_order=1,
         )
         # Entry without matched request
@@ -1250,8 +1243,8 @@ class TestPlayHistoryCsvExport:
             album=None,
             source="stagelinq",
             matched_request_id=None,
-            started_at=datetime.utcnow(),
-            ended_at=datetime.utcnow(),
+            started_at=utcnow(),
+            ended_at=utcnow(),
             play_order=2,
         )
         db.add_all([requested, not_requested])
@@ -1291,7 +1284,7 @@ class TestPlayHistoryCsvExport:
             code="EXPHIS",
             name="Expired Play History Event",
             created_by_user_id=test_user.id,
-            expires_at=datetime.utcnow() - timedelta(hours=1),
+            expires_at=utcnow() - timedelta(hours=1),
         )
         db.add(expired_event)
         db.commit()
@@ -1310,8 +1303,8 @@ class TestPlayHistoryCsvExport:
             code="ARCHIS",
             name="Archived Play History Event",
             created_by_user_id=test_user.id,
-            expires_at=datetime.utcnow() + timedelta(hours=6),
-            archived_at=datetime.utcnow(),
+            expires_at=utcnow() + timedelta(hours=6),
+            archived_at=utcnow(),
         )
         db.add(archived_event)
         db.commit()

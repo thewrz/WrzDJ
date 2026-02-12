@@ -1,7 +1,7 @@
 """Vote service for managing request upvotes."""
 
 from sqlalchemy import case, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.request import Request
@@ -96,7 +96,7 @@ def remove_vote(db: Session, request_id: int, client_fingerprint: str) -> tuple[
         db.commit()
         db.refresh(song_request)
         return song_request, True
-    except Exception:
+    except SQLAlchemyError:
         db.rollback()
         raise
 

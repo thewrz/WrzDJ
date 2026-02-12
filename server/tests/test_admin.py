@@ -1,10 +1,11 @@
 """Tests for admin API endpoints."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.core.time import utcnow
 from app.models.event import Event
 from app.models.user import User
 from app.services.auth import get_password_hash
@@ -188,7 +189,7 @@ class TestAdminUserManagement:
             code="DOOM01",
             name="Doomed Event",
             created_by_user_id=user.id,
-            expires_at=datetime.utcnow() + timedelta(hours=6),
+            expires_at=utcnow() + timedelta(hours=6),
         )
         db.add(event)
         db.commit()

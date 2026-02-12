@@ -191,7 +191,7 @@ def _track_to_result(track: tidalapi.Track) -> TidalSearchResult:
     )
 
 
-async def search_track(
+def search_track(
     db: Session,
     user: User,
     artist: str,
@@ -228,7 +228,7 @@ async def search_track(
         return None
 
 
-async def create_event_playlist(
+def create_event_playlist(
     db: Session,
     user: User,
     event: Event,
@@ -258,7 +258,7 @@ async def create_event_playlist(
         return None
 
 
-async def add_track_to_playlist(
+def add_track_to_playlist(
     db: Session,
     user: User,
     playlist_id: str,
@@ -280,7 +280,7 @@ async def add_track_to_playlist(
         return False
 
 
-async def sync_request_to_tidal(
+def sync_request_to_tidal(
     db: Session,
     request: Request,
 ) -> TidalSyncResult:
@@ -305,7 +305,7 @@ async def sync_request_to_tidal(
             error="Tidal account not linked",
         )
 
-    playlist_id = await create_event_playlist(db, user, event)
+    playlist_id = create_event_playlist(db, user, event)
     if not playlist_id:
         request.tidal_sync_status = TidalSyncStatus.ERROR.value
         db.commit()
@@ -315,7 +315,7 @@ async def sync_request_to_tidal(
             error="Failed to create Tidal playlist",
         )
 
-    track = await search_track(db, user, request.artist, request.song_title)
+    track = search_track(db, user, request.artist, request.song_title)
     if not track:
         request.tidal_sync_status = TidalSyncStatus.NOT_FOUND.value
         db.commit()
@@ -325,7 +325,7 @@ async def sync_request_to_tidal(
             error="Track not found on Tidal",
         )
 
-    if await add_track_to_playlist(db, user, playlist_id, track.track_id):
+    if add_track_to_playlist(db, user, playlist_id, track.track_id):
         request.tidal_track_id = track.track_id
         request.tidal_sync_status = TidalSyncStatus.SYNCED.value
         db.commit()
@@ -344,7 +344,7 @@ async def sync_request_to_tidal(
         )
 
 
-async def manual_link_track(
+def manual_link_track(
     db: Session,
     request: Request,
     tidal_track_id: str,
@@ -362,7 +362,7 @@ async def manual_link_track(
 
     playlist_id = event.tidal_playlist_id
     if not playlist_id:
-        playlist_id = await create_event_playlist(db, user, event)
+        playlist_id = create_event_playlist(db, user, event)
         if not playlist_id:
             return TidalSyncResult(
                 request_id=request.id,
@@ -370,7 +370,7 @@ async def manual_link_track(
                 error="Failed to create Tidal playlist",
             )
 
-    if await add_track_to_playlist(db, user, playlist_id, tidal_track_id):
+    if add_track_to_playlist(db, user, playlist_id, tidal_track_id):
         request.tidal_track_id = tidal_track_id
         request.tidal_sync_status = TidalSyncStatus.SYNCED.value
         db.commit()
@@ -387,7 +387,7 @@ async def manual_link_track(
         )
 
 
-async def search_tidal_tracks(
+def search_tidal_tracks(
     db: Session,
     user: User,
     query: str,

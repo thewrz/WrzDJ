@@ -1,7 +1,8 @@
 import json
 import logging
+import threading
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import spotipy
 from requests.exceptions import ReadTimeout, Timeout
@@ -9,6 +10,7 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.time import utcnow
 from app.models.search_cache import SearchCache
 from app.schemas.search import SearchResult
 
@@ -20,14 +22,19 @@ SPOTIFY_TIMEOUT = (5, 10)  # 5s connect, 10s read
 MAX_RETRIES = 2
 INITIAL_BACKOFF = 0.5  # seconds
 
-# Initialize Spotify client with client credentials flow
+# Initialize Spotify client with client credentials flow (thread-safe)
 _sp: spotipy.Spotify | None = None
+_sp_lock = threading.Lock()
 
 
 def _get_spotify_client() -> spotipy.Spotify:
-    """Get or create the Spotify client."""
+    """Get or create the Spotify client (double-checked locking)."""
     global _sp
-    if _sp is None:
+    if _sp is not None:
+        return _sp
+    with _sp_lock:
+        if _sp is not None:
+            return _sp
         if not settings.spotify_client_id or not settings.spotify_client_secret:
             raise ValueError(
                 "Spotify credentials not configured. "
@@ -44,7 +51,7 @@ def _get_spotify_client() -> spotipy.Spotify:
     return _sp
 
 
-async def search_songs(db: Session, query: str) -> list[SearchResult]:
+def search_songs(db: Session, query: str) -> list[SearchResult]:
     """Search for songs using Spotify API with caching."""
     query = query.strip().lower()
     if not query:
@@ -53,7 +60,7 @@ async def search_songs(db: Session, query: str) -> list[SearchResult]:
     # Check cache first
     cached = (
         db.query(SearchCache)
-        .filter(SearchCache.query == query, SearchCache.expires_at > datetime.utcnow())
+        .filter(SearchCache.query == query, SearchCache.expires_at > utcnow())
         .first()
     )
     if cached:
@@ -64,7 +71,7 @@ async def search_songs(db: Session, query: str) -> list[SearchResult]:
     results = _call_spotify_api(query)
 
     # Cache the results
-    expires_at = datetime.utcnow() + timedelta(hours=settings.search_cache_hours)
+    expires_at = utcnow() + timedelta(hours=settings.search_cache_hours)
     results_json = json.dumps([r.model_dump() for r in results])
 
     # Upsert cache entry
@@ -72,7 +79,7 @@ async def search_songs(db: Session, query: str) -> list[SearchResult]:
     if existing:
         existing.results_json = results_json
         existing.expires_at = expires_at
-        existing.created_at = datetime.utcnow()
+        existing.created_at = utcnow()
     else:
         cache_entry = SearchCache(query=query, results_json=results_json, expires_at=expires_at)
         db.add(cache_entry)

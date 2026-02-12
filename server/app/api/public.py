@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.core.config import get_settings
 from app.core.rate_limit import get_client_fingerprint, limiter
+from app.core.time import utcnow
 from app.models.request import Request as SongRequest
 from app.models.request import RequestStatus
 from app.services.event import EventLookupResult, get_event_by_code_with_status
@@ -116,14 +117,15 @@ def get_kiosk_display(
         db, event.id, auto_hide_minutes=event.now_playing_auto_hide_minutes
     )
 
-    # Build banner URLs from API host
+    # Build banner URLs using settings.public_url or request.base_url
     banner_url = None
     banner_kiosk_url = None
     banner_colors = None
     if event.banner_filename:
-        scheme = request.headers.get("x-forwarded-proto", "http")
-        host = request.headers.get("host", "localhost:8000")
-        api_base = f"{scheme}://{host}"
+        if settings.public_url:
+            api_base = settings.public_url.rstrip("/")
+        else:
+            api_base = str(request.base_url).rstrip("/")
         banner_url = f"{api_base}/uploads/{event.banner_filename}"
         stem = event.banner_filename.rsplit(".", 1)[0]
         banner_kiosk_url = f"{api_base}/uploads/{stem}_kiosk.webp"
@@ -137,7 +139,7 @@ def get_kiosk_display(
         now_playing=now_playing,
         now_playing_hidden=now_playing_is_hidden,
         requests_open=event.requests_open,
-        updated_at=datetime.utcnow(),
+        updated_at=utcnow(),
         banner_url=banner_url,
         banner_kiosk_url=banner_kiosk_url,
         banner_colors=banner_colors,
