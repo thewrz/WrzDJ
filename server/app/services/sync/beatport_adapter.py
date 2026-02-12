@@ -16,7 +16,13 @@ import logging
 from typing import TYPE_CHECKING
 
 from app.services import beatport as beatport_service
-from app.services.sync.base import PlaylistSyncAdapter, SyncResult, SyncStatus, TrackMatch
+from app.services.sync.base import (
+    PlaylistSyncAdapter,
+    SyncResult,
+    SyncStatus,
+    TrackMatch,
+    sanitize_sync_error,
+)
 from app.services.track_normalizer import fuzzy_match_score
 from app.services.version_filter import is_unwanted_version
 
@@ -143,9 +149,9 @@ class BeatportSyncAdapter(PlaylistSyncAdapter):
                 track_match=track_match,
             )
         except Exception as e:
-            logger.error("Beatport sync failed: %s", e)
+            logger.error("Beatport sync failed: %s", type(e).__name__)
             return SyncResult(
                 service=self.service_name,
                 status=SyncStatus.ERROR,
-                error=str(e),
+                error=sanitize_sync_error(e),
             )

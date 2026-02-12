@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.models.request import Request, TidalSyncStatus
 from app.services.intent_parser import parse_intent
-from app.services.sync.base import SyncResult, SyncStatus, TrackMatch
+from app.services.sync.base import SyncResult, SyncStatus, TrackMatch, sanitize_sync_error
 from app.services.sync.registry import get_connected_adapters
 from app.services.track_normalizer import normalize_track
 
@@ -80,12 +80,12 @@ def sync_request_to_services(db: Session, request: Request) -> MultiSyncResult:
             result = adapter.sync_track(db, user, event, normalized, intent)
             multi_result.results.append(result)
         except Exception as e:
-            logger.error(f"Adapter {adapter.service_name} failed: {e}")
+            logger.error(f"Adapter {adapter.service_name} failed: {type(e).__name__}")
             multi_result.results.append(
                 SyncResult(
                     service=adapter.service_name,
                     status=SyncStatus.ERROR,
-                    error=str(e),
+                    error=sanitize_sync_error(e),
                 )
             )
 
@@ -146,8 +146,8 @@ def sync_requests_batch(db: Session, requests: list[Request]) -> None:
                 else:
                     not_found_reqs.append(request)
             except Exception as e:
-                logger.error(f"Search failed for {adapter.service_name}: {e}")
-                error_reqs.append((request, str(e)))
+                logger.error(f"Search failed for {adapter.service_name}: {type(e).__name__}")
+                error_reqs.append((request, sanitize_sync_error(e)))
 
         # Phase 2: Ensure playlist exists (once, not per-request)
         playlist_id = None
@@ -155,9 +155,11 @@ def sync_requests_batch(db: Session, requests: list[Request]) -> None:
             try:
                 playlist_id = adapter.ensure_playlist(db, user, event)
             except Exception as e:
-                logger.error(f"Playlist creation failed for {adapter.service_name}: {e}")
+                svc = adapter.service_name
+                logger.error("Playlist creation failed for %s: %s", svc, type(e).__name__)
+                err_msg = f"Failed to ensure playlist: {sanitize_sync_error(e)}"
                 for request, _match in found:
-                    error_reqs.append((request, f"Failed to ensure playlist: {e}"))
+                    error_reqs.append((request, err_msg))
                 found = []
 
             if found and not playlist_id:
@@ -212,10 +214,11 @@ def _is_already_synced(request: Request, service_name: str) -> bool:
     # Check multi-service JSON results
     if request.sync_results_json:
         try:
-            results = json.loads(request.sync_results_json)
-            return any(
-                r.get("service") == service_name and r.get("status") == "added" for r in results
-            )
+            parsed = json.loads(request.sync_results_json)
+            if isinstance(parsed, list):
+                return any(
+                    r.get("service") == service_name and r.get("status") == "added" for r in parsed
+                )
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -231,7 +234,8 @@ def _persist_sync_result(request: Request, result: SyncResult) -> None:
     existing: list[dict] = []
     if request.sync_results_json:
         try:
-            existing = json.loads(request.sync_results_json)
+            parsed = json.loads(request.sync_results_json)
+            existing = parsed if isinstance(parsed, list) else []
         except (json.JSONDecodeError, TypeError):
             existing = []
 

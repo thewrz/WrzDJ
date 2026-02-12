@@ -162,6 +162,24 @@ class TestSyncTrack:
         assert result.playlist_id is None
 
 
+class TestSyncTrackErrorSanitized:
+    @patch("app.services.sync.beatport_adapter.beatport_service.search_beatport_tracks")
+    def test_sync_error_message_is_sanitized(
+        self, mock_search, adapter, db, bp_user, bp_event, normalized
+    ):
+        """Exception during sync produces sanitized error, not raw exception."""
+        import httpx
+
+        mock_search.side_effect = httpx.ConnectError(
+            "Connection with Bearer sk-secret-token to api.beatport.com failed"
+        )
+        result = adapter.sync_track(db, bp_user, bp_event, normalized)
+        assert result.status == SyncStatus.ERROR
+        assert "Bearer" not in result.error
+        assert "sk-secret" not in result.error
+        assert result.error == "External API connection failed"
+
+
 class TestStubs:
     def test_ensure_playlist_returns_none(self, adapter, db, bp_user, bp_event):
         assert adapter.ensure_playlist(db, bp_user, bp_event) is None

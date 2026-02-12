@@ -159,6 +159,26 @@ def test_link_endpoint_track_not_on_beatport(client, auth_headers, test_user, te
     assert "not found on Beatport" in response.json()["detail"]
 
 
+def test_manual_link_with_non_list_sync_results_json():
+    """Manual link handles sync_results_json that parses as non-list."""
+    db = MagicMock()
+    request = MagicMock()
+    request.sync_results_json = '"not a list"'  # Valid JSON but not a list
+
+    track = BeatportSearchResult(
+        track_id="999",
+        title="NonList",
+        artist="Test",
+    )
+
+    manual_link_beatport_track(db, request, track)
+
+    result = json.loads(request.sync_results_json)
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0]["service"] == "beatport"
+
+
 def test_link_endpoint_success(client, auth_headers, test_user, test_request, db):
     """Link endpoint succeeds when track found on Beatport."""
     test_user.beatport_access_token = "valid-token"

@@ -532,26 +532,44 @@ export default function EventQueuePage() {
     }
   };
 
+  const beatportListenerRef = useRef<((event: MessageEvent) => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (beatportListenerRef.current) {
+        window.removeEventListener('message', beatportListenerRef.current);
+        beatportListenerRef.current = null;
+      }
+    };
+  }, []);
+
   const handleConnectBeatport = async () => {
     try {
-      const { auth_url } = await api.startBeatportAuth();
-      // Open Beatport OAuth in a popup window
+      const { auth_url, state } = await api.startBeatportAuth();
       const popup = window.open(auth_url, 'beatport-auth', 'width=600,height=700');
-      // Listen for the callback
+      if (!popup) {
+        setActionError('Popup blocked - please allow popups for this site');
+        return;
+      }
+      // Clean up any previous listener
+      if (beatportListenerRef.current) {
+        window.removeEventListener('message', beatportListenerRef.current);
+      }
       const handleMessage = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
         if (event.data?.type === 'beatport-auth-callback' && event.data?.code) {
           window.removeEventListener('message', handleMessage);
-          popup?.close();
-          api.completeBeatportAuth(event.data.code).then(() => {
+          beatportListenerRef.current = null;
+          popup.close();
+          api.completeBeatportAuth(event.data.code, state).then(() => {
             setBeatportStatus({ linked: true, expires_at: null });
           }).catch(() => {
             setActionError('Failed to complete Beatport authentication');
           });
         }
       };
+      beatportListenerRef.current = handleMessage;
       window.addEventListener('message', handleMessage);
-      // Clean up listener after 10 minutes
-      setTimeout(() => window.removeEventListener('message', handleMessage), 10 * 60 * 1000);
     } catch {
       setActionError('Failed to start Beatport authentication');
     }

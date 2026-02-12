@@ -162,6 +162,33 @@ def test_not_found_on_one_service_added_on_another(test_request, db):
     assert beatport["track_id"] is None
 
 
+def test_persist_sync_result_with_non_list_json(test_request, db):
+    """Persist handles sync_results_json that parses as non-list (e.g., null)."""
+    from app.services.sync.orchestrator import _persist_sync_result
+
+    test_request.sync_results_json = "null"
+    db.commit()
+
+    result = SyncResult(
+        service="beatport",
+        status=SyncStatus.MATCHED,
+        track_match=TrackMatch(
+            service="beatport",
+            track_id="bp-guard",
+            title="Guard Test",
+            artist="Test",
+            match_confidence=0.9,
+        ),
+    )
+    _persist_sync_result(test_request, result)
+    db.commit()
+
+    results = json.loads(test_request.sync_results_json)
+    assert isinstance(results, list)
+    assert len(results) == 1
+    assert results[0]["service"] == "beatport"
+
+
 def test_sync_results_exposed_in_api_response(client, auth_headers, test_request, db):
     """GET /api/events/{code}/requests returns sync_results_json."""
     from app.services.sync.orchestrator import _persist_sync_result

@@ -506,8 +506,11 @@ class ApiClient {
     return this.fetch('/api/beatport/auth/start');
   }
 
-  async completeBeatportAuth(code: string): Promise<{ status: string; message: string }> {
-    return this.fetch(`/api/beatport/auth/callback?code=${encodeURIComponent(code)}`, { method: 'POST' });
+  async completeBeatportAuth(code: string, state: string): Promise<{ status: string; message: string }> {
+    return this.fetch('/api/beatport/auth/callback', {
+      method: 'POST',
+      body: JSON.stringify({ code, state }),
+    });
   }
 
   async disconnectBeatport(): Promise<{ status: string; message: string }> {

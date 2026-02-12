@@ -1,10 +1,9 @@
 """Beatport API v4 integration for catalog search.
 
 Uses OAuth2 authorization code flow for authentication.
-Beatport's API is currently read-only for third-party apps —
-track search and catalog access works, but playlist creation/editing
-is not yet available. When Beatport opens write APIs, the stub
-methods in the adapter can be implemented.
+Track search and catalog access works. Playlist creation/editing
+endpoints exist (POST /v4/my/playlists/) but are not yet implemented
+in this adapter — TODO for a future PR.
 """
 
 import json
@@ -23,8 +22,9 @@ from app.schemas.beatport import BeatportSearchResult
 logger = logging.getLogger(__name__)
 
 BEATPORT_API_BASE = "https://api.beatport.com/v4"
-BEATPORT_AUTH_URL = "https://account.beatport.com/authorize"
-BEATPORT_TOKEN_URL = "https://account.beatport.com/o/token/"  # nosec B105
+BEATPORT_AUTH_URL = "https://api.beatport.com/v4/auth/o/authorize/"
+BEATPORT_TOKEN_URL = "https://api.beatport.com/v4/auth/o/token/"  # nosec B105
+BEATPORT_REVOKE_URL = "https://api.beatport.com/v4/auth/o/revoke/"
 BEATPORT_TRACK_URL = "https://www.beatport.com/track/{slug}/{track_id}"
 
 # HTTP timeout for Beatport API calls
@@ -88,6 +88,7 @@ def _refresh_token_if_needed(db: Session, user: User) -> bool:
                     "client_id": settings.beatport_client_id,
                     "client_secret": settings.beatport_client_secret,
                 },
+                headers={"Authorization": f"Bearer {user.beatport_access_token}"},
             )
             response.raise_for_status()
             data = response.json()
@@ -99,8 +100,8 @@ def _refresh_token_if_needed(db: Session, user: User) -> bool:
         user.beatport_token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
         db.commit()
         return True
-    except httpx.HTTPError:
-        logger.exception("Beatport token refresh failed")
+    except httpx.HTTPError as e:
+        logger.error("Beatport token refresh failed: %s", type(e).__name__)
         return False
 
 
@@ -114,7 +115,22 @@ def save_tokens(db: Session, user: User, token_data: dict) -> None:
 
 
 def disconnect_beatport(db: Session, user: User) -> None:
-    """Clear all Beatport tokens from user."""
+    """Revoke Beatport token and clear all tokens from user."""
+    # Best-effort token revocation — don't fail if it errors
+    if user.beatport_access_token:
+        settings = get_settings()
+        try:
+            with httpx.Client(timeout=HTTP_TIMEOUT) as client:
+                client.post(
+                    BEATPORT_REVOKE_URL,
+                    params={
+                        "client_id": settings.beatport_client_id,
+                        "token": user.beatport_access_token,
+                    },
+                )
+        except httpx.HTTPError as e:
+            logger.error("Beatport token revocation failed: %s", type(e).__name__)
+
     user.beatport_access_token = None
     user.beatport_refresh_token = None
     user.beatport_token_expires_at = None
@@ -137,8 +153,8 @@ def search_beatport_tracks(
             )
             response.raise_for_status()
             data = response.json()
-    except httpx.HTTPError:
-        logger.exception("Beatport search failed")
+    except httpx.HTTPError as e:
+        logger.error("Beatport search failed: %s", type(e).__name__)
         return []
 
     results = []
@@ -191,8 +207,8 @@ def get_beatport_track(db: Session, user: User, track_id: str) -> BeatportSearch
             )
             response.raise_for_status()
             track = response.json()
-    except httpx.HTTPError:
-        logger.exception("Beatport track fetch failed for %s", track_id)
+    except httpx.HTTPError as e:
+        logger.error("Beatport track fetch failed: %s", type(e).__name__)
         return None
 
     artists = ", ".join(a.get("name", "") for a in track.get("artists", []))
@@ -251,7 +267,8 @@ def manual_link_beatport_track(
     existing: list[dict] = []
     if request.sync_results_json:
         try:
-            existing = json.loads(request.sync_results_json)
+            parsed = json.loads(request.sync_results_json)
+            existing = parsed if isinstance(parsed, list) else []
         except (json.JSONDecodeError, TypeError):
             existing = []
 

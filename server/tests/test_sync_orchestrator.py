@@ -303,7 +303,26 @@ class TestSyncRequestToServices:
 
         assert len(result.results) == 1
         assert result.results[0].status == SyncStatus.ERROR
-        assert "Connection reset" in result.results[0].error
+        # Error is now sanitized — generic message instead of raw exception
+        assert result.results[0].error == "Sync operation failed"
+
+    def test_adapter_exception_error_is_sanitized(self, db, accepted_request):
+        """httpx exceptions produce sanitized error messages."""
+        import httpx
+
+        class HttpxFailingAdapter(MockAdapter):
+            def sync_track(self, db, user, event, normalized, intent=None):
+                raise httpx.ConnectError("Bearer sk-secret at api.beatport.com")
+
+        adapter = HttpxFailingAdapter("tidal")
+        register_adapter(adapter)
+
+        result = sync_request_to_services(db, accepted_request)
+
+        assert len(result.results) == 1
+        assert result.results[0].status == SyncStatus.ERROR
+        assert "Bearer" not in result.results[0].error
+        assert result.results[0].error == "External API connection failed"
 
     def test_disconnected_adapter_skipped(self, db, accepted_request):
         """Disconnected adapters are not included."""

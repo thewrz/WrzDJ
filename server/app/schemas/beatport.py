@@ -39,6 +39,13 @@ class BeatportEventSettingsUpdate(BaseModel):
     beatport_sync_enabled: bool
 
 
+class BeatportAuthCallback(BaseModel):
+    """OAuth callback request with code and state."""
+
+    code: str = Field(..., min_length=1, max_length=2048)
+    state: str = Field(..., min_length=1, max_length=64)
+
+
 class BeatportManualLink(BaseModel):
     """Manual Beatport track linking request."""
 

@@ -25,6 +25,7 @@ def upgrade() -> None:
     op.add_column("users", sa.Column("beatport_access_token", sa.Text(), nullable=True))
     op.add_column("users", sa.Column("beatport_refresh_token", sa.Text(), nullable=True))
     op.add_column("users", sa.Column("beatport_token_expires_at", sa.DateTime(), nullable=True))
+    op.add_column("users", sa.Column("beatport_oauth_state", sa.String(64), nullable=True))
     op.add_column(
         "events",
         sa.Column(
@@ -38,6 +39,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("events", "beatport_sync_enabled")
+    op.drop_column("users", "beatport_oauth_state")
     op.drop_column("users", "beatport_token_expires_at")
     op.drop_column("users", "beatport_refresh_token")
     op.drop_column("users", "beatport_access_token")

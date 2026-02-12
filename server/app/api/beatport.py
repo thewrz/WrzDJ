@@ -1,8 +1,8 @@
 """Beatport OAuth and sync API endpoints.
 
 Uses OAuth2 authorization code flow for authentication.
-Beatport's API v4 is currently read-only — search works,
-but playlist write endpoints will be added when Beatport opens them.
+Beatport API v4 supports search and catalog access. Playlist write
+endpoints exist but are not yet implemented in this adapter.
 """
 
 import secrets
@@ -17,6 +17,7 @@ from app.models.event import Event
 from app.models.request import Request as SongRequest
 from app.models.user import User
 from app.schemas.beatport import (
+    BeatportAuthCallback,
     BeatportEventSettings,
     BeatportEventSettingsUpdate,
     BeatportManualLink,
@@ -40,12 +41,16 @@ router = APIRouter()
 
 
 @router.get("/auth/start")
+@limiter.limit("5/minute")
 def start_auth(
+    request: Request,
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ) -> dict:
     """Start Beatport OAuth2 authorization code flow.
 
     Returns the URL the frontend should redirect the user to.
+    Stores the CSRF state token on the user for callback validation.
     """
     if not settings.beatport_client_id:
         raise HTTPException(
@@ -53,6 +58,8 @@ def start_auth(
             detail="Beatport integration not configured",
         )
     state = secrets.token_urlsafe(32)
+    current_user.beatport_oauth_state = state
+    db.commit()
     auth_url = get_auth_url(state)
     return {
         "auth_url": auth_url,
@@ -61,15 +68,36 @@ def start_auth(
 
 
 @router.post("/auth/callback")
+@limiter.limit("5/minute")
 def auth_callback(
-    code: str = Query(...),
+    request: Request,
+    callback_data: BeatportAuthCallback,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> StatusMessageResponse:
-    """Exchange authorization code for tokens."""
+    """Exchange authorization code for tokens.
+
+    Validates the CSRF state parameter before exchanging the code.
+    """
+    # Validate OAuth state to prevent CSRF
+    if not current_user.beatport_oauth_state:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No pending OAuth flow — start auth first",
+        )
+    if not secrets.compare_digest(current_user.beatport_oauth_state, callback_data.state):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid state parameter",
+        )
+
+    # Clear state immediately to prevent reuse
+    current_user.beatport_oauth_state = None
+
     try:
-        token_data = exchange_code_for_tokens(code)
+        token_data = exchange_code_for_tokens(callback_data.code)
     except Exception:
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to exchange authorization code",
@@ -94,7 +122,9 @@ def get_status(
 
 
 @router.post("/disconnect", response_model=StatusMessageResponse)
+@limiter.limit("10/minute")
 def disconnect(
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> StatusMessageResponse:
@@ -107,7 +137,7 @@ def disconnect(
 @limiter.limit(lambda: f"{settings.search_rate_limit_per_minute}/minute")
 def search(
     request: Request,
-    q: str = Query(..., min_length=1),
+    q: str = Query(..., min_length=1, max_length=200),
     limit: int = Query(default=10, ge=1, le=50),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -167,7 +197,9 @@ def update_event_settings(
 
 
 @router.post("/requests/{request_id}/link", response_model=StatusMessageResponse)
+@limiter.limit("10/minute")
 def link_track(
+    request: Request,
     request_id: int,
     link_data: BeatportManualLink,
     current_user: User = Depends(get_current_active_user),
