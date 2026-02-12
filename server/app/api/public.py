@@ -117,14 +117,15 @@ def get_kiosk_display(
         db, event.id, auto_hide_minutes=event.now_playing_auto_hide_minutes
     )
 
-    # Build banner URLs from API host
+    # Build banner URLs using settings.public_url or request.base_url
     banner_url = None
     banner_kiosk_url = None
     banner_colors = None
     if event.banner_filename:
-        scheme = request.headers.get("x-forwarded-proto", "http")
-        host = request.headers.get("host", "localhost:8000")
-        api_base = f"{scheme}://{host}"
+        if settings.public_url:
+            api_base = settings.public_url.rstrip("/")
+        else:
+            api_base = str(request.base_url).rstrip("/")
         banner_url = f"{api_base}/uploads/{event.banner_filename}"
         stem = event.banner_filename.rsplit(".", 1)[0]
         banner_kiosk_url = f"{api_base}/uploads/{stem}_kiosk.webp"

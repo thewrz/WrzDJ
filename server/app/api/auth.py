@@ -8,6 +8,7 @@ from app.core.lockout import lockout_manager
 from app.core.rate_limit import get_client_ip, limiter
 from app.models.user import User, UserRole
 from app.schemas.auth import Token
+from app.schemas.common import StatusMessageResponse
 from app.schemas.user import PublicSettings, RegisterRequest, UserOut
 from app.services.auth import (
     authenticate_user,
@@ -85,13 +86,13 @@ def get_public_settings(db: Session = Depends(get_db)) -> PublicSettings:
     )
 
 
-@router.post("/register")
+@router.post("/register", response_model=StatusMessageResponse)
 @limiter.limit(lambda: f"{settings.registration_rate_limit_per_minute}/minute")
 async def register(
     request: Request,
     reg_data: RegisterRequest,
     db: Session = Depends(get_db),
-) -> dict:
+) -> StatusMessageResponse:
     """Register a new user (pending approval)."""
     # Check if registration is enabled
     sys_settings = get_system_settings(db)
@@ -129,7 +130,7 @@ async def register(
     user.email = reg_data.email
     db.commit()
 
-    return {
-        "status": "ok",
-        "message": "Registration submitted. An admin will review your account.",
-    }
+    return StatusMessageResponse(
+        status="ok",
+        message="Registration submitted. An admin will review your account.",
+    )

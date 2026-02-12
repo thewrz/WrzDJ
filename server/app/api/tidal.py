@@ -13,6 +13,7 @@ from app.core.rate_limit import limiter
 from app.models.event import Event
 from app.models.request import Request as SongRequest
 from app.models.user import User
+from app.schemas.common import StatusMessageResponse, TidalAuthCheckResponse, TidalAuthStartResponse
 from app.schemas.tidal import (
     TidalEventSettings,
     TidalEventSettingsUpdate,
@@ -36,24 +37,24 @@ settings = get_settings()
 router = APIRouter()
 
 
-@router.post("/auth/start")
+@router.post("/auth/start", response_model=TidalAuthStartResponse)
 def start_auth(
     current_user: User = Depends(get_current_active_user),
-) -> dict:
+) -> TidalAuthStartResponse:
     """Start Tidal device login flow.
 
     Returns a URL and code for the user to visit and authorize.
     The frontend should poll /auth/check to wait for completion.
     """
     result = start_device_login(current_user)
-    return {
-        "verification_url": result["verification_url"],
-        "user_code": result["user_code"],
-        "message": "Visit the URL and enter the code to link your Tidal account",
-    }
+    return TidalAuthStartResponse(
+        verification_url=result["verification_url"],
+        user_code=result["user_code"],
+        message="Visit the URL and enter the code to link your Tidal account",
+    )
 
 
-@router.get("/auth/check")
+@router.get("/auth/check", response_model=TidalAuthCheckResponse)
 def check_auth(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -68,13 +69,13 @@ def check_auth(
     return check_device_login(db, current_user)
 
 
-@router.post("/auth/cancel")
+@router.post("/auth/cancel", response_model=StatusMessageResponse)
 def cancel_auth(
     current_user: User = Depends(get_current_active_user),
-) -> dict:
+) -> StatusMessageResponse:
     """Cancel pending device login."""
     cancel_device_login(current_user)
-    return {"status": "ok", "message": "Login cancelled"}
+    return StatusMessageResponse(status="ok", message="Login cancelled")
 
 
 @router.get("/status", response_model=TidalStatus)
@@ -97,14 +98,14 @@ async def get_status(
     )
 
 
-@router.post("/disconnect")
+@router.post("/disconnect", response_model=StatusMessageResponse)
 def disconnect(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
-) -> dict:
+) -> StatusMessageResponse:
     """Unlink Tidal account from current user."""
     disconnect_tidal(db, current_user)
-    return {"status": "ok", "message": "Tidal account disconnected"}
+    return StatusMessageResponse(status="ok", message="Tidal account disconnected")
 
 
 @router.get("/search", response_model=list[TidalSearchResult])
