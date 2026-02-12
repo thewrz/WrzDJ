@@ -563,5 +563,23 @@ describe("PioneerProlinkPlugin", () => {
       expect(tracks[1].deckId).toBe("2");
       expect(tracks[1].track?.title).toBe("Track 43");
     });
+
+    it("times out metadata fetch after 10 seconds", async () => {
+      vi.useFakeTimers();
+      const logs: string[] = [];
+      plugin.on("log", (msg: string) => logs.push(msg));
+
+      // Mock getMetadata to never resolve
+      mockDb.getMetadata.mockImplementation(() => new Promise(() => {}));
+
+      await plugin.start();
+      mockStatusEmitter.emit("status", makeStatus({ trackId: 99 }));
+
+      // Advance past the 10s timeout
+      await vi.advanceTimersByTimeAsync(11_000);
+
+      expect(logs.some((l) => l.includes("timed out"))).toBe(true);
+      vi.useRealTimers();
+    });
   });
 });

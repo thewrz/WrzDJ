@@ -37,6 +37,7 @@ export class BridgeRunner extends EventEmitter {
   private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
   private stopReason: string | null = null;
   private networkWarnings: string[] = [];
+  private backendReachable = true;
 
   get isRunning(): boolean {
     return this.running;
@@ -55,6 +56,7 @@ export class BridgeRunner extends EventEmitter {
     this.connectedDevice = null;
     this.stopReason = null;
     this.networkWarnings = [];
+    this.backendReachable = true;
 
     const protocol = config.settings.protocol || 'stagelinq';
 
@@ -169,6 +171,7 @@ export class BridgeRunner extends EventEmitter {
       eventName: null,
       currentTrack: this.currentTrack,
       deckStates,
+      backendReachable: this.backendReachable,
       stopReason: this.stopReason,
       networkWarnings: this.networkWarnings,
     };
@@ -293,6 +296,10 @@ export class BridgeRunner extends EventEmitter {
           throw new Error(`HTTP ${response.status}: ${text}`);
         }
 
+        if (!this.backendReachable) {
+          this.backendReachable = true;
+          this.emitStatus();
+        }
         this.log(`POST ${endpoint} succeeded`);
         return;
       } catch (err) {
@@ -305,6 +312,10 @@ export class BridgeRunner extends EventEmitter {
       }
     }
 
+    if (this.backendReachable) {
+      this.backendReachable = false;
+      this.emitStatus();
+    }
     this.log(`POST ${endpoint} failed after ${MAX_RETRIES + 1} attempts: ${lastError?.message}`);
   }
 

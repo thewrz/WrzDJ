@@ -9,6 +9,7 @@ const INITIAL_STATUS: BridgeStatus = {
   eventName: null,
   currentTrack: null,
   deckStates: [],
+  backendReachable: true,
   stopReason: null,
   networkWarnings: [],
 };

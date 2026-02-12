@@ -86,6 +86,7 @@ export class TraktorBroadcastPlugin extends EventEmitter implements EquipmentSou
   private running = false;
   private port = DEFAULT_PORT;
   private lastStreamTitle: string | null = null;
+  private readonly activeConnections = new Set<IncomingMessage>();
 
   get isRunning(): boolean {
     return this.running;
@@ -112,6 +113,12 @@ export class TraktorBroadcastPlugin extends EventEmitter implements EquipmentSou
 
     this.running = false;
     this.lastStreamTitle = null;
+
+    // Destroy tracked request streams before closing server
+    for (const req of this.activeConnections) {
+      req.destroy();
+    }
+    this.activeConnections.clear();
 
     if (this.server) {
       // Force-close all open connections (streaming connections never end naturally)
@@ -156,6 +163,8 @@ export class TraktorBroadcastPlugin extends EventEmitter implements EquipmentSou
     this.emit("log", `Incoming connection: ${req.method} ${req.url}`);
     this.emit("connection", { connected: true, deviceName: "Traktor" });
 
+    this.activeConnections.add(req);
+
     // Request ICY metadata from the source
     const icyMetaInt = parseInt(req.headers["icy-metaint"] as string, 10) || 0;
 
@@ -171,11 +180,13 @@ export class TraktorBroadcastPlugin extends EventEmitter implements EquipmentSou
     res.writeHead(200, { "icy-metaint": "0" });
 
     req.on("close", () => {
+      this.activeConnections.delete(req);
       this.emit("log", "Traktor broadcast disconnected");
       this.emit("connection", { connected: false });
     });
 
     req.on("error", () => {
+      this.activeConnections.delete(req);
       this.emit("log", "Traktor broadcast stream error");
       this.emit("connection", { connected: false });
     });

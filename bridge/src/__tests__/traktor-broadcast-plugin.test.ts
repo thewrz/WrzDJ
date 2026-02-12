@@ -159,6 +159,20 @@ describe("TraktorBroadcastPlugin", () => {
     expect(tracks[0].deckId).toBe("1");
   });
 
+  it("clears active connections on stop", async () => {
+    plugin = new TraktorBroadcastPlugin();
+    await plugin.start({ port: 0 });
+
+    // Verify the activeConnections set exists and is initially empty
+    const connections = (plugin as unknown as Record<string, Set<unknown>>).activeConnections;
+    expect(connections).toBeInstanceOf(Set);
+
+    await plugin.stop();
+
+    // After stop, connections set should be empty
+    expect(connections.size).toBe(0);
+  });
+
   it("deduplicates identical consecutive tracks", async () => {
     plugin = new TraktorBroadcastPlugin();
     const tracks: PluginTrackEvent[] = [];

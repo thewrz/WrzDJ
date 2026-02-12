@@ -304,4 +304,53 @@ describe('BridgeRunner', () => {
 
     expect(logs.some((l) => l.includes('WARNING: Conflict warning text'))).toBe(true);
   });
+
+  it('sets backendReachable to false after all retries exhausted', async () => {
+    await runner.start(TEST_CONFIG);
+    expect(runner.getStatus().backendReachable).toBe(true);
+
+    // Make all POST attempts fail
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    // Trigger a POST by emitting a connection event on the pluginBridge
+    const pluginBridge = (runner as unknown as Record<string, unknown>).pluginBridge as {
+      emit: (event: string, ...args: unknown[]) => boolean;
+    };
+    pluginBridge.emit('connection', { connected: true, deviceName: 'Test Device' });
+
+    // Let all retries execute (3 retries: 2s + 4s + 8s = 14s)
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(runner.getStatus().backendReachable).toBe(false);
+
+    // Restore mock before afterEach cleanup calls stop()
+    mockFetch.mockResolvedValue({ ok: true, text: () => Promise.resolve('') });
+  });
+
+  it('restores backendReachable to true on successful POST after failure', async () => {
+    await runner.start(TEST_CONFIG);
+
+    // Make all attempts fail
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    const pluginBridge = (runner as unknown as Record<string, unknown>).pluginBridge as {
+      emit: (event: string, ...args: unknown[]) => boolean;
+    };
+    pluginBridge.emit('connection', { connected: true, deviceName: 'Test Device' });
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(runner.getStatus().backendReachable).toBe(false);
+
+    // Now make fetch succeed again
+    mockFetch.mockResolvedValue({ ok: true, text: () => Promise.resolve('') });
+    pluginBridge.emit('connection', { connected: false });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(runner.getStatus().backendReachable).toBe(true);
+  });
+
+  it('includes backendReachable: true by default', async () => {
+    const status = runner.getStatus();
+    expect(status.backendReachable).toBe(true);
+  });
 });

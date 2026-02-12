@@ -84,7 +84,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle(IPC_CHANNELS.AUTH_LOGOUT, async () => {
     if (bridgeRunner.isRunning) {
-      await bridgeRunner.stop();
+      try {
+        await bridgeRunner.stop();
+      } catch {
+        // Ensure logout completes even if bridge stop fails
+      }
     }
     store.clearToken();
 

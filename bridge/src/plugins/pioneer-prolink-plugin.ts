@@ -162,16 +162,27 @@ export class PioneerProlinkPlugin extends EventEmitter implements EquipmentSourc
     this.fetchTrackMetadata(status, deckId);
   }
 
+  private static readonly METADATA_TIMEOUT_MS = 10_000;
+
   private fetchTrackMetadata(status: CDJStatus.State, deckId: string): void {
     const db = this.network?.db;
     if (!db) return;
 
-    db.getMetadata({
+    const metadataPromise = db.getMetadata({
       deviceId: status.trackDeviceId,
       trackSlot: status.trackSlot,
       trackType: status.trackType,
       trackId: status.trackId,
-    })
+    });
+
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      setTimeout(
+        () => reject(new Error("Metadata fetch timed out")),
+        PioneerProlinkPlugin.METADATA_TIMEOUT_MS,
+      );
+    });
+
+    Promise.race([metadataPromise, timeoutPromise])
       .then((track) => {
         if (!track) {
           this.emit("log", `No metadata for track ${status.trackId} on deck ${deckId}`);

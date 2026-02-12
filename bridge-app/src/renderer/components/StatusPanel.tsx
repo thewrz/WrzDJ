@@ -11,6 +11,13 @@ export function StatusPanel({ status }: StatusPanelProps) {
 
   return (
     <>
+      {/* Backend unreachable warning */}
+      {!status.backendReachable && (
+        <div className="network-warning">
+          <p>Backend unreachable — track updates are not being sent.</p>
+        </div>
+      )}
+
       {/* Network warnings */}
       {status.networkWarnings.length > 0 && (
         <div className="network-warning">
