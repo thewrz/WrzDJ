@@ -84,14 +84,7 @@ limiter = Limiter(key_func=get_client_ip, enabled=get_settings().is_rate_limit_e
 
 def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Response:
     """Custom handler for rate limit exceeded errors."""
-    # Parse retry-after from the exception message if available
     retry_after = 60  # Default to 60 seconds
-    if hasattr(exc, "detail") and "Retry after" in str(exc.detail):
-        try:
-            # Extract seconds from message like "Rate limit exceeded: 5 per 1 minute"
-            retry_after = 60
-        except (ValueError, IndexError):
-            pass
 
     return JSONResponse(
         status_code=429,

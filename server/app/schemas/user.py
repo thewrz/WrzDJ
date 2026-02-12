@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -64,7 +65,7 @@ class SystemStats(BaseModel):
 
 
 class PaginatedResponse(BaseModel):
-    items: list
+    items: list[Any]
     total: int
     page: int
     limit: int
