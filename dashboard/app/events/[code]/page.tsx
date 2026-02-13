@@ -20,6 +20,8 @@ import { BridgeStatusCard } from './components/BridgeStatusCard';
 import { CloudProvidersCard } from './components/CloudProvidersCard';
 import { SyncReportPanel } from './components/SyncReportPanel';
 import { EventCustomizationCard } from './components/EventCustomizationCard';
+import { RecommendationsCard } from './components/RecommendationsCard';
+import type { RecommendedTrack } from '@/lib/api-types';
 
 function toLocalDateTimeString(date: Date): string {
   const pad = (n: number) => n.toString().padStart(2, '0');
@@ -602,6 +604,20 @@ export default function EventQueuePage() {
     }
   };
 
+  const handleAcceptRecommendedTrack = async (track: RecommendedTrack) => {
+    await api.submitRequest(
+      code,
+      track.artist,
+      track.title,
+      undefined,
+      track.url || undefined,
+      track.cover_url || undefined,
+    );
+    // Refresh request list
+    const updatedRequests = await api.getRequests(code);
+    setRequests(updatedRequests);
+  };
+
   if (isLoading || !isAuthenticated) {
     return (
       <div className="container">
@@ -850,7 +866,17 @@ export default function EventQueuePage() {
         />
       )}
 
-      {/* 8. Event Customization */}
+      {/* 8. Song Suggestions */}
+      {!isExpiredOrArchived && (
+        <RecommendationsCard
+          code={code}
+          hasAcceptedRequests={requests.some((r) => r.status === 'accepted' || r.status === 'played')}
+          hasConnectedServices={!!(tidalStatus?.linked || beatportStatus?.linked)}
+          onAcceptTrack={handleAcceptRecommendedTrack}
+        />
+      )}
+
+      {/* 9. Event Customization */}
       {!isExpiredOrArchived && (
         <EventCustomizationCard
           event={event}
