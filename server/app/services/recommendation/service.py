@@ -138,6 +138,8 @@ def _search_candidates(
                     TrackProfile(
                         title=r.title,
                         artist=r.artist,
+                        bpm=r.bpm,
+                        key=r.key,
                         source="tidal",
                         track_id=r.track_id,
                         url=r.tidal_url,

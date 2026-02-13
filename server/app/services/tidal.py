@@ -177,14 +177,28 @@ def _track_to_result(track: tidalapi.Track) -> TidalSearchResult:
     try:
         if track.album:
             cover_url = track.album.image(640)
-    except Exception:  # nosec B110 - cover art is optional, failure is non-critical
+    except Exception:  # nosec B110 — cover art is optional, failure is non-critical
         pass
+
+    bpm = None
+    try:
+        bpm = float(track.bpm) if hasattr(track, "bpm") and track.bpm else None
+    except (TypeError, ValueError):
+        pass  # nosec B110
+
+    key = None
+    try:
+        key = track.key if hasattr(track, "key") and track.key else None
+    except (TypeError, AttributeError):
+        pass  # nosec B110
 
     return TidalSearchResult(
         track_id=str(track.id),
         title=track.name or "Unknown",
         artist=track.artist.name if track.artist else "Unknown",
         album=track.album.name if track.album else None,
+        bpm=bpm,
+        key=key,
         duration_seconds=track.duration if track.duration else None,
         cover_url=cover_url,
         tidal_url=f"https://tidal.com/browse/track/{track.id}",

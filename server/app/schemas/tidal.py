@@ -19,6 +19,8 @@ class TidalSearchResult(BaseModel):
     title: str
     artist: str
     album: str | None = None
+    bpm: float | None = None
+    key: str | None = None
     duration_seconds: int | None = None
     cover_url: str | None = None
     tidal_url: str | None = None
