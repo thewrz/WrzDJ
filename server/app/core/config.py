@@ -108,7 +108,7 @@ class Settings(BaseSettings):
 
     # Anthropic API (LLM-powered recommendations)
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-haiku-4-20250414"
+    anthropic_model: str = "claude-haiku-4-5-20251001"
     anthropic_max_tokens: int = 1024
     anthropic_timeout_seconds: int = 15
 

@@ -162,7 +162,7 @@ class TestCallLLM:
     async def test_calls_api_correctly(self, mock_settings, mock_anthropic_cls):
         settings = MagicMock()
         settings.anthropic_api_key = "sk-ant-test-key"
-        settings.anthropic_model = "claude-haiku-4-20250414"
+        settings.anthropic_model = "claude-haiku-4-5-20251001"
         settings.anthropic_max_tokens = 1024
         settings.anthropic_timeout_seconds = 15
         mock_settings.return_value = settings
@@ -195,7 +195,7 @@ class TestCallLLM:
         # Verify API call parameters
         mock_client.messages.create.assert_called_once()
         call_kwargs = mock_client.messages.create.call_args[1]
-        assert call_kwargs["model"] == "claude-haiku-4-20250414"
+        assert call_kwargs["model"] == "claude-haiku-4-5-20251001"
         assert call_kwargs["max_tokens"] == 1024
         assert call_kwargs["tool_choice"] == {"type": "tool", "name": "search_queries"}
 
@@ -205,7 +205,7 @@ class TestCallLLM:
     async def test_trims_to_max_queries(self, mock_settings, mock_anthropic_cls):
         settings = MagicMock()
         settings.anthropic_api_key = "sk-ant-test-key"
-        settings.anthropic_model = "claude-haiku-4-20250414"
+        settings.anthropic_model = "claude-haiku-4-5-20251001"
         settings.anthropic_max_tokens = 1024
         settings.anthropic_timeout_seconds = 15
         mock_settings.return_value = settings
