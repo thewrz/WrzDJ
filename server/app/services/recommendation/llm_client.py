@@ -35,7 +35,7 @@ and taste. When the DJ says things like "more of the same",
 "based on these tracks", or "something similar", refer to the
 track list to understand what they mean.
 
-Generate 1-5 search queries that would find matching tracks on
+Generate 1-6 search queries that would find matching tracks on
 Tidal or Beatport. Each query should be a realistic search string
 (artist name, track name, or genre keywords).
 
@@ -83,7 +83,7 @@ SEARCH_QUERIES_TOOL = {
                     "required": ["search_query", "reasoning"],
                 },
                 "minItems": 1,
-                "maxItems": 5,
+                "maxItems": 6,
             },
         },
         "required": ["queries"],
@@ -158,7 +158,7 @@ def _parse_tool_response(response) -> LLMSuggestionResult:
 async def call_llm(
     profile: EventProfile,
     dj_prompt: str,
-    max_queries: int = 5,
+    max_queries: int = 6,
     tracks: list[TrackProfile] | None = None,
 ) -> LLMSuggestionResult:
     """Call Claude Haiku to generate search queries from a DJ prompt.

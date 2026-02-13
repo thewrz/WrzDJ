@@ -57,7 +57,7 @@ class TestGenerateLLMSuggestions:
         result = await generate_llm_suggestions(profile, "more like this", tracks=tracks)
 
         assert result is expected
-        mock_call_llm.assert_called_once_with(profile, "more like this", 5, tracks=tracks)
+        mock_call_llm.assert_called_once_with(profile, "more like this", 6, tracks=tracks)
 
 
 class TestDataClasses:

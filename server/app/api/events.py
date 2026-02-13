@@ -797,12 +797,15 @@ async def get_llm_recommendations(
         for q in result.llm_queries
     ]
 
+    from app.core.config import get_settings
+
     return LLMRecommendationResponse(
         suggestions=suggestions,
         profile=profile,
         services_used=result.services_used,
         total_candidates_searched=result.total_candidates_searched,
         llm_queries=llm_queries,
+        llm_model=get_settings().anthropic_model,
     )
 
 

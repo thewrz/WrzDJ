@@ -92,6 +92,7 @@ function makeLLMResponse(
       },
     ],
     llm_available: true,
+    llm_model: 'claude-haiku-4-5-20251001',
     ...overrides,
   };
 }
@@ -381,7 +382,7 @@ describe('RecommendationsCard', () => {
 
     fireEvent.click(screen.getByText('AI Assist'));
 
-    expect(screen.getByPlaceholderText(/something darker/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/recommend some more/)).toBeInTheDocument();
   });
 
   it('calls LLM API with prompt when generating in AI Assist mode', async () => {
@@ -402,7 +403,7 @@ describe('RecommendationsCard', () => {
     fireEvent.click(screen.getByText('AI Assist'));
 
     // Type a prompt
-    const input = screen.getByPlaceholderText(/something darker/);
+    const input = screen.getByPlaceholderText(/recommend some more/);
     fireEvent.change(input, { target: { value: 'dark techno vibes' } });
 
     // Generate
@@ -429,7 +430,7 @@ describe('RecommendationsCard', () => {
 
     // Switch to LLM mode and generate
     fireEvent.click(screen.getByText('AI Assist'));
-    const input = screen.getByPlaceholderText(/something darker/);
+    const input = screen.getByPlaceholderText(/recommend some more/);
     fireEvent.change(input, { target: { value: 'dark techno' } });
     fireEvent.click(screen.getByText('Generate'));
 
@@ -464,7 +465,7 @@ describe('RecommendationsCard', () => {
     expect(screen.getByText('Generate')).toBeDisabled();
 
     // Two chars — still disabled (min 3)
-    const input = screen.getByPlaceholderText(/something darker/);
+    const input = screen.getByPlaceholderText(/recommend some more/);
     fireEvent.change(input, { target: { value: 'ab' } });
     expect(screen.getByText('Generate')).toBeDisabled();
 

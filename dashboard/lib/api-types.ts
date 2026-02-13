@@ -373,6 +373,7 @@ export interface LLMRecommendationResponse {
   total_candidates_searched: number;
   llm_queries: LLMQueryInfo[];
   llm_available: boolean;
+  llm_model: string;
 }
 
 /** Playlist info from connected music services */

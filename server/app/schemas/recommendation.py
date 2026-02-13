@@ -57,6 +57,7 @@ class LLMRecommendationResponse(BaseModel):
     total_candidates_searched: int = 0
     llm_queries: list[LLMQueryInfo] = []
     llm_available: bool = True
+    llm_model: str = ""
 
 
 class PlaylistInfo(BaseModel):

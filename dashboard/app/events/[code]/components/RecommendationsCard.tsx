@@ -52,6 +52,7 @@ export function RecommendationsCard({
   const [llmPrompt, setLlmPrompt] = useState('');
   const [llmQueries, setLlmQueries] = useState<LLMQueryInfo[]>([]);
   const [showReasoning, setShowReasoning] = useState(false);
+  const [llmModel, setLlmModel] = useState('');
 
   const loadPlaylists = useCallback(async () => {
     if (playlistsLoaded) return;
@@ -101,6 +102,7 @@ export function RecommendationsCard({
         setSuggestions(result.suggestions);
         setProfile(result.profile);
         setLlmQueries(result.llm_queries);
+        setLlmModel(result.llm_model);
       } else {
         let result: RecommendationResponse;
         if (mode === 'template' && selectedPlaylist) {
@@ -164,6 +166,25 @@ export function RecommendationsCard({
     if (mode === 'template') return !!selectedPlaylist;
     if (mode === 'llm') return llmPrompt.trim().length >= 3;
     return false;
+  })();
+
+  // Derive short display name from model ID (e.g., "claude-haiku-4-5-20251001" → "Haiku 4.5")
+  const modelDisplayName = (() => {
+    if (!llmModel) return 'AI';
+    const m = llmModel.toLowerCase();
+    if (m.includes('haiku')) {
+      const ver = m.match(/haiku-(\d+)-(\d+)/);
+      return ver ? `Haiku ${ver[1]}.${ver[2]}` : 'Haiku';
+    }
+    if (m.includes('sonnet')) {
+      const ver = m.match(/sonnet-(\d+)-(\d+)/);
+      return ver ? `Sonnet ${ver[1]}.${ver[2]}` : 'Sonnet';
+    }
+    if (m.includes('opus')) {
+      const ver = m.match(/opus-(\d+)-(\d+)/);
+      return ver ? `Opus ${ver[1]}.${ver[2]}` : 'Opus';
+    }
+    return 'AI';
   })();
 
   const modeButtonStyle = (active: boolean) => ({
@@ -446,6 +467,18 @@ export function RecommendationsCard({
                     <span style={{ color: '#3b82f6' }}>
                       Score: {track.score.toFixed(2)}
                     </span>
+                    {mode === 'llm' && llmModel && (
+                      <span style={{
+                        background: '#7c3aed',
+                        color: '#fff',
+                        padding: '0.0625rem 0.375rem',
+                        borderRadius: '0.25rem',
+                        fontSize: '0.625rem',
+                        fontWeight: 600,
+                      }}>
+                        {modelDisplayName} Recommended
+                      </span>
+                    )}
                   </div>
                 </div>
                 <button

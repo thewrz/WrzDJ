@@ -35,7 +35,7 @@ class LLMSuggestionResult:
 async def generate_llm_suggestions(
     event_profile: EventProfile,
     prompt: str,
-    max_queries: int = 5,
+    max_queries: int = 6,
     tracks: list[TrackProfile] | None = None,
 ) -> LLMSuggestionResult:
     """Generate search queries via LLM (Claude Haiku).

@@ -61,6 +61,27 @@ def _is_blocked_genre(genre: str | None) -> bool:
     return any(blocked in genre_lower for blocked in BLOCKED_GENRES)
 
 
+# Title/artist substrings that indicate non-music or utility tracks
+BLOCKED_TITLE_KEYWORDS = [
+    "backing track",
+    "drumless",
+    "drum track",
+    "jam track",
+    "click track",
+    "no click",
+    "practice track",
+    "minus one",
+]
+
+
+def _is_junk_candidate(title: str, artist: str) -> bool:
+    """Check if a candidate is a non-music utility track based on title/artist."""
+    title_lower = title.lower()
+    artist_lower = artist.lower()
+    combined = f"{title_lower} {artist_lower}"
+    return any(kw in combined for kw in BLOCKED_TITLE_KEYWORDS)
+
+
 def _apply_artist_diversity(
     scored: list[ScoredTrack],
     source_artists: set[str],
@@ -251,6 +272,8 @@ def _search_candidates(
                     continue
                 if _is_blocked_genre(r.genre):
                     continue
+                if _is_junk_candidate(r.title, r.artist):
+                    continue
                 candidates.append(
                     TrackProfile(
                         title=r.title,
@@ -285,7 +308,9 @@ def _search_candidates(
                 sc_filtered = [
                     c
                     for c in sc_candidates
-                    if not is_unwanted_version(c.title) and not _is_blocked_genre(c.genre)
+                    if not is_unwanted_version(c.title)
+                    and not _is_blocked_genre(c.genre)
+                    and not _is_junk_candidate(c.title, c.artist)
                 ]
                 candidates.extend(sc_filtered)
                 total_searched += sc_searched
@@ -308,6 +333,8 @@ def _search_candidates(
                 results = search_tidal_tracks(db, user, query, limit=SEARCH_LIMIT)
                 for r in results:
                     if is_unwanted_version(r.title):
+                        continue
+                    if _is_junk_candidate(r.title, r.artist):
                         continue
                     candidates.append(
                         TrackProfile(
