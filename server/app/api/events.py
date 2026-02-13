@@ -30,7 +30,7 @@ from app.schemas.event import (
     EventOut,
     EventUpdate,
 )
-from app.schemas.recommendation import TemplatePlaylistRequest
+from app.schemas.recommendation import LLMPromptRequest, TemplatePlaylistRequest
 from app.schemas.request import RequestCreate, RequestOut
 from app.schemas.search import SearchResult
 from app.services.event import (
@@ -706,6 +706,103 @@ def get_recommendations_from_template(
         services_used=result.services_used,
         total_candidates_searched=result.total_candidates_searched,
         llm_available=is_llm_available(),
+    )
+
+
+@router.post("/{code}/recommendations/llm")
+@limiter.limit("3/minute")
+async def get_llm_recommendations(
+    request: Request,
+    prompt_request: LLMPromptRequest,
+    event: Event = Depends(get_owned_event),
+    db: Session = Depends(get_db),
+):
+    """Generate song recommendations from an LLM-interpreted DJ prompt."""
+    from app.schemas.recommendation import (
+        EventMusicProfile,
+        LLMQueryInfo,
+        LLMRecommendationResponse,
+        RecommendedTrack,
+    )
+    from app.services.recommendation.camelot import parse_key
+    from app.services.recommendation.llm_hooks import is_llm_available
+    from app.services.recommendation.service import generate_recommendations_from_llm
+
+    if not is_llm_available():
+        raise HTTPException(
+            status_code=503,
+            detail="LLM recommendations not configured. Set ANTHROPIC_API_KEY to enable.",
+        )
+
+    user = event.created_by
+
+    has_services = bool(user.tidal_access_token) or bool(user.beatport_access_token)
+    if not has_services:
+        raise HTTPException(
+            status_code=503,
+            detail="No music services connected. Link Tidal or Beatport to get recommendations.",
+        )
+
+    try:
+        result = await generate_recommendations_from_llm(db, user, event, prompt_request.prompt)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("LLM recommendation failed")
+        raise HTTPException(
+            status_code=502,
+            detail="LLM service error. Try again or use algorithmic recommendations.",
+        )
+
+    profile = EventMusicProfile(
+        avg_bpm=result.event_profile.avg_bpm,
+        bpm_range_low=result.event_profile.bpm_range[0] if result.event_profile.bpm_range else None,
+        bpm_range_high=result.event_profile.bpm_range[1]
+        if result.event_profile.bpm_range
+        else None,
+        dominant_keys=[str(p) for k in result.event_profile.dominant_keys if (p := parse_key(k))],
+        dominant_genres=list(result.event_profile.dominant_genres),
+        track_count=result.event_profile.track_count,
+        enriched_count=result.enriched_count,
+    )
+
+    suggestions = [
+        RecommendedTrack(
+            title=s.profile.title,
+            artist=s.profile.artist,
+            bpm=s.profile.bpm,
+            key=str(p) if (p := parse_key(s.profile.key)) else s.profile.key,
+            genre=s.profile.genre,
+            score=s.score,
+            bpm_score=s.bpm_score,
+            key_score=s.key_score,
+            genre_score=s.genre_score,
+            source=s.profile.source,
+            track_id=s.profile.track_id,
+            url=s.profile.url,
+            cover_url=s.profile.cover_url,
+            duration_seconds=s.profile.duration_seconds,
+        )
+        for s in result.suggestions
+    ]
+
+    llm_queries = [
+        LLMQueryInfo(
+            search_query=q.search_query,
+            target_bpm=q.target_bpm,
+            target_key=q.target_key,
+            target_genre=q.target_genre,
+            reasoning=q.reasoning,
+        )
+        for q in result.llm_queries
+    ]
+
+    return LLMRecommendationResponse(
+        suggestions=suggestions,
+        profile=profile,
+        services_used=result.services_used,
+        total_candidates_searched=result.total_candidates_searched,
+        llm_queries=llm_queries,
     )
 
 

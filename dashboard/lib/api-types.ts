@@ -356,6 +356,25 @@ export interface RecommendationResponse {
   llm_available: boolean;
 }
 
+/** LLM-generated search query with reasoning */
+export interface LLMQueryInfo {
+  search_query: string;
+  target_bpm: number | null;
+  target_key: string | null;
+  target_genre: string | null;
+  reasoning: string;
+}
+
+/** Response from POST /api/events/{code}/recommendations/llm */
+export interface LLMRecommendationResponse {
+  suggestions: RecommendedTrack[];
+  profile: EventMusicProfile;
+  services_used: string[];
+  total_candidates_searched: number;
+  llm_queries: LLMQueryInfo[];
+  llm_available: boolean;
+}
+
 /** Playlist info from connected music services */
 export interface PlaylistInfo {
   id: string;

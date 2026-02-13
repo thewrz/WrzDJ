@@ -106,6 +106,12 @@ class Settings(BaseSettings):
     soundcharts_app_id: str = ""
     soundcharts_api_key: str = ""
 
+    # Anthropic API (LLM-powered recommendations)
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-haiku-4-20250414"
+    anthropic_max_tokens: int = 1024
+    anthropic_timeout_seconds: int = 15
+
     # Cache durations (1 hour for Spotify since popularity changes)
     search_cache_hours: int = 1
 

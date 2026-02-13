@@ -80,10 +80,12 @@ def _mock_recommendation_result():
 
 
 class TestRecommendationsEndpoint:
+    @patch("app.services.recommendation.llm_hooks.is_llm_available", return_value=False)
     @patch("app.services.recommendation.service.generate_recommendations")
     def test_200_with_valid_response(
         self,
         mock_generate,
+        mock_llm_available,
         client: TestClient,
         auth_headers: dict,
         event_with_requests: Event,

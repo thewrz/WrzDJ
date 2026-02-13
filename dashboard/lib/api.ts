@@ -13,6 +13,7 @@ import type {
   IntegrationHealthResponse,
   IntegrationToggleResponse,
   KioskDisplay,
+  LLMRecommendationResponse,
   NowPlayingInfo,
   PaginatedResponse,
   PlayHistoryResponse,
@@ -48,6 +49,8 @@ export type {
   IntegrationServiceStatus,
   IntegrationToggleResponse,
   KioskDisplay,
+  LLMQueryInfo,
+  LLMRecommendationResponse,
   NowPlayingInfo,
   PaginatedResponse,
   PlayHistoryItem,
@@ -572,6 +575,13 @@ class ApiClient {
 
   async getEventPlaylists(code: string): Promise<PlaylistListResponse> {
     return this.fetch(`/api/events/${code}/playlists`);
+  }
+
+  async generateLLMRecommendations(code: string, prompt: string): Promise<LLMRecommendationResponse> {
+    return this.fetch(`/api/events/${code}/recommendations/llm`, {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
+    });
   }
 
   async generateRecommendationsFromTemplate(

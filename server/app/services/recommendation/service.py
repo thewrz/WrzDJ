@@ -403,6 +403,91 @@ def _deduplicate_candidates(candidates: list[TrackProfile]) -> list[TrackProfile
     return seen
 
 
+@dataclass
+class LLMRecommendationResult:
+    """Result of LLM-powered recommendations."""
+
+    suggestions: list[ScoredTrack]
+    event_profile: EventProfile
+    enriched_count: int
+    total_candidates_searched: int
+    services_used: list[str]
+    llm_queries: list  # list of LLMSuggestionQuery
+
+
+async def generate_recommendations_from_llm(
+    db: Session,
+    user: User,
+    event: Event,
+    prompt: str,
+    max_results: int = 20,
+) -> LLMRecommendationResult:
+    """Generate recommendations using LLM-generated search queries.
+
+    Pipeline:
+    1. Build EventProfile from accepted/played requests
+    2. Call LLM with profile + DJ prompt → structured search queries
+    3. Search Tidal/Beatport with LLM query strings
+    4. Deduplicate, score, rank, apply artist diversity
+    """
+    from app.services.recommendation.llm_hooks import generate_llm_suggestions
+
+    # Step 1: Build event profile (same as algorithmic path)
+    requests = _get_accepted_played_requests(db, event)
+    enriched = enrich_event_tracks(db, user, requests) if requests else []
+    profile = build_event_profile(enriched)
+
+    # Step 2: Call LLM (pass enriched tracks so it can see actual song names)
+    llm_result = await generate_llm_suggestions(profile, prompt, tracks=enriched or None)
+
+    if not llm_result.queries:
+        return LLMRecommendationResult(
+            suggestions=[],
+            event_profile=profile,
+            enriched_count=len(enriched),
+            total_candidates_searched=0,
+            services_used=[],
+            llm_queries=[],
+        )
+
+    # Step 3: Use LLM query strings as search queries
+    llm_query_strings = [q.search_query for q in llm_result.queries]
+
+    candidates, services_used, total_searched = _search_candidates(
+        db, user, llm_query_strings, profile=profile, tidal_queries=llm_query_strings
+    )
+
+    # Step 4: Deduplicate
+    candidates = _deduplicate_candidates(candidates)
+    all_requests = db.query(Request).filter(Request.event_id == event.id).all()
+    candidates = _deduplicate_against_requests(candidates, all_requests)
+
+    # Step 5: Score and rank
+    ranked = rank_candidates(candidates, profile, max_results)
+
+    # Step 6: Artist diversity
+    source_artists = {req.artist.lower() for req in requests if req.artist}
+    ranked = _apply_artist_diversity(ranked, source_artists)
+
+    logger.info(
+        "Generated %d LLM recommendations for event %s (prompt=%s, queries=%d, candidates=%d)",
+        len(ranked),
+        event.code,
+        prompt[:50],
+        len(llm_result.queries),
+        len(candidates),
+    )
+
+    return LLMRecommendationResult(
+        suggestions=ranked,
+        event_profile=profile,
+        enriched_count=len(enriched),
+        total_candidates_searched=total_searched,
+        services_used=services_used,
+        llm_queries=llm_result.queries,
+    )
+
+
 def generate_recommendations_from_template(
     db: Session,
     user: User,

@@ -1,7 +1,12 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RecommendationsCard } from '../RecommendationsCard';
-import type { RecommendedTrack, RecommendationResponse, PlaylistInfo } from '@/lib/api-types';
+import type {
+  RecommendedTrack,
+  RecommendationResponse,
+  PlaylistInfo,
+  LLMRecommendationResponse,
+} from '@/lib/api-types';
 
 // Mock the api module
 vi.mock('@/lib/api', () => ({
@@ -9,6 +14,7 @@ vi.mock('@/lib/api', () => ({
     generateRecommendations: vi.fn(),
     getEventPlaylists: vi.fn(),
     generateRecommendationsFromTemplate: vi.fn(),
+    generateLLMRecommendations: vi.fn(),
   },
   ApiError: class ApiError extends Error {
     status: number;
@@ -56,6 +62,36 @@ function makeResponse(overrides: Partial<RecommendationResponse> = {}): Recommen
     services_used: ['beatport'],
     total_candidates_searched: 20,
     llm_available: false,
+    ...overrides,
+  };
+}
+
+function makeLLMResponse(
+  overrides: Partial<LLMRecommendationResponse> = {}
+): LLMRecommendationResponse {
+  return {
+    suggestions: [makeSuggestion()],
+    profile: {
+      avg_bpm: 128,
+      bpm_range_low: 120,
+      bpm_range_high: 136,
+      dominant_keys: ['8A'],
+      dominant_genres: ['Tech House'],
+      track_count: 5,
+      enriched_count: 5,
+    },
+    services_used: ['beatport'],
+    total_candidates_searched: 15,
+    llm_queries: [
+      {
+        search_query: 'dark techno',
+        target_bpm: 130,
+        target_key: '8A',
+        target_genre: 'Techno',
+        reasoning: 'DJ wants darker sounds',
+      },
+    ],
+    llm_available: true,
     ...overrides,
   };
 }
@@ -294,5 +330,146 @@ describe('RecommendationsCard', () => {
       const select = screen.getByRole('combobox');
       expect(select).toBeInTheDocument();
     });
+  });
+
+  // AI Assist (LLM) tests
+
+  it('shows AI Assist button when llm_available is true', async () => {
+    vi.mocked(api.generateRecommendations).mockResolvedValue(
+      makeResponse({ llm_available: true })
+    );
+
+    render(<RecommendationsCard {...defaultProps} />);
+
+    // Initially no AI Assist button
+    expect(screen.queryByText('AI Assist')).not.toBeInTheDocument();
+
+    // Generate to get llm_available from response
+    fireEvent.click(screen.getByText('Generate'));
+
+    await waitFor(() => {
+      expect(screen.getByText('AI Assist')).toBeInTheDocument();
+    });
+  });
+
+  it('does not show AI Assist button when llm_available is false', async () => {
+    vi.mocked(api.generateRecommendations).mockResolvedValue(
+      makeResponse({ llm_available: false })
+    );
+
+    render(<RecommendationsCard {...defaultProps} />);
+    fireEvent.click(screen.getByText('Generate'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Test Artist/)).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('AI Assist')).not.toBeInTheDocument();
+  });
+
+  it('shows prompt input in AI Assist mode', async () => {
+    vi.mocked(api.generateRecommendations).mockResolvedValue(
+      makeResponse({ llm_available: true })
+    );
+
+    render(<RecommendationsCard {...defaultProps} />);
+    fireEvent.click(screen.getByText('Generate'));
+
+    await waitFor(() => {
+      expect(screen.getByText('AI Assist')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('AI Assist'));
+
+    expect(screen.getByPlaceholderText(/something darker/)).toBeInTheDocument();
+  });
+
+  it('calls LLM API with prompt when generating in AI Assist mode', async () => {
+    vi.mocked(api.generateRecommendations).mockResolvedValue(
+      makeResponse({ llm_available: true })
+    );
+    vi.mocked(api.generateLLMRecommendations).mockResolvedValue(makeLLMResponse());
+
+    render(<RecommendationsCard {...defaultProps} />);
+
+    // First generate to discover llm_available
+    fireEvent.click(screen.getByText('Generate'));
+    await waitFor(() => {
+      expect(screen.getByText('AI Assist')).toBeInTheDocument();
+    });
+
+    // Switch to AI Assist mode
+    fireEvent.click(screen.getByText('AI Assist'));
+
+    // Type a prompt
+    const input = screen.getByPlaceholderText(/something darker/);
+    fireEvent.change(input, { target: { value: 'dark techno vibes' } });
+
+    // Generate
+    fireEvent.click(screen.getByText('Generate'));
+
+    await waitFor(() => {
+      expect(api.generateLLMRecommendations).toHaveBeenCalledWith('TEST01', 'dark techno vibes');
+    });
+  });
+
+  it('shows AI reasoning toggle after LLM generation', async () => {
+    vi.mocked(api.generateRecommendations).mockResolvedValue(
+      makeResponse({ llm_available: true })
+    );
+    vi.mocked(api.generateLLMRecommendations).mockResolvedValue(makeLLMResponse());
+
+    render(<RecommendationsCard {...defaultProps} />);
+
+    // Get llm_available
+    fireEvent.click(screen.getByText('Generate'));
+    await waitFor(() => {
+      expect(screen.getByText('AI Assist')).toBeInTheDocument();
+    });
+
+    // Switch to LLM mode and generate
+    fireEvent.click(screen.getByText('AI Assist'));
+    const input = screen.getByPlaceholderText(/something darker/);
+    fireEvent.change(input, { target: { value: 'dark techno' } });
+    fireEvent.click(screen.getByText('Generate'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Show AI reasoning/)).toBeInTheDocument();
+    });
+
+    // Click to expand reasoning
+    fireEvent.click(screen.getByText(/Show AI reasoning/));
+
+    await waitFor(() => {
+      expect(screen.getByText('dark techno')).toBeInTheDocument();
+      expect(screen.getByText(/DJ wants darker sounds/)).toBeInTheDocument();
+    });
+  });
+
+  it('disables Generate in AI Assist mode when prompt is too short', async () => {
+    vi.mocked(api.generateRecommendations).mockResolvedValue(
+      makeResponse({ llm_available: true })
+    );
+
+    render(<RecommendationsCard {...defaultProps} />);
+    fireEvent.click(screen.getByText('Generate'));
+
+    await waitFor(() => {
+      expect(screen.getByText('AI Assist')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('AI Assist'));
+
+    // Empty prompt — should be disabled
+    expect(screen.getByText('Generate')).toBeDisabled();
+
+    // Two chars — still disabled (min 3)
+    const input = screen.getByPlaceholderText(/something darker/);
+    fireEvent.change(input, { target: { value: 'ab' } });
+    expect(screen.getByText('Generate')).toBeDisabled();
+
+    // Three chars — enabled
+    fireEvent.change(input, { target: { value: 'abc' } });
+    expect(screen.getByText('Generate')).not.toBeDisabled();
   });
 });

@@ -430,6 +430,24 @@ a {
   50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.7), 0 0 40px rgba(59, 130, 246, 0.35); }
 }
 
+@keyframes generate-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.5), 0 0 16px rgba(59, 130, 246, 0.25); opacity: 0.9; }
+  50% { box-shadow: 0 0 14px rgba(59, 130, 246, 0.8), 0 0 28px rgba(59, 130, 246, 0.4); opacity: 1; }
+}
+
+.btn-generating {
+  animation: generate-pulse 1.2s ease-in-out infinite;
+}
+
+.btn-complete {
+  background: #10b981 !important;
+  transition: background 1.5s ease, box-shadow 1.5s ease;
+}
+
+.btn-complete-fade {
+  transition: background 1.5s ease, box-shadow 1.5s ease;
+}
+
 .sticky-bottom-button .btn {
   width: 100%;
   max-width: 500px;

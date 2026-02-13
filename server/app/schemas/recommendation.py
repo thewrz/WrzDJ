@@ -38,6 +38,27 @@ class RecommendationResponse(BaseModel):
     llm_available: bool = False
 
 
+class LLMPromptRequest(BaseModel):
+    prompt: str = Field(..., min_length=3, max_length=500)
+
+
+class LLMQueryInfo(BaseModel):
+    search_query: str
+    target_bpm: float | None = None
+    target_key: str | None = None
+    target_genre: str | None = None
+    reasoning: str = ""
+
+
+class LLMRecommendationResponse(BaseModel):
+    suggestions: list[RecommendedTrack] = []
+    profile: EventMusicProfile
+    services_used: list[str] = []
+    total_candidates_searched: int = 0
+    llm_queries: list[LLMQueryInfo] = []
+    llm_available: bool = True
+
+
 class PlaylistInfo(BaseModel):
     id: str
     name: str

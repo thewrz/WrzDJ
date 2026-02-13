@@ -1,15 +1,16 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { api, ApiError } from '@/lib/api';
 import type {
   RecommendedTrack,
   EventMusicProfile,
   RecommendationResponse,
   PlaylistInfo,
+  LLMQueryInfo,
 } from '@/lib/api-types';
 
-type Mode = 'requests' | 'template';
+type Mode = 'requests' | 'template' | 'llm';
 
 interface RecommendationsCardProps {
   code: string;
@@ -42,6 +43,16 @@ export function RecommendationsCard({
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
   const [playlistsLoaded, setPlaylistsLoaded] = useState(false);
 
+  // Generate button state: 'idle' | 'working' | 'complete'
+  const [generateState, setGenerateState] = useState<'idle' | 'working' | 'complete'>('idle');
+  const completeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // LLM state
+  const [llmAvailable, setLlmAvailable] = useState(false);
+  const [llmPrompt, setLlmPrompt] = useState('');
+  const [llmQueries, setLlmQueries] = useState<LLMQueryInfo[]>([]);
+  const [showReasoning, setShowReasoning] = useState(false);
+
   const loadPlaylists = useCallback(async () => {
     if (playlistsLoaded) return;
     setLoadingPlaylists(true);
@@ -63,26 +74,50 @@ export function RecommendationsCard({
     setProfile(null);
     setError(null);
     setSelectedPlaylist(null);
+    setLlmQueries([]);
+    setShowReasoning(false);
+    setGenerateState('idle');
+    if (completeTimerRef.current) {
+      clearTimeout(completeTimerRef.current);
+      completeTimerRef.current = null;
+    }
     if (newMode === 'template') {
       loadPlaylists();
     }
   };
 
   const handleGenerate = async () => {
+    if (completeTimerRef.current) {
+      clearTimeout(completeTimerRef.current);
+      completeTimerRef.current = null;
+    }
     setLoading(true);
+    setGenerateState('working');
     setError(null);
+    setLlmQueries([]);
     try {
-      let result: RecommendationResponse;
-      if (mode === 'template' && selectedPlaylist) {
-        const [source, playlistId] = selectedPlaylist.split(':');
-        result = await api.generateRecommendationsFromTemplate(code, source, playlistId);
+      if (mode === 'llm') {
+        const result = await api.generateLLMRecommendations(code, llmPrompt);
+        setSuggestions(result.suggestions);
+        setProfile(result.profile);
+        setLlmQueries(result.llm_queries);
       } else {
-        result = await api.generateRecommendations(code);
+        let result: RecommendationResponse;
+        if (mode === 'template' && selectedPlaylist) {
+          const [source, playlistId] = selectedPlaylist.split(':');
+          result = await api.generateRecommendationsFromTemplate(code, source, playlistId);
+        } else {
+          result = await api.generateRecommendations(code);
+        }
+        setSuggestions(result.suggestions);
+        setProfile(result.profile);
+        setLlmAvailable(result.llm_available);
       }
-      setSuggestions(result.suggestions);
-      setProfile(result.profile);
+      setGenerateState('complete');
+      completeTimerRef.current = setTimeout(() => setGenerateState('idle'), 2000);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to generate suggestions');
+      setGenerateState('idle');
     } finally {
       setLoading(false);
     }
@@ -119,12 +154,16 @@ export function RecommendationsCard({
     setSuggestions([]);
     setProfile(null);
     setError(null);
+    setLlmQueries([]);
+    setShowReasoning(false);
   };
 
   const canGenerate = (() => {
     if (!hasConnectedServices || loading) return false;
     if (mode === 'requests') return hasAcceptedRequests;
-    return !!selectedPlaylist;
+    if (mode === 'template') return !!selectedPlaylist;
+    if (mode === 'llm') return llmPrompt.trim().length >= 3;
+    return false;
   })();
 
   const modeButtonStyle = (active: boolean) => ({
@@ -166,11 +205,18 @@ export function RecommendationsCard({
             </>
           )}
           <button
-            className="btn btn-primary btn-sm"
+            className={`btn btn-primary btn-sm${
+              generateState === 'working' ? ' btn-generating' : ''
+            }${generateState === 'complete' ? ' btn-complete' : ''
+            }${generateState === 'idle' && !loading ? ' btn-complete-fade' : ''}`}
             onClick={handleGenerate}
             disabled={!canGenerate}
           >
-            {loading ? 'Generating...' : 'Generate'}
+            {generateState === 'working'
+              ? 'Working...'
+              : generateState === 'complete'
+                ? 'Complete!'
+                : 'Generate'}
           </button>
         </div>
       </div>
@@ -190,6 +236,39 @@ export function RecommendationsCard({
           >
             From Playlist
           </button>
+          {llmAvailable && (
+            <button
+              style={modeButtonStyle(mode === 'llm')}
+              onClick={() => handleModeChange('llm')}
+            >
+              AI Assist
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* LLM prompt input */}
+      {mode === 'llm' && hasConnectedServices && (
+        <div style={{ marginBottom: '0.75rem' }}>
+          <input
+            type="text"
+            value={llmPrompt}
+            onChange={(e) => setLlmPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && canGenerate) handleGenerate();
+            }}
+            placeholder="e.g., look at the requests and recommend some more like that, 90s hip hop vibes, songs like Sandstorm by Darude..."
+            style={{
+              width: '100%',
+              padding: '0.5rem',
+              borderRadius: '0.375rem',
+              background: '#1a1a1a',
+              color: '#ededed',
+              border: '1px solid #374151',
+              fontSize: '0.875rem',
+              boxSizing: 'border-box',
+            }}
+          />
         </div>
       )}
 
@@ -245,6 +324,50 @@ export function RecommendationsCard({
       {error && (
         <div style={{ color: '#fca5a5', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
           {error}
+        </div>
+      )}
+
+      {/* LLM reasoning section */}
+      {llmQueries.length > 0 && (
+        <div style={{ marginBottom: '0.75rem' }}>
+          <button
+            onClick={() => setShowReasoning(!showReasoning)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#9ca3af',
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              padding: 0,
+              textDecoration: 'underline',
+            }}
+          >
+            {showReasoning ? 'Hide' : 'Show'} AI reasoning ({llmQueries.length} {llmQueries.length === 1 ? 'query' : 'queries'})
+          </button>
+          {showReasoning && (
+            <div style={{
+              marginTop: '0.5rem',
+              padding: '0.5rem',
+              borderRadius: '0.375rem',
+              background: '#111',
+              fontSize: '0.8rem',
+              color: '#9ca3af',
+            }}>
+              {llmQueries.map((q, i) => (
+                <div key={i} style={{ marginBottom: i < llmQueries.length - 1 ? '0.5rem' : 0 }}>
+                  <div style={{ color: '#ededed', fontWeight: 500 }}>
+                    {q.search_query}
+                    {q.target_bpm && <span style={{ color: '#9ca3af', fontWeight: 400 }}> {q.target_bpm} BPM</span>}
+                    {q.target_key && <span style={{ color: '#9ca3af', fontWeight: 400 }}> {q.target_key}</span>}
+                    {q.target_genre && <span style={{ color: '#9ca3af', fontWeight: 400 }}> {q.target_genre}</span>}
+                  </div>
+                  {q.reasoning && (
+                    <div style={{ fontStyle: 'italic', marginTop: '0.125rem' }}>{q.reasoning}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

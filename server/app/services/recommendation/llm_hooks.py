@@ -1,19 +1,16 @@
-"""Stub hooks for future LLM-powered recommendation enhancement.
+"""LLM-powered recommendation hooks.
 
-Future workflow:
+Workflow:
 1. Algorithmic engine builds EventProfile from accepted/played tracks
 2. LLM receives profile + DJ's natural language prompt
 3. LLM returns JSON: suggested search queries with target BPM/key/genre
 4. Queries run through existing search infrastructure (Tidal/Beatport)
 5. Results scored by existing algorithm and merged into suggestions list
-
-This module provides the interface stubs. Phase 3 will implement
-the actual LLM integration (Claude Haiku via Anthropic API).
 """
 
 from dataclasses import dataclass
 
-from app.services.recommendation.scorer import EventProfile
+from app.services.recommendation.scorer import EventProfile, TrackProfile
 
 
 @dataclass(frozen=True)
@@ -39,18 +36,21 @@ async def generate_llm_suggestions(
     event_profile: EventProfile,
     prompt: str,
     max_queries: int = 5,
+    tracks: list[TrackProfile] | None = None,
 ) -> LLMSuggestionResult:
-    """Generate search queries via LLM. NOT YET IMPLEMENTED.
+    """Generate search queries via LLM (Claude Haiku).
 
-    Will call Claude Haiku to interpret DJ's prompt in context of
-    the event's musical profile, returning structured search queries
+    Calls Claude to interpret the DJ's prompt in context of the event's
+    musical profile and track list, returning structured search queries
     that feed into the existing search + scoring pipeline.
-
-    Raises NotImplementedError until Phase 3.
     """
-    raise NotImplementedError("LLM recommendations not yet implemented. Coming in Phase 3.")
+    from app.services.recommendation.llm_client import call_llm
+
+    return await call_llm(event_profile, prompt, max_queries, tracks=tracks)
 
 
 def is_llm_available() -> bool:
     """Check if LLM recommendations are configured and available."""
-    return False  # Will check for ANTHROPIC_API_KEY in Phase 3
+    from app.core.config import get_settings
+
+    return bool(get_settings().anthropic_api_key)
