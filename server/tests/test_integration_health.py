@@ -119,13 +119,14 @@ class TestCheckIntegrationHealth:
         assert error is not None
         assert "Unknown" in error
 
-    @patch("app.services.integration_health._check_spotify_capabilities")
-    def test_spotify_healthy(self, mock_check, db: Session):
-        mock_check.return_value = ServiceCapabilities(
+    @patch("app.services.integration_health._CAPABILITY_CHECKERS")
+    def test_spotify_healthy(self, mock_checkers, db: Session):
+        expected_caps = ServiceCapabilities(
             auth=CapabilityStatus.YES,
             catalog_search=CapabilityStatus.YES,
             playlist_sync=CapabilityStatus.NOT_IMPLEMENTED,
         )
+        mock_checkers.get = lambda svc: (lambda: expected_caps) if svc == "spotify" else None
         healthy, caps, error = check_integration_health(db, "spotify")
         assert healthy is True
         assert caps.auth == CapabilityStatus.YES
@@ -141,13 +142,14 @@ class TestCheckIntegrationHealth:
         assert healthy is False
         assert error is not None
 
-    @patch("app.services.integration_health._check_tidal_capabilities")
-    def test_tidal_configured_is_healthy(self, mock_check, db: Session):
-        mock_check.return_value = ServiceCapabilities(
+    @patch("app.services.integration_health._CAPABILITY_CHECKERS")
+    def test_tidal_configured_is_healthy(self, mock_checkers, db: Session):
+        expected_caps = ServiceCapabilities(
             auth=CapabilityStatus.CONFIGURED,
             catalog_search=CapabilityStatus.CONFIGURED,
             playlist_sync=CapabilityStatus.CONFIGURED,
         )
+        mock_checkers.get = lambda service: (lambda: expected_caps) if service == "tidal" else None
         healthy, _caps, error = check_integration_health(db, "tidal")
         assert healthy is True
         assert error is None
