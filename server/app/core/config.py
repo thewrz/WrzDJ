@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     turnstile_site_key: str = ""
     registration_rate_limit_per_minute: int = 3
 
+    # OAuth token encryption (Fernet key, 44 chars base64)
+    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key()...)"
+    token_encryption_key: str = ""
+
     # Cache durations (1 hour for Spotify since popularity changes)
     search_cache_hours: int = 1
 
@@ -128,6 +132,12 @@ def validate_settings(settings: Settings) -> None:
             errors.append(
                 "CORS_ORIGINS should not be '*' in production - "
                 "set to your frontend domain (e.g., https://app.wrzdj.com)"
+            )
+        if not settings.token_encryption_key:
+            errors.append(
+                "TOKEN_ENCRYPTION_KEY must be set in production. "
+                'Generate with: python -c "from cryptography.fernet import Fernet; '
+                'print(Fernet.generate_key().decode())"'
             )
 
     if not settings.is_production:

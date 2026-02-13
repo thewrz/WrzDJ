@@ -19,6 +19,7 @@ dependencies = [
     "slowapi>=0.1.9",
     "tidalapi>=0.7.0",
     "Pillow>=10.0.0",
+    "cryptography>=42.0.0",
 ]
 
 [project.optional-dependencies]
