@@ -42,6 +42,7 @@ services:
       TIDAL_CLIENT_ID: ${TIDAL_CLIENT_ID:-}
       TIDAL_CLIENT_SECRET: ${TIDAL_CLIENT_SECRET:-}
       TIDAL_REDIRECT_URI: ${TIDAL_REDIRECT_URI:-}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?TOKEN_ENCRYPTION_KEY is required}
       CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required (e.g. https://app.yourdomain.com)}
       PUBLIC_URL: ${PUBLIC_URL:?PUBLIC_URL is required (e.g. https://app.yourdomain.com)}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}

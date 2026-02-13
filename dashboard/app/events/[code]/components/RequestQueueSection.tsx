@@ -3,11 +3,12 @@
 import { useMemo, useState } from 'react';
 import { SongRequest } from '@/lib/api';
 import { StatusFilter } from './types';
+import { SyncStatusBadges } from './SyncStatusBadges';
 
 interface RequestQueueSectionProps {
   requests: SongRequest[];
   isExpiredOrArchived: boolean;
-  tidalSyncEnabled: boolean;
+  connectedServices: string[];
   updating: number | null;
   acceptingAll: boolean;
   syncingRequest: number | null;
@@ -15,12 +16,13 @@ interface RequestQueueSectionProps {
   onAcceptAll: () => void;
   onSyncToTidal: (requestId: number) => void;
   onOpenTidalPicker: (requestId: number) => void;
+  onScrollToSyncReport?: (requestId: number) => void;
 }
 
 export function RequestQueueSection({
   requests,
   isExpiredOrArchived,
-  tidalSyncEnabled,
+  connectedServices,
   updating,
   acceptingAll,
   syncingRequest,
@@ -28,6 +30,7 @@ export function RequestQueueSection({
   onAcceptAll,
   onSyncToTidal,
   onOpenTidalPicker,
+  onScrollToSyncReport,
 }: RequestQueueSectionProps) {
   const [filter, setFilter] = useState<StatusFilter>('all');
 
@@ -82,7 +85,7 @@ export function RequestQueueSection({
       ) : (
         <div className="request-list scrollable-list" style={{ marginBottom: '1rem' }}>
           {filteredRequests.map((request) => (
-            <div key={request.id} className="request-item">
+            <div key={request.id} id={`request-${request.id}`} className="request-item">
               <div className="request-info">
                 <h3>
                   {request.song_title}
@@ -120,56 +123,14 @@ export function RequestQueueSection({
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                {/* Tidal Sync Status */}
-                {tidalSyncEnabled && request.status === 'accepted' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    {request.tidal_sync_status === 'synced' && (
-                      <span
-                        title="Synced to Tidal"
-                        style={{ color: '#10b981', fontSize: '1rem', cursor: 'default' }}
-                      >
-                        T
-                      </span>
-                    )}
-                    {request.tidal_sync_status === 'pending' && (
-                      <span title="Syncing..." style={{ color: '#f59e0b', fontSize: '0.875rem' }}>
-                        ...
-                      </span>
-                    )}
-                    {request.tidal_sync_status === 'not_found' && (
-                      <button
-                        className="btn btn-sm"
-                        style={{ background: '#f59e0b', padding: '0.125rem 0.375rem', fontSize: '0.75rem' }}
-                        onClick={() => onOpenTidalPicker(request.id)}
-                        title="Track not found - click to link manually"
-                      >
-                        Link
-                      </button>
-                    )}
-                    {request.tidal_sync_status === 'error' && (
-                      <button
-                        className="btn btn-sm"
-                        style={{ background: '#ef4444', padding: '0.125rem 0.375rem', fontSize: '0.75rem' }}
-                        onClick={() => onSyncToTidal(request.id)}
-                        disabled={syncingRequest === request.id}
-                        title="Sync failed - click to retry"
-                      >
-                        {syncingRequest === request.id ? '...' : 'Retry'}
-                      </button>
-                    )}
-                    {!request.tidal_sync_status && (
-                      <button
-                        className="btn btn-sm"
-                        style={{ background: '#0066ff', padding: '0.125rem 0.375rem', fontSize: '0.75rem' }}
-                        onClick={() => onSyncToTidal(request.id)}
-                        disabled={syncingRequest === request.id}
-                        title="Sync to Tidal"
-                      >
-                        {syncingRequest === request.id ? '...' : 'Sync'}
-                      </button>
-                    )}
-                  </div>
-                )}
+                <SyncStatusBadges
+                  request={request}
+                  connectedServices={connectedServices}
+                  syncingRequest={syncingRequest}
+                  onSyncToTidal={onSyncToTidal}
+                  onOpenTidalPicker={onOpenTidalPicker}
+                  onScrollToSyncReport={onScrollToSyncReport}
+                />
                 <span className={`badge badge-${request.status}`}>{request.status}</span>
                 {!isExpiredOrArchived && (
                   <div className="request-actions">

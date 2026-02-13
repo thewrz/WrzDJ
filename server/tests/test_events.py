@@ -1,6 +1,7 @@
 """Tests for event endpoints."""
 
 from datetime import datetime, timedelta
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -9,6 +10,9 @@ from app.core.time import utcnow
 from app.models.event import Event
 from app.models.request import Request, RequestStatus
 from app.models.user import User
+from app.schemas.beatport import BeatportSearchResult
+from app.schemas.search import SearchResult
+from app.services.auth import get_password_hash
 
 
 class TestCreateEvent:
@@ -553,7 +557,6 @@ class TestCsvExport:
     ):
         """Test exporting event you don't own fails."""
         # Create another user and their event
-        from app.services.auth import get_password_hash
 
         other_user = User(
             username="otheruser",
@@ -903,7 +906,6 @@ class TestDisplaySettings:
         self, client: TestClient, db: Session, test_user: User, auth_headers: dict
     ):
         """Test updating display settings for event you don't own fails."""
-        from app.services.auth import get_password_hash
 
         other_user = User(
             username="otheruser_display",
@@ -1145,7 +1147,6 @@ class TestPlayHistoryCsvExport:
         self, client: TestClient, db: Session, test_user: User, auth_headers: dict
     ):
         """Test exporting play history for event you don't own fails."""
-        from app.services.auth import get_password_hash
 
         other_user = User(
             username="otheruser2",
@@ -1314,3 +1315,131 @@ class TestPlayHistoryCsvExport:
             headers=auth_headers,
         )
         assert response.status_code == 200
+
+
+class TestEventSearch:
+    """Tests for GET /api/events/{code}/search endpoint."""
+
+    @patch("app.services.spotify.search_songs")
+    def test_event_search_returns_spotify_results(
+        self, mock_search, client: TestClient, test_event: Event
+    ):
+        """Basic search returns Spotify results."""
+        mock_search.return_value = [
+            SearchResult(
+                title="Strobe",
+                artist="deadmau5",
+                album="For Lack of a Better Name",
+                popularity=72,
+                spotify_id="sp_strobe",
+                source="spotify",
+            )
+        ]
+
+        response = client.get(f"/api/events/{test_event.code}/search?q=deadmau5")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["title"] == "Strobe"
+        assert data[0]["source"] == "spotify"
+
+    @patch("app.services.beatport.search_beatport_tracks")
+    @patch("app.services.spotify.search_songs")
+    def test_event_search_includes_beatport_fallback(
+        self, mock_spotify, mock_beatport, client: TestClient, db: Session, test_user: User
+    ):
+        """Event with Beatport-linked owner includes Beatport results."""
+        # Give test_user Beatport tokens
+        test_user.beatport_access_token = "bp_token"
+        test_user.beatport_refresh_token = "bp_refresh"
+        test_user.beatport_token_expires_at = utcnow() + timedelta(hours=1)
+        db.flush()
+
+        event = Event(
+            code="BPSRCH",
+            name="BP Search Test",
+            created_by_user_id=test_user.id,
+            expires_at=utcnow() + timedelta(hours=6),
+            beatport_sync_enabled=True,
+        )
+        db.add(event)
+        db.commit()
+
+        mock_spotify.return_value = [
+            SearchResult(
+                title="Strobe",
+                artist="deadmau5",
+                popularity=72,
+                spotify_id="sp_strobe",
+                source="spotify",
+            )
+        ]
+        mock_beatport.return_value = [
+            BeatportSearchResult(
+                track_id="bp_99",
+                title="Acid Phase",
+                artist="DJ Pierre",
+                beatport_url="https://www.beatport.com/track/acid-phase/99",
+            )
+        ]
+
+        response = client.get(f"/api/events/{event.code}/search?q=acid+phase")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        sources = [r["source"] for r in data]
+        assert "spotify" in sources
+        assert "beatport" in sources
+
+    @patch("app.services.spotify.search_songs")
+    def test_event_search_no_beatport_when_not_linked(
+        self, mock_search, client: TestClient, test_event: Event
+    ):
+        """DJ without Beatport linked -> Spotify only, no errors."""
+        mock_search.return_value = [
+            SearchResult(
+                title="Levels",
+                artist="Avicii",
+                popularity=85,
+                spotify_id="sp_levels",
+                source="spotify",
+            )
+        ]
+
+        response = client.get(f"/api/events/{test_event.code}/search?q=levels")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert all(r["source"] == "spotify" for r in data)
+
+    def test_event_search_expired_event_returns_410(
+        self, client: TestClient, db: Session, test_user: User
+    ):
+        """Expired event returns 410 for search."""
+        expired_event = Event(
+            code="EXPSRC",
+            name="Expired Search Event",
+            created_by_user_id=test_user.id,
+            expires_at=utcnow() - timedelta(hours=1),
+        )
+        db.add(expired_event)
+        db.commit()
+
+        response = client.get(f"/api/events/{expired_event.code}/search?q=test")
+        assert response.status_code == 410
+
+    def test_event_search_not_found_returns_404(self, client: TestClient):
+        """Nonexistent event returns 404 for search."""
+        response = client.get("/api/events/NOEXST/search?q=test")
+        assert response.status_code == 404
+
+    def test_event_search_query_too_short(self, client: TestClient, test_event: Event):
+        """Query shorter than 2 characters returns 422."""
+        response = client.get(f"/api/events/{test_event.code}/search?q=x")
+        assert response.status_code == 422
+
+    def test_event_search_query_too_long(self, client: TestClient, test_event: Event):
+        """Query longer than 200 characters returns 422."""
+        long_query = "a" * 201
+        response = client.get(f"/api/events/{test_event.code}/search?q={long_query}")
+        assert response.status_code == 422

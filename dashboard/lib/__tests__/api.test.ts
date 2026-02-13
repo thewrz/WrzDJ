@@ -451,4 +451,132 @@ describe('ApiClient', () => {
       await expect(api.login('user', 'pass')).rejects.toThrow('Login failed. Please try again.');
     });
   });
+
+  describe('Beatport API', () => {
+    beforeEach(() => {
+      api.setToken('test-token');
+    });
+
+    it('fetches Beatport status', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ linked: true, expires_at: '2026-03-01T00:00:00Z' }),
+      });
+
+      const status = await api.getBeatportStatus();
+      expect(status.linked).toBe(true);
+      expect(status.expires_at).toBe('2026-03-01T00:00:00Z');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/beatport/status');
+    });
+
+    it('logs in to Beatport with username and password', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'ok', message: 'Beatport account linked' }),
+      });
+
+      const result = await api.loginBeatport('myuser', 'mypass');
+      expect(result.status).toBe('ok');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/beatport/auth/login');
+      expect(options.method).toBe('POST');
+      const body = JSON.parse(options.body);
+      expect(body.username).toBe('myuser');
+      expect(body.password).toBe('mypass');
+    });
+
+    it('disconnects Beatport', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'ok', message: 'Beatport disconnected' }),
+      });
+
+      const result = await api.disconnectBeatport();
+      expect(result.status).toBe('ok');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/beatport/disconnect');
+      expect(options.method).toBe('POST');
+    });
+
+    it('fetches Beatport event settings', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ beatport_sync_enabled: true }),
+      });
+
+      const settings = await api.getBeatportEventSettings(42);
+      expect(settings.beatport_sync_enabled).toBe(true);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/beatport/events/42/settings');
+    });
+
+    it('updates Beatport event settings', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ beatport_sync_enabled: false }),
+      });
+
+      const settings = await api.updateBeatportEventSettings(42, {
+        beatport_sync_enabled: false,
+      });
+      expect(settings.beatport_sync_enabled).toBe(false);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/beatport/events/42/settings');
+      expect(options.method).toBe('PUT');
+      expect(JSON.parse(options.body)).toEqual({ beatport_sync_enabled: false });
+    });
+
+    it('searches Beatport tracks', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            track_id: '12345',
+            title: 'Strobe',
+            artist: 'deadmau5',
+            mix_name: 'Original Mix',
+            label: 'mau5trap',
+            genre: 'Progressive House',
+            bpm: 128,
+            key: 'F Minor',
+            duration_seconds: 630,
+            cover_url: null,
+            beatport_url: 'https://beatport.com/track/strobe/12345',
+            release_date: '2009-09-22',
+          },
+        ],
+      });
+
+      const results = await api.searchBeatport('strobe deadmau5');
+      expect(results).toHaveLength(1);
+      expect(results[0].title).toBe('Strobe');
+      expect(results[0].mix_name).toBe('Original Mix');
+      expect(results[0].bpm).toBe(128);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/beatport/search');
+      expect(url).toContain('q=strobe%20deadmau5');
+    });
+
+    it('links a Beatport track to a request', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'linked' }),
+      });
+
+      const result = await api.linkBeatportTrack(7, 'bp-track-99');
+      expect(result.status).toBe('linked');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/beatport/requests/7/link');
+      expect(options.method).toBe('POST');
+      expect(JSON.parse(options.body)).toEqual({ beatport_track_id: 'bp-track-99' });
+    });
+  });
 });
