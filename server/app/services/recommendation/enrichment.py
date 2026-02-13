@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.services.beatport import search_beatport_tracks
 from app.services.recommendation.scorer import TrackProfile
-from app.services.tidal import get_tidal_session
+from app.services.tidal import _get_artist_name, get_tidal_session
 from app.services.track_normalizer import fuzzy_match_score
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ def enrich_from_tidal(
         best_track = None
         best_score = 0.0
         for track in tracks:
-            track_artist = track.artist.name if track.artist else ""
+            track_artist = _get_artist_name(track)
             track_title = track.name or ""
             title_score = fuzzy_match_score(title, track_title)
             artist_score = fuzzy_match_score(artist, track_artist)
@@ -80,7 +80,7 @@ def enrich_from_tidal(
 
         return TrackProfile(
             title=best_track.name or title,
-            artist=best_track.artist.name if best_track.artist else artist,
+            artist=_get_artist_name(best_track),
             bpm=bpm,
             key=key,
             source="tidal",

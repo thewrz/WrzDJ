@@ -171,6 +171,21 @@ def get_tidal_session(db: Session, user: User) -> tidalapi.Session | None:
         return None
 
 
+def _get_artist_name(track: tidalapi.Track) -> str:
+    """Get the full artist name from a Tidal track.
+
+    tidalapi's ``track.artist`` is only the *primary* artist (first in
+    the list).  For multi-artist tracks like "Big & Rich", Tidal stores
+    separate artist objects and ``track.artist.name`` returns just "Big".
+    We join all artist names to preserve the full credit.
+    """
+    if hasattr(track, "artists") and track.artists:
+        names = [a.name for a in track.artists if a and a.name]
+        if names:
+            return ", ".join(names)
+    return track.artist.name if track.artist else "Unknown"
+
+
 def _track_to_result(track: tidalapi.Track) -> TidalSearchResult:
     """Convert tidalapi Track to TidalSearchResult."""
     cover_url = None
@@ -195,7 +210,7 @@ def _track_to_result(track: tidalapi.Track) -> TidalSearchResult:
     return TidalSearchResult(
         track_id=str(track.id),
         title=track.name or "Unknown",
-        artist=track.artist.name if track.artist else "Unknown",
+        artist=_get_artist_name(track),
         album=track.album.name if track.album else None,
         bpm=bpm,
         key=key,
@@ -229,7 +244,7 @@ def search_track(
         title_lower = title.lower()
 
         for track in tracks:
-            track_artist = track.artist.name.lower() if track.artist else ""
+            track_artist = _get_artist_name(track).lower()
             track_title = track.name.lower() if track.name else ""
 
             if artist_lower in track_artist and title_lower in track_title:

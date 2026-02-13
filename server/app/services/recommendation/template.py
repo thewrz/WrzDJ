@@ -33,12 +33,14 @@ def beatport_get_playlist_tracks(db: Session, user: User, playlist_id: str) -> l
 
 def tracks_from_tidal_playlist(db: Session, user: User, playlist_id: str) -> list[TrackProfile]:
     """Convert a Tidal playlist into a list of TrackProfile objects."""
+    from app.services.tidal import _get_artist_name
+
     raw_tracks = tidal_get_playlist_tracks(db, user, playlist_id)
 
     profiles = []
     for track in raw_tracks[:MAX_TEMPLATE_TRACKS]:
         try:
-            artist_name = track.artist.name if track.artist else "Unknown"
+            artist_name = _get_artist_name(track)
             title = track.name or "Unknown"
 
             cover_url = None
