@@ -25,9 +25,9 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 ## What Makes WrzDJ Different
 
 - **Zero friction for guests** -- scan a QR code, search Spotify, submit a request. Done.
-- **Live track detection** -- the bridge connects to DJ equipment via plugins (Denon StageLinQ, Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast), so the kiosk and dashboard update in real-time as the DJ plays.
+- **Live track detection** -- the bridge connects to DJ equipment via plugins (Denon, Pioneer, Serato, Traktor), so the kiosk and dashboard update in real-time as the DJ plays.
 - **Automatic request matching** -- when the DJ plays a requested song, WrzDJ detects it via fuzzy matching and moves it through the workflow automatically.
-- **Tidal playlist sync** -- accepted requests are auto-added to a Tidal playlist, ready for the SC6000 to load.
+- **Multi-service playlist sync** -- accepted requests are automatically searched and added to your Tidal and Beatport playlists, with smart version filtering that respects remix/acoustic/live intent.
 - **Desktop app for the bridge** -- no terminal needed. Sign in, pick your event, click Start.
 
 ---
@@ -48,12 +48,22 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Mark songs as Playing/Played with full status workflow (new -> accepted -> playing -> played)
 - Toggle "Now Playing" visibility on the public kiosk
 - Bridge connection status indicator (green/gray dot, polls every 3s)
-- Tidal playlist sync -- auto-add accepted requests to a Tidal playlist for SC6000
-- Manual Tidal track linking when auto-match fails
+- Multi-service playlist sync -- auto-add accepted requests to Tidal and Beatport playlists
+- Smart version filtering -- detects intent (remix, acoustic, sped-up, live) and matches the right version
+- Manual track linking when auto-match fails -- click a "Missing" badge to search and pick the right track
 - Play history with source badges (Live/Manual) and request matching
 - Export requests and play history to CSV
 - Edit event expiry, delete events
+- Cloud Providers card -- connect Tidal and Beatport via OAuth, toggle sync per event, see subscription tier
 - QR code display for easy guest onboarding
+
+### Admin Dashboard
+- System overview with user, event, and request counts
+- User management -- approve/reject pending registrations, assign roles, deactivate accounts
+- Event management -- view and manage all events across all DJs
+- Integration health dashboard -- check auth status, catalog search, and playlist sync for each service
+- Per-service enable/disable toggles -- temporarily disable a broken integration; DJs see "Currently Unavailable"
+- System settings -- toggle self-registration, adjust search rate limits
 
 ### Kiosk Display
 - Public full-screen view at `/e/{code}/display`
@@ -100,13 +110,24 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Cross-platform Electron app (Windows `.exe`, macOS `.dmg`, Linux `.AppImage`)
 - Sign in with your WrzDJ account -- no API keys to copy/paste
 - Select your active event from a dropdown
-- Choose DJ protocol (StageLinQ, Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast) with dynamic config options
+- Choose your DJ software/hardware (Denon, Pioneer, Serato, Traktor) with dynamic config options per plugin
 - One-click Start/Stop for track detection
 - Real-time status panel: connected devices, current track, per-deck states
 - Configurable detection settings (live threshold, pause grace, fader detection, master deck priority)
 - Auto-disconnect when event is deleted or expired
 - Encrypted credential storage via OS keychain (`safeStorage`)
 - Dark theme matching the WrzDJ dashboard
+
+### Self-Registration
+- DJs can sign up without needing an admin to create their account
+- Admin approval required before new accounts can create events
+- Cloudflare Turnstile CAPTCHA protects against bot registrations
+- Admin can enable/disable self-registration from the Settings page
+
+### Data Protection
+- OAuth tokens (Tidal, Beatport) are encrypted at rest -- if the database is compromised, tokens remain unreadable without the server's encryption key
+- Passwords hashed with bcrypt
+- Rate limiting on all public endpoints
 
 ### Automated Releases
 - GitHub Actions release workflow triggers on tag push (`v*`), not on every PR merge
@@ -303,8 +324,13 @@ See `deploy/DEPLOYMENT.md` for full setup instructions.
 ENV=production
 DATABASE_URL=<PostgreSQL connection string>
 JWT_SECRET=<openssl rand -hex 32>
+TOKEN_ENCRYPTION_KEY=<openssl rand -hex 32>
 SPOTIFY_CLIENT_ID=<from Spotify Developer Dashboard>
 SPOTIFY_CLIENT_SECRET=<from Spotify Developer Dashboard>
+TIDAL_CLIENT_ID=<from Tidal Developer Portal>
+TIDAL_CLIENT_SECRET=<from Tidal Developer Portal>
+BEATPORT_CLIENT_ID=<from Beatport API>
+BEATPORT_CLIENT_SECRET=<from Beatport API>
 BRIDGE_API_KEY=<openssl rand -hex 32>
 CORS_ORIGINS=https://app.yourdomain.com
 PUBLIC_URL=https://app.yourdomain.com
@@ -363,8 +389,9 @@ WrzDJ is built on these excellent open source projects:
 ### DJ Integration
 - [stagelinq](https://github.com/chrisle/stagelinq) -- Node.js library for the Denon StageLinQ protocol
 - [alphatheta-connect](https://github.com/chrisle/alphatheta-connect) -- TypeScript library for the Pioneer PRO DJ LINK protocol (maintained fork with encrypted Rekordbox DB support)
-- [Spotipy](https://github.com/spotipy-dev/spotipy) -- Python client for the Spotify Web API
-- [python-tidalapi](https://github.com/tamland/python-tidal) -- Python client for the Tidal API
+- [Spotipy](https://github.com/spotipy-dev/spotipy) -- Python client for the Spotify Web API (song search)
+- [python-tidalapi](https://github.com/tamland/python-tidal) -- Python client for the Tidal API (playlist sync)
+- [Beatport API v4](https://api.beatport.com) -- Beatport catalog search and playlist sync
 
 ### Desktop App
 - [Electron](https://github.com/electron/electron) -- cross-platform desktop framework
@@ -396,7 +423,7 @@ WrzDJ/
     scripts/           # Startup scripts
     Dockerfile
   dashboard/           # Next.js frontend
-    app/               # App router pages (dashboard, kiosk, join)
+    app/               # App router pages (dashboard, kiosk, join, admin)
     lib/               # API client, auth, utilities
     Dockerfile
   bridge/              # DJ equipment bridge (Node.js)
