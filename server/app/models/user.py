@@ -36,5 +36,6 @@ class User(Base):
     beatport_refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     beatport_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     beatport_oauth_state: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    beatport_oauth_code_verifier: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     events: Mapped[list["Event"]] = relationship("Event", back_populates="created_by")

@@ -26,6 +26,7 @@ from app.schemas.beatport import (
 )
 from app.schemas.common import StatusMessageResponse
 from app.services.beatport import (
+    _generate_pkce_pair,
     disconnect_beatport,
     exchange_code_for_tokens,
     get_auth_url,
@@ -58,9 +59,11 @@ def start_auth(
             detail="Beatport integration not configured",
         )
     state = secrets.token_urlsafe(32)
+    code_verifier, code_challenge = _generate_pkce_pair()
     current_user.beatport_oauth_state = state
+    current_user.beatport_oauth_code_verifier = code_verifier
     db.commit()
-    auth_url = get_auth_url(state)
+    auth_url = get_auth_url(state, code_challenge)
     return {
         "auth_url": auth_url,
         "state": state,
@@ -91,11 +94,20 @@ def auth_callback(
             detail="Invalid state parameter",
         )
 
-    # Clear state immediately to prevent reuse
+    # Retrieve and clear PKCE verifier + state immediately to prevent reuse
+    code_verifier = current_user.beatport_oauth_code_verifier
     current_user.beatport_oauth_state = None
+    current_user.beatport_oauth_code_verifier = None
+
+    if not code_verifier:
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No PKCE verifier found — start auth first",
+        )
 
     try:
-        token_data = exchange_code_for_tokens(callback_data.code)
+        token_data = exchange_code_for_tokens(callback_data.code, code_verifier)
     except Exception:
         db.commit()
         raise HTTPException(

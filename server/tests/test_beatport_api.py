@@ -162,14 +162,14 @@ class TestBeatportSearch:
 
 
 class TestBeatportAuthStateValidation:
-    def test_start_auth_stores_state_on_user(
+    def test_start_auth_stores_state_and_verifier(
         self,
         client: TestClient,
         bp_api_headers: dict[str, str],
         bp_api_user: User,
         db: Session,
     ):
-        """Start auth stores state on user model."""
+        """Start auth stores state and PKCE code_verifier on user model."""
         from unittest.mock import patch
 
         with patch("app.api.beatport.settings") as mock_settings:
@@ -182,6 +182,27 @@ class TestBeatportAuthStateValidation:
 
         db.refresh(bp_api_user)
         assert bp_api_user.beatport_oauth_state == state
+        assert bp_api_user.beatport_oauth_code_verifier is not None
+        assert len(bp_api_user.beatport_oauth_code_verifier) >= 43
+
+    def test_start_auth_url_includes_pkce(
+        self,
+        client: TestClient,
+        bp_api_headers: dict[str, str],
+        bp_api_user: User,
+        db: Session,
+    ):
+        """Start auth returns URL with PKCE code_challenge params."""
+        from unittest.mock import patch
+
+        with patch("app.api.beatport.settings") as mock_settings:
+            mock_settings.beatport_client_id = "test-bp-client-id"
+            mock_settings.beatport_redirect_uri = "http://localhost:3000/callback"
+            response = client.get("/api/beatport/auth/start", headers=bp_api_headers)
+        assert response.status_code == 200
+        auth_url = response.json()["auth_url"]
+        assert "code_challenge=" in auth_url
+        assert "code_challenge_method=S256" in auth_url
 
     def test_callback_rejects_missing_state(
         self,
@@ -211,6 +232,7 @@ class TestBeatportAuthStateValidation:
     ):
         """Callback rejects incorrect state parameter."""
         bp_api_user.beatport_oauth_state = "correct-state-value"
+        bp_api_user.beatport_oauth_code_verifier = "test-verifier"
         db.commit()
 
         response = client.post(
@@ -228,8 +250,9 @@ class TestBeatportAuthStateValidation:
         bp_api_user: User,
         db: Session,
     ):
-        """Callback accepts correct state and clears it after use."""
+        """Callback accepts correct state, passes verifier, and clears both."""
         bp_api_user.beatport_oauth_state = "valid-state-123"
+        bp_api_user.beatport_oauth_code_verifier = "test-verifier-abc"
         db.commit()
 
         from unittest.mock import patch
@@ -238,17 +261,20 @@ class TestBeatportAuthStateValidation:
             mock_exchange.return_value = {
                 "access_token": "new-token",
                 "refresh_token": "new-refresh",
-                "expires_in": 3600,
+                "expires_in": 600,
             }
             response = client.post(
                 "/api/beatport/auth/callback",
                 json={"code": "auth-code", "state": "valid-state-123"},
                 headers=bp_api_headers,
             )
+            # Verify code_verifier was passed to exchange function
+            mock_exchange.assert_called_once_with("auth-code", "test-verifier-abc")
 
         assert response.status_code == 200
         db.refresh(bp_api_user)
-        assert bp_api_user.beatport_oauth_state is None  # Cleared after use
+        assert bp_api_user.beatport_oauth_state is None
+        assert bp_api_user.beatport_oauth_code_verifier is None
 
     def test_callback_rejects_reused_state(
         self,
@@ -259,6 +285,7 @@ class TestBeatportAuthStateValidation:
     ):
         """Second callback with same state is rejected (state cleared after first use)."""
         bp_api_user.beatport_oauth_state = "one-time-state"
+        bp_api_user.beatport_oauth_code_verifier = "one-time-verifier"
         db.commit()
 
         from unittest.mock import patch
@@ -267,7 +294,7 @@ class TestBeatportAuthStateValidation:
             mock_exchange.return_value = {
                 "access_token": "token",
                 "refresh_token": "refresh",
-                "expires_in": 3600,
+                "expires_in": 600,
             }
             # First call succeeds
             response1 = client.post(
@@ -285,6 +312,26 @@ class TestBeatportAuthStateValidation:
         )
         assert response2.status_code == 400
 
+    def test_callback_rejects_missing_verifier(
+        self,
+        client: TestClient,
+        bp_api_headers: dict[str, str],
+        bp_api_user: User,
+        db: Session,
+    ):
+        """Callback rejects when state is set but code_verifier is missing."""
+        bp_api_user.beatport_oauth_state = "valid-state"
+        bp_api_user.beatport_oauth_code_verifier = None
+        db.commit()
+
+        response = client.post(
+            "/api/beatport/auth/callback",
+            json={"code": "test-code", "state": "valid-state"},
+            headers=bp_api_headers,
+        )
+        assert response.status_code == 400
+        assert "PKCE" in response.json()["detail"]
+
 
 class TestBeatportAuthCallbackBody:
     def test_callback_accepts_json_body(
@@ -296,6 +343,7 @@ class TestBeatportAuthCallbackBody:
     ):
         """Callback accepts code and state as JSON body."""
         bp_api_user.beatport_oauth_state = "json-body-state"
+        bp_api_user.beatport_oauth_code_verifier = "json-body-verifier"
         db.commit()
 
         from unittest.mock import patch
@@ -304,7 +352,7 @@ class TestBeatportAuthCallbackBody:
             mock_exchange.return_value = {
                 "access_token": "t",
                 "refresh_token": "r",
-                "expires_in": 3600,
+                "expires_in": 600,
             }
             response = client.post(
                 "/api/beatport/auth/callback",

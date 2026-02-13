@@ -1,5 +1,7 @@
 """Tests for Beatport service layer."""
 
+import base64
+import hashlib
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -11,11 +13,16 @@ from app.models.user import User
 from app.services.auth import get_password_hash
 from app.services.beatport import (
     BEATPORT_AUTH_URL,
+    BEATPORT_SEARCH_URL,
     BEATPORT_TOKEN_URL,
+    DEFAULT_TOKEN_EXPIRY,
+    _generate_pkce_pair,
     _parse_duration,
     _refresh_token_if_needed,
     disconnect_beatport,
+    exchange_code_for_tokens,
     get_auth_url,
+    save_tokens,
     search_beatport_tracks,
 )
 
@@ -114,6 +121,26 @@ class TestSearchBeatportTracks:
         assert "beatport.com/track/strobe/12345" in results[0].beatport_url
 
     @patch("app.services.beatport.httpx.Client")
+    def test_search_uses_dedicated_search_url(
+        self, mock_client_cls, db: Session, beatport_user: User
+    ):
+        """Search uses the dedicated search endpoint, not the catalog endpoint."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"results": []}
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        search_beatport_tracks(db, beatport_user, "test")
+
+        call_args = mock_client.get.call_args
+        assert call_args.args[0] == BEATPORT_SEARCH_URL
+
+    @patch("app.services.beatport.httpx.Client")
     def test_search_empty(self, mock_client_cls, db: Session, beatport_user: User):
         """Empty search results return empty list."""
         mock_response = MagicMock()
@@ -156,6 +183,16 @@ class TestDisconnect:
         assert beatport_user.beatport_refresh_token is None
         assert beatport_user.beatport_token_expires_at is None
 
+    def test_disconnect_clears_code_verifier(self, db: Session, beatport_user: User):
+        """Disconnect also clears the PKCE code_verifier."""
+        beatport_user.beatport_oauth_code_verifier = "test-verifier"
+        db.commit()
+
+        disconnect_beatport(db, beatport_user)
+
+        db.refresh(beatport_user)
+        assert beatport_user.beatport_oauth_code_verifier is None
+
 
 class TestSearchIncludesMixName:
     @patch("app.services.beatport.httpx.Client")
@@ -191,12 +228,11 @@ class TestTokenRefresh:
     @patch("app.services.beatport.httpx.Client")
     def test_refresh_on_expiry(self, mock_client_cls, db: Session, beatport_user_expired: User):
         """Expired token triggers refresh, then search succeeds."""
-        # First call: token refresh
         refresh_response = MagicMock()
         refresh_response.json.return_value = {
             "access_token": "new_access_token",
             "refresh_token": "new_refresh_token",
-            "expires_in": 3600,
+            "expires_in": 600,
         }
         refresh_response.raise_for_status = MagicMock()
 
@@ -234,33 +270,110 @@ class TestParseDuration:
 
 
 class TestCorrectApiUrls:
-    def test_auth_url_uses_api_base(self):
-        """Auth URL uses the correct Beatport API v4 base."""
-        assert BEATPORT_AUTH_URL == "https://api.beatport.com/v4/auth/o/authorize/"
+    def test_auth_url_uses_account_domain(self):
+        """Auth URL uses the Beatport Identity Service domain."""
+        assert BEATPORT_AUTH_URL == "https://account.beatport.com/o/authorize/"
 
-    def test_token_url_uses_api_base(self):
-        """Token URL uses the correct Beatport API v4 base."""
-        assert BEATPORT_TOKEN_URL == "https://api.beatport.com/v4/auth/o/token/"
+    def test_token_url_uses_account_domain(self):
+        """Token URL uses the Beatport Identity Service domain."""
+        assert BEATPORT_TOKEN_URL == "https://account.beatport.com/o/token/"
 
     @patch("app.services.beatport.get_settings")
     def test_get_auth_url_starts_with_correct_base(self, mock_settings):
         """get_auth_url() returns a URL starting with the correct base."""
         mock_settings.return_value.beatport_client_id = "test-client-id"
         mock_settings.return_value.beatport_redirect_uri = "http://localhost:3000/callback"
-        url = get_auth_url("test-state")
-        assert url.startswith("https://api.beatport.com/v4/auth/o/authorize/")
+        url = get_auth_url("test-state", "test-challenge")
+        assert url.startswith("https://account.beatport.com/o/authorize/")
+
+    @patch("app.services.beatport.get_settings")
+    def test_get_auth_url_includes_pkce_params(self, mock_settings):
+        """get_auth_url() includes PKCE code_challenge and method."""
+        mock_settings.return_value.beatport_client_id = "test-client-id"
+        mock_settings.return_value.beatport_redirect_uri = "http://localhost:3000/callback"
+        url = get_auth_url("test-state", "test-challenge-value")
+        assert "code_challenge=test-challenge-value" in url
+        assert "code_challenge_method=S256" in url
 
 
-class TestTokenRefreshAuthHeader:
+class TestPKCE:
+    def test_generate_pkce_pair_format(self):
+        """PKCE pair has correct format — verifier is URL-safe, challenge is base64url."""
+        verifier, challenge = _generate_pkce_pair()
+        assert len(verifier) >= 43  # token_urlsafe(32) produces 43 chars
+        assert len(challenge) > 0
+        # Verify no padding characters
+        assert "=" not in challenge
+
+    def test_pkce_s256_hash_matches(self):
+        """code_challenge is the S256 hash of code_verifier."""
+        verifier, challenge = _generate_pkce_pair()
+        # Recompute
+        digest = hashlib.sha256(verifier.encode("ascii")).digest()
+        expected = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+        assert challenge == expected
+
+    @patch("app.services.beatport.get_settings")
     @patch("app.services.beatport.httpx.Client")
-    def test_refresh_sends_auth_header(
+    def test_exchange_includes_code_verifier(self, mock_client_cls, mock_settings):
+        """Token exchange POST includes code_verifier in body."""
+        mock_settings.return_value.beatport_client_id = "test-id"
+        mock_settings.return_value.beatport_client_secret = ""
+        mock_settings.return_value.beatport_redirect_uri = "http://localhost:3000/callback"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "access_token": "tok",
+            "expires_in": 600,
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        exchange_code_for_tokens("auth-code", "my-verifier-123")
+
+        call_kwargs = mock_client.post.call_args
+        post_data = call_kwargs.kwargs.get("data", {})
+        assert post_data["code_verifier"] == "my-verifier-123"
+
+
+class TestDefaultTokenExpiry:
+    def test_default_expiry_is_600(self):
+        """Default token expiry constant is 600 seconds (10 minutes)."""
+        assert DEFAULT_TOKEN_EXPIRY == 600
+
+    def test_save_tokens_uses_600_default(self, db: Session, beatport_user_no_token: User):
+        """save_tokens uses 600s default when expires_in is missing."""
+        token_data = {"access_token": "tok", "refresh_token": "ref"}
+        before = datetime.now(UTC)
+        save_tokens(db, beatport_user_no_token, token_data)
+        after = datetime.now(UTC)
+
+        db.refresh(beatport_user_no_token)
+        expires = beatport_user_no_token.beatport_token_expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=UTC)
+
+        # Should be ~600s from now, not 3600s
+        expected_min = before + timedelta(seconds=590)
+        expected_max = after + timedelta(seconds=610)
+        assert expected_min <= expires <= expected_max
+
+
+class TestTokenRefreshNoAuthHeader:
+    @patch("app.services.beatport.httpx.Client")
+    def test_refresh_does_not_send_auth_header(
         self, mock_client_cls, db: Session, beatport_user_expired: User
     ):
-        """Token refresh includes Authorization: Bearer header."""
+        """Token refresh POST does NOT include Authorization header."""
         refresh_response = MagicMock()
         refresh_response.json.return_value = {
             "access_token": "new_token",
-            "expires_in": 3600,
+            "expires_in": 600,
         }
         refresh_response.raise_for_status = MagicMock()
 
@@ -272,11 +385,9 @@ class TestTokenRefreshAuthHeader:
 
         _refresh_token_if_needed(db, beatport_user_expired)
 
-        # Verify the POST call includes the Authorization header
         call_kwargs = mock_client.post.call_args
-        headers = call_kwargs.kwargs.get("headers", {})
-        assert "Authorization" in headers
-        assert headers["Authorization"].startswith("Bearer ")
+        headers = call_kwargs.kwargs.get("headers")
+        assert headers is None
 
 
 class TestDisconnectRevokesToken:
@@ -293,7 +404,24 @@ class TestDisconnectRevokesToken:
         # Verify POST to revocation endpoint was called
         mock_client.post.assert_called_once()
         call_args = mock_client.post.call_args
-        assert "/v4/auth/o/revoke/" in call_args.args[0]
+        assert "/o/revoke_token/" in call_args.args[0]
+
+    @patch("app.services.beatport.httpx.Client")
+    def test_disconnect_revoke_uses_post_body(
+        self, mock_client_cls, db: Session, beatport_user: User
+    ):
+        """Disconnect sends revocation params as POST body, not query params."""
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value = mock_client
+
+        disconnect_beatport(db, beatport_user)
+
+        call_kwargs = mock_client.post.call_args
+        # Should use data= (POST body), not params= (query string)
+        assert "data" in call_kwargs.kwargs
+        assert "params" not in call_kwargs.kwargs
 
     @patch("app.services.beatport.httpx.Client")
     def test_disconnect_succeeds_if_revocation_fails(
@@ -312,6 +440,101 @@ class TestDisconnectRevokesToken:
         assert beatport_user.beatport_access_token is None
         assert beatport_user.beatport_refresh_token is None
         assert beatport_user.beatport_token_expires_at is None
+
+
+class TestExchangeCodeWithoutSecret:
+    @patch("app.services.beatport.get_settings")
+    @patch("app.services.beatport.httpx.Client")
+    def test_exchange_omits_secret_when_empty(self, mock_client_cls, mock_settings):
+        """Token exchange excludes client_secret when it's empty."""
+        mock_settings.return_value.beatport_client_id = "public-client-id"
+        mock_settings.return_value.beatport_client_secret = ""
+        mock_settings.return_value.beatport_redirect_uri = "http://localhost:3000/callback"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "access_token": "new_token",
+            "refresh_token": "new_refresh",
+            "expires_in": 600,
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        result = exchange_code_for_tokens("auth-code-123", "test-verifier")
+
+        assert result["access_token"] == "new_token"
+
+        call_kwargs = mock_client.post.call_args
+        post_data = call_kwargs.kwargs.get("data", {})
+        assert "client_secret" not in post_data
+        assert post_data["client_id"] == "public-client-id"
+        assert post_data["code_verifier"] == "test-verifier"
+
+    @patch("app.services.beatport.get_settings")
+    @patch("app.services.beatport.httpx.Client")
+    def test_exchange_includes_secret_when_set(self, mock_client_cls, mock_settings):
+        """Token exchange includes client_secret when configured."""
+        mock_settings.return_value.beatport_client_id = "my-client-id"
+        mock_settings.return_value.beatport_client_secret = "my-secret"
+        mock_settings.return_value.beatport_redirect_uri = "http://localhost:3000/callback"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "access_token": "tok",
+            "expires_in": 600,
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        exchange_code_for_tokens("auth-code-456", "test-verifier")
+
+        call_kwargs = mock_client.post.call_args
+        post_data = call_kwargs.kwargs.get("data", {})
+        assert post_data["client_secret"] == "my-secret"
+
+
+class TestRefreshWithoutSecret:
+    @patch("app.services.beatport.get_settings")
+    @patch("app.services.beatport.httpx.Client")
+    def test_refresh_omits_secret_when_empty(
+        self, mock_client_cls, mock_settings, db: Session, beatport_user_expired: User
+    ):
+        """Token refresh excludes client_secret when it's empty."""
+        mock_settings.return_value.beatport_client_id = "public-client-id"
+        mock_settings.return_value.beatport_client_secret = ""
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "access_token": "refreshed_token",
+            "expires_in": 600,
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        result = _refresh_token_if_needed(db, beatport_user_expired)
+
+        assert result is True
+        db.refresh(beatport_user_expired)
+        assert beatport_user_expired.beatport_access_token == "refreshed_token"
+
+        call_kwargs = mock_client.post.call_args
+        post_data = call_kwargs.kwargs.get("data", {})
+        assert "client_secret" not in post_data
 
 
 class TestLoggerSanitization:

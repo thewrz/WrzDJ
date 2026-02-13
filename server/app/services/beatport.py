@@ -1,13 +1,16 @@
 """Beatport API v4 integration for catalog search.
 
-Uses OAuth2 authorization code flow for authentication.
+Uses OAuth2 authorization code flow with PKCE for authentication.
 Track search and catalog access works. Playlist creation/editing
 endpoints exist (POST /v4/my/playlists/) but are not yet implemented
 in this adapter — TODO for a future PR.
 """
 
+import base64
+import hashlib
 import json
 import logging
+import secrets
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
@@ -22,41 +25,60 @@ from app.schemas.beatport import BeatportSearchResult
 logger = logging.getLogger(__name__)
 
 BEATPORT_API_BASE = "https://api.beatport.com/v4"
-BEATPORT_AUTH_URL = "https://api.beatport.com/v4/auth/o/authorize/"
-BEATPORT_TOKEN_URL = "https://api.beatport.com/v4/auth/o/token/"  # nosec B105
-BEATPORT_REVOKE_URL = "https://api.beatport.com/v4/auth/o/revoke/"
+BEATPORT_AUTH_URL = "https://account.beatport.com/o/authorize/"
+BEATPORT_TOKEN_URL = "https://account.beatport.com/o/token/"  # nosec B105
+BEATPORT_REVOKE_URL = "https://account.beatport.com/o/revoke_token/"
+BEATPORT_SEARCH_URL = "https://api.beatport.com/search/v1/tracks"
 BEATPORT_TRACK_URL = "https://www.beatport.com/track/{slug}/{track_id}"
 
 # HTTP timeout for Beatport API calls
 HTTP_TIMEOUT = 15.0
 
+# Default token lifetime (Beatport docs say 600s / 10 min)
+DEFAULT_TOKEN_EXPIRY = 600
 
-def get_auth_url(state: str) -> str:
-    """Build Beatport OAuth2 authorization URL."""
+
+def _generate_pkce_pair() -> tuple[str, str]:
+    """Generate a PKCE code_verifier and code_challenge (S256)."""
+    code_verifier = secrets.token_urlsafe(32)
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+    return code_verifier, code_challenge
+
+
+def get_auth_url(state: str, code_challenge: str) -> str:
+    """Build Beatport OAuth2 authorization URL with PKCE."""
     settings = get_settings()
     params = {
         "client_id": settings.beatport_client_id,
         "response_type": "code",
         "redirect_uri": settings.beatport_redirect_uri,
         "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
     }
     return f"{BEATPORT_AUTH_URL}?{urlencode(params)}"
 
 
-def exchange_code_for_tokens(code: str) -> dict:
-    """Exchange authorization code for access + refresh tokens."""
+def exchange_code_for_tokens(code: str, code_verifier: str) -> dict:
+    """Exchange authorization code for access + refresh tokens.
+
+    Includes PKCE code_verifier for server-side verification.
+    Works with or without client_secret — public OAuth clients (like the
+    Beatport docs Swagger UI client) only need client_id.
+    """
     settings = get_settings()
+    data: dict[str, str] = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": settings.beatport_redirect_uri,
+        "client_id": settings.beatport_client_id,
+        "code_verifier": code_verifier,
+    }
+    if settings.beatport_client_secret:
+        data["client_secret"] = settings.beatport_client_secret
     with httpx.Client(timeout=HTTP_TIMEOUT) as client:
-        response = client.post(
-            BEATPORT_TOKEN_URL,
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": settings.beatport_redirect_uri,
-                "client_id": settings.beatport_client_id,
-                "client_secret": settings.beatport_client_secret,
-            },
-        )
+        response = client.post(BEATPORT_TOKEN_URL, data=data)
         response.raise_for_status()
         return response.json()
 
@@ -79,24 +101,25 @@ def _refresh_token_if_needed(db: Session, user: User) -> bool:
 
     settings = get_settings()
     try:
+        data: dict[str, str] = {
+            "grant_type": "refresh_token",
+            "refresh_token": user.beatport_refresh_token,
+            "client_id": settings.beatport_client_id,
+        }
+        if settings.beatport_client_secret:
+            data["client_secret"] = settings.beatport_client_secret
         with httpx.Client(timeout=HTTP_TIMEOUT) as client:
             response = client.post(
                 BEATPORT_TOKEN_URL,
-                data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": user.beatport_refresh_token,
-                    "client_id": settings.beatport_client_id,
-                    "client_secret": settings.beatport_client_secret,
-                },
-                headers={"Authorization": f"Bearer {user.beatport_access_token}"},
+                data=data,
             )
             response.raise_for_status()
-            data = response.json()
+            token_data = response.json()
 
-        user.beatport_access_token = data["access_token"]
-        if "refresh_token" in data:
-            user.beatport_refresh_token = data["refresh_token"]
-        expires_in = data.get("expires_in", 3600)
+        user.beatport_access_token = token_data["access_token"]
+        if "refresh_token" in token_data:
+            user.beatport_refresh_token = token_data["refresh_token"]
+        expires_in = token_data.get("expires_in", DEFAULT_TOKEN_EXPIRY)
         user.beatport_token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
         db.commit()
         return True
@@ -109,7 +132,7 @@ def save_tokens(db: Session, user: User, token_data: dict) -> None:
     """Save Beatport OAuth tokens to the user model."""
     user.beatport_access_token = token_data["access_token"]
     user.beatport_refresh_token = token_data.get("refresh_token")
-    expires_in = token_data.get("expires_in", 3600)
+    expires_in = token_data.get("expires_in", DEFAULT_TOKEN_EXPIRY)
     user.beatport_token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
     db.commit()
 
@@ -123,7 +146,7 @@ def disconnect_beatport(db: Session, user: User) -> None:
             with httpx.Client(timeout=HTTP_TIMEOUT) as client:
                 client.post(
                     BEATPORT_REVOKE_URL,
-                    params={
+                    data={
                         "client_id": settings.beatport_client_id,
                         "token": user.beatport_access_token,
                     },
@@ -134,6 +157,7 @@ def disconnect_beatport(db: Session, user: User) -> None:
     user.beatport_access_token = None
     user.beatport_refresh_token = None
     user.beatport_token_expires_at = None
+    user.beatport_oauth_code_verifier = None
     db.commit()
 
 
@@ -147,7 +171,7 @@ def search_beatport_tracks(
     try:
         with httpx.Client(timeout=HTTP_TIMEOUT) as client:
             response = client.get(
-                f"{BEATPORT_API_BASE}/catalog/tracks/",
+                BEATPORT_SEARCH_URL,
                 params={"q": query, "per_page": limit},
                 headers={"Authorization": f"Bearer {user.beatport_access_token}"},
             )
