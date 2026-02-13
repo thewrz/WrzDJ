@@ -61,7 +61,7 @@ ignore = ["UP042", "E711", "E712"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "-v --cov=app --cov-report=term-missing --cov-fail-under=70"
+addopts = "-v --cov=app --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
 source = ["app"]
