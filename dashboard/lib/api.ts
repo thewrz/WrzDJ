@@ -2,6 +2,9 @@ import type {
   AdminEvent,
   AdminUser,
   ArchivedEvent,
+  BeatportEventSettings,
+  BeatportSearchResult,
+  BeatportStatus,
   DisplaySettingsResponse,
   Event,
   GuestRequestListResponse,
@@ -25,6 +28,9 @@ export type {
   AdminEvent,
   AdminUser,
   ArchivedEvent,
+  BeatportEventSettings,
+  BeatportSearchResult,
+  BeatportStatus,
   DisplaySettingsResponse,
   Event,
   GuestRequestInfo,
@@ -38,6 +44,7 @@ export type {
   PublicRequestInfo,
   SearchResult,
   SongRequest,
+  SyncResultEntry,
   SystemSettings,
   SystemStats,
   TidalEventSettings,
@@ -298,6 +305,12 @@ class ApiClient {
     return this.fetch(`/api/search?q=${encodeURIComponent(query)}`);
   }
 
+  async eventSearch(code: string, query: string): Promise<SearchResult[]> {
+    return this.publicFetch(
+      `${getApiUrl()}/api/events/${code}/search?q=${encodeURIComponent(query)}`
+    );
+  }
+
   async voteRequest(requestId: number): Promise<VoteResponse> {
     return this.fetch(`/api/requests/${requestId}/vote`, { method: 'POST' });
   }
@@ -489,6 +502,48 @@ class ApiClient {
       body: JSON.stringify({ tidal_track_id: tidalTrackId }),
     });
   }
+  // ========== Beatport Integration ==========
+
+  async getBeatportStatus(): Promise<BeatportStatus> {
+    return this.fetch('/api/beatport/status');
+  }
+
+  async loginBeatport(username: string, password: string): Promise<{ status: string; message: string }> {
+    return this.fetch('/api/beatport/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+  }
+
+  async disconnectBeatport(): Promise<{ status: string; message: string }> {
+    return this.fetch('/api/beatport/disconnect', { method: 'POST' });
+  }
+
+  async getBeatportEventSettings(eventId: number): Promise<BeatportEventSettings> {
+    return this.fetch(`/api/beatport/events/${eventId}/settings`);
+  }
+
+  async updateBeatportEventSettings(
+    eventId: number,
+    settings: { beatport_sync_enabled: boolean }
+  ): Promise<BeatportEventSettings> {
+    return this.fetch(`/api/beatport/events/${eventId}/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  async searchBeatport(query: string, limit: number = 10): Promise<BeatportSearchResult[]> {
+    return this.fetch(`/api/beatport/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+  }
+
+  async linkBeatportTrack(requestId: number, beatportTrackId: string): Promise<{ status: string }> {
+    return this.fetch(`/api/beatport/requests/${requestId}/link`, {
+      method: 'POST',
+      body: JSON.stringify({ beatport_track_id: beatportTrackId }),
+    });
+  }
+
   // ========== Banner ==========
 
   async uploadEventBanner(code: string, file: File): Promise<Event> {

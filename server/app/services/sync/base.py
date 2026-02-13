@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
 
+import httpx
+
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
@@ -22,6 +24,24 @@ if TYPE_CHECKING:
     from app.services.track_normalizer import NormalizedTrack
 
 logger = logging.getLogger(__name__)
+
+
+def sanitize_sync_error(e: Exception) -> str:
+    """Return a safe error message that never leaks tokens or credentials.
+
+    httpx exceptions can contain Authorization headers, Bearer tokens,
+    client secrets, and full URLs with query parameters in their string
+    representations. This function returns only generic, safe messages.
+    """
+    if isinstance(e, httpx.TimeoutException):
+        return "External API timeout"
+    if isinstance(e, httpx.ConnectError):
+        return "External API connection failed"
+    if isinstance(e, httpx.HTTPStatusError):
+        return f"External API error: HTTP {e.response.status_code}"
+    if isinstance(e, httpx.HTTPError):
+        return "External API error"
+    return "Sync operation failed"
 
 
 class SyncStatus(str, Enum):
@@ -169,9 +189,9 @@ class PlaylistSyncAdapter(ABC):
                 )
 
         except Exception as e:
-            logger.error(f"Sync failed for {self.service_name}: {e}")
+            logger.error(f"Sync failed for {self.service_name}: {type(e).__name__}")
             return SyncResult(
                 service=self.service_name,
                 status=SyncStatus.ERROR,
-                error=str(e),
+                error=sanitize_sync_error(e),
             )

@@ -70,6 +70,8 @@ class RequestOut(BaseModel):
     # Tidal sync status
     tidal_track_id: str | None = None
     tidal_sync_status: TidalSyncStatus | None = None
+    # Multi-service sync results (JSON array)
+    sync_results_json: str | None = None
     # Voting
     vote_count: int = 0
 

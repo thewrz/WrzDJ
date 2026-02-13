@@ -112,10 +112,16 @@ export default function JoinEventPage() {
     setSearching(true);
     setSearchResults([]);
     try {
-      const results = await api.search(searchQuery);
+      const results = await api.eventSearch(code, searchQuery);
       setSearchResults(results);
-    } catch (err) {
-      console.error('Search failed:', err);
+    } catch {
+      // Fall back to generic search if event search fails
+      try {
+        const results = await api.search(searchQuery);
+        setSearchResults(results);
+      } catch (err) {
+        console.error('Search failed:', err);
+      }
     } finally {
       setSearching(false);
     }
@@ -392,7 +398,7 @@ export default function JoinEventPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {searchResults.map((result, index) => (
               <button
-                key={result.spotify_id || index}
+                key={result.spotify_id || result.url || index}
                 className="request-item"
                 style={{
                   cursor: 'pointer',
@@ -425,22 +431,41 @@ export default function JoinEventPage() {
                     <p style={{ margin: 0, fontSize: '0.75rem', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.album}</p>
                   )}
                 </div>
-                <div
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    background: `conic-gradient(#22c55e ${result.popularity}%, #333 ${result.popularity}%)`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.65rem',
-                    flexShrink: 0
-                  }}
-                  title={`Popularity: ${result.popularity}%`}
-                >
-                  {result.popularity}
-                </div>
+                {result.source === 'beatport' ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      width: '32px',
+                      height: '32px',
+                    }}
+                    title="Beatport"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#01ff28">
+                      <circle cx="12" cy="12" r="10" fill="none" stroke="#01ff28" strokeWidth="2" />
+                      <text x="12" y="16" textAnchor="middle" fontSize="11" fill="#01ff28" fontWeight="bold">B</text>
+                    </svg>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      background: `conic-gradient(#22c55e ${result.popularity}%, #333 ${result.popularity}%)`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.65rem',
+                      flexShrink: 0
+                    }}
+                    title={`Popularity: ${result.popularity}%`}
+                  >
+                    {result.popularity}
+                  </div>
+                )}
               </button>
             ))}
           </div>

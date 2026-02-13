@@ -31,6 +31,7 @@ from app.schemas.event import (
     EventUpdate,
 )
 from app.schemas.request import RequestCreate, RequestOut
+from app.schemas.search import SearchResult
 from app.services.event import (
     EventLookupResult,
     archive_event,
@@ -132,6 +133,8 @@ def _event_to_out(
         request_count=request_count,
         tidal_sync_enabled=event.tidal_sync_enabled,
         tidal_playlist_id=event.tidal_playlist_id,
+        beatport_sync_enabled=event.beatport_sync_enabled,
+        beatport_playlist_id=event.beatport_playlist_id,
         banner_url=banner_url,
         banner_kiosk_url=banner_kiosk_url,
         banner_colors=banner_colors,
@@ -199,6 +202,40 @@ def get_event(code: str, request: Request, db: Session = Depends(get_db)) -> Eve
         raise HTTPException(status_code=410, detail="Event has been archived")
 
     return _event_to_out(event, request)
+
+
+@router.get("/{code}/search", response_model=list[SearchResult])
+@limiter.limit(lambda: f"{settings.search_rate_limit_per_minute}/minute")
+def event_search(
+    code: str,
+    request: Request,
+    q: str = Query(..., min_length=2, max_length=200),
+    db: Session = Depends(get_db),
+) -> list[SearchResult]:
+    """Public search endpoint for event guests. Searches Spotify first,
+    falls back to Beatport if the event owner has it linked and enabled."""
+    from app.services.beatport import search_beatport_tracks
+    from app.services.search_merge import merge_search_results
+    from app.services.spotify import search_songs
+
+    event_obj, lookup_result = get_event_by_code_with_status(db, code)
+
+    if lookup_result == EventLookupResult.NOT_FOUND:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if lookup_result in (EventLookupResult.EXPIRED, EventLookupResult.ARCHIVED):
+        raise HTTPException(status_code=410, detail="Event has expired")
+
+    # Always search Spotify
+    spotify_results = search_songs(db, q)
+
+    # Check if owner has Beatport linked and sync enabled
+    owner = event_obj.created_by
+    if owner and owner.beatport_access_token and event_obj.beatport_sync_enabled:
+        beatport_results = search_beatport_tracks(db, owner, q, limit=10)
+        return merge_search_results(spotify_results, beatport_results)
+
+    return spotify_results
 
 
 @router.patch("/{code}", response_model=EventOut)
@@ -437,6 +474,10 @@ def get_event_requests(
             status=r.status,
             created_at=r.created_at,
             updated_at=r.updated_at,
+            tidal_track_id=r.tidal_track_id,
+            tidal_sync_status=r.tidal_sync_status,
+            raw_search_query=r.raw_search_query,
+            sync_results_json=r.sync_results_json,
             vote_count=r.vote_count,
         )
         for r in requests

@@ -47,6 +47,15 @@ class Settings(BaseSettings):
     tidal_client_secret: str = ""
     tidal_redirect_uri: str = ""
 
+    # Beatport API v4 (OAuth2 authorization code flow with PKCE)
+    beatport_client_id: str = ""
+    beatport_client_secret: str = ""
+    beatport_redirect_uri: str = ""
+    # Override auth base URL for testing with the public Swagger client_id
+    # Default (Partner Portal): https://account.beatport.com
+    # Public client: https://api.beatport.com/v4/auth
+    beatport_auth_base_url: str = "https://account.beatport.com"
+
     # StageLinQ Bridge
     bridge_api_key: str = ""
 

@@ -27,6 +27,10 @@ class Event(Base):
     tidal_playlist_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     tidal_sync_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Beatport sync
+    beatport_sync_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    beatport_playlist_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
     # Display settings
     now_playing_auto_hide_minutes: Mapped[int] = mapped_column(
         Integer, default=10, nullable=False, server_default="10"
