@@ -217,6 +217,7 @@ def event_search(
     from app.services.beatport import search_beatport_tracks
     from app.services.search_merge import merge_search_results
     from app.services.spotify import search_songs
+    from app.services.system_settings import get_system_settings
 
     event_obj, lookup_result = get_event_by_code_with_status(db, code)
 
@@ -226,13 +227,28 @@ def event_search(
     if lookup_result in (EventLookupResult.EXPIRED, EventLookupResult.ARCHIVED):
         raise HTTPException(status_code=410, detail="Event has expired")
 
-    # Always search Spotify
-    spotify_results = search_songs(db, q)
+    sys_settings = get_system_settings(db)
+
+    # Search Spotify if enabled
+    spotify_results = []
+    if sys_settings.spotify_enabled:
+        spotify_results = search_songs(db, q)
 
     # Check if owner has Beatport linked and sync enabled
+    beatport_results = []
     owner = event_obj.created_by
-    if owner and owner.beatport_access_token and event_obj.beatport_sync_enabled:
+    if (
+        sys_settings.beatport_enabled
+        and owner
+        and owner.beatport_access_token
+        and event_obj.beatport_sync_enabled
+    ):
         beatport_results = search_beatport_tracks(db, owner, q, limit=10)
+
+    if not sys_settings.spotify_enabled and not sys_settings.beatport_enabled:
+        raise HTTPException(status_code=503, detail="Song search is currently unavailable")
+
+    if beatport_results:
         return merge_search_results(spotify_results, beatport_results)
 
     return spotify_results

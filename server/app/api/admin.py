@@ -11,6 +11,12 @@ from app.models.event import Event
 from app.models.request import Request
 from app.models.user import User, UserRole
 from app.schemas.event import EventUpdate
+from app.schemas.integration_health import (
+    IntegrationCheckResponse,
+    IntegrationHealthResponse,
+    IntegrationToggleRequest,
+    IntegrationToggleResponse,
+)
 from app.schemas.system_settings import SystemSettingsOut, SystemSettingsUpdate
 from app.schemas.user import (
     AdminEventOut,
@@ -32,6 +38,11 @@ from app.services.admin import (
 )
 from app.services.auth import get_user_by_username
 from app.services.event import delete_event, update_event
+from app.services.integration_health import (
+    VALID_SERVICES,
+    check_integration_health,
+    get_all_integration_statuses,
+)
 from app.services.system_settings import get_system_settings, update_system_settings
 
 router = APIRouter()
@@ -223,5 +234,57 @@ def admin_update_settings(
         db,
         registration_enabled=update_data.registration_enabled,
         search_rate_limit_per_minute=update_data.search_rate_limit_per_minute,
+        spotify_enabled=update_data.spotify_enabled,
+        tidal_enabled=update_data.tidal_enabled,
+        beatport_enabled=update_data.beatport_enabled,
+        bridge_enabled=update_data.bridge_enabled,
     )
     return SystemSettingsOut.model_validate(settings)
+
+
+@router.get("/integrations", response_model=IntegrationHealthResponse)
+@limiter.limit("60/minute")
+def admin_get_integrations(
+    request: FastAPIRequest,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> IntegrationHealthResponse:
+    """Get status of all external integrations (no active health checks)."""
+    services = get_all_integration_statuses(db)
+    return IntegrationHealthResponse(services=services)
+
+
+@router.patch("/integrations/{service}", response_model=IntegrationToggleResponse)
+def admin_toggle_integration(
+    service: str,
+    toggle: IntegrationToggleRequest,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> IntegrationToggleResponse:
+    """Enable or disable a specific integration."""
+    if service not in VALID_SERVICES:
+        raise HTTPException(status_code=400, detail=f"Unknown service: {service}")
+
+    update_system_settings(db, **{f"{service}_enabled": toggle.enabled})
+    return IntegrationToggleResponse(service=service, enabled=toggle.enabled)
+
+
+@router.post("/integrations/{service}/check", response_model=IntegrationCheckResponse)
+@limiter.limit("10/minute")
+def admin_check_integration(
+    request: FastAPIRequest,
+    service: str,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> IntegrationCheckResponse:
+    """Run an active health check for a specific service (rate limited)."""
+    if service not in VALID_SERVICES:
+        raise HTTPException(status_code=400, detail=f"Unknown service: {service}")
+
+    healthy, capabilities, error = check_integration_health(db, service)
+    return IntegrationCheckResponse(
+        service=service,
+        healthy=healthy,
+        capabilities=capabilities,
+        error=error,
+    )

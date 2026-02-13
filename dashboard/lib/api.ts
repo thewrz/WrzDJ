@@ -9,6 +9,9 @@ import type {
   Event,
   GuestRequestListResponse,
   HasRequestedResponse,
+  IntegrationCheckResponse,
+  IntegrationHealthResponse,
+  IntegrationToggleResponse,
   KioskDisplay,
   NowPlayingInfo,
   PaginatedResponse,
@@ -31,11 +34,16 @@ export type {
   BeatportEventSettings,
   BeatportSearchResult,
   BeatportStatus,
+  CapabilityStatus,
   DisplaySettingsResponse,
   Event,
   GuestRequestInfo,
   GuestRequestListResponse,
   HasRequestedResponse,
+  IntegrationCheckResponse,
+  IntegrationHealthResponse,
+  IntegrationServiceStatus,
+  IntegrationToggleResponse,
   KioskDisplay,
   NowPlayingInfo,
   PaginatedResponse,
@@ -43,6 +51,7 @@ export type {
   PlayHistoryResponse,
   PublicRequestInfo,
   SearchResult,
+  ServiceCapabilities,
   SongRequest,
   SyncResultEntry,
   SystemSettings,
@@ -647,6 +656,30 @@ class ApiClient {
     return this.fetch('/api/admin/settings', {
       method: 'PATCH',
       body: JSON.stringify(data),
+    });
+  }
+
+  // ========== Admin Integrations ==========
+
+  async getIntegrations(): Promise<IntegrationHealthResponse> {
+    return this.fetch('/api/admin/integrations');
+  }
+
+  async toggleIntegration(
+    service: string,
+    enabled: boolean
+  ): Promise<IntegrationToggleResponse> {
+    return this.fetch(`/api/admin/integrations/${service}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    });
+  }
+
+  async checkIntegrationHealth(
+    service: string
+  ): Promise<IntegrationCheckResponse> {
+    return this.fetch(`/api/admin/integrations/${service}/check`, {
+      method: 'POST',
     });
   }
 }

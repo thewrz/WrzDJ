@@ -22,6 +22,7 @@ from app.schemas.tidal import (
     TidalStatus,
     TidalSyncResult,
 )
+from app.services.system_settings import get_system_settings
 from app.services.tidal import (
     cancel_device_login,
     check_device_login,
@@ -40,12 +41,19 @@ router = APIRouter()
 @router.post("/auth/start", response_model=TidalAuthStartResponse)
 def start_auth(
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ) -> TidalAuthStartResponse:
     """Start Tidal device login flow.
 
     Returns a URL and code for the user to visit and authorize.
     The frontend should poll /auth/check to wait for completion.
     """
+    sys_settings = get_system_settings(db)
+    if not sys_settings.tidal_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Tidal integration is currently unavailable",
+        )
     result = start_device_login(current_user)
     return TidalAuthStartResponse(
         verification_url=result["verification_url"],
@@ -118,6 +126,12 @@ def search(
     db: Session = Depends(get_db),
 ) -> list[TidalSearchResult]:
     """Search Tidal for tracks."""
+    sys_settings = get_system_settings(db)
+    if not sys_settings.tidal_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Tidal integration is currently unavailable",
+        )
     if not current_user.tidal_access_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -186,6 +200,12 @@ def sync_request(
     db: Session = Depends(get_db),
 ) -> TidalSyncResult:
     """Manually trigger Tidal sync for a request."""
+    sys_settings = get_system_settings(db)
+    if not sys_settings.tidal_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Tidal integration is currently unavailable",
+        )
     song_request = db.query(SongRequest).filter(SongRequest.id == request_id).first()
     if not song_request:
         raise HTTPException(status_code=404, detail="Request not found")
@@ -205,6 +225,12 @@ def link_track(
     db: Session = Depends(get_db),
 ) -> TidalSyncResult:
     """Manually link a Tidal track to a request."""
+    sys_settings = get_system_settings(db)
+    if not sys_settings.tidal_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Tidal integration is currently unavailable",
+        )
     song_request = db.query(SongRequest).filter(SongRequest.id == request_id).first()
     if not song_request:
         raise HTTPException(status_code=404, detail="Request not found")
