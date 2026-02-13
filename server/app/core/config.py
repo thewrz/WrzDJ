@@ -102,6 +102,10 @@ class Settings(BaseSettings):
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key()...)"
     token_encryption_key: str = ""
 
+    # Soundcharts API (song discovery for recommendations)
+    soundcharts_app_id: str = ""
+    soundcharts_api_key: str = ""
+
     # Cache durations (1 hour for Spotify since popularity changes)
     search_cache_hours: int = 1
 

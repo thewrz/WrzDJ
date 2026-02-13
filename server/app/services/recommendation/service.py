@@ -54,14 +54,15 @@ def _get_accepted_played_requests(db: Session, event: Event) -> list[Request]:
     )
 
 
-def _build_search_queries(
+def _build_beatport_queries(
     profile: EventProfile,
     template_tracks: list[TrackProfile] | None = None,
 ) -> list[str]:
-    """Generate search queries from an event profile.
+    """Generate search queries for Beatport from an event profile.
 
-    Uses dominant genres first, then falls back to artist names from
-    template tracks when genres are unavailable (e.g., Tidal playlists).
+    Genre-based text queries work well for Beatport (genre catalog).
+    Falls back to artist names from template tracks when genres are
+    unavailable (e.g., Tidal playlists).
     """
     queries = []
 
@@ -93,8 +94,13 @@ def _search_candidates(
     db: Session,
     user: User,
     queries: list[str],
+    profile: EventProfile | None = None,
 ) -> tuple[list[TrackProfile], list[str], int]:
     """Search connected services for candidate tracks.
+
+    For Beatport: uses genre-based text queries (works well with their catalog).
+    For Tidal: prefers Soundcharts discovery (genre+BPM+key filtered) when
+    configured, falls back to text search otherwise.
 
     Returns (candidates, services_used, total_searched).
     """
@@ -129,27 +135,47 @@ def _search_candidates(
 
     # Search Tidal if connected
     if user.tidal_access_token:
-        from app.services.tidal import search_tidal_tracks
+        used_soundcharts = False
 
-        for query in queries:
-            results = search_tidal_tracks(db, user, query, limit=SEARCH_LIMIT)
-            for r in results:
-                candidates.append(
-                    TrackProfile(
-                        title=r.title,
-                        artist=r.artist,
-                        bpm=r.bpm,
-                        key=r.key,
-                        source="tidal",
-                        track_id=r.track_id,
-                        url=r.tidal_url,
-                        cover_url=r.cover_url,
-                        duration_seconds=r.duration_seconds,
+        # Try Soundcharts discovery first (genre+BPM+key filtered, 1 API call)
+        if profile and profile.dominant_genres:
+            from app.core.config import get_settings
+            from app.services.recommendation.soundcharts_candidates import (
+                search_candidates_via_soundcharts,
+            )
+
+            settings = get_settings()
+            if settings.soundcharts_app_id and settings.soundcharts_api_key:
+                sc_candidates, sc_searched = search_candidates_via_soundcharts(db, user, profile)
+                candidates.extend(sc_candidates)
+                total_searched += sc_searched
+                if sc_candidates:
+                    services_used.add("tidal")
+                    used_soundcharts = True
+
+        # Fallback: Tidal text search (when Soundcharts not configured/no genres/failed)
+        if not used_soundcharts:
+            from app.services.tidal import search_tidal_tracks
+
+            for query in queries:
+                results = search_tidal_tracks(db, user, query, limit=SEARCH_LIMIT)
+                for r in results:
+                    candidates.append(
+                        TrackProfile(
+                            title=r.title,
+                            artist=r.artist,
+                            bpm=r.bpm,
+                            key=r.key,
+                            source="tidal",
+                            track_id=r.track_id,
+                            url=r.tidal_url,
+                            cover_url=r.cover_url,
+                            duration_seconds=r.duration_seconds,
+                        )
                     )
-                )
-            total_searched += len(results)
-            if results:
-                services_used.add("tidal")
+                total_searched += len(results)
+                if results:
+                    services_used.add("tidal")
 
     return candidates, sorted(services_used), total_searched
 
@@ -255,12 +281,14 @@ def generate_recommendations_from_template(
     profile = build_event_profile(template_tracks)
 
     # Generate search queries from profile (pass template tracks for artist fallback)
-    search_queries = _build_search_queries(profile, template_tracks=template_tracks)
+    search_queries = _build_beatport_queries(profile, template_tracks=template_tracks)
     if not search_queries:
         search_queries = ["top tracks", "popular tracks"]
 
     # Search for candidates
-    candidates, services_used, total_searched = _search_candidates(db, user, search_queries)
+    candidates, services_used, total_searched = _search_candidates(
+        db, user, search_queries, profile=profile
+    )
 
     # Deduplicate candidates among themselves
     candidates = _deduplicate_candidates(candidates)
@@ -336,15 +364,17 @@ def generate_recommendations(
     # Step 3: Build profile
     profile = build_event_profile(enriched)
 
-    # Step 4: Generate search queries
-    search_queries = _build_search_queries(profile)
+    # Step 4: Generate search queries (for Beatport)
+    search_queries = _build_beatport_queries(profile)
 
     # If no queries can be generated (no genre, no BPM), use generic queries
     if not search_queries:
         search_queries = ["top tracks", "popular tracks"]
 
     # Step 5: Search for candidates
-    candidates, services_used, total_searched = _search_candidates(db, user, search_queries)
+    candidates, services_used, total_searched = _search_candidates(
+        db, user, search_queries, profile=profile
+    )
 
     # Step 6a: Deduplicate candidates among themselves
     candidates = _deduplicate_candidates(candidates)

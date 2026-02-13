@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from app.services.recommendation.scorer import EventProfile, TrackProfile
 from app.services.recommendation.service import (
     RecommendationResult,
-    _build_search_queries,
+    _build_beatport_queries,
     _deduplicate_against_requests,
     _deduplicate_against_template,
     _deduplicate_candidates,
@@ -27,13 +27,13 @@ def _make_event(code="TEST1"):
     return event
 
 
-class TestBuildSearchQueries:
+class TestBuildBeatportQueries:
     def test_genre_based_queries(self):
         profile = EventProfile(
             dominant_genres=["Tech House", "Progressive House", "Minimal"],
             track_count=10,
         )
-        queries = _build_search_queries(profile)
+        queries = _build_beatport_queries(profile)
         assert "Tech House" in queries
         assert "Progressive House" in queries
         assert "Minimal" in queries
@@ -44,12 +44,12 @@ class TestBuildSearchQueries:
             dominant_genres=["House"],
             track_count=5,
         )
-        queries = _build_search_queries(profile)
+        queries = _build_beatport_queries(profile)
         assert any("128" in q for q in queries)
 
     def test_empty_profile(self):
         profile = EventProfile(track_count=0)
-        queries = _build_search_queries(profile)
+        queries = _build_beatport_queries(profile)
         assert queries == []
 
     def test_max_three_queries(self):
@@ -58,7 +58,7 @@ class TestBuildSearchQueries:
             dominant_genres=["A", "B", "C"],
             track_count=10,
         )
-        queries = _build_search_queries(profile)
+        queries = _build_beatport_queries(profile)
         assert len(queries) <= 3
 
     def test_artist_fallback_when_no_genres(self):
@@ -71,7 +71,7 @@ class TestBuildSearchQueries:
             TrackProfile(title="Song 4", artist="Stephan Bodzin", bpm=125.0),
             TrackProfile(title="Song 5", artist="deadmau5", bpm=132.0),
         ]
-        queries = _build_search_queries(profile, template_tracks=template_tracks)
+        queries = _build_beatport_queries(profile, template_tracks=template_tracks)
         assert len(queries) >= 1
         # deadmau5 appears most, should be first
         assert queries[0] == "deadmau5"
@@ -85,7 +85,7 @@ class TestBuildSearchQueries:
             TrackProfile(title="Song 2", artist="Various Artists"),
             TrackProfile(title="Song 3", artist="Real Artist", bpm=120.0),
         ]
-        queries = _build_search_queries(profile, template_tracks=template_tracks)
+        queries = _build_beatport_queries(profile, template_tracks=template_tracks)
         assert "Unknown" not in queries
         assert "Various Artists" not in queries
         assert "Real Artist" in queries
@@ -96,7 +96,7 @@ class TestBuildSearchQueries:
         template_tracks = [
             TrackProfile(title="Song", artist="deadmau5", genre="Tech House"),
         ]
-        queries = _build_search_queries(profile, template_tracks=template_tracks)
+        queries = _build_beatport_queries(profile, template_tracks=template_tracks)
         assert "Tech House" in queries
         # Artist shouldn't be in queries when genres are available
         assert "deadmau5" not in queries
@@ -104,7 +104,7 @@ class TestBuildSearchQueries:
     def test_no_bpm_only_fallback_without_genres(self):
         """BPM-only query should NOT be generated when there are no genres."""
         profile = EventProfile(avg_bpm=128.0, track_count=5)
-        queries = _build_search_queries(profile)
+        queries = _build_beatport_queries(profile)
         # Without genres or template tracks, should return empty
         assert queries == []
 
