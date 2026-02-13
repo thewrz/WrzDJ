@@ -10,6 +10,7 @@ from app.services.recommendation.service import (
     _deduplicate_against_requests,
     _deduplicate_against_template,
     _deduplicate_candidates,
+    _is_blocked_genre,
     generate_recommendations,
 )
 
@@ -328,3 +329,61 @@ class TestGenerateRecommendations:
         result = generate_recommendations(db, user, event)
         # The existing song should be deduped out
         assert len(result.suggestions) == 0
+
+
+class TestIsBlockedGenre:
+    def test_exact_match(self):
+        assert _is_blocked_genre("DJ Tools") is True
+        assert _is_blocked_genre("karaoke") is True
+        assert _is_blocked_genre("Stems") is True
+
+    def test_compound_genre(self):
+        assert _is_blocked_genre("DJ Tools / Acapellas") is True
+        assert _is_blocked_genre("Acapellas/DJ Tools") is True
+
+    def test_none_and_empty(self):
+        assert _is_blocked_genre(None) is False
+        assert _is_blocked_genre("") is False
+
+    def test_normal_genre_passes(self):
+        assert _is_blocked_genre("House") is False
+        assert _is_blocked_genre("Country") is False
+        assert _is_blocked_genre("Tech House") is False
+
+
+class TestCoverDetection:
+    def test_cover_artist_filtered(self):
+        """Cover version with same title but different artist is removed."""
+        candidates = [
+            TrackProfile(
+                title="Save A Horse Ride A Cowboy",
+                artist="Big",
+                source="tidal",
+            ),
+        ]
+        requests = [
+            MagicMock(
+                song_title="Save A Horse Ride A Cowboy",
+                artist="Big & Rich",
+            ),
+        ]
+        result = _deduplicate_against_requests(candidates, requests)
+        assert len(result) == 0
+
+    def test_same_artist_not_filtered(self):
+        """Same title and artist should be filtered as dupe, not cover."""
+        candidates = [
+            TrackProfile(title="Some Song", artist="Real Artist", source="tidal"),
+        ]
+        requests = [MagicMock(song_title="Some Song", artist="Real Artist")]
+        result = _deduplicate_against_requests(candidates, requests)
+        assert len(result) == 0
+
+    def test_different_title_and_artist_passes(self):
+        """Completely different track should pass through."""
+        candidates = [
+            TrackProfile(title="New Song", artist="New Artist", source="tidal"),
+        ]
+        requests = [MagicMock(song_title="Old Song", artist="Old Artist")]
+        result = _deduplicate_against_requests(candidates, requests)
+        assert len(result) == 1

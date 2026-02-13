@@ -59,7 +59,9 @@ class TestSearchCandidatesViaSoundcharts:
         assert candidates[0].title == "Country Roads"
         assert candidates[0].source == "tidal"
         assert candidates[0].track_id == "111"
+        assert candidates[0].genre == "Country"
         assert candidates[1].title == "Jolene"
+        assert candidates[1].genre == "Country"
 
         # Verify discover_songs was called with correct args
         mock_discover.assert_called_once_with(
@@ -164,6 +166,28 @@ class TestSearchCandidatesViaSoundcharts:
 
         call_kwargs = mock_discover.call_args
         assert call_kwargs.kwargs["keys"] == ["D Minor", "G Major"]
+
+    @patch("app.services.tidal.search_tidal_tracks")
+    @patch("app.services.recommendation.soundcharts_candidates.discover_songs")
+    def test_genre_propagated_from_profile(self, mock_discover, mock_tidal_search):
+        """Candidates get genre inferred from the profile's dominant genre."""
+        mock_discover.return_value = [
+            SoundchartsTrack(title="Song A", artist="Artist A", soundcharts_uuid="a"),
+        ]
+        mock_tidal_search.return_value = [
+            _make_tidal_result("Song A", "Artist A", "111"),
+        ]
+
+        db = MagicMock()
+        user = _make_user()
+        profile = EventProfile(
+            dominant_genres=["House", "Tech House"],
+            track_count=5,
+        )
+
+        candidates, _ = search_candidates_via_soundcharts(db, user, profile)
+        assert len(candidates) == 1
+        assert candidates[0].genre == "House"
 
     @patch("app.services.tidal.search_tidal_tracks")
     @patch("app.services.recommendation.soundcharts_candidates.discover_songs")

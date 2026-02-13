@@ -69,12 +69,15 @@ def search_candidates_via_soundcharts(
             continue
 
         tidal_result = results[0]
+        # Tidal doesn't return genre — infer from the profile's dominant genre
+        inferred_genre = profile.dominant_genres[0] if profile.dominant_genres else None
         candidates.append(
             TrackProfile(
                 title=tidal_result.title,
                 artist=tidal_result.artist,
                 bpm=tidal_result.bpm,
                 key=tidal_result.key,
+                genre=inferred_genre,
                 source="tidal",
                 track_id=tidal_result.track_id,
                 url=tidal_result.tidal_url,

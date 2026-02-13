@@ -21,6 +21,7 @@ from app.services.recommendation.scorer import (
     rank_candidates,
 )
 from app.services.track_normalizer import fuzzy_match_score
+from app.services.version_filter import is_unwanted_version
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,29 @@ logger = logging.getLogger(__name__)
 MAX_SEARCH_QUERIES = 3
 # Maximum results per search query
 SEARCH_LIMIT = 10
+
+# Genres that indicate non-music or DJ utility tracks
+BLOCKED_GENRES = {
+    "dj tools",
+    "dj tool",
+    "acapellas",
+    "acapella",
+    "acapellas/dj tools",
+    "karaoke",
+    "sound effects",
+    "stems",
+    "samples",
+}
+
+
+def _is_blocked_genre(genre: str | None) -> bool:
+    """Check if a genre matches or contains a blocked genre keyword."""
+    if not genre:
+        return False
+    genre_lower = genre.lower()
+    if genre_lower in BLOCKED_GENRES:
+        return True
+    return any(blocked in genre_lower for blocked in BLOCKED_GENRES)
 
 
 @dataclass
@@ -145,6 +169,10 @@ def _search_candidates(
         for query in queries:
             results = search_beatport_tracks(db, user, query, limit=SEARCH_LIMIT)
             for r in results:
+                if is_unwanted_version(r.title):
+                    continue
+                if _is_blocked_genre(r.genre):
+                    continue
                 candidates.append(
                     TrackProfile(
                         title=r.title,
@@ -177,9 +205,14 @@ def _search_candidates(
             settings = get_settings()
             if settings.soundcharts_app_id and settings.soundcharts_api_key:
                 sc_candidates, sc_searched = search_candidates_via_soundcharts(db, user, profile)
-                candidates.extend(sc_candidates)
+                sc_filtered = [
+                    c
+                    for c in sc_candidates
+                    if not is_unwanted_version(c.title) and not _is_blocked_genre(c.genre)
+                ]
+                candidates.extend(sc_filtered)
                 total_searched += sc_searched
-                if sc_candidates:
+                if sc_filtered:
                     services_used.add("tidal")
                     used_soundcharts = True
 
@@ -187,17 +220,25 @@ def _search_candidates(
         if not used_soundcharts:
             from app.services.tidal import search_tidal_tracks
 
+            # Infer genre from profile for Tidal results (Tidal API has no genre)
+            inferred_genre = (
+                profile.dominant_genres[0] if profile and profile.dominant_genres else None
+            )
+
             # Use artist-based queries for Tidal (genre strings produce garbage)
             tidal_search_queries = tidal_queries or queries
             for query in tidal_search_queries:
                 results = search_tidal_tracks(db, user, query, limit=SEARCH_LIMIT)
                 for r in results:
+                    if is_unwanted_version(r.title):
+                        continue
                     candidates.append(
                         TrackProfile(
                             title=r.title,
                             artist=r.artist,
                             bpm=r.bpm,
                             key=r.key,
+                            genre=inferred_genre,
                             source="tidal",
                             track_id=r.track_id,
                             url=r.tidal_url,
@@ -216,13 +257,19 @@ def _deduplicate_against_requests(
     candidates: list[TrackProfile],
     existing_requests: list[Request],
 ) -> list[TrackProfile]:
-    """Remove candidates that are already requested for this event."""
+    """Remove candidates that are already requested or are likely covers.
+
+    Catches both exact duplicates (same title + artist) and cover/tribute
+    versions where the title matches but the artist is different (e.g.,
+    "Big" performing "Save A Horse" when "Big & Rich" already has it).
+    """
     if not existing_requests:
         return candidates
 
     deduped = []
     for candidate in candidates:
         is_dupe = False
+        is_cover = False
         for req in existing_requests:
             title_score = fuzzy_match_score(candidate.title, req.song_title)
             artist_score = fuzzy_match_score(candidate.artist, req.artist)
@@ -230,7 +277,11 @@ def _deduplicate_against_requests(
             if combined >= 0.8:
                 is_dupe = True
                 break
-        if not is_dupe:
+            # Cover detection: same title but different artist
+            if title_score >= 0.85 and artist_score < 0.6:
+                is_cover = True
+                break
+        if not is_dupe and not is_cover:
             deduped.append(candidate)
     return deduped
 

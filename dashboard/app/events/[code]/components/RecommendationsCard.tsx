@@ -297,6 +297,16 @@ export function RecommendationsCard({
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
                     {track.artist} &mdash; {track.title}
+                    {track.url && (
+                      <a
+                        href={track.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ marginLeft: '0.5rem', fontSize: '0.75rem' }}
+                      >
+                        ↗
+                      </a>
+                    )}
                   </div>
                   <div style={{
                     fontSize: '0.75rem', color: '#9ca3af',
