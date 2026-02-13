@@ -45,7 +45,13 @@ server {
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://${API_DOMAIN} https://i.scdn.co https://resources.tidal.com; media-src 'self' data:; connect-src 'self' https://${API_DOMAIN}; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'" always;
 
-    # Hide X-Powered-By header from Next.js
+    # Strip security headers from upstream (Next.js sets them too — nginx is authoritative)
+    proxy_hide_header Strict-Transport-Security;
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header X-XSS-Protection;
+    proxy_hide_header Referrer-Policy;
+    proxy_hide_header Content-Security-Policy;
     proxy_hide_header X-Powered-By;
 
     # Proxy settings
