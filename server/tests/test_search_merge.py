@@ -79,7 +79,7 @@ class TestMergeSearchResults:
         assert r.spotify_id is None
         assert r.popularity == 0
         assert r.album_art == "https://img.beatport.com/test.jpg"
-        assert "beatport.com" in (r.url or "")
+        assert (r.url or "").startswith("https://www.beatport.com/")
 
     def test_empty_spotify_returns_beatport_only(self):
         """If Spotify returns nothing, Beatport fills in."""
