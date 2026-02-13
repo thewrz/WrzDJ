@@ -43,6 +43,7 @@ function makeSuggestion(overrides: Partial<RecommendedTrack> = {}): RecommendedT
     url: 'https://beatport.com/track/test/12345',
     cover_url: 'https://bp.com/cover.jpg',
     duration_seconds: 360,
+    mb_verified: false,
     ...overrides,
   };
 }
@@ -445,6 +446,43 @@ describe('RecommendationsCard', () => {
       expect(screen.getByText('dark techno')).toBeInTheDocument();
       expect(screen.getByText(/DJ wants darker sounds/)).toBeInTheDocument();
     });
+  });
+
+  it('shows Verified Artist badge for mb_verified tracks', async () => {
+    vi.mocked(api.generateRecommendations).mockResolvedValue(makeResponse({
+      suggestions: [
+        makeSuggestion({ title: 'Verified Song', artist: 'Real Artist', mb_verified: true }),
+        makeSuggestion({ title: 'Unverified Song', artist: 'Unknown Artist', mb_verified: false }),
+      ],
+    }));
+
+    render(<RecommendationsCard {...defaultProps} />);
+    fireEvent.click(screen.getByText('Generate'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Real Artist/)).toBeInTheDocument();
+      expect(screen.getByText(/Unknown Artist/)).toBeInTheDocument();
+    });
+
+    const badges = screen.getAllByText('Verified Artist');
+    expect(badges).toHaveLength(1);
+  });
+
+  it('does not show Verified Artist badge when mb_verified is false', async () => {
+    vi.mocked(api.generateRecommendations).mockResolvedValue(makeResponse({
+      suggestions: [
+        makeSuggestion({ mb_verified: false }),
+      ],
+    }));
+
+    render(<RecommendationsCard {...defaultProps} />);
+    fireEvent.click(screen.getByText('Generate'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Test Artist/)).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('Verified Artist')).not.toBeInTheDocument();
   });
 
   it('disables Generate in AI Assist mode when prompt is too short', async () => {

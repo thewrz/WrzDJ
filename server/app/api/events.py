@@ -573,6 +573,7 @@ def get_recommendations(
             url=s.profile.url,
             cover_url=s.profile.cover_url,
             duration_seconds=s.profile.duration_seconds,
+            mb_verified=result.mb_verified.get(s.profile.artist, False),
         )
         for s in result.suggestions
     ]
@@ -696,6 +697,7 @@ def get_recommendations_from_template(
             url=s.profile.url,
             cover_url=s.profile.cover_url,
             duration_seconds=s.profile.duration_seconds,
+            mb_verified=result.mb_verified.get(s.profile.artist, False),
         )
         for s in result.suggestions
     ]
@@ -782,6 +784,7 @@ async def get_llm_recommendations(
             url=s.profile.url,
             cover_url=s.profile.cover_url,
             duration_seconds=s.profile.duration_seconds,
+            mb_verified=result.mb_verified.get(s.profile.artist, False),
         )
         for s in result.suggestions
     ]

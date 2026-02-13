@@ -334,6 +334,7 @@ export interface RecommendedTrack {
   url: string | null;
   cover_url: string | null;
   duration_seconds: number | null;
+  mb_verified: boolean;
 }
 
 /** Music profile of an event derived from its requests */

@@ -8,6 +8,7 @@ import pytest
 from app.services.musicbrainz import (
     USER_AGENT,
     _throttled_get,
+    check_artist_exists,
     lookup_artist_genre,
     lookup_artist_genres,
 )
@@ -94,6 +95,66 @@ class TestLookupArtistGenre:
             result = lookup_artist_genre("Radiohead")
 
         assert result is None
+
+
+class TestCheckArtistExists:
+    def test_returns_true_with_mbid_for_match(self):
+        search_data = _mock_search_response([{"id": "abc-123", "name": "Radiohead", "score": 100}])
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("Radiohead")
+
+        assert verified is True
+        assert mbid == "abc-123"
+
+    def test_returns_false_when_score_too_low(self):
+        search_data = _mock_search_response([{"id": "abc-123", "name": "Close Match", "score": 50}])
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("Something Else")
+
+        assert verified is False
+        assert mbid is None
+
+    def test_returns_false_on_empty_name(self):
+        assert check_artist_exists("") == (False, None)
+        assert check_artist_exists("   ") == (False, None)
+
+    def test_returns_false_when_search_fails(self):
+        with patch("app.services.musicbrainz._throttled_get", return_value=None):
+            verified, mbid = check_artist_exists("Nonexistent")
+
+        assert verified is False
+        assert mbid is None
+
+    def test_returns_false_when_no_results(self):
+        with patch(
+            "app.services.musicbrainz._throttled_get",
+            return_value=_mock_search_response([]),
+        ):
+            verified, mbid = check_artist_exists("Nonexistent")
+
+        assert verified is False
+        assert mbid is None
+
+    def test_returns_false_when_no_mbid(self):
+        search_data = _mock_search_response([{"name": "NoID Artist", "score": 95}])
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("NoID Artist")
+
+        assert verified is False
+        assert mbid is None
+
+    def test_picks_first_high_score_match(self):
+        search_data = _mock_search_response(
+            [
+                {"id": "low-id", "name": "Wrong", "score": 50},
+                {"id": "high-id", "name": "Right", "score": 95},
+            ]
+        )
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("Right")
+
+        assert verified is True
+        assert mbid == "high-id"
 
 
 class TestLookupArtistGenres:

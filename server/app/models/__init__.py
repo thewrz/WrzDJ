@@ -1,5 +1,6 @@
 from app.models.base import Base
 from app.models.event import Event
+from app.models.mb_artist_cache import MbArtistCache
 from app.models.now_playing import NowPlaying
 from app.models.play_history import PlayHistory
 from app.models.request import Request
@@ -18,4 +19,5 @@ __all__ = [
     "NowPlaying",
     "PlayHistory",
     "SystemSettings",
+    "MbArtistCache",
 ]

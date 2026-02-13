@@ -55,6 +55,31 @@ def _throttled_get(url: str, params: dict) -> dict | None:
         return None
 
 
+def check_artist_exists(artist_name: str) -> tuple[bool, str | None]:
+    """Check if an artist exists on MusicBrainz (search only, no genre detail).
+
+    Returns (True, mbid) if an artist with score >= 90 is found,
+    otherwise (False, None).  Uses a single API call.
+    """
+    if not artist_name or not artist_name.strip():
+        return False, None
+
+    search_data = _throttled_get(
+        f"{MUSICBRAINZ_BASE}/artist/",
+        {"query": f"artist:{artist_name}", "fmt": "json", "limit": "3"},
+    )
+    if not search_data:
+        return False, None
+
+    for artist in search_data.get("artists", []):
+        if artist.get("score", 0) >= 90:
+            mbid = artist.get("id")
+            if mbid:
+                return True, mbid
+
+    return False, None
+
+
 def lookup_artist_genre(artist_name: str) -> str | None:
     """Search MusicBrainz for an artist and return their top genre tag.
 

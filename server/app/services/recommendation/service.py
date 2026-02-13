@@ -155,6 +155,11 @@ class RecommendationResult:
     enriched_count: int
     total_candidates_searched: int
     services_used: list[str]
+    mb_verified: dict[str, bool] = None  # type: ignore[assignment]
+
+    def __post_init__(self):
+        if self.mb_verified is None:
+            self.mb_verified = {}
 
 
 def _get_accepted_played_requests(db: Session, event: Event) -> list[Request]:
@@ -440,6 +445,11 @@ class LLMRecommendationResult:
     total_candidates_searched: int
     services_used: list[str]
     llm_queries: list  # list of LLMSuggestionQuery
+    mb_verified: dict[str, bool] = None  # type: ignore[assignment]
+
+    def __post_init__(self):
+        if self.mb_verified is None:
+            self.mb_verified = {}
 
 
 async def generate_recommendations_from_llm(
@@ -500,6 +510,12 @@ async def generate_recommendations_from_llm(
     source_artists = {req.artist.lower() for req in requests if req.artist}
     ranked = _apply_artist_diversity(ranked, source_artists)
 
+    # Step 7: MusicBrainz artist verification
+    from app.services.recommendation.mb_verify import verify_artists_batch
+
+    artist_names = [s.profile.artist for s in ranked if s.profile.artist]
+    mb_verified = verify_artists_batch(db, artist_names) if artist_names else {}
+
     logger.info(
         "Generated %d LLM recommendations for event %s (prompt=%s, queries=%d, candidates=%d)",
         len(ranked),
@@ -516,6 +532,7 @@ async def generate_recommendations_from_llm(
         total_candidates_searched=total_searched,
         services_used=services_used,
         llm_queries=llm_result.queries,
+        mb_verified=mb_verified,
     )
 
 
@@ -586,6 +603,12 @@ def generate_recommendations_from_template(
     source_artists = {t.artist.lower() for t in template_tracks if t.artist}
     ranked = _apply_artist_diversity(ranked, source_artists)
 
+    # MusicBrainz artist verification
+    from app.services.recommendation.mb_verify import verify_artists_batch
+
+    artist_names = [s.profile.artist for s in ranked if s.profile.artist]
+    mb_verified = verify_artists_batch(db, artist_names) if artist_names else {}
+
     logger.info(
         "Generated %d template recommendations for event %s "
         "(template=%s:%s, queries=%s, candidates=%d, searched=%d)",
@@ -604,6 +627,7 @@ def generate_recommendations_from_template(
         enriched_count=len(template_tracks),
         total_candidates_searched=total_searched,
         services_used=services_used,
+        mb_verified=mb_verified,
     )
 
 
@@ -676,6 +700,12 @@ def generate_recommendations(
     source_artists = {req.artist.lower() for req in requests if req.artist}
     ranked = _apply_artist_diversity(ranked, source_artists)
 
+    # Step 9: MusicBrainz artist verification
+    from app.services.recommendation.mb_verify import verify_artists_batch
+
+    artist_names = [s.profile.artist for s in ranked if s.profile.artist]
+    mb_verified = verify_artists_batch(db, artist_names) if artist_names else {}
+
     logger.info(
         "Generated %d recommendations for event %s (enriched=%d, candidates=%d, searched=%d)",
         len(ranked),
@@ -691,4 +721,5 @@ def generate_recommendations(
         enriched_count=len(enriched),
         total_candidates_searched=total_searched,
         services_used=services_used,
+        mb_verified=mb_verified,
     )

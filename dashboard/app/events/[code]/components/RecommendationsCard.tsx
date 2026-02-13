@@ -497,6 +497,18 @@ export function RecommendationsCard({
                     <span style={{ color: '#3b82f6' }}>
                       Score: {track.score.toFixed(2)}
                     </span>
+                    {track.mb_verified && (
+                      <span style={{
+                        background: '#10b981',
+                        color: '#fff',
+                        padding: '0.0625rem 0.375rem',
+                        borderRadius: '0.25rem',
+                        fontSize: '0.625rem',
+                        fontWeight: 600,
+                      }}>
+                        Verified Artist
+                      </span>
+                    )}
                     {mode === 'llm' && llmModel && (
                       <span style={{
                         background: '#7c3aed',

@@ -18,6 +18,7 @@ class RecommendedTrack(BaseModel):
     url: str | None = None
     cover_url: str | None = None
     duration_seconds: int | None = None
+    mb_verified: bool = False
 
 
 class EventMusicProfile(BaseModel):
