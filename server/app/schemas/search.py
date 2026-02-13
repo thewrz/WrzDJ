@@ -9,4 +9,5 @@ class SearchResult(BaseModel):
     spotify_id: str | None = None
     album_art: str | None = None
     preview_url: str | None = None
-    url: str | None = None  # Link to Spotify
+    url: str | None = None  # Link to Spotify or Beatport
+    source: str = "spotify"  # "spotify" or "beatport"

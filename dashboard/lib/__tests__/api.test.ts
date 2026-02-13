@@ -471,37 +471,21 @@ describe('ApiClient', () => {
       expect(url).toContain('/api/beatport/status');
     });
 
-    it('starts Beatport auth flow', async () => {
+    it('logs in to Beatport with username and password', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ auth_url: 'https://beatport.com/oauth/authorize?...', state: 'abc' }),
+        json: async () => ({ status: 'ok', message: 'Beatport account linked' }),
       });
 
-      const result = await api.startBeatportAuth();
-      expect(result.auth_url).toContain('beatport.com');
-      expect(result.state).toBe('abc');
-
-      const [url] = mockFetch.mock.calls[0];
-      expect(url).toContain('/api/beatport/auth/start');
-    });
-
-    it('completes Beatport auth callback with code and state as JSON body', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ status: 'ok', message: 'Beatport connected' }),
-      });
-
-      const result = await api.completeBeatportAuth('auth-code-123', 'state-xyz');
-
+      const result = await api.loginBeatport('myuser', 'mypass');
       expect(result.status).toBe('ok');
 
       const [url, options] = mockFetch.mock.calls[0];
-      expect(url).toContain('/api/beatport/auth/callback');
-      expect(url).not.toContain('code=');  // No longer in query params
+      expect(url).toContain('/api/beatport/auth/login');
       expect(options.method).toBe('POST');
       const body = JSON.parse(options.body);
-      expect(body.code).toBe('auth-code-123');
-      expect(body.state).toBe('state-xyz');
+      expect(body.username).toBe('myuser');
+      expect(body.password).toBe('mypass');
     });
 
     it('disconnects Beatport', async () => {

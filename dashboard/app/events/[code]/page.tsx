@@ -10,6 +10,7 @@ import type { BeatportSearchResult, NowPlayingInfo } from '@/lib/api-types';
 import { DeleteEventModal } from './components/DeleteEventModal';
 import { NowPlayingBadge } from './components/NowPlayingBadge';
 import { TidalLoginModal } from './components/TidalLoginModal';
+import { BeatportLoginModal } from './components/BeatportLoginModal';
 import { ServiceTrackPickerModal } from './components/ServiceTrackPickerModal';
 import { PlayHistorySection } from './components/PlayHistorySection';
 import { RequestQueueSection } from './components/RequestQueueSection';
@@ -102,6 +103,9 @@ export default function EventQueuePage() {
   const [tidalLoginCode, setTidalLoginCode] = useState('');
   const [tidalLoginPolling, setTidalLoginPolling] = useState(false);
 
+  // Beatport login modal state
+  const [showBeatportLogin, setShowBeatportLogin] = useState(false);
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
@@ -125,7 +129,7 @@ export default function EventQueuePage() {
         api.getPlayHistory(code).catch((): undefined => undefined),
         api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false, now_playing_auto_hide_minutes: 10, requests_open: true })),
         api.getTidalStatus().catch(() => ({ linked: false, user_id: null, expires_at: null })),
-        api.getBeatportStatus().catch(() => ({ linked: false, expires_at: null })),
+        api.getBeatportStatus().catch(() => ({ linked: false, expires_at: null, configured: false, subscription: null })),
         api.getNowPlaying(code).catch((): undefined => undefined),
       ]);
       setEvent(eventData);
@@ -532,53 +536,22 @@ export default function EventQueuePage() {
     }
   };
 
-  const beatportListenerRef = useRef<((event: MessageEvent) => void) | null>(null);
+  const handleConnectBeatport = () => {
+    setShowBeatportLogin(true);
+  };
 
-  useEffect(() => {
-    return () => {
-      if (beatportListenerRef.current) {
-        window.removeEventListener('message', beatportListenerRef.current);
-        beatportListenerRef.current = null;
-      }
-    };
-  }, []);
-
-  const handleConnectBeatport = async () => {
-    try {
-      const { auth_url, state } = await api.startBeatportAuth();
-      const popup = window.open(auth_url, 'beatport-auth', 'width=600,height=700');
-      if (!popup) {
-        setActionError('Popup blocked - please allow popups for this site');
-        return;
-      }
-      // Clean up any previous listener
-      if (beatportListenerRef.current) {
-        window.removeEventListener('message', beatportListenerRef.current);
-      }
-      const handleMessage = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
-        if (event.data?.type === 'beatport-auth-callback' && event.data?.code) {
-          window.removeEventListener('message', handleMessage);
-          beatportListenerRef.current = null;
-          popup.close();
-          api.completeBeatportAuth(event.data.code, state).then(() => {
-            setBeatportStatus({ linked: true, expires_at: null });
-          }).catch(() => {
-            setActionError('Failed to complete Beatport authentication');
-          });
-        }
-      };
-      beatportListenerRef.current = handleMessage;
-      window.addEventListener('message', handleMessage);
-    } catch {
-      setActionError('Failed to start Beatport authentication');
-    }
+  const handleBeatportLogin = async (username: string, password: string) => {
+    await api.loginBeatport(username, password);
+    // Refetch status to get subscription info
+    const status = await api.getBeatportStatus().catch(() => ({ linked: true, expires_at: null, configured: true, subscription: null }));
+    setBeatportStatus(status);
+    setShowBeatportLogin(false);
   };
 
   const handleDisconnectBeatport = async () => {
     try {
       await api.disconnectBeatport();
-      setBeatportStatus({ linked: false, expires_at: null });
+      setBeatportStatus({ linked: false, expires_at: null, configured: true, subscription: null });
       setBeatportSyncEnabled(false);
     } catch {
       setActionError('Failed to disconnect Beatport');
@@ -904,6 +877,13 @@ export default function EventQueuePage() {
           userCode={tidalLoginCode}
           polling={tidalLoginPolling}
           onCancel={handleCancelTidalLogin}
+        />
+      )}
+
+      {showBeatportLogin && (
+        <BeatportLoginModal
+          onSubmit={handleBeatportLogin}
+          onCancel={() => setShowBeatportLogin(false)}
         />
       )}
 

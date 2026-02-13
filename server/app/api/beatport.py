@@ -1,12 +1,13 @@
 """Beatport OAuth and sync API endpoints.
 
-Uses OAuth2 authorization code flow for authentication.
-Beatport API v4 supports search and catalog access. Playlist write
-endpoints exist but are not yet implemented in this adapter.
+Uses server-side OAuth2 login: the backend authenticates with Beatport
+using the user's credentials, obtains tokens, and stores them.
+No browser popup or postMessage required.
 """
 
-import secrets
+import logging
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
@@ -17,103 +18,76 @@ from app.models.event import Event
 from app.models.request import Request as SongRequest
 from app.models.user import User
 from app.schemas.beatport import (
-    BeatportAuthCallback,
     BeatportEventSettings,
     BeatportEventSettingsUpdate,
+    BeatportLogin,
     BeatportManualLink,
     BeatportSearchResult,
     BeatportStatus,
 )
 from app.schemas.common import StatusMessageResponse
 from app.services.beatport import (
-    _generate_pkce_pair,
     disconnect_beatport,
-    exchange_code_for_tokens,
-    get_auth_url,
     get_beatport_track,
+    login_and_get_tokens,
     manual_link_beatport_track,
     save_tokens,
     search_beatport_tracks,
 )
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 router = APIRouter()
 
 
-@router.get("/auth/start")
+@router.post("/auth/login")
 @limiter.limit("5/minute")
-def start_auth(
+def login_beatport(
     request: Request,
+    login_data: BeatportLogin,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
-) -> dict:
-    """Start Beatport OAuth2 authorization code flow.
+) -> StatusMessageResponse:
+    """Authenticate with Beatport using username/password.
 
-    Returns the URL the frontend should redirect the user to.
-    Stores the CSRF state token on the user for callback validation.
+    The backend logs in to Beatport server-side, obtains an authorization
+    code, exchanges it for tokens, and stores them on the user.
     """
     if not settings.beatport_client_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Beatport integration not configured",
         )
-    state = secrets.token_urlsafe(32)
-    code_verifier, code_challenge = _generate_pkce_pair()
-    current_user.beatport_oauth_state = state
-    current_user.beatport_oauth_code_verifier = code_verifier
-    db.commit()
-    auth_url = get_auth_url(state, code_challenge)
-    return {
-        "auth_url": auth_url,
-        "state": state,
-    }
-
-
-@router.post("/auth/callback")
-@limiter.limit("5/minute")
-def auth_callback(
-    request: Request,
-    callback_data: BeatportAuthCallback,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
-) -> StatusMessageResponse:
-    """Exchange authorization code for tokens.
-
-    Validates the CSRF state parameter before exchanging the code.
-    """
-    # Validate OAuth state to prevent CSRF
-    if not current_user.beatport_oauth_state:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No pending OAuth flow — start auth first",
-        )
-    if not secrets.compare_digest(current_user.beatport_oauth_state, callback_data.state):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid state parameter",
-        )
-
-    # Retrieve and clear PKCE verifier + state immediately to prevent reuse
-    code_verifier = current_user.beatport_oauth_code_verifier
-    current_user.beatport_oauth_state = None
-    current_user.beatport_oauth_code_verifier = None
-
-    if not code_verifier:
-        db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No PKCE verifier found — start auth first",
-        )
 
     try:
-        token_data = exchange_code_for_tokens(callback_data.code, code_verifier)
-    except Exception:
-        db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to exchange authorization code",
+        token_data = login_and_get_tokens(login_data.username, login_data.password)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in (401, 403):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Beatport username or password",
+            )
+        logger.error(
+            "Beatport login HTTP error: %s %s", e.response.status_code, e.response.text[:200]
         )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to authenticate with Beatport",
+        )
+    except ValueError as e:
+        logger.error("Beatport login flow error: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to complete Beatport authentication flow",
+        )
+    except httpx.HTTPError as e:
+        logger.error("Beatport login network error: %s", type(e).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach Beatport — try again later",
+        )
+
     save_tokens(db, current_user, token_data)
     return StatusMessageResponse(status="ok", message="Beatport account linked")
 
@@ -123,14 +97,20 @@ def get_status(
     current_user: User = Depends(get_current_active_user),
 ) -> BeatportStatus:
     """Check if current user has linked Beatport account."""
+    configured = bool(settings.beatport_client_id)
     if not current_user.beatport_access_token:
-        return BeatportStatus(linked=False)
+        return BeatportStatus(linked=False, configured=configured)
 
     expires_at = None
     if current_user.beatport_token_expires_at:
         expires_at = current_user.beatport_token_expires_at.isoformat() + "Z"
 
-    return BeatportStatus(linked=True, expires_at=expires_at)
+    return BeatportStatus(
+        linked=True,
+        expires_at=expires_at,
+        configured=configured,
+        subscription=current_user.beatport_subscription,
+    )
 
 
 @router.post("/disconnect", response_model=StatusMessageResponse)

@@ -11,6 +11,7 @@ export interface Event {
   tidal_playlist_id: string | null;
   // Beatport sync settings
   beatport_sync_enabled: boolean;
+  beatport_playlist_id: string | null;
   // Banner
   banner_url: string | null;
   banner_kiosk_url: string | null;
@@ -105,6 +106,7 @@ export interface SearchResult {
   album_art: string | null;
   preview_url: string | null;
   url: string | null;
+  source: 'spotify' | 'beatport';
 }
 
 /** StageLinQ now-playing track info */
@@ -177,6 +179,8 @@ export interface TidalSyncResult {
 export interface BeatportStatus {
   linked: boolean;
   expires_at: string | null;
+  configured: boolean;
+  subscription: string | null;
 }
 
 /** Beatport search result */

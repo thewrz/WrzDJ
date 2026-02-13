@@ -1,8 +1,9 @@
-"""Tests for Beatport sync adapter."""
+"""Tests for Beatport sync adapter pipeline."""
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
+import httpx
 import pytest
 from sqlalchemy.orm import Session
 
@@ -135,31 +136,79 @@ class TestSearchWithFuzzyScoring:
         assert result is None
 
 
-class TestSyncTrack:
+class TestEnsurePlaylist:
+    @patch("app.services.sync.beatport_adapter.beatport_service.create_beatport_playlist")
+    def test_delegates_to_service(self, mock_create, adapter, db, bp_user, bp_event):
+        """ensure_playlist delegates to beatport_service.create_beatport_playlist."""
+        mock_create.return_value = "playlist-123"
+        result = adapter.ensure_playlist(db, bp_user, bp_event)
+        assert result == "playlist-123"
+        mock_create.assert_called_once_with(db, bp_user, bp_event)
+
+
+class TestAddToPlaylist:
+    @patch("app.services.sync.beatport_adapter.beatport_service.add_track_to_beatport_playlist")
+    def test_delegates_to_service(self, mock_add, adapter, db, bp_user):
+        """add_to_playlist delegates to beatport_service."""
+        mock_add.return_value = True
+        result = adapter.add_to_playlist(db, bp_user, "playlist-123", "track-456")
+        assert result is True
+        mock_add.assert_called_once_with(db, bp_user, "playlist-123", "track-456")
+
+
+class TestAddTracksToPlaylist:
+    @patch("app.services.sync.beatport_adapter.beatport_service.add_tracks_to_beatport_playlist")
+    def test_batch_delegates_to_service(self, mock_batch, adapter, db, bp_user):
+        """add_tracks_to_playlist delegates to beatport_service batch."""
+        mock_batch.return_value = True
+        result = adapter.add_tracks_to_playlist(db, bp_user, "playlist-123", ["1", "2", "3"])
+        assert result is True
+        mock_batch.assert_called_once_with(db, bp_user, "playlist-123", ["1", "2", "3"])
+
+
+class TestSyncTrackPipeline:
+    """Test the full sync_track pipeline (search -> ensure -> add -> ADDED)."""
+
+    @patch("app.services.sync.beatport_adapter.beatport_service.add_track_to_beatport_playlist")
+    @patch("app.services.sync.beatport_adapter.beatport_service.create_beatport_playlist")
     @patch("app.services.sync.beatport_adapter.beatport_service.search_beatport_tracks")
-    def test_found_returns_matched(self, mock_search, adapter, db, bp_user, bp_event, normalized):
-        """Found track returns MATCHED, not ADDED."""
+    def test_full_pipeline_returns_added(
+        self, mock_search, mock_create, mock_add, adapter, db, bp_user, bp_event, normalized
+    ):
+        """Full pipeline: search -> ensure playlist -> add -> ADDED."""
         mock_search.return_value = [_make_search_result()]
+        mock_create.return_value = "playlist-99"
+        mock_add.return_value = True
+
         result = adapter.sync_track(db, bp_user, bp_event, normalized)
-        assert result.status == SyncStatus.MATCHED
+
+        assert result.status == SyncStatus.ADDED
         assert result.track_match is not None
+        assert result.track_match.track_id == "12345"
+        assert result.playlist_id == "playlist-99"
 
     @patch("app.services.sync.beatport_adapter.beatport_service.search_beatport_tracks")
-    def test_not_found(self, mock_search, adapter, db, bp_user, bp_event, normalized):
-        """Not found returns NOT_FOUND."""
+    def test_not_found_when_search_empty(
+        self, mock_search, adapter, db, bp_user, bp_event, normalized
+    ):
+        """Search returns nothing -> NOT_FOUND."""
         mock_search.return_value = []
+
         result = adapter.sync_track(db, bp_user, bp_event, normalized)
         assert result.status == SyncStatus.NOT_FOUND
 
+    @patch("app.services.sync.beatport_adapter.beatport_service.create_beatport_playlist")
     @patch("app.services.sync.beatport_adapter.beatport_service.search_beatport_tracks")
-    def test_does_not_call_ensure_playlist(
-        self, mock_search, adapter, db, bp_user, bp_event, normalized
+    def test_error_when_playlist_creation_fails(
+        self, mock_search, mock_create, adapter, db, bp_user, bp_event, normalized
     ):
-        """sync_track should NOT call ensure_playlist (overrides base pipeline)."""
+        """Playlist creation failure -> ERROR."""
         mock_search.return_value = [_make_search_result()]
+        mock_create.return_value = None
+
         result = adapter.sync_track(db, bp_user, bp_event, normalized)
-        assert result.status == SyncStatus.MATCHED
-        assert result.playlist_id is None
+        assert result.status == SyncStatus.ERROR
+        assert "playlist" in (result.error or "").lower()
 
 
 class TestSyncTrackErrorSanitized:
@@ -168,8 +217,6 @@ class TestSyncTrackErrorSanitized:
         self, mock_search, adapter, db, bp_user, bp_event, normalized
     ):
         """Exception during sync produces sanitized error, not raw exception."""
-        import httpx
-
         mock_search.side_effect = httpx.ConnectError(
             "Connection with Bearer sk-secret-token to api.beatport.com failed"
         )
@@ -178,11 +225,3 @@ class TestSyncTrackErrorSanitized:
         assert "Bearer" not in result.error
         assert "sk-secret" not in result.error
         assert result.error == "External API connection failed"
-
-
-class TestStubs:
-    def test_ensure_playlist_returns_none(self, adapter, db, bp_user, bp_event):
-        assert adapter.ensure_playlist(db, bp_user, bp_event) is None
-
-    def test_add_to_playlist_returns_false(self, adapter, db, bp_user):
-        assert adapter.add_to_playlist(db, bp_user, "playlist", "track") is False

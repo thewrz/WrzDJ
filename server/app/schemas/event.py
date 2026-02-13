@@ -55,6 +55,7 @@ class EventOut(BaseModel):
     tidal_playlist_id: str | None = None
     # Beatport sync settings
     beatport_sync_enabled: bool = False
+    beatport_playlist_id: str | None = None
     # Banner
     banner_url: str | None = None
     banner_kiosk_url: str | None = None

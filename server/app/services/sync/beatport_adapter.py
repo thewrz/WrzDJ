@@ -1,13 +1,10 @@
-"""Beatport adapter — search-only sync (no playlist write).
+"""Beatport adapter — full playlist sync via Beatport API v4.
 
-Beatport's API v4 is read-only for third-party apps. This adapter:
+This adapter:
 1. Searches the Beatport catalog for the requested track
-2. Returns MATCHED (not ADDED) when found — the DJ gets a purchase link
-3. Returns NOT_FOUND when no match
-4. Stubs ensure_playlist() and add_to_playlist() — they do nothing
-
-When Beatport opens write APIs, override sync_track() to use the
-full search->playlist->add pipeline from the base class.
+2. Creates/ensures a Beatport playlist for the event
+3. Adds matched tracks to the playlist
+4. Returns ADDED when found and added to playlist
 """
 
 from __future__ import annotations
@@ -16,13 +13,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from app.services import beatport as beatport_service
-from app.services.sync.base import (
-    PlaylistSyncAdapter,
-    SyncResult,
-    SyncStatus,
-    TrackMatch,
-    sanitize_sync_error,
-)
+from app.services.sync.base import PlaylistSyncAdapter, TrackMatch
 from app.services.track_normalizer import fuzzy_match_score
 from app.services.version_filter import is_unwanted_version
 
@@ -40,7 +31,7 @@ MATCH_THRESHOLD = 0.5
 
 
 class BeatportSyncAdapter(PlaylistSyncAdapter):
-    """Playlist sync adapter for Beatport (search-only)."""
+    """Playlist sync adapter for Beatport."""
 
     @property
     def service_name(self) -> str:
@@ -111,8 +102,8 @@ class BeatportSyncAdapter(PlaylistSyncAdapter):
         user: User,
         event: Event,
     ) -> str | None:
-        """Stub — Beatport has no playlist API."""
-        return None
+        """Create or get the Beatport playlist for this event."""
+        return beatport_service.create_beatport_playlist(db, user, event)
 
     def add_to_playlist(
         self,
@@ -121,37 +112,15 @@ class BeatportSyncAdapter(PlaylistSyncAdapter):
         playlist_id: str,
         track_id: str,
     ) -> bool:
-        """Stub — Beatport has no playlist API."""
-        return False
+        """Add a single track to the Beatport playlist."""
+        return beatport_service.add_track_to_beatport_playlist(db, user, playlist_id, track_id)
 
-    def sync_track(
+    def add_tracks_to_playlist(
         self,
         db: Session,
         user: User,
-        event: Event,
-        normalized: NormalizedTrack,
-        intent: IntentContext | None = None,
-    ) -> SyncResult:
-        """Search-only sync: returns MATCHED (not ADDED) when found.
-
-        Overrides the base class pipeline to skip playlist creation/addition.
-        """
-        try:
-            track_match = self.search_track(db, user, normalized, intent)
-            if not track_match:
-                return SyncResult(
-                    service=self.service_name,
-                    status=SyncStatus.NOT_FOUND,
-                )
-            return SyncResult(
-                service=self.service_name,
-                status=SyncStatus.MATCHED,
-                track_match=track_match,
-            )
-        except Exception as e:
-            logger.error("Beatport sync failed: %s", type(e).__name__)
-            return SyncResult(
-                service=self.service_name,
-                status=SyncStatus.ERROR,
-                error=sanitize_sync_error(e),
-            )
+        playlist_id: str,
+        track_ids: list[str],
+    ) -> bool:
+        """Batch add tracks to the Beatport playlist."""
+        return beatport_service.add_tracks_to_beatport_playlist(db, user, playlist_id, track_ids)

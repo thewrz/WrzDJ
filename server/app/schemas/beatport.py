@@ -8,6 +8,8 @@ class BeatportStatus(BaseModel):
 
     linked: bool
     expires_at: str | None = None
+    configured: bool = True
+    subscription: str | None = None  # e.g., "bp_link", "bp_pro", None
 
 
 class BeatportSearchResult(BaseModel):
@@ -39,11 +41,11 @@ class BeatportEventSettingsUpdate(BaseModel):
     beatport_sync_enabled: bool
 
 
-class BeatportAuthCallback(BaseModel):
-    """OAuth callback request with code and state."""
+class BeatportLogin(BaseModel):
+    """Login request with Beatport credentials."""
 
-    code: str = Field(..., min_length=1, max_length=2048)
-    state: str = Field(..., min_length=1, max_length=64)
+    username: str = Field(..., min_length=1, max_length=200)
+    password: str = Field(..., min_length=1, max_length=200)
 
 
 class BeatportManualLink(BaseModel):

@@ -1,6 +1,7 @@
 """Tests for Beatport API endpoints."""
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -66,6 +67,137 @@ class TestBeatportStatus:
         data = response.json()
         assert data["linked"] is True
         assert data["expires_at"] is not None
+
+    def test_configured_field(self, client: TestClient, bp_api_headers: dict[str, str]):
+        """Status includes configured field."""
+        response = client.get("/api/beatport/status", headers=bp_api_headers)
+        assert response.status_code == 200
+        assert "configured" in response.json()
+
+    def test_status_includes_subscription_field(
+        self, client: TestClient, bp_api_headers: dict[str, str], bp_api_user: User, db: Session
+    ):
+        """Status includes subscription field from user model."""
+        bp_api_user.beatport_subscription = "bp_link"
+        db.commit()
+
+        response = client.get("/api/beatport/status", headers=bp_api_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["subscription"] == "bp_link"
+
+    def test_status_subscription_null_when_not_set(
+        self, client: TestClient, bp_api_headers: dict[str, str]
+    ):
+        """Status subscription is null when user has no subscription stored."""
+        response = client.get("/api/beatport/status", headers=bp_api_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["subscription"] is None
+
+
+class TestBeatportLogin:
+    def test_login_success(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+    ):
+        """Successful login links Beatport account."""
+        with (
+            patch("app.api.beatport.login_and_get_tokens") as mock_login,
+            patch("app.api.beatport.settings") as mock_settings,
+        ):
+            mock_settings.beatport_client_id = "test-client-id"
+            mock_login.return_value = {
+                "access_token": "new-token",
+                "refresh_token": "new-refresh",
+                "expires_in": 600,
+            }
+            response = client.post(
+                "/api/beatport/auth/login",
+                json={"username": "dj_test", "password": "beatpass123"},
+                headers=auth_headers,
+            )
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+        mock_login.assert_called_once_with("dj_test", "beatpass123")
+
+    def test_login_not_configured(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+    ):
+        """Login returns 503 when Beatport is not configured."""
+        with patch("app.api.beatport.settings") as mock_settings:
+            mock_settings.beatport_client_id = ""
+            response = client.post(
+                "/api/beatport/auth/login",
+                json={"username": "user", "password": "pass"},
+                headers=auth_headers,
+            )
+        assert response.status_code == 503
+
+    def test_login_invalid_credentials(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+    ):
+        """Invalid credentials returns 401."""
+        from unittest.mock import MagicMock
+
+        import httpx
+
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+
+        with (
+            patch("app.api.beatport.login_and_get_tokens") as mock_login,
+            patch("app.api.beatport.settings") as mock_settings,
+        ):
+            mock_settings.beatport_client_id = "test-client-id"
+            mock_login.side_effect = httpx.HTTPStatusError(
+                "Unauthorized", request=MagicMock(), response=mock_response
+            )
+            response = client.post(
+                "/api/beatport/auth/login",
+                json={"username": "bad", "password": "creds"},
+                headers=auth_headers,
+            )
+        assert response.status_code == 401
+
+    def test_login_requires_auth(self, client: TestClient):
+        """Login endpoint requires authentication."""
+        response = client.post(
+            "/api/beatport/auth/login",
+            json={"username": "user", "password": "pass"},
+        )
+        assert response.status_code in (401, 403)
+
+    def test_login_rejects_empty_username(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+    ):
+        """Login rejects empty username."""
+        response = client.post(
+            "/api/beatport/auth/login",
+            json={"username": "", "password": "pass"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 422
+
+    def test_login_rejects_empty_password(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+    ):
+        """Login rejects empty password."""
+        response = client.post(
+            "/api/beatport/auth/login",
+            json={"username": "user", "password": ""},
+            headers=auth_headers,
+        )
+        assert response.status_code == 422
 
 
 class TestBeatportDisconnect:
@@ -159,221 +291,3 @@ class TestBeatportSearch:
         )
         # Should not be a validation error — may be 200 or other non-422 status
         assert response.status_code != 422
-
-
-class TestBeatportAuthStateValidation:
-    def test_start_auth_stores_state_and_verifier(
-        self,
-        client: TestClient,
-        bp_api_headers: dict[str, str],
-        bp_api_user: User,
-        db: Session,
-    ):
-        """Start auth stores state and PKCE code_verifier on user model."""
-        from unittest.mock import patch
-
-        with patch("app.api.beatport.settings") as mock_settings:
-            mock_settings.beatport_client_id = "test-bp-client-id"
-            mock_settings.beatport_redirect_uri = "http://localhost:3000/callback"
-            response = client.get("/api/beatport/auth/start", headers=bp_api_headers)
-        assert response.status_code == 200
-        state = response.json()["state"]
-        assert state is not None
-
-        db.refresh(bp_api_user)
-        assert bp_api_user.beatport_oauth_state == state
-        assert bp_api_user.beatport_oauth_code_verifier is not None
-        assert len(bp_api_user.beatport_oauth_code_verifier) >= 43
-
-    def test_start_auth_url_includes_pkce(
-        self,
-        client: TestClient,
-        bp_api_headers: dict[str, str],
-        bp_api_user: User,
-        db: Session,
-    ):
-        """Start auth returns URL with PKCE code_challenge params."""
-        from unittest.mock import patch
-
-        with patch("app.api.beatport.settings") as mock_settings:
-            mock_settings.beatport_client_id = "test-bp-client-id"
-            mock_settings.beatport_redirect_uri = "http://localhost:3000/callback"
-            response = client.get("/api/beatport/auth/start", headers=bp_api_headers)
-        assert response.status_code == 200
-        auth_url = response.json()["auth_url"]
-        assert "code_challenge=" in auth_url
-        assert "code_challenge_method=S256" in auth_url
-
-    def test_callback_rejects_missing_state(
-        self,
-        client: TestClient,
-        bp_api_headers: dict[str, str],
-        bp_api_user: User,
-        db: Session,
-    ):
-        """Callback rejects request when user has no pending state."""
-        bp_api_user.beatport_oauth_state = None
-        db.commit()
-
-        response = client.post(
-            "/api/beatport/auth/callback",
-            json={"code": "test-code", "state": "some-state"},
-            headers=bp_api_headers,
-        )
-        assert response.status_code == 400
-        assert "No pending OAuth flow" in response.json()["detail"]
-
-    def test_callback_rejects_wrong_state(
-        self,
-        client: TestClient,
-        bp_api_headers: dict[str, str],
-        bp_api_user: User,
-        db: Session,
-    ):
-        """Callback rejects incorrect state parameter."""
-        bp_api_user.beatport_oauth_state = "correct-state-value"
-        bp_api_user.beatport_oauth_code_verifier = "test-verifier"
-        db.commit()
-
-        response = client.post(
-            "/api/beatport/auth/callback",
-            json={"code": "test-code", "state": "wrong-state-value"},
-            headers=bp_api_headers,
-        )
-        assert response.status_code == 400
-        assert "Invalid state" in response.json()["detail"]
-
-    def test_callback_accepts_correct_state(
-        self,
-        client: TestClient,
-        bp_api_headers: dict[str, str],
-        bp_api_user: User,
-        db: Session,
-    ):
-        """Callback accepts correct state, passes verifier, and clears both."""
-        bp_api_user.beatport_oauth_state = "valid-state-123"
-        bp_api_user.beatport_oauth_code_verifier = "test-verifier-abc"
-        db.commit()
-
-        from unittest.mock import patch
-
-        with patch("app.api.beatport.exchange_code_for_tokens") as mock_exchange:
-            mock_exchange.return_value = {
-                "access_token": "new-token",
-                "refresh_token": "new-refresh",
-                "expires_in": 600,
-            }
-            response = client.post(
-                "/api/beatport/auth/callback",
-                json={"code": "auth-code", "state": "valid-state-123"},
-                headers=bp_api_headers,
-            )
-            # Verify code_verifier was passed to exchange function
-            mock_exchange.assert_called_once_with("auth-code", "test-verifier-abc")
-
-        assert response.status_code == 200
-        db.refresh(bp_api_user)
-        assert bp_api_user.beatport_oauth_state is None
-        assert bp_api_user.beatport_oauth_code_verifier is None
-
-    def test_callback_rejects_reused_state(
-        self,
-        client: TestClient,
-        bp_api_headers: dict[str, str],
-        bp_api_user: User,
-        db: Session,
-    ):
-        """Second callback with same state is rejected (state cleared after first use)."""
-        bp_api_user.beatport_oauth_state = "one-time-state"
-        bp_api_user.beatport_oauth_code_verifier = "one-time-verifier"
-        db.commit()
-
-        from unittest.mock import patch
-
-        with patch("app.api.beatport.exchange_code_for_tokens") as mock_exchange:
-            mock_exchange.return_value = {
-                "access_token": "token",
-                "refresh_token": "refresh",
-                "expires_in": 600,
-            }
-            # First call succeeds
-            response1 = client.post(
-                "/api/beatport/auth/callback",
-                json={"code": "code1", "state": "one-time-state"},
-                headers=bp_api_headers,
-            )
-            assert response1.status_code == 200
-
-        # Second call with same state fails
-        response2 = client.post(
-            "/api/beatport/auth/callback",
-            json={"code": "code2", "state": "one-time-state"},
-            headers=bp_api_headers,
-        )
-        assert response2.status_code == 400
-
-    def test_callback_rejects_missing_verifier(
-        self,
-        client: TestClient,
-        bp_api_headers: dict[str, str],
-        bp_api_user: User,
-        db: Session,
-    ):
-        """Callback rejects when state is set but code_verifier is missing."""
-        bp_api_user.beatport_oauth_state = "valid-state"
-        bp_api_user.beatport_oauth_code_verifier = None
-        db.commit()
-
-        response = client.post(
-            "/api/beatport/auth/callback",
-            json={"code": "test-code", "state": "valid-state"},
-            headers=bp_api_headers,
-        )
-        assert response.status_code == 400
-        assert "PKCE" in response.json()["detail"]
-
-
-class TestBeatportAuthCallbackBody:
-    def test_callback_accepts_json_body(
-        self,
-        client: TestClient,
-        bp_api_headers: dict[str, str],
-        bp_api_user: User,
-        db: Session,
-    ):
-        """Callback accepts code and state as JSON body."""
-        bp_api_user.beatport_oauth_state = "json-body-state"
-        bp_api_user.beatport_oauth_code_verifier = "json-body-verifier"
-        db.commit()
-
-        from unittest.mock import patch
-
-        with patch("app.api.beatport.exchange_code_for_tokens") as mock_exchange:
-            mock_exchange.return_value = {
-                "access_token": "t",
-                "refresh_token": "r",
-                "expires_in": 600,
-            }
-            response = client.post(
-                "/api/beatport/auth/callback",
-                json={"code": "test-code", "state": "json-body-state"},
-                headers=bp_api_headers,
-            )
-        assert response.status_code == 200
-
-    def test_callback_rejects_query_params_only(
-        self,
-        client: TestClient,
-        bp_api_headers: dict[str, str],
-        bp_api_user: User,
-        db: Session,
-    ):
-        """Callback rejects old-style query parameter format."""
-        bp_api_user.beatport_oauth_state = "query-state"
-        db.commit()
-
-        response = client.post(
-            "/api/beatport/auth/callback?code=test&state=query-state",
-            headers=bp_api_headers,
-        )
-        assert response.status_code == 422  # Missing body

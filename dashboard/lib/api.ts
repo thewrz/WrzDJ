@@ -305,6 +305,12 @@ class ApiClient {
     return this.fetch(`/api/search?q=${encodeURIComponent(query)}`);
   }
 
+  async eventSearch(code: string, query: string): Promise<SearchResult[]> {
+    return this.publicFetch(
+      `${getApiUrl()}/api/events/${code}/search?q=${encodeURIComponent(query)}`
+    );
+  }
+
   async voteRequest(requestId: number): Promise<VoteResponse> {
     return this.fetch(`/api/requests/${requestId}/vote`, { method: 'POST' });
   }
@@ -502,14 +508,10 @@ class ApiClient {
     return this.fetch('/api/beatport/status');
   }
 
-  async startBeatportAuth(): Promise<{ auth_url: string; state: string }> {
-    return this.fetch('/api/beatport/auth/start');
-  }
-
-  async completeBeatportAuth(code: string, state: string): Promise<{ status: string; message: string }> {
-    return this.fetch('/api/beatport/auth/callback', {
+  async loginBeatport(username: string, password: string): Promise<{ status: string; message: string }> {
+    return this.fetch('/api/beatport/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ code, state }),
+      body: JSON.stringify({ username, password }),
     });
   }
 

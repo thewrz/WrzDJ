@@ -1,7 +1,5 @@
 """Tests for Beatport service layer."""
 
-import base64
-import hashlib
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -9,19 +7,21 @@ import httpx
 import pytest
 from sqlalchemy.orm import Session
 
+from app.models.event import Event
 from app.models.user import User
 from app.services.auth import get_password_hash
 from app.services.beatport import (
-    BEATPORT_AUTH_URL,
     BEATPORT_SEARCH_URL,
-    BEATPORT_TOKEN_URL,
     DEFAULT_TOKEN_EXPIRY,
-    _generate_pkce_pair,
+    _authorize_url,
     _parse_duration,
     _refresh_token_if_needed,
+    _token_url,
+    add_tracks_to_beatport_playlist,
+    create_beatport_playlist,
     disconnect_beatport,
-    exchange_code_for_tokens,
-    get_auth_url,
+    fetch_subscription_type,
+    login_and_get_tokens,
     save_tokens,
     search_beatport_tracks,
 )
@@ -183,16 +183,6 @@ class TestDisconnect:
         assert beatport_user.beatport_refresh_token is None
         assert beatport_user.beatport_token_expires_at is None
 
-    def test_disconnect_clears_code_verifier(self, db: Session, beatport_user: User):
-        """Disconnect also clears the PKCE code_verifier."""
-        beatport_user.beatport_oauth_code_verifier = "test-verifier"
-        db.commit()
-
-        disconnect_beatport(db, beatport_user)
-
-        db.refresh(beatport_user)
-        assert beatport_user.beatport_oauth_code_verifier is None
-
 
 class TestSearchIncludesMixName:
     @patch("app.services.beatport.httpx.Client")
@@ -270,75 +260,158 @@ class TestParseDuration:
 
 
 class TestCorrectApiUrls:
-    def test_auth_url_uses_account_domain(self):
-        """Auth URL uses the Beatport Identity Service domain."""
-        assert BEATPORT_AUTH_URL == "https://account.beatport.com/o/authorize/"
-
-    def test_token_url_uses_account_domain(self):
-        """Token URL uses the Beatport Identity Service domain."""
-        assert BEATPORT_TOKEN_URL == "https://account.beatport.com/o/token/"
+    @patch("app.services.beatport.get_settings")
+    def test_authorize_url_uses_configured_base(self, mock_settings):
+        """Authorize URL uses the configured beatport_auth_base_url."""
+        mock_settings.return_value.beatport_auth_base_url = "https://account.beatport.com"
+        assert _authorize_url() == "https://account.beatport.com/o/authorize/"
 
     @patch("app.services.beatport.get_settings")
-    def test_get_auth_url_starts_with_correct_base(self, mock_settings):
-        """get_auth_url() returns a URL starting with the correct base."""
-        mock_settings.return_value.beatport_client_id = "test-client-id"
-        mock_settings.return_value.beatport_redirect_uri = "http://localhost:3000/callback"
-        url = get_auth_url("test-state", "test-challenge")
-        assert url.startswith("https://account.beatport.com/o/authorize/")
+    def test_token_url_uses_configured_base(self, mock_settings):
+        """Token URL uses the configured beatport_auth_base_url."""
+        mock_settings.return_value.beatport_auth_base_url = "https://account.beatport.com"
+        assert _token_url() == "https://account.beatport.com/o/token/"
 
     @patch("app.services.beatport.get_settings")
-    def test_get_auth_url_includes_pkce_params(self, mock_settings):
-        """get_auth_url() includes PKCE code_challenge and method."""
-        mock_settings.return_value.beatport_client_id = "test-client-id"
-        mock_settings.return_value.beatport_redirect_uri = "http://localhost:3000/callback"
-        url = get_auth_url("test-state", "test-challenge-value")
-        assert "code_challenge=test-challenge-value" in url
-        assert "code_challenge_method=S256" in url
+    def test_v4_auth_base_override(self, mock_settings):
+        """Auth URLs can be overridden to v4 path for public client testing."""
+        mock_settings.return_value.beatport_auth_base_url = "https://api.beatport.com/v4/auth"
+        assert _authorize_url() == "https://api.beatport.com/v4/auth/o/authorize/"
+        assert _token_url() == "https://api.beatport.com/v4/auth/o/token/"
 
 
-class TestPKCE:
-    def test_generate_pkce_pair_format(self):
-        """PKCE pair has correct format — verifier is URL-safe, challenge is base64url."""
-        verifier, challenge = _generate_pkce_pair()
-        assert len(verifier) >= 43  # token_urlsafe(32) produces 43 chars
-        assert len(challenge) > 0
-        # Verify no padding characters
-        assert "=" not in challenge
-
-    def test_pkce_s256_hash_matches(self):
-        """code_challenge is the S256 hash of code_verifier."""
-        verifier, challenge = _generate_pkce_pair()
-        # Recompute
-        digest = hashlib.sha256(verifier.encode("ascii")).digest()
-        expected = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
-        assert challenge == expected
-
+class TestLoginAndGetTokens:
     @patch("app.services.beatport.get_settings")
     @patch("app.services.beatport.httpx.Client")
-    def test_exchange_includes_code_verifier(self, mock_client_cls, mock_settings):
-        """Token exchange POST includes code_verifier in body."""
-        mock_settings.return_value.beatport_client_id = "test-id"
-        mock_settings.return_value.beatport_client_secret = ""
-        mock_settings.return_value.beatport_redirect_uri = "http://localhost:3000/callback"
+    def test_login_success(self, mock_client_cls, mock_settings):
+        """Successful login returns token data."""
+        mock_settings.return_value.beatport_client_id = "test-client-id"
+        mock_settings.return_value.beatport_redirect_uri = "https://example.com/callback"
+        mock_settings.return_value.beatport_auth_base_url = "https://api.beatport.com/v4/auth"
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "access_token": "tok",
+        login_response = MagicMock()
+        login_response.json.return_value = {"username": "dj_test", "email": "dj@test.com"}
+        login_response.raise_for_status = MagicMock()
+
+        authorize_response = MagicMock()
+        authorize_response.status_code = 302
+        authorize_response.headers = {"location": "/callback?code=auth-code-xyz"}
+
+        token_response = MagicMock()
+        token_response.json.return_value = {
+            "access_token": "new-access",
+            "refresh_token": "new-refresh",
             "expires_in": 600,
         }
-        mock_response.raise_for_status = MagicMock()
+        token_response.raise_for_status = MagicMock()
 
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
         mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = mock_response
+        mock_client.post.side_effect = [login_response, token_response]
+        mock_client.get.return_value = authorize_response
         mock_client_cls.return_value = mock_client
 
-        exchange_code_for_tokens("auth-code", "my-verifier-123")
+        result = login_and_get_tokens("dj_test", "password123")
 
-        call_kwargs = mock_client.post.call_args
-        post_data = call_kwargs.kwargs.get("data", {})
-        assert post_data["code_verifier"] == "my-verifier-123"
+        assert result["access_token"] == "new-access"
+        assert result["refresh_token"] == "new-refresh"
+
+    @patch("app.services.beatport.get_settings")
+    @patch("app.services.beatport.httpx.Client")
+    def test_login_invalid_credentials(self, mock_client_cls, mock_settings):
+        """Invalid credentials raises HTTPStatusError."""
+        mock_settings.return_value.beatport_client_id = "test-client-id"
+        mock_settings.return_value.beatport_redirect_uri = "https://example.com/callback"
+        mock_settings.return_value.beatport_auth_base_url = "https://api.beatport.com/v4/auth"
+
+        login_response = MagicMock()
+        login_response.status_code = 401
+        login_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "Unauthorized", request=MagicMock(), response=login_response
+        )
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = login_response
+        mock_client_cls.return_value = mock_client
+
+        with pytest.raises(httpx.HTTPStatusError):
+            login_and_get_tokens("baduser", "badpass")
+
+    @patch("app.services.beatport.get_settings")
+    @patch("app.services.beatport.httpx.Client")
+    def test_login_missing_fields_raises_value_error(self, mock_client_cls, mock_settings):
+        """Login response without username/email fields raises ValueError."""
+        mock_settings.return_value.beatport_client_id = "test-client-id"
+        mock_settings.return_value.beatport_redirect_uri = "https://example.com/callback"
+        mock_settings.return_value.beatport_auth_base_url = "https://api.beatport.com/v4/auth"
+
+        login_response = MagicMock()
+        login_response.json.return_value = {"status": "ok"}  # Missing username/email
+        login_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = login_response
+        mock_client_cls.return_value = mock_client
+
+        with pytest.raises(ValueError, match="Invalid Beatport credentials"):
+            login_and_get_tokens("user", "pass")
+
+    @patch("app.services.beatport.get_settings")
+    @patch("app.services.beatport.httpx.Client")
+    def test_login_authorize_not_redirect_raises_value_error(self, mock_client_cls, mock_settings):
+        """Non-redirect response from authorize raises ValueError."""
+        mock_settings.return_value.beatport_client_id = "test-client-id"
+        mock_settings.return_value.beatport_redirect_uri = "https://example.com/callback"
+        mock_settings.return_value.beatport_auth_base_url = "https://api.beatport.com/v4/auth"
+
+        login_response = MagicMock()
+        login_response.json.return_value = {"username": "dj", "email": "dj@test.com"}
+        login_response.raise_for_status = MagicMock()
+
+        authorize_response = MagicMock()
+        authorize_response.status_code = 200
+        authorize_response.text = "Not a redirect"
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = login_response
+        mock_client.get.return_value = authorize_response
+        mock_client_cls.return_value = mock_client
+
+        with pytest.raises(ValueError, match="Expected redirect"):
+            login_and_get_tokens("dj", "pass")
+
+    @patch("app.services.beatport.get_settings")
+    @patch("app.services.beatport.httpx.Client")
+    def test_login_no_code_in_redirect_raises_value_error(self, mock_client_cls, mock_settings):
+        """Redirect without code parameter raises ValueError."""
+        mock_settings.return_value.beatport_client_id = "test-client-id"
+        mock_settings.return_value.beatport_redirect_uri = "https://example.com/callback"
+        mock_settings.return_value.beatport_auth_base_url = "https://api.beatport.com/v4/auth"
+
+        login_response = MagicMock()
+        login_response.json.return_value = {"username": "dj", "email": "dj@test.com"}
+        login_response.raise_for_status = MagicMock()
+
+        authorize_response = MagicMock()
+        authorize_response.status_code = 302
+        authorize_response.headers = {"location": "/callback?error=access_denied"}
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = login_response
+        mock_client.get.return_value = authorize_response
+        mock_client_cls.return_value = mock_client
+
+        with pytest.raises(ValueError, match="No authorization code"):
+            login_and_get_tokens("dj", "pass")
 
 
 class TestDefaultTokenExpiry:
@@ -404,7 +477,7 @@ class TestDisconnectRevokesToken:
         # Verify POST to revocation endpoint was called
         mock_client.post.assert_called_once()
         call_args = mock_client.post.call_args
-        assert "/o/revoke_token/" in call_args.args[0]
+        assert call_args.args[0].endswith("/o/revoke_token/")
 
     @patch("app.services.beatport.httpx.Client")
     def test_disconnect_revoke_uses_post_body(
@@ -440,67 +513,6 @@ class TestDisconnectRevokesToken:
         assert beatport_user.beatport_access_token is None
         assert beatport_user.beatport_refresh_token is None
         assert beatport_user.beatport_token_expires_at is None
-
-
-class TestExchangeCodeWithoutSecret:
-    @patch("app.services.beatport.get_settings")
-    @patch("app.services.beatport.httpx.Client")
-    def test_exchange_omits_secret_when_empty(self, mock_client_cls, mock_settings):
-        """Token exchange excludes client_secret when it's empty."""
-        mock_settings.return_value.beatport_client_id = "public-client-id"
-        mock_settings.return_value.beatport_client_secret = ""
-        mock_settings.return_value.beatport_redirect_uri = "http://localhost:3000/callback"
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "access_token": "new_token",
-            "refresh_token": "new_refresh",
-            "expires_in": 600,
-        }
-        mock_response.raise_for_status = MagicMock()
-
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        result = exchange_code_for_tokens("auth-code-123", "test-verifier")
-
-        assert result["access_token"] == "new_token"
-
-        call_kwargs = mock_client.post.call_args
-        post_data = call_kwargs.kwargs.get("data", {})
-        assert "client_secret" not in post_data
-        assert post_data["client_id"] == "public-client-id"
-        assert post_data["code_verifier"] == "test-verifier"
-
-    @patch("app.services.beatport.get_settings")
-    @patch("app.services.beatport.httpx.Client")
-    def test_exchange_includes_secret_when_set(self, mock_client_cls, mock_settings):
-        """Token exchange includes client_secret when configured."""
-        mock_settings.return_value.beatport_client_id = "my-client-id"
-        mock_settings.return_value.beatport_client_secret = "my-secret"
-        mock_settings.return_value.beatport_redirect_uri = "http://localhost:3000/callback"
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "access_token": "tok",
-            "expires_in": 600,
-        }
-        mock_response.raise_for_status = MagicMock()
-
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        exchange_code_for_tokens("auth-code-456", "test-verifier")
-
-        call_kwargs = mock_client.post.call_args
-        post_data = call_kwargs.kwargs.get("data", {})
-        assert post_data["client_secret"] == "my-secret"
 
 
 class TestRefreshWithoutSecret:
@@ -578,3 +590,174 @@ class TestLoggerSanitization:
         log_msg = str(mock_logger.error.call_args)
         assert "super-secret" not in log_msg
         assert "client_secret" not in log_msg
+
+
+@pytest.fixture
+def beatport_event(db: Session, beatport_user: User) -> Event:
+    """Event with Beatport sync enabled."""
+    from datetime import UTC, datetime, timedelta
+
+    event = Event(
+        code="BPTEST",
+        name="BP Playlist Test",
+        created_by_user_id=beatport_user.id,
+        expires_at=datetime.now(UTC) + timedelta(hours=6),
+        beatport_sync_enabled=True,
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+class TestBeatportPlaylist:
+    @patch("app.services.beatport.httpx.Client")
+    def test_create_playlist_success(
+        self, mock_client_cls, db: Session, beatport_user: User, beatport_event: Event
+    ):
+        """Successful playlist creation returns playlist ID and saves to event."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"id": 42}
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        result = create_beatport_playlist(db, beatport_user, beatport_event)
+
+        assert result == "42"
+        db.refresh(beatport_event)
+        assert beatport_event.beatport_playlist_id == "42"
+
+    def test_create_playlist_returns_existing(
+        self, db: Session, beatport_user: User, beatport_event: Event
+    ):
+        """Event already has beatport_playlist_id — returns it without API call."""
+        beatport_event.beatport_playlist_id = "existing-99"
+        db.commit()
+
+        result = create_beatport_playlist(db, beatport_user, beatport_event)
+        assert result == "existing-99"
+
+    @patch("app.services.beatport.httpx.Client")
+    def test_create_playlist_handles_error(
+        self, mock_client_cls, db: Session, beatport_user: User, beatport_event: Event
+    ):
+        """HTTP error during playlist creation returns None."""
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.side_effect = httpx.ConnectError("Connection refused")
+        mock_client_cls.return_value = mock_client
+
+        result = create_beatport_playlist(db, beatport_user, beatport_event)
+        assert result is None
+
+    @patch("app.services.beatport.httpx.Client")
+    def test_add_tracks_batch_sends_ints(self, mock_client_cls, db: Session, beatport_user: User):
+        """Track IDs are cast to int in the API request body."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        result = add_tracks_to_beatport_playlist(
+            db, beatport_user, "playlist-1", ["12345", "67890"]
+        )
+
+        assert result is True
+        call_kwargs = mock_client.post.call_args
+        body = call_kwargs.kwargs.get("json", {})
+        assert body["track_ids"] == [12345, 67890]
+
+    @patch("app.services.beatport.httpx.Client")
+    def test_add_track_success(self, mock_client_cls, db: Session, beatport_user: User):
+        """Adding a single track returns True on success."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        from app.services.beatport import add_track_to_beatport_playlist
+
+        result = add_track_to_beatport_playlist(db, beatport_user, "playlist-1", "99999")
+        assert result is True
+
+    @patch("app.services.beatport.httpx.Client")
+    def test_add_track_handles_error(self, mock_client_cls, db: Session, beatport_user: User):
+        """HTTP error during add track returns False."""
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.side_effect = httpx.ConnectError("Connection refused")
+        mock_client_cls.return_value = mock_client
+
+        from app.services.beatport import add_track_to_beatport_playlist
+
+        result = add_track_to_beatport_playlist(db, beatport_user, "playlist-1", "99999")
+        assert result is False
+
+
+class TestFetchSubscriptionType:
+    @patch("app.services.beatport.httpx.Client")
+    def test_fetch_subscription_bp_link(self, mock_client_cls, db: Session, beatport_user: User):
+        """Returns 'bp_link' when account response has subscription field."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"subscription": "bp_link"}
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        result = fetch_subscription_type(db, beatport_user)
+
+        assert result == "bp_link"
+        db.refresh(beatport_user)
+        assert beatport_user.beatport_subscription == "bp_link"
+
+    @patch("app.services.beatport.httpx.Client")
+    def test_fetch_subscription_none(self, mock_client_cls, db: Session, beatport_user: User):
+        """Returns None when account response has no subscription field."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"username": "dj_test"}
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        result = fetch_subscription_type(db, beatport_user)
+
+        assert result is None
+        db.refresh(beatport_user)
+        assert beatport_user.beatport_subscription is None
+
+    @patch("app.services.beatport.httpx.Client")
+    def test_fetch_subscription_handles_error(
+        self, mock_client_cls, db: Session, beatport_user: User
+    ):
+        """HTTP error returns None without crashing."""
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.side_effect = httpx.ConnectError("Connection refused")
+        mock_client_cls.return_value = mock_client
+
+        result = fetch_subscription_type(db, beatport_user)
+        assert result is None

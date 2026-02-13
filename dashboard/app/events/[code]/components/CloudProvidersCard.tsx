@@ -114,7 +114,18 @@ export function CloudProvidersCard({
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {beatportStatus?.linked ? (
             <>
-              <span style={{ color: '#01ff28', fontSize: '0.875rem' }}>Connected</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+                <span style={{ color: '#01ff28', fontSize: '0.875rem' }}>Connected</span>
+                {beatportStatus.subscription && ['bp_link', 'bp_pro'].includes(beatportStatus.subscription) ? (
+                  <span style={{ fontSize: '0.65rem', color: '#22c55e', background: '#052e16', padding: '0.125rem 0.375rem', borderRadius: '9999px' }}>
+                    Full Streaming Access
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '0.65rem', color: '#f59e0b', background: '#451a03', padding: '0.125rem 0.375rem', borderRadius: '9999px' }}>
+                    Purchased Library Only
+                  </span>
+                )}
+              </div>
               <button
                 className={`btn btn-sm ${beatportSyncEnabled ? 'btn-success' : ''}`}
                 style={{ minWidth: '100px', background: beatportSyncEnabled ? undefined : '#333' }}
