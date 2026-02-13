@@ -12,6 +12,15 @@ import type {
 
 type Mode = 'requests' | 'template' | 'llm';
 
+interface ModeResultCache {
+  suggestions: RecommendedTrack[];
+  profile: EventMusicProfile | null;
+  llmQueries: LLMQueryInfo[];
+  llmModel: string;
+}
+
+const emptyCache: ModeResultCache = { suggestions: [], profile: null, llmQueries: [], llmModel: '' };
+
 interface RecommendationsCardProps {
   code: string;
   hasAcceptedRequests: boolean;
@@ -54,6 +63,13 @@ export function RecommendationsCard({
   const [showReasoning, setShowReasoning] = useState(false);
   const [llmModel, setLlmModel] = useState('');
 
+  // Per-mode results cache — persists suggestions across mode switches
+  const resultsCacheRef = useRef<Record<Mode, ModeResultCache>>({
+    requests: { ...emptyCache },
+    template: { ...emptyCache },
+    llm: { ...emptyCache },
+  });
+
   const loadPlaylists = useCallback(async () => {
     if (playlistsLoaded) return;
     setLoadingPlaylists(true);
@@ -70,12 +86,24 @@ export function RecommendationsCard({
 
   const handleModeChange = (newMode: Mode) => {
     if (newMode === mode) return;
+
+    // Save current mode's results to cache
+    resultsCacheRef.current[mode] = {
+      suggestions,
+      profile,
+      llmQueries,
+      llmModel,
+    };
+
+    // Restore cached results for the new mode
+    const cached = resultsCacheRef.current[newMode];
+    setSuggestions(cached.suggestions);
+    setProfile(cached.profile);
+    setLlmQueries(cached.llmQueries);
+    setLlmModel(cached.llmModel);
+
     setMode(newMode);
-    setSuggestions([]);
-    setProfile(null);
     setError(null);
-    setSelectedPlaylist(null);
-    setLlmQueries([]);
     setShowReasoning(false);
     setGenerateState('idle');
     if (completeTimerRef.current) {
@@ -158,6 +186,8 @@ export function RecommendationsCard({
     setError(null);
     setLlmQueries([]);
     setShowReasoning(false);
+    // Also clear the cache for the current mode
+    resultsCacheRef.current[mode] = { ...emptyCache };
   };
 
   const canGenerate = (() => {

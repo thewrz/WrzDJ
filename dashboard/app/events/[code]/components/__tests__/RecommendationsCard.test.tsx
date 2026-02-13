@@ -473,4 +473,53 @@ describe('RecommendationsCard', () => {
     fireEvent.change(input, { target: { value: 'abc' } });
     expect(screen.getByText('Generate')).not.toBeDisabled();
   });
+
+  // Persistence tests
+
+  it('preserves suggestions when switching modes and back', async () => {
+    vi.mocked(api.generateRecommendations).mockResolvedValue(makeResponse({
+      suggestions: [
+        makeSuggestion({ title: 'Persisted Song', artist: 'DJ Persist' }),
+      ],
+    }));
+    vi.mocked(api.getEventPlaylists).mockResolvedValue({ playlists: [makePlaylist()] });
+
+    render(<RecommendationsCard {...defaultProps} />);
+    fireEvent.click(screen.getByText('Generate'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/DJ Persist/)).toBeInTheDocument();
+    });
+
+    // Switch to From Playlist — suggestions should swap out
+    fireEvent.click(screen.getByText('From Playlist'));
+    expect(screen.queryByText(/DJ Persist/)).not.toBeInTheDocument();
+
+    // Switch back to From Requests — suggestions should be restored
+    fireEvent.click(screen.getByText('From Requests'));
+    expect(screen.getByText(/DJ Persist/)).toBeInTheDocument();
+  });
+
+  it('Clear removes cached results for current mode', async () => {
+    vi.mocked(api.generateRecommendations).mockResolvedValue(makeResponse({
+      suggestions: [makeSuggestion({ title: 'Gone', artist: 'DJ Gone' })],
+    }));
+    vi.mocked(api.getEventPlaylists).mockResolvedValue({ playlists: [makePlaylist()] });
+
+    render(<RecommendationsCard {...defaultProps} />);
+    fireEvent.click(screen.getByText('Generate'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/DJ Gone/)).toBeInTheDocument();
+    });
+
+    // Clear
+    fireEvent.click(screen.getByText('Clear'));
+    expect(screen.queryByText(/DJ Gone/)).not.toBeInTheDocument();
+
+    // Switch away and back — should still be cleared
+    fireEvent.click(screen.getByText('From Playlist'));
+    fireEvent.click(screen.getByText('From Requests'));
+    expect(screen.queryByText(/DJ Gone/)).not.toBeInTheDocument();
+  });
 });
