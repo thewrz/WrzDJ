@@ -10,6 +10,7 @@ class BeatportStatus(BaseModel):
     expires_at: str | None = None
     configured: bool = True
     subscription: str | None = None  # e.g., "bp_link", "bp_pro", None
+    integration_enabled: bool = True
 
 
 class BeatportSearchResult(BaseModel):

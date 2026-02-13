@@ -102,11 +102,15 @@ def login_beatport(
 @router.get("/status", response_model=BeatportStatus)
 def get_status(
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ) -> BeatportStatus:
     """Check if current user has linked Beatport account."""
     configured = bool(settings.beatport_client_id)
+    sys_settings = get_system_settings(db)
+    enabled = sys_settings.beatport_enabled
+
     if not current_user.beatport_access_token:
-        return BeatportStatus(linked=False, configured=configured)
+        return BeatportStatus(linked=False, configured=configured, integration_enabled=enabled)
 
     expires_at = None
     if current_user.beatport_token_expires_at:
@@ -117,6 +121,7 @@ def get_status(
         expires_at=expires_at,
         configured=configured,
         subscription=current_user.beatport_subscription,
+        integration_enabled=enabled,
     )
 
 

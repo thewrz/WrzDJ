@@ -128,8 +128,8 @@ export default function EventQueuePage() {
         api.getRequests(code),
         api.getPlayHistory(code).catch((): undefined => undefined),
         api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false, now_playing_auto_hide_minutes: 10, requests_open: true })),
-        api.getTidalStatus().catch(() => ({ linked: false, user_id: null, expires_at: null })),
-        api.getBeatportStatus().catch(() => ({ linked: false, expires_at: null, configured: false, subscription: null })),
+        api.getTidalStatus().catch(() => ({ linked: false, user_id: null, expires_at: null, integration_enabled: true })),
+        api.getBeatportStatus().catch(() => ({ linked: false, expires_at: null, configured: false, subscription: null, integration_enabled: true })),
         api.getNowPlaying(code).catch((): undefined => undefined),
       ]);
       setEvent(eventData);
@@ -384,7 +384,7 @@ export default function EventQueuePage() {
             clearInterval(pollInterval);
             setTidalLoginPolling(false);
             setShowTidalLogin(false);
-            setTidalStatus({ linked: true, user_id: result.user_id || null, expires_at: null });
+            setTidalStatus({ linked: true, user_id: result.user_id || null, expires_at: null, integration_enabled: true });
           } else if (result.error) {
             clearInterval(pollInterval);
             setTidalLoginPolling(false);
@@ -418,7 +418,7 @@ export default function EventQueuePage() {
   const handleDisconnectTidal = async () => {
     try {
       await api.disconnectTidal();
-      setTidalStatus({ linked: false, user_id: null, expires_at: null });
+      setTidalStatus({ linked: false, user_id: null, expires_at: null, integration_enabled: true });
       setTidalSyncEnabled(false);
     } catch (err) {
       console.error('Failed to disconnect Tidal:', err);
@@ -543,7 +543,7 @@ export default function EventQueuePage() {
   const handleBeatportLogin = async (username: string, password: string) => {
     await api.loginBeatport(username, password);
     // Refetch status to get subscription info
-    const status = await api.getBeatportStatus().catch(() => ({ linked: true, expires_at: null, configured: true, subscription: null }));
+    const status = await api.getBeatportStatus().catch(() => ({ linked: true, expires_at: null, configured: true, subscription: null, integration_enabled: true }));
     setBeatportStatus(status);
     setShowBeatportLogin(false);
   };
@@ -551,7 +551,7 @@ export default function EventQueuePage() {
   const handleDisconnectBeatport = async () => {
     try {
       await api.disconnectBeatport();
-      setBeatportStatus({ linked: false, expires_at: null, configured: true, subscription: null });
+      setBeatportStatus({ linked: false, expires_at: null, configured: true, subscription: null, integration_enabled: true });
       setBeatportSyncEnabled(false);
     } catch {
       setActionError('Failed to disconnect Beatport');

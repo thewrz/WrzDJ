@@ -92,8 +92,11 @@ def get_status(
     db: Session = Depends(get_db),
 ) -> TidalStatus:
     """Check if current user has linked Tidal account."""
+    sys_settings = get_system_settings(db)
+    enabled = sys_settings.tidal_enabled
+
     if not current_user.tidal_access_token:
-        return TidalStatus(linked=False)
+        return TidalStatus(linked=False, integration_enabled=enabled)
 
     expires_at = None
     if current_user.tidal_token_expires_at:
@@ -103,6 +106,7 @@ def get_status(
         linked=True,
         user_id=current_user.tidal_user_id,
         expires_at=expires_at,
+        integration_enabled=enabled,
     )
 
 

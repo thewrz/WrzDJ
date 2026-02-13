@@ -148,6 +148,7 @@ export interface TidalStatus {
   linked: boolean;
   user_id: string | null;
   expires_at: string | null;
+  integration_enabled: boolean;
 }
 
 /** Tidal search result */
@@ -181,6 +182,7 @@ export interface BeatportStatus {
   expires_at: string | null;
   configured: boolean;
   subscription: string | null;
+  integration_enabled: boolean;
 }
 
 /** Beatport search result */

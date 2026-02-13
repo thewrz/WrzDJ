@@ -95,6 +95,29 @@ class TestBeatportStatus:
         data = response.json()
         assert data["subscription"] is None
 
+    def test_status_includes_integration_enabled(
+        self, client: TestClient, bp_api_headers: dict[str, str]
+    ):
+        """Status includes integration_enabled flag."""
+        response = client.get("/api/beatport/status", headers=bp_api_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["integration_enabled"] is True
+
+    def test_status_disabled_when_admin_disables(
+        self, client: TestClient, bp_api_headers: dict[str, str], admin_headers: dict
+    ):
+        """Status shows integration_enabled=false when admin disables Beatport."""
+        client.patch(
+            "/api/admin/integrations/beatport",
+            headers=admin_headers,
+            json={"enabled": False},
+        )
+        response = client.get("/api/beatport/status", headers=bp_api_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["integration_enabled"] is False
+
 
 class TestBeatportLogin:
     def test_login_success(

@@ -9,6 +9,7 @@ class TidalStatus(BaseModel):
     linked: bool
     user_id: str | None = None
     expires_at: str | None = None
+    integration_enabled: bool = True
 
 
 class TidalSearchResult(BaseModel):
