@@ -16,6 +16,7 @@ import type {
   NowPlayingInfo,
   PaginatedResponse,
   PlayHistoryResponse,
+  RecommendationResponse,
   SearchResult,
   SongRequest,
   SystemSettings,
@@ -37,6 +38,7 @@ export type {
   CapabilityStatus,
   DisplaySettingsResponse,
   Event,
+  EventMusicProfile,
   GuestRequestInfo,
   GuestRequestListResponse,
   HasRequestedResponse,
@@ -50,6 +52,8 @@ export type {
   PlayHistoryItem,
   PlayHistoryResponse,
   PublicRequestInfo,
+  RecommendationResponse,
+  RecommendedTrack,
   SearchResult,
   ServiceCapabilities,
   SongRequest,
@@ -550,6 +554,14 @@ class ApiClient {
     return this.fetch(`/api/beatport/requests/${requestId}/link`, {
       method: 'POST',
       body: JSON.stringify({ beatport_track_id: beatportTrackId }),
+    });
+  }
+
+  // ========== Recommendations ==========
+
+  async generateRecommendations(code: string): Promise<RecommendationResponse> {
+    return this.fetch(`/api/events/${code}/recommendations`, {
+      method: 'POST',
     });
   }
 

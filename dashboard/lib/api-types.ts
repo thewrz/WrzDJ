@@ -309,3 +309,41 @@ export interface PaginatedResponse<T> {
   page: number;
   limit: number;
 }
+
+/** Recommended track from the suggestion engine */
+export interface RecommendedTrack {
+  title: string;
+  artist: string;
+  bpm: number | null;
+  key: string | null;
+  genre: string | null;
+  score: number;
+  bpm_score: number;
+  key_score: number;
+  genre_score: number;
+  source: string;
+  track_id: string | null;
+  url: string | null;
+  cover_url: string | null;
+  duration_seconds: number | null;
+}
+
+/** Music profile of an event derived from its requests */
+export interface EventMusicProfile {
+  avg_bpm: number | null;
+  bpm_range_low: number | null;
+  bpm_range_high: number | null;
+  dominant_keys: string[];
+  dominant_genres: string[];
+  track_count: number;
+  enriched_count: number;
+}
+
+/** Response from POST /api/events/{code}/recommendations */
+export interface RecommendationResponse {
+  suggestions: RecommendedTrack[];
+  profile: EventMusicProfile;
+  services_used: string[];
+  total_candidates_searched: number;
+  llm_available: boolean;
+}

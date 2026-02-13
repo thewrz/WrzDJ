@@ -500,6 +500,75 @@ def get_event_requests(
     ]
 
 
+@router.post("/{code}/recommendations")
+@limiter.limit("5/minute")
+def get_recommendations(
+    request: Request,
+    event: Event = Depends(get_owned_event),
+    db: Session = Depends(get_db),
+):
+    """Generate song recommendations based on the event's musical profile."""
+    from app.schemas.recommendation import (
+        EventMusicProfile,
+        RecommendationResponse,
+        RecommendedTrack,
+    )
+    from app.services.recommendation.llm_hooks import is_llm_available
+    from app.services.recommendation.service import generate_recommendations
+
+    user = event.created_by
+
+    # Check if any music services are connected
+    has_services = bool(user.tidal_access_token) or bool(user.beatport_access_token)
+    if not has_services:
+        raise HTTPException(
+            status_code=503,
+            detail="No music services connected. Link Tidal or Beatport to get recommendations.",
+        )
+
+    result = generate_recommendations(db, user, event)
+
+    profile = EventMusicProfile(
+        avg_bpm=result.event_profile.avg_bpm,
+        bpm_range_low=result.event_profile.bpm_range[0] if result.event_profile.bpm_range else None,
+        bpm_range_high=result.event_profile.bpm_range[1]
+        if result.event_profile.bpm_range
+        else None,
+        dominant_keys=list(result.event_profile.dominant_keys),
+        dominant_genres=list(result.event_profile.dominant_genres),
+        track_count=result.event_profile.track_count,
+        enriched_count=result.enriched_count,
+    )
+
+    suggestions = [
+        RecommendedTrack(
+            title=s.profile.title,
+            artist=s.profile.artist,
+            bpm=s.profile.bpm,
+            key=s.profile.key,
+            genre=s.profile.genre,
+            score=s.score,
+            bpm_score=s.bpm_score,
+            key_score=s.key_score,
+            genre_score=s.genre_score,
+            source=s.profile.source,
+            track_id=s.profile.track_id,
+            url=s.profile.url,
+            cover_url=s.profile.cover_url,
+            duration_seconds=s.profile.duration_seconds,
+        )
+        for s in result.suggestions
+    ]
+
+    return RecommendationResponse(
+        suggestions=suggestions,
+        profile=profile,
+        services_used=result.services_used,
+        total_candidates_searched=result.total_candidates_searched,
+        llm_available=is_llm_available(),
+    )
+
+
 @router.post("/{code}/banner", response_model=EventOut)
 @limiter.limit("10/minute")
 def upload_banner(
