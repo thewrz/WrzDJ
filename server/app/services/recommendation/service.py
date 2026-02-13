@@ -488,6 +488,10 @@ async def generate_recommendations_from_llm(
     candidates = _deduplicate_candidates(candidates)
     all_requests = db.query(Request).filter(Request.event_id == event.id).all()
     candidates = _deduplicate_against_requests(candidates, all_requests)
+    # Also deduplicate against enriched tracks (catches songs referenced in
+    # the prompt that are already in the set, even if stored slightly differently)
+    if enriched:
+        candidates = _deduplicate_against_template(candidates, enriched)
 
     # Step 5: Score and rank
     ranked = rank_candidates(candidates, profile, max_results)

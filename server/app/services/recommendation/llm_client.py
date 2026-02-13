@@ -35,9 +35,20 @@ and taste. When the DJ says things like "more of the same",
 "based on these tracks", or "something similar", refer to the
 track list to understand what they mean.
 
+CRITICAL RULES:
+1. NEVER recommend songs already in the track list. You are finding NEW music.
+2. When the DJ says "like [song]" or "similar to [artist]", they mean
+   musically similar — same vibe, energy, genre, era, or mood. They do NOT
+   mean songs with similar words in the title. "More songs like Old Country
+   Soul" means country songs with a similar soulful feel at a similar tempo,
+   NOT songs with "Old", "Country", or "Soul" in the title.
+3. Search queries should be ARTIST NAMES or GENRE TERMS that would lead to
+   the right style of music, not fragments of the referenced song's title.
+   Think: "What other artists make music that sounds like this?"
+
 Generate 1-6 search queries that would find matching tracks on
 Tidal or Beatport. Each query should be a realistic search string
-(artist name, track name, or genre keywords).
+— preferably artist names, genre terms, or "artist genre" combos.
 
 For each query, optionally include target BPM, key, and genre
 when you can infer them from context. Include brief reasoning
@@ -59,8 +70,9 @@ SEARCH_QUERIES_TOOL = {
                         "search_query": {
                             "type": "string",
                             "description": (
-                                "Search string for Tidal/Beatport"
-                                " (artist, track, or genre keywords)"
+                                "Search string for Tidal/Beatport — use artist names,"
+                                " genre terms, or 'artist genre' combos."
+                                " Do NOT use fragments of a referenced song title."
                             ),
                         },
                         "target_bpm": {
