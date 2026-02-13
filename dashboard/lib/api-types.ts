@@ -46,6 +46,10 @@ export interface SongRequest {
   tidal_sync_status: 'pending' | 'synced' | 'not_found' | 'error' | null;
   // Multi-service sync results (JSON string)
   sync_results_json: string | null;
+  // Track metadata
+  genre: string | null;
+  bpm: number | null;
+  musical_key: string | null;
   // Voting
   vote_count: number;
 }
@@ -107,6 +111,10 @@ export interface SearchResult {
   preview_url: string | null;
   url: string | null;
   source: 'spotify' | 'beatport';
+  // Track metadata (from Beatport search results)
+  genre: string | null;
+  bpm: number | null;
+  key: string | null;
 }
 
 /** StageLinQ now-playing track info */

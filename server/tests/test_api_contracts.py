@@ -76,6 +76,9 @@ REQUEST_OUT_KEYS = {
     "tidal_sync_status",
     "sync_results_json",
     "vote_count",
+    "genre",
+    "bpm",
+    "musical_key",
 }
 
 ADMIN_USER_OUT_KEYS = {"id", "username", "is_active", "role", "created_at", "event_count"}

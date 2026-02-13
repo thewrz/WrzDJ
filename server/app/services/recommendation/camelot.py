@@ -103,6 +103,56 @@ def parse_key(key_str: str | None) -> CamelotPosition | None:
             if 1 <= num <= 12:
                 return CamelotPosition(number=num, letter=stripped[-1].upper())
 
+    # Handle bare note names from Tidal (e.g. "Eb", "G", "CSharp", "FSharp")
+    # Tidal returns keys without major/minor qualifier — default to major
+    bare_key = _normalize_bare_key(key_str.strip())
+    if bare_key:
+        result = CAMELOT_MAP.get(bare_key.lower())
+        if result:
+            return result
+
+    return None
+
+
+# Mapping for Tidal's "CSharp" / "FSharp" etc. to standard notation
+_TIDAL_KEY_MAP: dict[str, str] = {
+    "csharp": "c#",
+    "dsharp": "d#",
+    "esharp": "f",
+    "fsharp": "f#",
+    "gsharp": "g#",
+    "asharp": "a#",
+    "bsharp": "c",
+    "cflat": "b",
+    "dflat": "db",
+    "eflat": "eb",
+    "fflat": "e",
+    "gflat": "gb",
+    "aflat": "ab",
+    "bflat": "bb",
+}
+
+
+def _normalize_bare_key(key_str: str) -> str | None:
+    """Convert a bare key name (no major/minor) to 'X major' format.
+
+    Handles: "Eb" → "Eb major", "CSharp" → "C# major", "G" → "G major".
+    Returns None if the string doesn't look like a bare key name.
+    """
+    lowered = key_str.lower().strip()
+
+    # Check Tidal-style "CSharp", "FSharp" etc.
+    if lowered in _TIDAL_KEY_MAP:
+        return f"{_TIDAL_KEY_MAP[lowered]} major"
+
+    # Single letter (A-G) or letter + accidental (Eb, F#, Bb, etc.)
+    if len(lowered) >= 1 and lowered[0] in "abcdefg":
+        rest = lowered[1:]
+        if rest in ("", "b", "#"):
+            # Reconstruct with proper casing
+            note = key_str[0].upper() + rest
+            return f"{note} major"
+
     return None
 
 

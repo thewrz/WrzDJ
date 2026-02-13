@@ -58,7 +58,7 @@ from app.services.now_playing import (
     set_now_playing_visibility,
 )
 from app.services.request import accept_all_new_requests, create_request, get_requests_for_event
-from app.services.sync.orchestrator import sync_requests_batch
+from app.services.sync.orchestrator import enrich_request_metadata, sync_requests_batch
 from app.services.sync.registry import get_connected_adapters
 
 router = APIRouter()
@@ -401,6 +401,7 @@ def submit_request(
     code: str,
     request_data: RequestCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> RequestOut:
     event, lookup_result = get_event_by_code_with_status(db, code)
@@ -428,7 +429,15 @@ def submit_request(
         artwork_url=request_data.artwork_url,
         client_fingerprint=get_client_fingerprint(request),
         raw_search_query=request_data.raw_search_query,
+        genre=request_data.genre,
+        bpm=request_data.bpm,
+        musical_key=request_data.musical_key,
     )
+
+    # Enrich missing metadata in background (Beatport, MusicBrainz)
+    has_full_metadata = song_request.genre and song_request.bpm and song_request.musical_key
+    if not is_duplicate and not has_full_metadata:
+        background_tasks.add_task(enrich_request_metadata, db, song_request.id)
 
     return RequestOut(
         id=song_request.id,
@@ -444,6 +453,9 @@ def submit_request(
         updated_at=song_request.updated_at,
         is_duplicate=is_duplicate,
         vote_count=song_request.vote_count,
+        genre=song_request.genre,
+        bpm=song_request.bpm,
+        musical_key=song_request.musical_key,
     )
 
 
@@ -496,6 +508,9 @@ def get_event_requests(
             raw_search_query=r.raw_search_query,
             sync_results_json=r.sync_results_json,
             vote_count=r.vote_count,
+            genre=r.genre,
+            bpm=r.bpm,
+            musical_key=r.musical_key,
         )
         for r in requests
     ]

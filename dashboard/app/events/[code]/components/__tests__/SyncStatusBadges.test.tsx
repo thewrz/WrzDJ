@@ -21,6 +21,9 @@ function makeRequest(overrides: Partial<SongRequest> = {}): SongRequest {
     tidal_sync_status: null,
     sync_results_json: null,
     vote_count: 0,
+    genre: null,
+    bpm: null,
+    musical_key: null,
     ...overrides,
   };
 }

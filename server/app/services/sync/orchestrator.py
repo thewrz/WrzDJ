@@ -20,6 +20,8 @@ from sqlalchemy.orm import Session
 
 from app.models.request import Request, TidalSyncStatus
 from app.services.intent_parser import parse_intent
+from app.services.musicbrainz import lookup_artist_genre
+from app.services.request import normalize_key
 from app.services.sync.base import SyncResult, SyncStatus, TrackMatch, sanitize_sync_error
 from app.services.sync.registry import get_connected_adapters
 from app.services.track_normalizer import normalize_track
@@ -223,6 +225,67 @@ def _is_already_synced(request: Request, service_name: str) -> bool:
             pass
 
     return False
+
+
+def enrich_request_metadata(db: Session, request_id: int) -> None:
+    """Background task: fill missing genre/BPM/key on a request.
+
+    Sources (in priority order):
+    1. Beatport search (has genre + BPM + key)
+    2. MusicBrainz artist lookup (has genre only, artist-level)
+
+    Only queries sources for missing fields. Skips if all fields present.
+    """
+    # Re-fetch request in this background task's context
+    request = db.query(Request).filter(Request.id == request_id).first()
+    if not request:
+        return
+
+    if request.genre and request.bpm and request.musical_key:
+        return  # Already complete
+
+    search_query = f"{request.artist} {request.song_title}"
+
+    # Try Beatport first (richest metadata: genre + BPM + key)
+    if not request.genre or not request.bpm or not request.musical_key:
+        user = request.event.created_by
+        if user and user.beatport_access_token:
+            try:
+                from app.services.beatport import search_beatport_tracks
+
+                results = search_beatport_tracks(db, user, search_query, limit=3)
+                if results:
+                    best = results[0]
+                    if not request.genre and best.genre:
+                        request.genre = best.genre
+                    if not request.bpm and best.bpm:
+                        request.bpm = float(best.bpm)
+                    if not request.musical_key and best.key:
+                        request.musical_key = normalize_key(best.key)
+            except Exception:
+                logger.warning("Beatport enrichment failed for request %d", request_id)
+
+    # MusicBrainz for genre (last resort — artist-level, slowest)
+    if not request.genre and request.artist:
+        try:
+            genre = lookup_artist_genre(request.artist)
+            if genre:
+                request.genre = genre
+        except Exception:
+            logger.warning("MusicBrainz enrichment failed for request %d", request_id)
+
+    # Normalize key if we got one from enrichment
+    if request.musical_key:
+        request.musical_key = normalize_key(request.musical_key)
+
+    db.commit()
+    logger.info(
+        "Enriched request %d: genre=%s, bpm=%s, key=%s",
+        request_id,
+        request.genre,
+        request.bpm,
+        request.musical_key,
+    )
 
 
 def _persist_sync_result(request: Request, result: SyncResult) -> None:

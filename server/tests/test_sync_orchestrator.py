@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from app.services.sync.orchestrator import (
     MultiSyncResult,
     _is_already_synced,
     _persist_sync_result,
+    enrich_request_metadata,
     sync_request_to_services,
     sync_requests_batch,
 )
@@ -644,3 +646,113 @@ class TestSyncRequestsBatch:
         assert len(adapter.search_calls) == 0
         db.refresh(r1)
         assert r1.tidal_sync_status is None
+
+
+class TestEnrichRequestMetadata:
+    """Tests for enrich_request_metadata background task."""
+
+    def test_skips_when_all_metadata_present(self, db, tidal_event):
+        """Requests with genre, bpm, and key are skipped entirely."""
+        request = _make_accepted_request(db, tidal_event, "Test Song", "Test Artist", "enrich_skip")
+        request.genre = "country"
+        request.bpm = 120.0
+        request.musical_key = "8A"
+        db.commit()
+
+        enrich_request_metadata(db, request.id)
+
+        db.refresh(request)
+        assert request.genre == "country"
+        assert request.bpm == 120.0
+        assert request.musical_key == "8A"
+
+    def test_skips_nonexistent_request(self, db):
+        """Non-existent request ID is a no-op."""
+        enrich_request_metadata(db, 999999)  # Should not raise
+
+    def test_musicbrainz_fills_genre(self, db, tidal_event):
+        """When no Beatport is linked, MusicBrainz fills genre."""
+        request = _make_accepted_request(db, tidal_event, "Test Song", "Radiohead", "enrich_mb")
+        db.commit()
+
+        with patch(
+            "app.services.sync.orchestrator.lookup_artist_genre",
+            return_value="alternative rock",
+        ):
+            enrich_request_metadata(db, request.id)
+
+        db.refresh(request)
+        assert request.genre == "alternative rock"
+
+    def test_musicbrainz_skipped_when_genre_present(self, db, tidal_event):
+        """MusicBrainz is not called when genre already exists."""
+        request = _make_accepted_request(db, tidal_event, "Test Song", "Artist", "enrich_mb_skip")
+        request.genre = "country"
+        db.commit()
+
+        with patch("app.services.sync.orchestrator.lookup_artist_genre") as mock_mb:
+            enrich_request_metadata(db, request.id)
+            mock_mb.assert_not_called()
+
+    def test_beatport_enrichment_fills_all_fields(self, db, tidal_event, tidal_user):
+        """When Beatport is linked, it fills genre/bpm/key."""
+        tidal_user.beatport_access_token = "fake_bp_token"
+        db.commit()
+
+        request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "enrich_bp")
+        db.commit()
+
+        from app.schemas.beatport import BeatportSearchResult
+
+        mock_results = [
+            BeatportSearchResult(
+                track_id="123",
+                title="Strobe",
+                artist="deadmau5",
+                genre="Progressive House",
+                bpm=128,
+                key="F Minor",
+            )
+        ]
+
+        with patch(
+            "app.services.sync.orchestrator.search_beatport_tracks",
+            create=True,
+        ) as mock_bp:
+            mock_bp.return_value = mock_results
+            # Also patch the import inside the function
+            with patch(
+                "app.services.beatport.search_beatport_tracks",
+                return_value=mock_results,
+            ):
+                enrich_request_metadata(db, request.id)
+
+        db.refresh(request)
+        assert request.genre == "Progressive House"
+        assert request.bpm == 128.0
+        assert request.musical_key == "4A"  # F Minor -> 4A in Camelot
+
+    def test_normalizes_key_from_enrichment(self, db, tidal_event):
+        """Musical key from enrichment is normalized to Camelot notation."""
+        request = _make_accepted_request(db, tidal_event, "Test Song", "Artist", "enrich_key_norm")
+        request.musical_key = "D Minor"
+        db.commit()
+
+        enrich_request_metadata(db, request.id)
+
+        db.refresh(request)
+        assert request.musical_key == "7A"  # D Minor = 7A
+
+    def test_musicbrainz_failure_is_graceful(self, db, tidal_event):
+        """MusicBrainz exceptions don't crash the enrichment task."""
+        request = _make_accepted_request(db, tidal_event, "Test Song", "Artist", "enrich_mb_fail")
+        db.commit()
+
+        with patch(
+            "app.services.sync.orchestrator.lookup_artist_genre",
+            side_effect=RuntimeError("Network error"),
+        ):
+            enrich_request_metadata(db, request.id)  # Should not raise
+
+        db.refresh(request)
+        assert request.genre is None  # Gracefully degraded

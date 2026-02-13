@@ -7,6 +7,7 @@ from app.services.recommendation.service import (
     RecommendationResult,
     _build_search_queries,
     _deduplicate_against_requests,
+    _deduplicate_against_template,
     _deduplicate_candidates,
     generate_recommendations,
 )
@@ -59,6 +60,72 @@ class TestBuildSearchQueries:
         )
         queries = _build_search_queries(profile)
         assert len(queries) <= 3
+
+    def test_artist_fallback_when_no_genres(self):
+        """When no genres available, use top artists from template tracks."""
+        profile = EventProfile(avg_bpm=128.0, track_count=5)
+        template_tracks = [
+            TrackProfile(title="Song 1", artist="deadmau5", bpm=128.0),
+            TrackProfile(title="Song 2", artist="deadmau5", bpm=130.0),
+            TrackProfile(title="Song 3", artist="Boris Brejcha", bpm=126.0),
+            TrackProfile(title="Song 4", artist="Stephan Bodzin", bpm=125.0),
+            TrackProfile(title="Song 5", artist="deadmau5", bpm=132.0),
+        ]
+        queries = _build_search_queries(profile, template_tracks=template_tracks)
+        assert len(queries) >= 1
+        # deadmau5 appears most, should be first
+        assert queries[0] == "deadmau5"
+        assert "Boris Brejcha" in queries or "Stephan Bodzin" in queries
+
+    def test_artist_fallback_skips_unknown(self):
+        """Unknown and Various Artists should not be used as queries."""
+        profile = EventProfile(avg_bpm=120.0, track_count=3)
+        template_tracks = [
+            TrackProfile(title="Song 1", artist="Unknown"),
+            TrackProfile(title="Song 2", artist="Various Artists"),
+            TrackProfile(title="Song 3", artist="Real Artist", bpm=120.0),
+        ]
+        queries = _build_search_queries(profile, template_tracks=template_tracks)
+        assert "Unknown" not in queries
+        assert "Various Artists" not in queries
+        assert "Real Artist" in queries
+
+    def test_genres_preferred_over_artists(self):
+        """When genres exist, use them instead of artist fallback."""
+        profile = EventProfile(dominant_genres=["Tech House"], avg_bpm=128.0, track_count=5)
+        template_tracks = [
+            TrackProfile(title="Song", artist="deadmau5", genre="Tech House"),
+        ]
+        queries = _build_search_queries(profile, template_tracks=template_tracks)
+        assert "Tech House" in queries
+        # Artist shouldn't be in queries when genres are available
+        assert "deadmau5" not in queries
+
+    def test_no_bpm_only_fallback_without_genres(self):
+        """BPM-only query should NOT be generated when there are no genres."""
+        profile = EventProfile(avg_bpm=128.0, track_count=5)
+        queries = _build_search_queries(profile)
+        # Without genres or template tracks, should return empty
+        assert queries == []
+
+
+class TestDeduplicateAgainstTemplate:
+    def test_removes_template_tracks(self):
+        candidates = [
+            TrackProfile(title="Strobe", artist="deadmau5", source="beatport"),
+            TrackProfile(title="New Track", artist="New Artist", source="beatport"),
+        ]
+        template = [
+            TrackProfile(title="Strobe", artist="deadmau5", source="tidal"),
+        ]
+        result = _deduplicate_against_template(candidates, template)
+        assert len(result) == 1
+        assert result[0].title == "New Track"
+
+    def test_empty_template(self):
+        candidates = [TrackProfile(title="Track", artist="Artist")]
+        result = _deduplicate_against_template(candidates, [])
+        assert len(result) == 1
 
 
 class TestDeduplicateAgainstRequests:

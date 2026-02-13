@@ -54,25 +54,37 @@ def _get_accepted_played_requests(db: Session, event: Event) -> list[Request]:
     )
 
 
-def _build_search_queries(profile: EventProfile) -> list[str]:
+def _build_search_queries(
+    profile: EventProfile,
+    template_tracks: list[TrackProfile] | None = None,
+) -> list[str]:
     """Generate search queries from an event profile.
 
-    Uses dominant genres and creates general queries that
-    should return tracks matching the event's vibe.
+    Uses dominant genres first, then falls back to artist names from
+    template tracks when genres are unavailable (e.g., Tidal playlists).
     """
     queries = []
 
-    # Genre-based queries
+    # Genre-based queries (best signal)
     for genre in profile.dominant_genres[:MAX_SEARCH_QUERIES]:
         queries.append(genre)
 
-    # If we have BPM info, add a BPM-targeted query
+    # If we have no genres but have template tracks, use top artists
+    if not queries and template_tracks:
+        artist_counts: dict[str, int] = {}
+        for t in template_tracks:
+            if t.artist and t.artist.lower() not in ("unknown", "various artists"):
+                artist_counts[t.artist] = artist_counts.get(t.artist, 0) + 1
+        # Sort by frequency, take top artists as search queries
+        top_artists = sorted(artist_counts, key=artist_counts.get, reverse=True)  # type: ignore[arg-type]
+        for artist in top_artists[:MAX_SEARCH_QUERIES]:
+            queries.append(artist)
+
+    # If we have BPM info and still have room, add a BPM-targeted query
     if profile.avg_bpm and len(queries) < MAX_SEARCH_QUERIES:
         bpm_str = str(int(profile.avg_bpm))
         if profile.dominant_genres:
             queries.append(f"{profile.dominant_genres[0]} {bpm_str} bpm")
-        else:
-            queries.append(f"{bpm_str} bpm")
 
     return queries[:MAX_SEARCH_QUERIES]
 
@@ -163,6 +175,29 @@ def _deduplicate_against_requests(
     return deduped
 
 
+def _deduplicate_against_template(
+    candidates: list[TrackProfile],
+    template_tracks: list[TrackProfile],
+) -> list[TrackProfile]:
+    """Remove candidates that already appear in the template playlist."""
+    if not template_tracks:
+        return candidates
+
+    deduped = []
+    for candidate in candidates:
+        is_dupe = False
+        for tmpl in template_tracks:
+            title_score = fuzzy_match_score(candidate.title, tmpl.title)
+            artist_score = fuzzy_match_score(candidate.artist, tmpl.artist)
+            combined = title_score * 0.6 + artist_score * 0.4
+            if combined >= 0.8:
+                is_dupe = True
+                break
+        if not is_dupe:
+            deduped.append(candidate)
+    return deduped
+
+
 def _deduplicate_candidates(candidates: list[TrackProfile]) -> list[TrackProfile]:
     """Remove duplicate candidates (same track from different queries)."""
     seen: list[TrackProfile] = []
@@ -217,8 +252,8 @@ def generate_recommendations_from_template(
     # Build profile from template tracks (no enrichment needed — data is direct)
     profile = build_event_profile(template_tracks)
 
-    # Generate search queries from profile
-    search_queries = _build_search_queries(profile)
+    # Generate search queries from profile (pass template tracks for artist fallback)
+    search_queries = _build_search_queries(profile, template_tracks=template_tracks)
     if not search_queries:
         search_queries = ["top tracks", "popular tracks"]
 
@@ -232,16 +267,22 @@ def generate_recommendations_from_template(
     all_requests = db.query(Request).filter(Request.event_id == event.id).all()
     candidates = _deduplicate_against_requests(candidates, all_requests)
 
+    # Also deduplicate against the template tracks themselves
+    candidates = _deduplicate_against_template(candidates, template_tracks)
+
     # Score and rank
     ranked = rank_candidates(candidates, profile, max_results)
 
     logger.info(
-        "Generated %d template recommendations for event %s (template=%s:%s, candidates=%d)",
+        "Generated %d template recommendations for event %s "
+        "(template=%s:%s, queries=%s, candidates=%d, searched=%d)",
         len(ranked),
         event.code,
         template_source,
         template_id,
+        search_queries,
         len(candidates),
+        total_searched,
     )
 
     return RecommendationResult(

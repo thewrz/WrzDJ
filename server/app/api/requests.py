@@ -70,4 +70,7 @@ def update_request(
         raw_search_query=updated.raw_search_query,
         sync_results_json=updated.sync_results_json,
         vote_count=updated.vote_count,
+        genre=updated.genre,
+        bpm=updated.bpm,
+        musical_key=updated.musical_key,
     )

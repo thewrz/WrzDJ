@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.time import utcnow
@@ -55,6 +55,11 @@ class Request(Base):
     # Multi-service sync
     raw_search_query: Mapped[str | None] = mapped_column(String(200), nullable=True)
     sync_results_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Track metadata (populated from search results when available)
+    genre: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    bpm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    musical_key: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Voting
     vote_count: Mapped[int] = mapped_column(Integer, default=0)

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.time import utcnow
 from app.models.event import Event
 from app.models.request import Request, RequestStatus
+from app.services.recommendation.camelot import parse_key
 from app.services.vote import add_vote
 
 # Valid state transitions for request status
@@ -20,6 +21,18 @@ VALID_TRANSITIONS: dict[RequestStatus, set[RequestStatus]] = {
 
 class InvalidStatusTransitionError(ValueError):
     """Raised when an invalid status transition is attempted."""
+
+
+def normalize_key(key_str: str | None) -> str | None:
+    """Normalize a musical key to Camelot notation (e.g., '8A', '5B').
+
+    Accepts any format: 'D Minor', 'Dm', 'Eb', 'CSharp', '7A', etc.
+    Returns the Camelot code or None if unrecognizable.
+    """
+    if not key_str:
+        return None
+    pos = parse_key(key_str)
+    return str(pos) if pos else None
 
 
 def compute_dedupe_key(artist: str, title: str) -> str:
@@ -39,6 +52,9 @@ def create_request(
     artwork_url: str | None = None,
     client_fingerprint: str | None = None,
     raw_search_query: str | None = None,
+    genre: str | None = None,
+    bpm: float | None = None,
+    musical_key: str | None = None,
 ) -> tuple[Request, bool]:
     """
     Create a new song request.
@@ -76,6 +92,9 @@ def create_request(
         client_fingerprint=client_fingerprint,
         dedupe_key=dedupe_key,
         raw_search_query=raw_search_query,
+        genre=genre,
+        bpm=bpm,
+        musical_key=normalize_key(musical_key),
     )
     db.add(request)
     db.commit()

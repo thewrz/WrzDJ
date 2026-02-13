@@ -101,6 +101,16 @@ export function RequestQueueSection({
                   )}
                 </h3>
                 <p>{request.artist}</p>
+                {(request.bpm || request.musical_key || request.genre) && (
+                  <div style={{
+                    fontSize: '0.7rem', color: '#6b7280',
+                    display: 'flex', gap: '0.5rem', marginTop: '0.125rem',
+                  }}>
+                    {request.bpm && <span>{Math.round(request.bpm)} BPM</span>}
+                    {request.musical_key && <span>{request.musical_key}</span>}
+                    {request.genre && <span>{request.genre}</span>}
+                  </div>
+                )}
                 {request.note && <div className="note">{request.note}</div>}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
                   <p style={{ fontSize: '0.75rem', margin: 0 }}>

@@ -30,6 +30,9 @@ def merge_search_results(
                 preview_url=None,
                 url=bp.beatport_url,
                 source="beatport",
+                genre=bp.genre,
+                bpm=bp.bpm,
+                key=bp.key,
             )
         )
 
