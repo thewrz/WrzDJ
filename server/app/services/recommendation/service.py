@@ -90,11 +90,41 @@ def _build_beatport_queries(
     return queries[:MAX_SEARCH_QUERIES]
 
 
+def _build_tidal_queries(
+    profile: EventProfile,
+    requests: list | None = None,
+    template_tracks: list[TrackProfile] | None = None,
+) -> list[str]:
+    """Generate artist-based search queries for Tidal text search.
+
+    Tidal's search API is a general text search — genre strings like
+    "Country" produce irrelevant results.  Use artist names instead.
+    """
+    artist_counts: dict[str, int] = {}
+
+    # Collect artists from accepted requests
+    if requests:
+        for req in requests:
+            artist = getattr(req, "artist", None)
+            if artist and artist.lower() not in ("unknown", "various artists"):
+                artist_counts[artist] = artist_counts.get(artist, 0) + 1
+
+    # Collect artists from template tracks
+    if template_tracks:
+        for t in template_tracks:
+            if t.artist and t.artist.lower() not in ("unknown", "various artists"):
+                artist_counts[t.artist] = artist_counts.get(t.artist, 0) + 1
+
+    top_artists = sorted(artist_counts, key=artist_counts.get, reverse=True)  # type: ignore[arg-type]
+    return top_artists[:MAX_SEARCH_QUERIES]
+
+
 def _search_candidates(
     db: Session,
     user: User,
     queries: list[str],
     profile: EventProfile | None = None,
+    tidal_queries: list[str] | None = None,
 ) -> tuple[list[TrackProfile], list[str], int]:
     """Search connected services for candidate tracks.
 
@@ -157,7 +187,9 @@ def _search_candidates(
         if not used_soundcharts:
             from app.services.tidal import search_tidal_tracks
 
-            for query in queries:
+            # Use artist-based queries for Tidal (genre strings produce garbage)
+            tidal_search_queries = tidal_queries or queries
+            for query in tidal_search_queries:
                 results = search_tidal_tracks(db, user, query, limit=SEARCH_LIMIT)
                 for r in results:
                     candidates.append(
@@ -285,9 +317,12 @@ def generate_recommendations_from_template(
     if not search_queries:
         search_queries = ["top tracks", "popular tracks"]
 
+    # Build artist-based queries for Tidal text search (genre strings don't work)
+    tidal_queries = _build_tidal_queries(profile, template_tracks=template_tracks)
+
     # Search for candidates
     candidates, services_used, total_searched = _search_candidates(
-        db, user, search_queries, profile=profile
+        db, user, search_queries, profile=profile, tidal_queries=tidal_queries or None
     )
 
     # Deduplicate candidates among themselves
@@ -371,9 +406,12 @@ def generate_recommendations(
     if not search_queries:
         search_queries = ["top tracks", "popular tracks"]
 
+    # Build artist-based queries for Tidal text search (genre strings don't work)
+    tidal_queries = _build_tidal_queries(profile, requests=requests)
+
     # Step 5: Search for candidates
     candidates, services_used, total_searched = _search_candidates(
-        db, user, search_queries, profile=profile
+        db, user, search_queries, profile=profile, tidal_queries=tidal_queries or None
     )
 
     # Step 6a: Deduplicate candidates among themselves

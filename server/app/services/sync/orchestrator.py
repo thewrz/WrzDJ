@@ -231,8 +231,9 @@ def enrich_request_metadata(db: Session, request_id: int) -> None:
     """Background task: fill missing genre/BPM/key on a request.
 
     Sources (in priority order):
-    1. Beatport search (has genre + BPM + key)
-    2. MusicBrainz artist lookup (has genre only, artist-level)
+    1. MusicBrainz artist lookup (genre — artist-level, 1 req/sec rate limit)
+    2. Beatport search (BPM + key, backfill genre if MusicBrainz missed)
+    3. Tidal search (BPM + key backup when Beatport unavailable)
 
     Only queries sources for missing fields. Skips if all fields present.
     """
@@ -244,11 +245,20 @@ def enrich_request_metadata(db: Session, request_id: int) -> None:
     if request.genre and request.bpm and request.musical_key:
         return  # Already complete
 
+    user = request.event.created_by
     search_query = f"{request.artist} {request.song_title}"
 
-    # Try Beatport first (richest metadata: genre + BPM + key)
-    if not request.genre or not request.bpm or not request.musical_key:
-        user = request.event.created_by
+    # 1. MusicBrainz for genre (artist-level, free, rate-limited)
+    if not request.genre and request.artist:
+        try:
+            genre = lookup_artist_genre(request.artist)
+            if genre:
+                request.genre = genre
+        except Exception:
+            logger.warning("MusicBrainz enrichment failed for request %d", request_id)
+
+    # 2. Beatport for BPM + key (and genre backfill if MusicBrainz missed)
+    if not request.bpm or not request.musical_key or not request.genre:
         if user and user.beatport_access_token:
             try:
                 from app.services.beatport import search_beatport_tracks
@@ -265,14 +275,21 @@ def enrich_request_metadata(db: Session, request_id: int) -> None:
             except Exception:
                 logger.warning("Beatport enrichment failed for request %d", request_id)
 
-    # MusicBrainz for genre (last resort — artist-level, slowest)
-    if not request.genre and request.artist:
-        try:
-            genre = lookup_artist_genre(request.artist)
-            if genre:
-                request.genre = genre
-        except Exception:
-            logger.warning("MusicBrainz enrichment failed for request %d", request_id)
+    # 3. Tidal for BPM + key (backup when Beatport didn't find them)
+    if not request.bpm or not request.musical_key:
+        if user and user.tidal_access_token:
+            try:
+                from app.services.tidal import search_tidal_tracks
+
+                results = search_tidal_tracks(db, user, search_query, limit=3)
+                if results:
+                    best = results[0]
+                    if not request.bpm and best.bpm:
+                        request.bpm = float(best.bpm)
+                    if not request.musical_key and best.key:
+                        request.musical_key = normalize_key(best.key)
+            except Exception:
+                logger.warning("Tidal enrichment failed for request %d", request_id)
 
     # Normalize key if we got one from enrichment
     if request.musical_key:

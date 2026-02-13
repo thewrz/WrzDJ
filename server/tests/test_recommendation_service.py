@@ -6,6 +6,7 @@ from app.services.recommendation.scorer import EventProfile, TrackProfile
 from app.services.recommendation.service import (
     RecommendationResult,
     _build_beatport_queries,
+    _build_tidal_queries,
     _deduplicate_against_requests,
     _deduplicate_against_template,
     _deduplicate_candidates,
@@ -107,6 +108,72 @@ class TestBuildBeatportQueries:
         queries = _build_beatport_queries(profile)
         # Without genres or template tracks, should return empty
         assert queries == []
+
+
+class TestBuildTidalQueries:
+    def test_artist_from_requests(self):
+        """Builds queries from request artists, not genres."""
+        profile = EventProfile(
+            dominant_genres=["Country", "Pop"],
+            track_count=5,
+        )
+        requests = [
+            MagicMock(artist="Luke Bryan"),
+            MagicMock(artist="Luke Bryan"),
+            MagicMock(artist="Morgan Wallen"),
+        ]
+        queries = _build_tidal_queries(profile, requests=requests)
+        assert "Luke Bryan" in queries
+        assert "Morgan Wallen" in queries
+        # Genre strings should NOT be in Tidal queries
+        assert "Country" not in queries
+        assert "Pop" not in queries
+
+    def test_artist_from_template_tracks(self):
+        """Builds queries from template track artists."""
+        profile = EventProfile(dominant_genres=["House"], track_count=3)
+        template_tracks = [
+            TrackProfile(title="Song 1", artist="deadmau5", bpm=128.0),
+            TrackProfile(title="Song 2", artist="deadmau5", bpm=130.0),
+            TrackProfile(title="Song 3", artist="Zedd", bpm=126.0),
+        ]
+        queries = _build_tidal_queries(profile, template_tracks=template_tracks)
+        assert queries[0] == "deadmau5"  # Most frequent first
+        assert "Zedd" in queries
+
+    def test_skips_unknown_artists(self):
+        profile = EventProfile(track_count=2)
+        requests = [
+            MagicMock(artist="Unknown"),
+            MagicMock(artist="Various Artists"),
+            MagicMock(artist="Real Artist"),
+        ]
+        queries = _build_tidal_queries(profile, requests=requests)
+        assert "Unknown" not in queries
+        assert "Various Artists" not in queries
+        assert "Real Artist" in queries
+
+    def test_empty_sources(self):
+        profile = EventProfile(track_count=0)
+        queries = _build_tidal_queries(profile)
+        assert queries == []
+
+    def test_max_three_queries(self):
+        profile = EventProfile(track_count=5)
+        requests = [MagicMock(artist=f"Artist {i}") for i in range(10)]
+        queries = _build_tidal_queries(profile, requests=requests)
+        assert len(queries) <= 3
+
+    def test_combines_requests_and_template(self):
+        """Artists from both requests and templates are merged."""
+        profile = EventProfile(track_count=3)
+        requests = [MagicMock(artist="Artist A")]
+        template_tracks = [
+            TrackProfile(title="Song", artist="Artist B", bpm=128.0),
+        ]
+        queries = _build_tidal_queries(profile, requests=requests, template_tracks=template_tracks)
+        assert "Artist A" in queries
+        assert "Artist B" in queries
 
 
 class TestDeduplicateAgainstTemplate:
