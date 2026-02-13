@@ -11,7 +11,7 @@ from app.models.event import Event
 from app.models.user import User
 from app.services.auth import get_password_hash
 from app.services.beatport import (
-    BEATPORT_SEARCH_URL,
+    BEATPORT_API_BASE,
     DEFAULT_TOKEN_EXPIRY,
     _authorize_url,
     _parse_duration,
@@ -73,7 +73,7 @@ def beatport_user_no_token(db: Session) -> User:
 
 
 MOCK_SEARCH_RESPONSE = {
-    "results": [
+    "tracks": [
         {
             "id": 12345,
             "name": "Strobe",
@@ -121,12 +121,12 @@ class TestSearchBeatportTracks:
         assert "beatport.com/track/strobe/12345" in results[0].beatport_url
 
     @patch("app.services.beatport.httpx.Client")
-    def test_search_uses_dedicated_search_url(
+    def test_search_uses_catalog_search_url(
         self, mock_client_cls, db: Session, beatport_user: User
     ):
-        """Search uses the dedicated search endpoint, not the catalog endpoint."""
+        """Search uses the v4 catalog search endpoint with type=tracks."""
         mock_response = MagicMock()
-        mock_response.json.return_value = {"results": []}
+        mock_response.json.return_value = {"tracks": []}
         mock_response.raise_for_status = MagicMock()
 
         mock_client = MagicMock()
@@ -138,13 +138,14 @@ class TestSearchBeatportTracks:
         search_beatport_tracks(db, beatport_user, "test")
 
         call_args = mock_client.get.call_args
-        assert call_args.args[0] == BEATPORT_SEARCH_URL
+        assert call_args.args[0] == f"{BEATPORT_API_BASE}/catalog/search/"
+        assert call_args.kwargs["params"]["type"] == "tracks"
 
     @patch("app.services.beatport.httpx.Client")
     def test_search_empty(self, mock_client_cls, db: Session, beatport_user: User):
         """Empty search results return empty list."""
         mock_response = MagicMock()
-        mock_response.json.return_value = {"results": []}
+        mock_response.json.return_value = {"tracks": []}
         mock_response.raise_for_status = MagicMock()
 
         mock_client = MagicMock()
@@ -189,7 +190,7 @@ class TestSearchIncludesMixName:
     def test_mix_name_captured(self, mock_client_cls, db: Session, beatport_user: User):
         """Beatport-specific mix_name field is captured."""
         response_data = {
-            "results": [
+            "tracks": [
                 {
                     "id": 99999,
                     "name": "Levels",
@@ -657,8 +658,31 @@ class TestBeatportPlaylist:
         assert result is None
 
     @patch("app.services.beatport.httpx.Client")
-    def test_add_tracks_batch_sends_ints(self, mock_client_cls, db: Session, beatport_user: User):
-        """Track IDs are cast to int in the API request body."""
+    def test_add_track_sends_singular_int(self, mock_client_cls, db: Session, beatport_user: User):
+        """Track ID is sent as singular int via 'track_id' field."""
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        from app.services.beatport import add_track_to_beatport_playlist
+
+        result = add_track_to_beatport_playlist(db, beatport_user, "playlist-1", "12345")
+
+        assert result is True
+        call_kwargs = mock_client.post.call_args
+        body = call_kwargs.kwargs.get("json", {})
+        assert body == {"track_id": 12345}
+
+    @patch("app.services.beatport.httpx.Client")
+    def test_add_tracks_batch_calls_per_track(
+        self, mock_client_cls, db: Session, beatport_user: User
+    ):
+        """Batch add sends one request per track."""
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
 
@@ -673,26 +697,7 @@ class TestBeatportPlaylist:
         )
 
         assert result is True
-        call_kwargs = mock_client.post.call_args
-        body = call_kwargs.kwargs.get("json", {})
-        assert body["track_ids"] == [12345, 67890]
-
-    @patch("app.services.beatport.httpx.Client")
-    def test_add_track_success(self, mock_client_cls, db: Session, beatport_user: User):
-        """Adding a single track returns True on success."""
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
-
-        mock_client = MagicMock()
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client.post.return_value = mock_response
-        mock_client_cls.return_value = mock_client
-
-        from app.services.beatport import add_track_to_beatport_playlist
-
-        result = add_track_to_beatport_playlist(db, beatport_user, "playlist-1", "99999")
-        assert result is True
+        assert mock_client.post.call_count == 2
 
     @patch("app.services.beatport.httpx.Client")
     def test_add_track_handles_error(self, mock_client_cls, db: Session, beatport_user: User):
@@ -711,10 +716,13 @@ class TestBeatportPlaylist:
 
 class TestFetchSubscriptionType:
     @patch("app.services.beatport.httpx.Client")
-    def test_fetch_subscription_bp_link(self, mock_client_cls, db: Session, beatport_user: User):
-        """Returns 'bp_link' when account response has subscription field."""
+    def test_fetch_subscription_streaming(self, mock_client_cls, db: Session, beatport_user: User):
+        """Returns 'streaming' when account has streaming_audio_format_id in preferences."""
         mock_response = MagicMock()
-        mock_response.json.return_value = {"subscription": "bp_link"}
+        mock_response.json.return_value = {
+            "username": "dj_test",
+            "preferences": {"streaming_audio_format_id": 29},
+        }
         mock_response.raise_for_status = MagicMock()
 
         mock_client = MagicMock()
@@ -725,15 +733,15 @@ class TestFetchSubscriptionType:
 
         result = fetch_subscription_type(db, beatport_user)
 
-        assert result == "bp_link"
+        assert result == "streaming"
         db.refresh(beatport_user)
-        assert beatport_user.beatport_subscription == "bp_link"
+        assert beatport_user.beatport_subscription == "streaming"
 
     @patch("app.services.beatport.httpx.Client")
     def test_fetch_subscription_none(self, mock_client_cls, db: Session, beatport_user: User):
-        """Returns None when account response has no subscription field."""
+        """Returns None when account has no streaming preferences."""
         mock_response = MagicMock()
-        mock_response.json.return_value = {"username": "dj_test"}
+        mock_response.json.return_value = {"username": "dj_test", "preferences": {}}
         mock_response.raise_for_status = MagicMock()
 
         mock_client = MagicMock()

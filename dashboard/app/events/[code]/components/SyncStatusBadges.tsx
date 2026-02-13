@@ -74,6 +74,20 @@ function TidalBadge({
   const status = syncResult?.status ?? mapLegacyTidalStatus(request.tidal_sync_status);
 
   if (status === 'added') {
+    const url = syncResult?.url;
+    if (url) {
+      return (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Synced to Tidal - click to view"
+          style={{ color: '#10b981', fontSize: '1rem', fontWeight: 600, textDecoration: 'none', cursor: 'pointer' }}
+        >
+          T
+        </a>
+      );
+    }
     return (
       <span title="Synced to Tidal" style={{ color: '#10b981', fontSize: '1rem', cursor: 'default', fontWeight: 600 }}>
         T

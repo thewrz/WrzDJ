@@ -60,7 +60,7 @@ export function CloudProvidersCard({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>Tidal</span>
-          <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>Playlist Sync for SC6000</span>
+          <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}></span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {tidalStatus?.linked ? (
@@ -109,14 +109,14 @@ export function CloudProvidersCard({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>Beatport</span>
-          <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>Track Matching &amp; Purchase Links</span>
+          <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}></span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {beatportStatus?.linked ? (
             <>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
                 <span style={{ color: '#01ff28', fontSize: '0.875rem' }}>Connected</span>
-                {beatportStatus.subscription && ['bp_link', 'bp_pro'].includes(beatportStatus.subscription) ? (
+                {beatportStatus.subscription && ['bp_link', 'bp_pro', 'streaming'].includes(beatportStatus.subscription) ? (
                   <span style={{ fontSize: '0.65rem', color: '#22c55e', background: '#052e16', padding: '0.125rem 0.375rem', borderRadius: '9999px' }}>
                     Full Streaming Access
                   </span>

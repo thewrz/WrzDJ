@@ -78,13 +78,13 @@ class TestBeatportStatus:
         self, client: TestClient, bp_api_headers: dict[str, str], bp_api_user: User, db: Session
     ):
         """Status includes subscription field from user model."""
-        bp_api_user.beatport_subscription = "bp_link"
+        bp_api_user.beatport_subscription = "streaming"
         db.commit()
 
         response = client.get("/api/beatport/status", headers=bp_api_headers)
         assert response.status_code == 200
         data = response.json()
-        assert data["subscription"] == "bp_link"
+        assert data["subscription"] == "streaming"
 
     def test_status_subscription_null_when_not_set(
         self, client: TestClient, bp_api_headers: dict[str, str]

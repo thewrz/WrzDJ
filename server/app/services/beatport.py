@@ -25,7 +25,6 @@ from app.schemas.beatport import BeatportSearchResult
 logger = logging.getLogger(__name__)
 
 BEATPORT_API_BASE = "https://api.beatport.com/v4"
-BEATPORT_SEARCH_URL = "https://api.beatport.com/search/v1/tracks"
 BEATPORT_TRACK_URL = "https://www.beatport.com/track/{slug}/{track_id}"
 
 # HTTP timeout for Beatport API calls
@@ -217,8 +216,8 @@ def search_beatport_tracks(
     try:
         with httpx.Client(timeout=HTTP_TIMEOUT) as client:
             response = client.get(
-                BEATPORT_SEARCH_URL,
-                params={"q": query, "per_page": limit},
+                f"{BEATPORT_API_BASE}/catalog/search/",
+                params={"q": query, "per_page": limit, "type": "tracks"},
                 headers={"Authorization": f"Bearer {user.beatport_access_token}"},
             )
             response.raise_for_status()
@@ -228,7 +227,7 @@ def search_beatport_tracks(
         return []
 
     results = []
-    for track in data.get("results", []):
+    for track in data.get("tracks", []):
         artists = ", ".join(a.get("name", "") for a in track.get("artists", []))
         genre_name = None
         if track.get("genre"):
@@ -352,36 +351,57 @@ def create_beatport_playlist(db: Session, user: User, event: Event) -> str | Non
         return None
 
 
+def _get_playlist_track_ids(user: User, playlist_id: str) -> set[str]:
+    """Fetch the set of track IDs already on a Beatport playlist."""
+    try:
+        with httpx.Client(timeout=HTTP_TIMEOUT) as client:
+            response = client.get(
+                f"{BEATPORT_API_BASE}/my/playlists/{playlist_id}/tracks/",
+                headers={"Authorization": f"Bearer {user.beatport_access_token}"},
+            )
+            response.raise_for_status()
+            data = response.json()
+        return {str(entry["track"]["id"]) for entry in data.get("results", [])}
+    except (httpx.HTTPError, KeyError, TypeError) as e:
+        logger.error("Beatport playlist fetch failed: %s", type(e).__name__)
+        return set()
+
+
 def add_track_to_beatport_playlist(
     db: Session, user: User, playlist_id: str, track_id: str
 ) -> bool:
-    """Add a single track to a Beatport playlist."""
-    return add_tracks_to_beatport_playlist(db, user, playlist_id, [track_id])
-
-
-def add_tracks_to_beatport_playlist(
-    db: Session, user: User, playlist_id: str, track_ids: list[str]
-) -> bool:
-    """Add tracks to a Beatport playlist. Track IDs must be cast to int for the API."""
-    if not track_ids:
-        return True
-
+    """Add a single track to a Beatport playlist. Skips if already present."""
     if not _refresh_token_if_needed(db, user):
         return False
+
+    existing = _get_playlist_track_ids(user, playlist_id)
+    if track_id in existing:
+        logger.info("Track %s already on Beatport playlist %s, skipping", track_id, playlist_id)
+        return True
 
     try:
         with httpx.Client(timeout=HTTP_TIMEOUT) as client:
             response = client.post(
                 f"{BEATPORT_API_BASE}/my/playlists/{playlist_id}/tracks/",
-                json={"track_ids": [int(tid) for tid in track_ids]},
+                json={"track_id": int(track_id)},
                 headers={"Authorization": f"Bearer {user.beatport_access_token}"},
             )
             response.raise_for_status()
-        logger.info("Added %d track(s) to Beatport playlist %s", len(track_ids), playlist_id)
+        logger.info("Added track %s to Beatport playlist %s", track_id, playlist_id)
         return True
     except httpx.HTTPError as e:
-        logger.error("Beatport add tracks failed: %s", type(e).__name__)
+        logger.error("Beatport add track failed: %s", type(e).__name__)
         return False
+
+
+def add_tracks_to_beatport_playlist(
+    db: Session, user: User, playlist_id: str, track_ids: list[str]
+) -> bool:
+    """Add multiple tracks to a Beatport playlist (one request per track)."""
+    if not track_ids:
+        return True
+
+    return all(add_track_to_beatport_playlist(db, user, playlist_id, tid) for tid in track_ids)
 
 
 def fetch_subscription_type(db: Session, user: User) -> str | None:
@@ -398,7 +418,10 @@ def fetch_subscription_type(db: Session, user: User) -> str | None:
             response.raise_for_status()
             data = response.json()
 
-        subscription = data.get("subscription")
+        # Beatport account API has no explicit "subscription" field.
+        # Detect streaming access via preferences.streaming_audio_format_id.
+        streaming_format = data.get("preferences", {}).get("streaming_audio_format_id")
+        subscription = "streaming" if streaming_format else None
         user.beatport_subscription = subscription
         db.commit()
         return subscription

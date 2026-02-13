@@ -19,7 +19,7 @@ export function BridgeStatusCard({ bridgeConnected }: BridgeStatusCardProps) {
       <div>
         <span style={{ fontWeight: 600 }}>Bridge Status</span>
         <p style={{ color: '#b0b0b0', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
-          Denon StageLinQ bridge connection for live track detection
+          Live track detection for compatible controllers and software
         </p>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
