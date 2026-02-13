@@ -222,18 +222,131 @@ class TestEnrichTrack:
 
 class TestEnrichEventTracks:
     @patch("app.services.recommendation.enrichment.enrich_track")
-    def test_enriches_list(self, mock_enrich):
+    def test_enriches_list_no_stored_metadata(self, mock_enrich):
         mock_enrich.return_value = TrackProfile(title="T", artist="A", bpm=128.0)
         db = MagicMock()
         user = _make_user()
 
         requests = [
-            SimpleNamespace(song_title="Song 1", artist="Artist 1"),
-            SimpleNamespace(song_title="Song 2", artist="Artist 2"),
+            SimpleNamespace(
+                song_title="Song 1", artist="Artist 1", genre=None, bpm=None, musical_key=None
+            ),
+            SimpleNamespace(
+                song_title="Song 2", artist="Artist 2", genre=None, bpm=None, musical_key=None
+            ),
         ]
         result = enrich_event_tracks(db, user, requests)
         assert len(result) == 2
         assert mock_enrich.call_count == 2
+
+    @patch("app.services.recommendation.enrichment.enrich_track")
+    def test_skips_api_when_all_metadata_stored(self, mock_enrich):
+        """Requests with genre + bpm + musical_key should skip API calls."""
+        db = MagicMock()
+        user = _make_user()
+
+        requests = [
+            SimpleNamespace(
+                song_title="Country Road",
+                artist="John Denver",
+                genre="Country",
+                bpm=110.0,
+                musical_key="G Major",
+            ),
+        ]
+        result = enrich_event_tracks(db, user, requests)
+        assert len(result) == 1
+        mock_enrich.assert_not_called()
+        assert result[0].genre == "Country"
+        assert result[0].bpm == 110.0
+        assert result[0].key == "G Major"
+        assert result[0].title == "Country Road"
+
+    @patch("app.services.recommendation.enrichment.enrich_track")
+    def test_partial_metadata_fills_from_api(self, mock_enrich):
+        """Requests with partial metadata should only use API for missing fields."""
+        mock_enrich.return_value = TrackProfile(
+            title="Song",
+            artist="Artist",
+            bpm=125.0,
+            key="8A",
+            genre="House",
+            source="beatport",
+            track_id="123",
+            url="https://beatport.com/track/123",
+            cover_url="https://beatport.com/cover.jpg",
+            duration_seconds=300,
+        )
+        db = MagicMock()
+        user = _make_user()
+
+        requests = [
+            SimpleNamespace(
+                song_title="Song",
+                artist="Artist",
+                genre="Hip Hop",  # has genre
+                bpm=None,  # missing bpm
+                musical_key=None,  # missing key
+            ),
+        ]
+        result = enrich_event_tracks(db, user, requests)
+        assert len(result) == 1
+        assert mock_enrich.call_count == 1
+        # Genre from stored metadata, BPM and key from API
+        assert result[0].genre == "Hip Hop"
+        assert result[0].bpm == 125.0
+        assert result[0].key == "8A"
+        assert result[0].source == "beatport"
+
+    @patch("app.services.recommendation.enrichment.enrich_track")
+    def test_partial_metadata_uses_stored_bpm(self, mock_enrich):
+        """Stored BPM should be used even when genre/key come from API."""
+        mock_enrich.return_value = TrackProfile(
+            title="Song", artist="Artist", bpm=999.0, key="5B", genre="Techno", source="tidal"
+        )
+        db = MagicMock()
+        user = _make_user()
+
+        requests = [
+            SimpleNamespace(
+                song_title="Song",
+                artist="Artist",
+                genre=None,
+                bpm=95.0,  # stored BPM
+                musical_key=None,
+            ),
+        ]
+        result = enrich_event_tracks(db, user, requests)
+        assert result[0].bpm == 95.0  # Stored, not API's 999.0
+        assert result[0].genre == "Techno"  # From API
+        assert result[0].key == "5B"  # From API
+
+    @patch("app.services.recommendation.enrichment.enrich_track")
+    def test_mixed_requests(self, mock_enrich):
+        """Mix of full, partial, and no metadata requests."""
+        mock_enrich.return_value = TrackProfile(
+            title="T", artist="A", bpm=128.0, key="8A", genre="House", source="beatport"
+        )
+        db = MagicMock()
+        user = _make_user()
+
+        requests = [
+            # Full metadata — no API call
+            SimpleNamespace(
+                song_title="Full", artist="A", genre="Country", bpm=100.0, musical_key="C Major"
+            ),
+            # No metadata — full API call
+            SimpleNamespace(song_title="Empty", artist="A", genre=None, bpm=None, musical_key=None),
+            # Partial — API call for missing fields
+            SimpleNamespace(
+                song_title="Partial", artist="A", genre="Pop", bpm=None, musical_key=None
+            ),
+        ]
+        result = enrich_event_tracks(db, user, requests)
+        assert len(result) == 3
+        assert mock_enrich.call_count == 2  # Called for Empty and Partial only
+        assert result[0].genre == "Country"
+        assert result[0].source == "unknown"  # No API call, default source
 
     @patch("app.services.recommendation.enrichment.enrich_track")
     def test_caps_at_30(self, mock_enrich):
@@ -241,7 +354,12 @@ class TestEnrichEventTracks:
         db = MagicMock()
         user = _make_user()
 
-        requests = [SimpleNamespace(song_title=f"S{i}", artist=f"A{i}") for i in range(50)]
+        requests = [
+            SimpleNamespace(
+                song_title=f"S{i}", artist=f"A{i}", genre=None, bpm=None, musical_key=None
+            )
+            for i in range(50)
+        ]
         result = enrich_event_tracks(db, user, requests)
         assert len(result) == 30
         assert mock_enrich.call_count == 30
@@ -253,3 +371,17 @@ class TestEnrichEventTracks:
         result = enrich_event_tracks(db, user, [])
         assert result == []
         mock_enrich.assert_not_called()
+
+    @patch("app.services.recommendation.enrichment.enrich_track")
+    def test_legacy_requests_without_metadata_attrs(self, mock_enrich):
+        """Requests without genre/bpm/musical_key attrs should fall through to API."""
+        mock_enrich.return_value = TrackProfile(title="T", artist="A", bpm=128.0)
+        db = MagicMock()
+        user = _make_user()
+
+        requests = [
+            SimpleNamespace(song_title="Song 1", artist="Artist 1"),
+        ]
+        result = enrich_event_tracks(db, user, requests)
+        assert len(result) == 1
+        assert mock_enrich.call_count == 1
