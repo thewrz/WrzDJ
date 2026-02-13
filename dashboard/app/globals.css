@@ -631,6 +631,132 @@ a {
   animation: now-playing-spectrum 0.5s ease-in-out infinite alternate;
 }
 
+/* Integration status badges */
+.badge-status {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.badge-status.yes {
+  background: #22c55e;
+  color: white;
+}
+
+.badge-status.no {
+  background: #ef4444;
+  color: white;
+}
+
+.badge-status.configured {
+  background: #f59e0b;
+  color: #0a0a0a;
+}
+
+.badge-status.not-configured {
+  background: #374151;
+  color: #9ca3af;
+}
+
+.badge-status.not-implemented {
+  background: #1f2937;
+  color: #6b7280;
+}
+
+/* Integration table */
+.integration-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.integration-table th,
+.integration-table td {
+  padding: 0.75rem 1rem;
+  text-align: center;
+  border-bottom: 1px solid #333;
+}
+
+.integration-table th {
+  color: #9ca3af;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.integration-table td:first-child,
+.integration-table th:first-child {
+  text-align: left;
+}
+
+.integration-table tbody tr:hover {
+  background: #1a1a1a;
+}
+
+/* Toggle switch */
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: #374151;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.toggle-switch.active {
+  background: #22c55e;
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 0.2s;
+}
+
+.toggle-switch.active::after {
+  transform: translateX(20px);
+}
+
+.toggle-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-check {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  border: 1px solid #444;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.btn-check:hover {
+  background: #333;
+  color: #ededed;
+}
+
+.btn-check:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (max-width: 768px) {
   .admin-layout {
     flex-direction: column;

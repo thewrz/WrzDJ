@@ -24,6 +24,7 @@ from app.services.now_playing import (
     handle_now_playing_update,
     update_bridge_status,
 )
+from app.services.system_settings import get_system_settings
 
 router = APIRouter()
 
@@ -65,6 +66,9 @@ def post_now_playing(
     Archives the previous track to play history and updates now_playing.
     Rate limited to 60 requests per minute.
     """
+    sys_settings = get_system_settings(db)
+    if not sys_settings.bridge_enabled:
+        raise HTTPException(status_code=503, detail="Bridge integration is currently unavailable")
     result = handle_now_playing_update(
         db,
         payload.event_code,
@@ -92,6 +96,9 @@ def post_bridge_status(
     Called when bridge connects/disconnects from DJ equipment.
     Rate limited to 30 requests per minute.
     """
+    sys_settings = get_system_settings(db)
+    if not sys_settings.bridge_enabled:
+        raise HTTPException(status_code=503, detail="Bridge integration is currently unavailable")
     success = update_bridge_status(db, payload.event_code, payload.connected, payload.device_name)
     if not success:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -112,6 +119,9 @@ def delete_now_playing(
     Archives current track to history and clears now_playing.
     Rate limited to 60 requests per minute.
     """
+    sys_settings = get_system_settings(db)
+    if not sys_settings.bridge_enabled:
+        raise HTTPException(status_code=503, detail="Bridge integration is currently unavailable")
     success = clear_now_playing(db, code)
     if not success:
         raise HTTPException(status_code=404, detail="Event not found")

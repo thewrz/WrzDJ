@@ -56,6 +56,7 @@ export function CloudProvidersCard({
           background: '#111',
           borderRadius: '6px',
           marginBottom: '0.5rem',
+          opacity: tidalStatus?.integration_enabled === false ? 0.5 : 1,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -63,7 +64,9 @@ export function CloudProvidersCard({
           <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}></span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          {tidalStatus?.linked ? (
+          {tidalStatus?.integration_enabled === false ? (
+            <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>Unavailable</span>
+          ) : tidalStatus?.linked ? (
             <>
               <span style={{ color: '#10b981', fontSize: '0.875rem' }}>Connected</span>
               <button
@@ -105,6 +108,7 @@ export function CloudProvidersCard({
           background: '#111',
           borderRadius: '6px',
           marginBottom: '0.5rem',
+          opacity: beatportStatus?.integration_enabled === false ? 0.5 : 1,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -112,7 +116,9 @@ export function CloudProvidersCard({
           <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}></span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          {beatportStatus?.linked ? (
+          {beatportStatus?.integration_enabled === false ? (
+            <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>Unavailable</span>
+          ) : beatportStatus?.linked ? (
             <>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
                 <span style={{ color: '#01ff28', fontSize: '0.875rem' }}>Connected</span>

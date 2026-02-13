@@ -148,6 +148,7 @@ export interface TidalStatus {
   linked: boolean;
   user_id: string | null;
   expires_at: string | null;
+  integration_enabled: boolean;
 }
 
 /** Tidal search result */
@@ -181,6 +182,7 @@ export interface BeatportStatus {
   expires_at: string | null;
   configured: boolean;
   subscription: string | null;
+  integration_enabled: boolean;
 }
 
 /** Beatport search result */
@@ -251,6 +253,54 @@ export interface AdminEvent {
 export interface SystemSettings {
   registration_enabled: boolean;
   search_rate_limit_per_minute: number;
+  spotify_enabled: boolean;
+  tidal_enabled: boolean;
+  beatport_enabled: boolean;
+  bridge_enabled: boolean;
+}
+
+/** Capability status for integration services */
+export type CapabilityStatus =
+  | 'yes'
+  | 'no'
+  | 'not_implemented'
+  | 'configured'
+  | 'not_configured';
+
+/** Capability matrix for a single service */
+export interface ServiceCapabilities {
+  auth: CapabilityStatus;
+  catalog_search: CapabilityStatus;
+  playlist_sync: CapabilityStatus;
+}
+
+/** Full status for a single integration */
+export interface IntegrationServiceStatus {
+  service: string;
+  display_name: string;
+  enabled: boolean;
+  configured: boolean;
+  capabilities: ServiceCapabilities;
+  last_check_error: string | null;
+}
+
+/** Response from GET /api/admin/integrations */
+export interface IntegrationHealthResponse {
+  services: IntegrationServiceStatus[];
+}
+
+/** Response from PATCH /api/admin/integrations/{service} */
+export interface IntegrationToggleResponse {
+  service: string;
+  enabled: boolean;
+}
+
+/** Response from POST /api/admin/integrations/{service}/check */
+export interface IntegrationCheckResponse {
+  service: string;
+  healthy: boolean;
+  capabilities: ServiceCapabilities;
+  error: string | null;
 }
 
 export interface PaginatedResponse<T> {

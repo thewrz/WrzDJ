@@ -34,6 +34,7 @@ from app.services.beatport import (
     save_tokens,
     search_beatport_tracks,
 )
+from app.services.system_settings import get_system_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -54,6 +55,12 @@ def login_beatport(
     The backend logs in to Beatport server-side, obtains an authorization
     code, exchanges it for tokens, and stores them on the user.
     """
+    sys_settings = get_system_settings(db)
+    if not sys_settings.beatport_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Beatport integration is currently unavailable",
+        )
     if not settings.beatport_client_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -95,11 +102,15 @@ def login_beatport(
 @router.get("/status", response_model=BeatportStatus)
 def get_status(
     current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ) -> BeatportStatus:
     """Check if current user has linked Beatport account."""
     configured = bool(settings.beatport_client_id)
+    sys_settings = get_system_settings(db)
+    enabled = sys_settings.beatport_enabled
+
     if not current_user.beatport_access_token:
-        return BeatportStatus(linked=False, configured=configured)
+        return BeatportStatus(linked=False, configured=configured, integration_enabled=enabled)
 
     expires_at = None
     if current_user.beatport_token_expires_at:
@@ -110,6 +121,7 @@ def get_status(
         expires_at=expires_at,
         configured=configured,
         subscription=current_user.beatport_subscription,
+        integration_enabled=enabled,
     )
 
 
@@ -135,6 +147,12 @@ def search(
     db: Session = Depends(get_db),
 ) -> list[BeatportSearchResult]:
     """Search Beatport for tracks."""
+    sys_settings = get_system_settings(db)
+    if not sys_settings.beatport_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Beatport integration is currently unavailable",
+        )
     if not current_user.beatport_access_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -202,6 +220,12 @@ def link_track(
     Verifies the track exists on Beatport, then stores the
     Beatport URL and metadata in sync_results_json.
     """
+    sys_settings = get_system_settings(db)
+    if not sys_settings.beatport_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Beatport integration is currently unavailable",
+        )
     song_request = db.query(SongRequest).filter(SongRequest.id == request_id).first()
     if not song_request:
         raise HTTPException(status_code=404, detail="Request not found")
