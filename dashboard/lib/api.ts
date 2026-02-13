@@ -16,6 +16,7 @@ import type {
   NowPlayingInfo,
   PaginatedResponse,
   PlayHistoryResponse,
+  PlaylistListResponse,
   RecommendationResponse,
   SearchResult,
   SongRequest,
@@ -562,6 +563,20 @@ class ApiClient {
   async generateRecommendations(code: string): Promise<RecommendationResponse> {
     return this.fetch(`/api/events/${code}/recommendations`, {
       method: 'POST',
+    });
+  }
+
+  async getEventPlaylists(code: string): Promise<PlaylistListResponse> {
+    return this.fetch(`/api/events/${code}/playlists`);
+  }
+
+  async generateRecommendationsFromTemplate(
+    code: string, source: string, playlistId: string
+  ): Promise<RecommendationResponse> {
+    return this.fetch(`/api/events/${code}/recommendations/from-template`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, playlist_id: playlistId }),
     });
   }
 

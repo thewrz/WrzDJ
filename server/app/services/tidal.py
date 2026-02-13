@@ -403,6 +403,62 @@ def manual_link_track(
         )
 
 
+@dataclass
+class TidalPlaylistInfo:
+    """Tidal playlist metadata."""
+
+    id: str
+    name: str
+    num_tracks: int
+    description: str | None = None
+    cover_url: str | None = None
+    source: str = "tidal"
+
+
+def list_user_playlists(db: Session, user: User) -> list[TidalPlaylistInfo]:
+    """List all playlists owned by the user on Tidal."""
+    session = get_tidal_session(db, user)
+    if not session:
+        return []
+
+    try:
+        playlists = session.user.playlists()
+        result = []
+        for p in playlists:
+            cover_url = None
+            try:
+                cover_url = p.image(480)
+            except Exception:  # nosec B110 - cover art is optional
+                pass
+            result.append(
+                TidalPlaylistInfo(
+                    id=str(p.id),
+                    name=p.name or "",
+                    num_tracks=p.num_tracks or 0,
+                    description=p.description,
+                    cover_url=cover_url,
+                )
+            )
+        return result
+    except Exception as e:
+        logger.error(f"Failed to list Tidal playlists: {e}")
+        return []
+
+
+def get_playlist_tracks(db: Session, user: User, playlist_id: str) -> list:
+    """Get tracks from a Tidal playlist. Returns raw tidalapi.Track objects."""
+    session = get_tidal_session(db, user)
+    if not session:
+        return []
+
+    try:
+        playlist = session.playlist(playlist_id)
+        return playlist.tracks() or []
+    except Exception as e:
+        logger.error(f"Failed to get Tidal playlist tracks: {e}")
+        return []
+
+
 def search_tidal_tracks(
     db: Session,
     user: User,

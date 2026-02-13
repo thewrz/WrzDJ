@@ -180,6 +180,79 @@ def _deduplicate_candidates(candidates: list[TrackProfile]) -> list[TrackProfile
     return seen
 
 
+def generate_recommendations_from_template(
+    db: Session,
+    user: User,
+    event: Event,
+    template_source: str,
+    template_id: str,
+    max_results: int = 20,
+) -> RecommendationResult:
+    """Generate recommendations using a template playlist as the profile source.
+
+    The template playlist's tracks build the EventProfile instead of the
+    event's accepted requests. The rest of the pipeline is reused.
+    """
+    from app.services.recommendation.template import (
+        tracks_from_beatport_playlist,
+        tracks_from_tidal_playlist,
+    )
+
+    if template_source == "tidal":
+        template_tracks = tracks_from_tidal_playlist(db, user, template_id)
+    elif template_source == "beatport":
+        template_tracks = tracks_from_beatport_playlist(db, user, template_id)
+    else:
+        raise ValueError(f"Invalid template source: {template_source}")
+
+    if not template_tracks:
+        return RecommendationResult(
+            suggestions=[],
+            event_profile=EventProfile(track_count=0),
+            enriched_count=0,
+            total_candidates_searched=0,
+            services_used=[],
+        )
+
+    # Build profile from template tracks (no enrichment needed — data is direct)
+    profile = build_event_profile(template_tracks)
+
+    # Generate search queries from profile
+    search_queries = _build_search_queries(profile)
+    if not search_queries:
+        search_queries = ["top tracks", "popular tracks"]
+
+    # Search for candidates
+    candidates, services_used, total_searched = _search_candidates(db, user, search_queries)
+
+    # Deduplicate candidates among themselves
+    candidates = _deduplicate_candidates(candidates)
+
+    # Deduplicate against event's existing requests (not the template)
+    all_requests = db.query(Request).filter(Request.event_id == event.id).all()
+    candidates = _deduplicate_against_requests(candidates, all_requests)
+
+    # Score and rank
+    ranked = rank_candidates(candidates, profile, max_results)
+
+    logger.info(
+        "Generated %d template recommendations for event %s (template=%s:%s, candidates=%d)",
+        len(ranked),
+        event.code,
+        template_source,
+        template_id,
+        len(candidates),
+    )
+
+    return RecommendationResult(
+        suggestions=ranked,
+        event_profile=profile,
+        enriched_count=len(template_tracks),
+        total_candidates_searched=total_searched,
+        services_used=services_used,
+    )
+
+
 def generate_recommendations(
     db: Session,
     user: User,

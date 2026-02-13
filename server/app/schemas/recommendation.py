@@ -1,6 +1,6 @@
 """Pydantic schemas for the song recommendation system."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RecommendedTrack(BaseModel):
@@ -36,3 +36,21 @@ class RecommendationResponse(BaseModel):
     services_used: list[str] = []
     total_candidates_searched: int = 0
     llm_available: bool = False
+
+
+class PlaylistInfo(BaseModel):
+    id: str
+    name: str
+    num_tracks: int
+    description: str | None = None
+    cover_url: str | None = None
+    source: str
+
+
+class PlaylistListResponse(BaseModel):
+    playlists: list[PlaylistInfo] = []
+
+
+class TemplatePlaylistRequest(BaseModel):
+    source: str = Field(..., pattern=r"^(tidal|beatport)$")
+    playlist_id: str = Field(..., min_length=1, max_length=200)

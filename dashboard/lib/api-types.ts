@@ -347,3 +347,18 @@ export interface RecommendationResponse {
   total_candidates_searched: number;
   llm_available: boolean;
 }
+
+/** Playlist info from connected music services */
+export interface PlaylistInfo {
+  id: string;
+  name: string;
+  num_tracks: number;
+  description: string | null;
+  cover_url: string | null;
+  source: 'tidal' | 'beatport';
+}
+
+/** Response from GET /api/events/{code}/playlists */
+export interface PlaylistListResponse {
+  playlists: PlaylistInfo[];
+}

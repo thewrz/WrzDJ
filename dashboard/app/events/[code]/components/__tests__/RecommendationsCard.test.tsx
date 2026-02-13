@@ -1,12 +1,14 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RecommendationsCard } from '../RecommendationsCard';
-import type { RecommendedTrack, RecommendationResponse } from '@/lib/api-types';
+import type { RecommendedTrack, RecommendationResponse, PlaylistInfo } from '@/lib/api-types';
 
 // Mock the api module
 vi.mock('@/lib/api', () => ({
   api: {
     generateRecommendations: vi.fn(),
+    getEventPlaylists: vi.fn(),
+    generateRecommendationsFromTemplate: vi.fn(),
   },
   ApiError: class ApiError extends Error {
     status: number;
@@ -58,11 +60,24 @@ function makeResponse(overrides: Partial<RecommendationResponse> = {}): Recommen
   };
 }
 
+function makePlaylist(overrides: Partial<PlaylistInfo> = {}): PlaylistInfo {
+  return {
+    id: 'playlist-1',
+    name: 'My Mix',
+    num_tracks: 10,
+    description: 'A great mix',
+    cover_url: 'https://bp.com/cover.jpg',
+    source: 'beatport',
+    ...overrides,
+  };
+}
+
 describe('RecommendationsCard', () => {
   const defaultProps = {
     code: 'TEST01',
     hasAcceptedRequests: true,
-    hasConnectedServices: true,
+    tidalLinked: true,
+    beatportLinked: true,
     onAcceptTrack: vi.fn().mockResolvedValue(undefined),
   };
 
@@ -75,14 +90,14 @@ describe('RecommendationsCard', () => {
     expect(screen.getByText('Generate')).toBeInTheDocument();
   });
 
-  it('disables Generate when no accepted requests', () => {
+  it('disables Generate when no accepted requests in request mode', () => {
     render(<RecommendationsCard {...defaultProps} hasAcceptedRequests={false} />);
     const btn = screen.getByText('Generate');
     expect(btn).toBeDisabled();
   });
 
   it('disables Generate when no connected services', () => {
-    render(<RecommendationsCard {...defaultProps} hasConnectedServices={false} />);
+    render(<RecommendationsCard {...defaultProps} tidalLinked={false} beatportLinked={false} />);
     const btn = screen.getByText('Generate');
     expect(btn).toBeDisabled();
     expect(screen.getByText(/link tidal or beatport/i)).toBeInTheDocument();
@@ -94,8 +109,6 @@ describe('RecommendationsCard', () => {
     render(<RecommendationsCard {...defaultProps} />);
     fireEvent.click(screen.getByText('Generate'));
 
-    // After click, button text changes to loading state (may resolve quickly)
-    // Just verify the API was called and results appear
     await waitFor(() => {
       expect(screen.getByText(/Test Artist/)).toBeInTheDocument();
     });
@@ -184,5 +197,102 @@ describe('RecommendationsCard', () => {
 
     expect(screen.queryByText('Test Artist')).not.toBeInTheDocument();
     expect(defaultProps.onAcceptTrack).not.toHaveBeenCalled();
+  });
+
+  // Template playlist tests
+
+  it('renders mode toggle with From Requests and From Playlist options', () => {
+    render(<RecommendationsCard {...defaultProps} />);
+    expect(screen.getByText('From Requests')).toBeInTheDocument();
+    expect(screen.getByText('From Playlist')).toBeInTheDocument();
+  });
+
+  it('loads playlists when From Playlist mode is selected', async () => {
+    vi.mocked(api.getEventPlaylists).mockResolvedValue({
+      playlists: [
+        makePlaylist({ id: 'p1', name: 'Mix 1', source: 'tidal' }),
+        makePlaylist({ id: 'p2', name: 'Mix 2', source: 'beatport' }),
+      ],
+    });
+
+    render(<RecommendationsCard {...defaultProps} />);
+    fireEvent.click(screen.getByText('From Playlist'));
+
+    await waitFor(() => {
+      expect(api.getEventPlaylists).toHaveBeenCalledWith('TEST01');
+    });
+  });
+
+  it('shows playlist dropdown with loaded playlists', async () => {
+    vi.mocked(api.getEventPlaylists).mockResolvedValue({
+      playlists: [
+        makePlaylist({ id: 'p1', name: 'Friday Night Mix', source: 'tidal' }),
+      ],
+    });
+
+    render(<RecommendationsCard {...defaultProps} />);
+    fireEvent.click(screen.getByText('From Playlist'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Friday Night Mix/)).toBeInTheDocument();
+    });
+  });
+
+  it('Generate disabled when no playlist selected in template mode', async () => {
+    vi.mocked(api.getEventPlaylists).mockResolvedValue({
+      playlists: [makePlaylist()],
+    });
+
+    render(<RecommendationsCard {...defaultProps} />);
+    fireEvent.click(screen.getByText('From Playlist'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Generate')).toBeDisabled();
+    });
+  });
+
+  it('calls from-template API when generating in template mode', async () => {
+    vi.mocked(api.getEventPlaylists).mockResolvedValue({
+      playlists: [makePlaylist({ id: 'bp-1', name: 'Club Mix', source: 'beatport' })],
+    });
+    vi.mocked(api.generateRecommendationsFromTemplate).mockResolvedValue(makeResponse());
+
+    render(<RecommendationsCard {...defaultProps} />);
+    fireEvent.click(screen.getByText('From Playlist'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Club Mix/)).toBeInTheDocument();
+    });
+
+    // Select the playlist
+    const select = screen.getByRole('combobox');
+    fireEvent.change(select, { target: { value: 'beatport:bp-1' } });
+
+    // Generate
+    fireEvent.click(screen.getByText('Generate'));
+
+    await waitFor(() => {
+      expect(api.generateRecommendationsFromTemplate).toHaveBeenCalledWith(
+        'TEST01', 'beatport', 'bp-1'
+      );
+    });
+  });
+
+  it('shows service badges on playlists', async () => {
+    vi.mocked(api.getEventPlaylists).mockResolvedValue({
+      playlists: [
+        makePlaylist({ id: 'p1', name: 'Tidal Mix', source: 'tidal', num_tracks: 15 }),
+        makePlaylist({ id: 'p2', name: 'BP Mix', source: 'beatport', num_tracks: 25 }),
+      ],
+    });
+
+    render(<RecommendationsCard {...defaultProps} />);
+    fireEvent.click(screen.getByText('From Playlist'));
+
+    await waitFor(() => {
+      // Both playlists should be visible as options
+      const select = screen.getByRole('combobox');
+      expect(select).toBeInTheDocument();
+    });
   });
 });
