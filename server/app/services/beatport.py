@@ -176,6 +176,11 @@ def save_tokens(db: Session, user: User, token_data: dict) -> None:
     user.beatport_refresh_token = token_data.get("refresh_token")
     expires_in = token_data.get("expires_in", DEFAULT_TOKEN_EXPIRY)
     user.beatport_token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
+
+    # Clean up temporary PKCE values now that we have real tokens
+    user.beatport_oauth_state = None
+    user.beatport_oauth_code_verifier = None
+
     db.commit()
 
     # Best-effort subscription fetch on login

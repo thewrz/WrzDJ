@@ -20,6 +20,8 @@ depends_on = None
 TOKEN_COLUMNS = [
     "tidal_access_token",
     "tidal_refresh_token",
+    "beatport_access_token",
+    "beatport_refresh_token",
 ]
 
 
