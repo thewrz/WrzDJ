@@ -279,6 +279,7 @@ export function RecommendationsCard({
                   padding: '0.5rem',
                   borderRadius: '0.375rem',
                   background: '#1a1a1a',
+                  overflow: 'hidden',
                 }}
               >
                 {track.cover_url && (
@@ -293,16 +294,20 @@ export function RecommendationsCard({
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
-                    fontWeight: 500, fontSize: '0.875rem',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    display: 'flex', alignItems: 'baseline', gap: '0.375rem',
                   }}>
-                    {track.artist} &mdash; {track.title}
+                    <span style={{
+                      fontWeight: 500, fontSize: '0.875rem',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {track.artist} &mdash; {track.title}
+                    </span>
                     {track.url && (
                       <a
                         href={track.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        style={{ marginLeft: '0.5rem', fontSize: '0.75rem' }}
+                        style={{ fontSize: '0.75rem', flexShrink: 0 }}
                       >
                         ↗
                       </a>

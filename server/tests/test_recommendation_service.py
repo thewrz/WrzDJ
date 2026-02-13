@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from app.services.recommendation.scorer import EventProfile, TrackProfile
 from app.services.recommendation.service import (
     RecommendationResult,
+    _apply_artist_diversity,
     _build_beatport_queries,
     _build_tidal_queries,
     _deduplicate_against_requests,
@@ -387,3 +388,104 @@ class TestCoverDetection:
         requests = [MagicMock(song_title="Old Song", artist="Old Artist")]
         result = _deduplicate_against_requests(candidates, requests)
         assert len(result) == 1
+
+
+def _make_scored(title, artist, score, bpm_score=0.5, key_score=0.5, genre_score=0.5):
+    """Helper to create a ScoredTrack for diversity tests."""
+    from app.services.recommendation.scorer import ScoredTrack
+
+    return ScoredTrack(
+        profile=TrackProfile(title=title, artist=artist),
+        score=score,
+        bpm_score=bpm_score,
+        key_score=key_score,
+        genre_score=genre_score,
+    )
+
+
+class TestArtistDiversity:
+    def test_source_artist_penalized(self):
+        """Candidate matching a source artist scores lower than equal-score new artist."""
+        scored = [
+            _make_scored("Song A", "Luke Bryan", 0.90),
+            _make_scored("Song B", "New Artist", 0.90),
+        ]
+        result = _apply_artist_diversity(scored, {"luke bryan"})
+
+        # New Artist should rank first (no penalty)
+        assert result[0].profile.artist == "New Artist"
+        assert result[0].score == 0.90
+        # Luke Bryan gets SOURCE_ARTIST_PENALTY (0.92×)
+        assert result[1].profile.artist == "Luke Bryan"
+        assert abs(result[1].score - 0.90 * 0.92) < 1e-9
+
+    def test_repeat_artist_penalized(self):
+        """3rd occurrence of same artist ranks below 1st."""
+        scored = [
+            _make_scored("Hit 1", "Luke Bryan", 0.95),
+            _make_scored("Hit 2", "Luke Bryan", 0.93),
+            _make_scored("Hit 3", "Luke Bryan", 0.91),
+        ]
+        result = _apply_artist_diversity(scored, set())
+
+        # All three are Luke Bryan; 1st keeps score, 2nd/3rd get repetition penalty
+        assert result[0].profile.title == "Hit 1"
+        assert result[0].score == 0.95  # No penalty for first occurrence
+        # 2nd occurrence: 0.93 * 0.90 = 0.837
+        assert result[1].profile.title == "Hit 2"
+        assert abs(result[1].score - 0.93 * 0.90) < 1e-9
+        # 3rd occurrence: 0.91 * 0.80 = 0.728
+        assert result[2].profile.title == "Hit 3"
+        assert abs(result[2].score - 0.91 * 0.80) < 1e-9
+
+    def test_no_penalty_for_unique_artists(self):
+        """Candidates with unique artists keep original scores."""
+        scored = [
+            _make_scored("Song A", "Luke Bryan", 0.90),
+            _make_scored("Song B", "Morgan Wallen", 0.85),
+            _make_scored("Song C", "Zach Bryan", 0.80),
+        ]
+        result = _apply_artist_diversity(scored, set())
+
+        assert result[0].score == 0.90
+        assert result[1].score == 0.85
+        assert result[2].score == 0.80
+
+    def test_empty_source_artists(self):
+        """Empty source artists set — only repetition penalty applies, no crash."""
+        scored = [
+            _make_scored("Song A", "Same Artist", 0.90),
+            _make_scored("Song B", "Same Artist", 0.85),
+        ]
+        result = _apply_artist_diversity(scored, set())
+
+        assert result[0].profile.title == "Song A"
+        assert result[0].score == 0.90
+        # 2nd occurrence gets repetition penalty only
+        assert result[1].profile.title == "Song B"
+        assert abs(result[1].score - 0.85 * 0.90) < 1e-9
+
+    def test_diversity_reranks_candidates(self):
+        """A lower-scoring new artist can outrank a penalized source artist."""
+        scored = [
+            _make_scored("Known Hit", "Luke Bryan", 0.95),
+            _make_scored("Fresh Track", "New Artist", 0.80),
+        ]
+        # Luke Bryan is in source AND will get source penalty
+        result = _apply_artist_diversity(scored, {"luke bryan"})
+
+        # Luke Bryan: 0.95 * 0.92 = 0.874
+        # New Artist: 0.80 (no penalty)
+        # Luke Bryan still ranks higher since 0.874 > 0.80
+        assert result[0].profile.artist == "Luke Bryan"
+        # But if we add a second Luke Bryan, the combined penalty drops it
+        scored_with_repeat = [
+            _make_scored("Known Hit", "Luke Bryan", 0.95),
+            _make_scored("Known Hit 2", "Luke Bryan", 0.90),
+            _make_scored("Fresh Track", "New Artist", 0.80),
+        ]
+        result2 = _apply_artist_diversity(scored_with_repeat, {"luke bryan"})
+        # 2nd Luke Bryan: 0.90 * 0.92 (source) * 0.90 (repeat) = 0.7452
+        # New Artist: 0.80 → ranks above 2nd Luke Bryan
+        assert result2[2].profile.artist == "Luke Bryan"
+        assert result2[1].profile.artist == "New Artist"

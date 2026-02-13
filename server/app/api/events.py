@@ -529,6 +529,7 @@ def get_recommendations(
         RecommendationResponse,
         RecommendedTrack,
     )
+    from app.services.recommendation.camelot import parse_key
     from app.services.recommendation.llm_hooks import is_llm_available
     from app.services.recommendation.service import generate_recommendations
 
@@ -550,7 +551,7 @@ def get_recommendations(
         bpm_range_high=result.event_profile.bpm_range[1]
         if result.event_profile.bpm_range
         else None,
-        dominant_keys=list(result.event_profile.dominant_keys),
+        dominant_keys=[str(p) for k in result.event_profile.dominant_keys if (p := parse_key(k))],
         dominant_genres=list(result.event_profile.dominant_genres),
         track_count=result.event_profile.track_count,
         enriched_count=result.enriched_count,
@@ -561,7 +562,7 @@ def get_recommendations(
             title=s.profile.title,
             artist=s.profile.artist,
             bpm=s.profile.bpm,
-            key=s.profile.key,
+            key=str(p) if (p := parse_key(s.profile.key)) else s.profile.key,
             genre=s.profile.genre,
             score=s.score,
             bpm_score=s.bpm_score,
@@ -645,6 +646,7 @@ def get_recommendations_from_template(
         RecommendationResponse,
         RecommendedTrack,
     )
+    from app.services.recommendation.camelot import parse_key
     from app.services.recommendation.llm_hooks import is_llm_available
     from app.services.recommendation.service import generate_recommendations_from_template
 
@@ -672,7 +674,7 @@ def get_recommendations_from_template(
         bpm_range_high=result.event_profile.bpm_range[1]
         if result.event_profile.bpm_range
         else None,
-        dominant_keys=list(result.event_profile.dominant_keys),
+        dominant_keys=[str(p) for k in result.event_profile.dominant_keys if (p := parse_key(k))],
         dominant_genres=list(result.event_profile.dominant_genres),
         track_count=result.event_profile.track_count,
         enriched_count=result.enriched_count,
@@ -683,7 +685,7 @@ def get_recommendations_from_template(
             title=s.profile.title,
             artist=s.profile.artist,
             bpm=s.profile.bpm,
-            key=s.profile.key,
+            key=str(p) if (p := parse_key(s.profile.key)) else s.profile.key,
             genre=s.profile.genre,
             score=s.score,
             bpm_score=s.bpm_score,

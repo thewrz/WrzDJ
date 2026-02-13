@@ -30,6 +30,13 @@ MAX_SEARCH_QUERIES = 3
 # Maximum results per search query
 SEARCH_LIMIT = 10
 
+# Penalty multiplier for candidates matching a source artist
+SOURCE_ARTIST_PENALTY = 0.92
+# Base penalty for repeated artists among candidates (compounds per occurrence)
+REPEAT_ARTIST_BASE_PENALTY = 0.90
+# Fuzzy match threshold for artist matching
+ARTIST_MATCH_THRESHOLD = 0.85
+
 # Genres that indicate non-music or DJ utility tracks
 BLOCKED_GENRES = {
     "dj tools",
@@ -52,6 +59,70 @@ def _is_blocked_genre(genre: str | None) -> bool:
     if genre_lower in BLOCKED_GENRES:
         return True
     return any(blocked in genre_lower for blocked in BLOCKED_GENRES)
+
+
+def _apply_artist_diversity(
+    scored: list[ScoredTrack],
+    source_artists: set[str],
+) -> list[ScoredTrack]:
+    """Apply artist diversity penalties and re-rank.
+
+    Two-layer penalty keeps the scorer module pure (musical compatibility only)
+    while the orchestrator promotes variety across artists.
+
+    Layer 1 — Source artist penalty: if a candidate's artist matches an artist
+    already in the source material (accepted requests or template playlist),
+    apply SOURCE_ARTIST_PENALTY to its score.
+
+    Layer 2 — Repetition penalty: among candidates sharing an artist, the 2nd
+    occurrence gets REPEAT_ARTIST_BASE_PENALTY, 3rd gets 0.80, etc.
+    """
+    artist_seen_count: dict[str, int] = {}
+    adjusted: list[ScoredTrack] = []
+
+    for st in scored:
+        multiplier = 1.0
+        candidate_artist = st.profile.artist.lower() if st.profile.artist else ""
+
+        # Layer 1: penalize if artist is already in the source material
+        if candidate_artist:
+            for src in source_artists:
+                if fuzzy_match_score(candidate_artist, src) >= ARTIST_MATCH_THRESHOLD:
+                    multiplier *= SOURCE_ARTIST_PENALTY
+                    break
+
+        # Layer 2: penalize repeated artists among candidates
+        if candidate_artist:
+            count = artist_seen_count.get(candidate_artist, 0)
+            # Find the canonical key (handles slight case variations already
+            # normalised by .lower(), but also check fuzzy against seen keys)
+            matched_key = candidate_artist
+            for seen_key in artist_seen_count:
+                if fuzzy_match_score(candidate_artist, seen_key) >= ARTIST_MATCH_THRESHOLD:
+                    matched_key = seen_key
+                    count = artist_seen_count[seen_key]
+                    break
+
+            if count > 0:
+                # 1st dup → 0.90, 2nd dup → 0.80, 3rd → 0.70, floor at 0.50
+                penalty = max(REPEAT_ARTIST_BASE_PENALTY - 0.10 * (count - 1), 0.50)
+                multiplier *= penalty
+
+            artist_seen_count[matched_key] = count + 1
+
+        new_score = st.score * multiplier
+        adjusted.append(
+            ScoredTrack(
+                profile=st.profile,
+                score=new_score,
+                bpm_score=st.bpm_score,
+                key_score=st.key_score,
+                genre_score=st.genre_score,
+            )
+        )
+
+    adjusted.sort(key=lambda s: s.score, reverse=True)
+    return adjusted
 
 
 @dataclass
@@ -166,8 +237,15 @@ def _search_candidates(
     if user.beatport_access_token:
         from app.services.beatport import search_beatport_tracks
 
+        beatport_failures = 0
         for query in queries:
             results = search_beatport_tracks(db, user, query, limit=SEARCH_LIMIT)
+            if not results:
+                beatport_failures += 1
+                if beatport_failures >= 2:
+                    logger.warning("Beatport failing repeatedly, skipping remaining queries")
+                    break
+                continue
             for r in results:
                 if is_unwanted_version(r.title):
                     continue
@@ -188,8 +266,7 @@ def _search_candidates(
                     )
                 )
             total_searched += len(results)
-            if results:
-                services_used.add("beatport")
+            services_used.add("beatport")
 
     # Search Tidal if connected
     if user.tidal_access_token:
@@ -389,6 +466,10 @@ def generate_recommendations_from_template(
     # Score and rank
     ranked = rank_candidates(candidates, profile, max_results)
 
+    # Apply artist diversity penalties
+    source_artists = {t.artist.lower() for t in template_tracks if t.artist}
+    ranked = _apply_artist_diversity(ranked, source_artists)
+
     logger.info(
         "Generated %d template recommendations for event %s "
         "(template=%s:%s, queries=%s, candidates=%d, searched=%d)",
@@ -474,6 +555,10 @@ def generate_recommendations(
 
     # Step 7: Score and rank
     ranked = rank_candidates(candidates, profile, max_results)
+
+    # Step 8: Apply artist diversity penalties
+    source_artists = {req.artist.lower() for req in requests if req.artist}
+    ranked = _apply_artist_diversity(ranked, source_artists)
 
     logger.info(
         "Generated %d recommendations for event %s (enriched=%d, candidates=%d, searched=%d)",
