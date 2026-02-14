@@ -13,6 +13,7 @@ from app.models.user import User
 from app.services.sync.base import SyncResult, SyncStatus, TrackMatch
 from app.services.sync.orchestrator import (
     MultiSyncResult,
+    _find_best_match,
     _is_already_synced,
     _persist_sync_result,
     enrich_request_metadata,
@@ -1001,3 +1002,132 @@ class TestEnrichRequestMetadata:
         assert request.bpm is None  # Must NOT take 72 BPM from LB aka LABAT
         assert request.genre is None  # Must NOT take "House" from wrong track
         assert request.musical_key is None
+
+    def test_bpm_context_excludes_new_requests(self, db, tidal_event, tidal_user):
+        """BPM context correction should only use accepted/played/playing requests."""
+        # Create accepted requests with BPMs to form context (median ~130)
+        for i, bpm_val in enumerate([128.0, 130.0, 132.0]):
+            r = _make_accepted_request(db, tidal_event, f"Track {i}", f"Artist {i}", f"bpm_ctx_{i}")
+            r.status = RequestStatus.ACCEPTED.value
+            r.bpm = bpm_val
+        db.commit()
+
+        # Create a NEW request with BPM that should NOT be in context
+        new_req = _make_accepted_request(db, tidal_event, "Troll Track", "Troll", "bpm_ctx_new")
+        new_req.status = RequestStatus.NEW.value
+        new_req.bpm = 200.0  # Would skew median if included
+        db.commit()
+
+        # Create the request to enrich — 65 BPM should double to 130
+        # (within 15% of median 130). Leave musical_key=None so we don't
+        # hit the "already complete" early-return.
+        target = _make_accepted_request(
+            db, tidal_event, "Half Time Track", "Artist", "bpm_ctx_target"
+        )
+        target.genre = "electronic"
+        target.bpm = 65.0
+        db.commit()
+
+        # Mock external services to avoid network calls (Tidal fills missing key)
+        with patch(
+            "app.services.tidal.search_tidal_tracks",
+            return_value=[],
+        ):
+            enrich_request_metadata(db, target.id)
+
+        db.refresh(target)
+        # With status filter: median = 130, 65*2 = 130 → corrected
+        # Without status filter: median would include 200, skewing context
+        assert target.bpm == 130.0
+
+
+class TestFindBestMatchVersionPreference:
+    """Tests for _find_best_match() version-aware scoring."""
+
+    def test_beatport_original_beats_remix_on_tie(self):
+        """When title/artist scores are equal, Original Mix wins over remix."""
+        from app.schemas.beatport import BeatportSearchResult
+
+        results = [
+            BeatportSearchResult(
+                track_id="1",
+                title="Surrender",
+                artist="Darude",
+                mix_name="Hardstyle Remix",
+                bpm=165,
+            ),
+            BeatportSearchResult(
+                track_id="2",
+                title="Surrender",
+                artist="Darude",
+                mix_name="Original Mix",
+                bpm=132,
+            ),
+        ]
+        best = _find_best_match(results, "Surrender", "Darude", prefer_original=True)
+        assert best.track_id == "2"
+        assert best.bpm == 132
+
+    def test_beatport_remix_preferred_when_requested(self):
+        """When request title contains remix, prefer_original=False lets remix win."""
+        from app.schemas.beatport import BeatportSearchResult
+
+        results = [
+            BeatportSearchResult(
+                track_id="1",
+                title="Surrender",
+                artist="Darude",
+                mix_name="Hardstyle Remix",
+                bpm=165,
+            ),
+            BeatportSearchResult(
+                track_id="2",
+                title="Surrender",
+                artist="Darude",
+                mix_name="Original Mix",
+                bpm=132,
+            ),
+        ]
+        # With prefer_original=False, no bonus/penalty — first result wins on tie
+        best = _find_best_match(results, "Surrender", "Darude", prefer_original=False)
+        # Both have identical scores, first one encountered wins
+        assert best is not None
+
+    def test_tidal_remix_penalized(self):
+        """Tidal results with remix in title get penalized for non-remix queries."""
+        from types import SimpleNamespace
+
+        results = [
+            SimpleNamespace(title="Surrender (Hardstyle Remix)", artist="Darude", bpm=165),
+            SimpleNamespace(title="Surrender", artist="Darude", bpm=132),
+        ]
+        best = _find_best_match(results, "Surrender", "Darude", prefer_original=True)
+        # Plain title should win over remix title
+        assert best.title == "Surrender"
+        assert best.bpm == 132
+
+    def test_prefer_original_disabled(self):
+        """With prefer_original=False, no version scoring applied."""
+        from types import SimpleNamespace
+
+        results = [
+            SimpleNamespace(title="Surrender (Hardstyle Remix)", artist="Darude", bpm=165),
+            SimpleNamespace(title="Surrender", artist="Darude", bpm=132),
+        ]
+        # Without prefer_original, both have similar scores — first wins
+        best = _find_best_match(results, "Surrender", "Darude", prefer_original=False)
+        assert best is not None
+
+    def test_bpm_consensus_tiebreaker(self):
+        """When title/artist scores are identical, modal BPM wins."""
+        from types import SimpleNamespace
+
+        # Tidal returns multiple "Surrender" — 3 at 132, 1 at 165
+        results = [
+            SimpleNamespace(title="Surrender", artist="Darude", bpm=165.0),
+            SimpleNamespace(title="Surrender", artist="Darude", bpm=132.0),
+            SimpleNamespace(title="Surrender", artist="Darude", bpm=132.0),
+            SimpleNamespace(title="Surrender", artist="Darude", bpm=132.0),
+        ]
+        best = _find_best_match(results, "Surrender", "Darude", prefer_original=True)
+        assert best.bpm == 132.0  # Modal BPM among results

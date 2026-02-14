@@ -13,7 +13,13 @@ from app.models.user import User
 from app.services.beatport import search_beatport_tracks
 from app.services.recommendation.scorer import TrackProfile
 from app.services.tidal import _get_artist_name, get_tidal_session
-from app.services.track_normalizer import artist_match_score, fuzzy_match_score, primary_artist
+from app.services.track_normalizer import (
+    artist_match_score,
+    fuzzy_match_score,
+    is_original_mix_name,
+    is_remix_title,
+    primary_artist,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +49,8 @@ def enrich_from_tidal(
         if not tracks:
             return None
 
-        # Find best match
+        # Find best match (prefer originals over remixes for non-remix queries)
+        want_remix = is_remix_title(title)
         best_track = None
         best_score = 0.0
         for track in tracks:
@@ -52,6 +59,8 @@ def enrich_from_tidal(
             title_score = fuzzy_match_score(title, track_title)
             artist_score = artist_match_score(artist, track_artist)
             combined = title_score * 0.6 + artist_score * 0.4
+            if not want_remix and is_remix_title(track_title):
+                combined -= 0.1
             if combined > best_score:
                 best_score = combined
                 best_track = track
@@ -105,13 +114,19 @@ def enrich_from_beatport(
     if not results:
         return None
 
-    # Find best match
+    # Find best match (prefer originals over remixes for non-remix queries)
+    want_remix = is_remix_title(title)
     best_result = None
     best_score = 0.0
     for result in results:
         title_score = fuzzy_match_score(title, result.title)
         artist_score = artist_match_score(artist, result.artist)
         combined = title_score * 0.6 + artist_score * 0.4
+        if not want_remix and result.mix_name:
+            if is_original_mix_name(result.mix_name):
+                combined += 0.1
+        elif not want_remix and is_remix_title(result.title):
+            combined -= 0.1
         if combined > best_score:
             best_score = combined
             best_result = result

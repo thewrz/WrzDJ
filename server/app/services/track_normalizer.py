@@ -13,8 +13,8 @@ from difflib import SequenceMatcher
 # These get stripped before fuzzy comparison so "Banana (Original Mix)" matches "Banana".
 # Named remixes, Instrumental, Acoustic, Live, VIP, Dub Mix, A Cappella are preserved.
 _GENERIC_SUFFIXES = (
-    r"original\s+mix|extended\s+mix|radio\s+edit|club\s+mix|"
-    r"album\s+version|single\s+version|full\s+length(?:\s+version)?|"
+    r"original\s+mix|extended\s+mix|radio\s+(?:edit|mix)|club\s+mix|"
+    r"instrumental\s+mix|album\s+version|single\s+version|full\s+length(?:\s+version)?|"
     r"main\s+mix|short\s+(?:edit|mix)|long\s+(?:mix|version)|"
     r"original\s+version|original|extended"
 )
@@ -34,6 +34,35 @@ _REMIX_DASH_RE = re.compile(
     r"\s+-\s+([\w\s&.]+?)\s+(remix|edit|bootleg|rework|flip)\s*$",
     re.IGNORECASE,
 )
+
+
+_GENERIC_SUFFIX_EXACT_RE = re.compile(rf"^(?:{_GENERIC_SUFFIXES})$", re.IGNORECASE)
+
+
+def is_remix_title(title: str) -> bool:
+    """Check if a title contains a named remix/edit/bootleg pattern.
+
+    Returns True for titles like "Surrender (Hardstyle Remix)" or
+    "Strobe - Maceo Plex Remix", but False for "Surrender (Original Mix)"
+    or plain "Surrender". Generic suffixes (Original Mix, Extended Mix,
+    Radio Edit, Club Mix, etc.) are excluded.
+    """
+    for regex in (_REMIX_PAREN_RE, _REMIX_DASH_RE):
+        match = regex.search(title)
+        if match:
+            full_suffix = f"{match.group(1).strip()} {match.group(2).strip()}"
+            if not _GENERIC_SUFFIX_EXACT_RE.match(full_suffix):
+                return True
+    return False
+
+
+def is_original_mix_name(mix_name: str) -> bool:
+    """Check if a Beatport mix_name indicates an original/standard version.
+
+    Matches "Original Mix", "Extended Mix", "Radio Edit", "Club Mix", etc.
+    Used by version-aware scoring to prefer originals over remixes.
+    """
+    return bool(_GENERIC_SUFFIX_EXACT_RE.match(mix_name.strip()))
 
 
 def normalize_track_title(title: str) -> str:

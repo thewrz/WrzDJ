@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
-from app.models.request import Request, TidalSyncStatus
+from app.models.request import Request, RequestStatus, TidalSyncStatus
 from app.services.intent_parser import parse_intent
 from app.services.musicbrainz import lookup_artist_genre
 from app.services.request import normalize_key
@@ -28,6 +28,8 @@ from app.services.sync.registry import get_connected_adapters
 from app.services.track_normalizer import (
     artist_match_score,
     fuzzy_match_score,
+    is_original_mix_name,
+    is_remix_title,
     normalize_bpm_to_context,
     normalize_track,
     primary_artist,
@@ -256,7 +258,12 @@ def _is_already_synced(request: Request, service_name: str) -> bool:
 
 
 def _find_best_match(
-    results, title: str, artist: str, min_score: float = 0.4, min_artist_score: float = 0.35
+    results,
+    title: str,
+    artist: str,
+    min_score: float = 0.4,
+    min_artist_score: float = 0.35,
+    prefer_original: bool = True,
 ):
     """Find the best fuzzy match from search results.
 
@@ -266,7 +273,28 @@ def _find_best_match(
     A separate min_artist_score floor prevents a perfect title match
     from carrying a completely wrong artist (e.g., "Feel the Beat" by
     LB aka LABAT matching a request for Darude).
+
+    When prefer_original is True, applies a small bonus (+0.1) for
+    results that look like the original version (Beatport mix_name
+    matches "Original Mix", "Extended Mix", etc.) and a penalty (-0.1)
+    for results with detected remix patterns in the title (Tidal).
+    This breaks ties between "Surrender (Original Mix)" at 132 BPM and
+    "Surrender (Hardstyle Remix)" at 165 BPM without overriding a
+    genuinely better title/artist match.
+
+    When multiple results have identical scores, a BPM consensus
+    tiebreaker (+0.01) favors the version whose BPM matches the most
+    common BPM among all results.
     """
+    # Compute modal BPM for consensus tiebreaker
+    bpm_counts: dict[int, int] = {}
+    for result in results:
+        bpm = getattr(result, "bpm", None)
+        if bpm:
+            rounded = round(float(bpm))
+            bpm_counts[rounded] = bpm_counts.get(rounded, 0) + 1
+    modal_bpm = max(bpm_counts, key=bpm_counts.get) if bpm_counts else None
+
     best = None
     best_score = 0.0
     for result in results:
@@ -275,6 +303,24 @@ def _find_best_match(
         if artist_score < min_artist_score:
             continue
         combined = title_score * 0.6 + artist_score * 0.4
+
+        if prefer_original:
+            mix_name = getattr(result, "mix_name", None)
+            if mix_name:
+                # Beatport: structured mix_name available
+                if is_original_mix_name(mix_name):
+                    combined += 0.1
+                # Named remix/bootleg/rework in mix_name → no bonus
+            else:
+                # Tidal/other: check title for remix patterns
+                if is_remix_title(result.title):
+                    combined -= 0.1
+
+        # BPM consensus tiebreaker: prefer modal BPM among results
+        result_bpm = getattr(result, "bpm", None)
+        if modal_bpm and result_bpm and round(float(result_bpm)) == modal_bpm:
+            combined += 0.01
+
         if combined > best_score:
             best_score = combined
             best = result
@@ -305,6 +351,7 @@ def enrich_request_metadata(db: Session, request_id: int) -> None:
 
     user = request.event.created_by
     search_query = f"{primary_artist(request.artist)} {request.song_title}"
+    prefer_original = not is_remix_title(request.song_title)
 
     # 1. MusicBrainz for genre (artist-level, free, rate-limited)
     if not request.genre and request.artist:
@@ -323,7 +370,12 @@ def enrich_request_metadata(db: Session, request_id: int) -> None:
 
                 results = search_beatport_tracks(db, user, search_query, limit=5)
                 if results:
-                    best = _find_best_match(results, request.song_title, request.artist)
+                    best = _find_best_match(
+                        results,
+                        request.song_title,
+                        request.artist,
+                        prefer_original=prefer_original,
+                    )
                     if best:
                         if not request.genre and best.genre:
                             request.genre = best.genre
@@ -342,7 +394,12 @@ def enrich_request_metadata(db: Session, request_id: int) -> None:
 
                 results = search_tidal_tracks(db, user, search_query, limit=5)
                 if results:
-                    best = _find_best_match(results, request.song_title, request.artist)
+                    best = _find_best_match(
+                        results,
+                        request.song_title,
+                        request.artist,
+                        prefer_original=prefer_original,
+                    )
                     if best:
                         if not request.bpm and best.bpm:
                             request.bpm = float(best.bpm)
@@ -364,6 +421,13 @@ def enrich_request_metadata(db: Session, request_id: int) -> None:
                 Request.event_id == request.event_id,
                 Request.id != request.id,
                 Request.bpm.isnot(None),
+                Request.status.in_(
+                    [
+                        RequestStatus.ACCEPTED.value,
+                        RequestStatus.PLAYING.value,
+                        RequestStatus.PLAYED.value,
+                    ]
+                ),
             )
             .all()
         ]
