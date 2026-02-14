@@ -950,3 +950,54 @@ class TestEnrichRequestMetadata:
         db.refresh(request)
         assert request.bpm is None  # Should NOT take BPM from wrong track
         assert request.musical_key is None
+
+    def test_beatport_enrichment_rejects_same_title_wrong_artist(self, db, tidal_event, tidal_user):
+        """Beatport result with matching title but wrong artist is rejected.
+
+        Real-world case: searching "Darude Feel The Beat" returns
+        "Feel the Beat" by LB aka LABAT (72 BPM) as the first result.
+        The title matches perfectly but the artist is completely different.
+        """
+        tidal_user.beatport_access_token = "fake_bp_token"
+        db.commit()
+
+        request = _make_accepted_request(
+            db, tidal_event, "Feel The Beat", "Darude", "enrich_wrong_artist"
+        )
+        db.commit()
+
+        from app.schemas.beatport import BeatportSearchResult
+
+        mock_results = [
+            BeatportSearchResult(
+                track_id="16190399",
+                title="Feel the Beat",
+                artist="LB aka LABAT",
+                genre="House",
+                bpm=72,
+                key="Gb Major",
+            ),
+            BeatportSearchResult(
+                track_id="13280071",
+                title="Darude",
+                artist="Victor Vandale",
+                genre="Techno (Peak Time / Driving)",
+                bpm=124,
+                key="F# Minor",
+            ),
+        ]
+
+        with patch(
+            "app.services.sync.orchestrator.lookup_artist_genre",
+            return_value=None,
+        ):
+            with patch(
+                "app.services.beatport.search_beatport_tracks",
+                return_value=mock_results,
+            ):
+                enrich_request_metadata(db, request.id)
+
+        db.refresh(request)
+        assert request.bpm is None  # Must NOT take 72 BPM from LB aka LABAT
+        assert request.genre is None  # Must NOT take "House" from wrong track
+        assert request.musical_key is None

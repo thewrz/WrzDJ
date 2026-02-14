@@ -248,17 +248,25 @@ def _is_already_synced(request: Request, service_name: str) -> bool:
     return False
 
 
-def _find_best_match(results, title: str, artist: str, min_score: float = 0.4):
+def _find_best_match(
+    results, title: str, artist: str, min_score: float = 0.4, min_artist_score: float = 0.35
+):
     """Find the best fuzzy match from search results.
 
     Scores each result by title (60%) + artist (40%) similarity.
     Returns the best match above min_score, or None if no good match.
+
+    A separate min_artist_score floor prevents a perfect title match
+    from carrying a completely wrong artist (e.g., "Feel the Beat" by
+    LB aka LABAT matching a request for Darude).
     """
     best = None
     best_score = 0.0
     for result in results:
         title_score = fuzzy_match_score(title, result.title)
         artist_score = fuzzy_match_score(artist, result.artist)
+        if artist_score < min_artist_score:
+            continue
         combined = title_score * 0.6 + artist_score * 0.4
         if combined > best_score:
             best_score = combined
