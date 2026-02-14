@@ -20,7 +20,7 @@ from app.services.recommendation.scorer import (
     build_event_profile,
     rank_candidates,
 )
-from app.services.track_normalizer import fuzzy_match_score
+from app.services.track_normalizer import artist_match_score, fuzzy_match_score, split_artists
 from app.services.version_filter import is_unwanted_version
 
 logger = logging.getLogger(__name__)
@@ -108,7 +108,7 @@ def _apply_artist_diversity(
         # Layer 1: penalize if artist is already in the source material
         if candidate_artist:
             for src in source_artists:
-                if fuzzy_match_score(candidate_artist, src) >= ARTIST_MATCH_THRESHOLD:
+                if artist_match_score(candidate_artist, src) >= ARTIST_MATCH_THRESHOLD:
                     multiplier *= SOURCE_ARTIST_PENALTY
                     break
 
@@ -119,7 +119,7 @@ def _apply_artist_diversity(
             # normalised by .lower(), but also check fuzzy against seen keys)
             matched_key = candidate_artist
             for seen_key in artist_seen_count:
-                if fuzzy_match_score(candidate_artist, seen_key) >= ARTIST_MATCH_THRESHOLD:
+                if artist_match_score(candidate_artist, seen_key) >= ARTIST_MATCH_THRESHOLD:
                     matched_key = seen_key
                     count = artist_seen_count[seen_key]
                     break
@@ -223,18 +223,28 @@ def _build_tidal_queries(
     """
     artist_counts: dict[str, int] = {}
 
-    # Collect artists from accepted requests
+    # Collect artists from accepted requests (split multi-artist strings)
     if requests:
         for req in requests:
             artist = getattr(req, "artist", None)
-            if artist and artist.lower() not in ("unknown", "various artists"):
-                artist_counts[artist] = artist_counts.get(artist, 0) + 1
+            if artist:
+                for individual in split_artists(artist):
+                    key = individual.strip().lower()
+                    if key not in ("unknown", "various artists", ""):
+                        artist_counts[individual.strip()] = (
+                            artist_counts.get(individual.strip(), 0) + 1
+                        )
 
-    # Collect artists from template tracks
+    # Collect artists from template tracks (split multi-artist strings)
     if template_tracks:
         for t in template_tracks:
-            if t.artist and t.artist.lower() not in ("unknown", "various artists"):
-                artist_counts[t.artist] = artist_counts.get(t.artist, 0) + 1
+            if t.artist:
+                for individual in split_artists(t.artist):
+                    key = individual.strip().lower()
+                    if key not in ("unknown", "various artists", ""):
+                        artist_counts[individual.strip()] = (
+                            artist_counts.get(individual.strip(), 0) + 1
+                        )
 
     top_artists = sorted(artist_counts, key=artist_counts.get, reverse=True)  # type: ignore[arg-type]
     return top_artists[:MAX_SEARCH_QUERIES]
@@ -381,7 +391,7 @@ def _deduplicate_against_requests(
         is_cover = False
         for req in existing_requests:
             title_score = fuzzy_match_score(candidate.title, req.song_title)
-            artist_score = fuzzy_match_score(candidate.artist, req.artist)
+            artist_score = artist_match_score(candidate.artist, req.artist)
             combined = title_score * 0.6 + artist_score * 0.4
             if combined >= 0.8:
                 is_dupe = True
@@ -408,7 +418,7 @@ def _deduplicate_against_template(
         is_dupe = False
         for tmpl in template_tracks:
             title_score = fuzzy_match_score(candidate.title, tmpl.title)
-            artist_score = fuzzy_match_score(candidate.artist, tmpl.artist)
+            artist_score = artist_match_score(candidate.artist, tmpl.artist)
             combined = title_score * 0.6 + artist_score * 0.4
             if combined >= 0.8:
                 is_dupe = True
@@ -425,7 +435,7 @@ def _deduplicate_candidates(candidates: list[TrackProfile]) -> list[TrackProfile
         is_dupe = False
         for existing in seen:
             title_score = fuzzy_match_score(candidate.title, existing.title)
-            artist_score = fuzzy_match_score(candidate.artist, existing.artist)
+            artist_score = artist_match_score(candidate.artist, existing.artist)
             combined = title_score * 0.6 + artist_score * 0.4
             if combined >= 0.8:
                 is_dupe = True

@@ -2,10 +2,14 @@
 
 from app.services.track_normalizer import (
     NormalizedTrack,
+    artist_match_score,
     fuzzy_match_score,
     normalize_artist,
+    normalize_bpm_to_context,
     normalize_track,
     normalize_track_title,
+    primary_artist,
+    split_artists,
 )
 
 
@@ -155,3 +159,141 @@ class TestNormalizeTrack:
             assert False, "Should not be able to mutate frozen dataclass"
         except AttributeError:
             pass
+
+
+class TestSplitArtists:
+    """Tests for split_artists()."""
+
+    def test_single_artist(self):
+        assert split_artists("Darude") == ["Darude"]
+
+    def test_comma_separated(self):
+        assert split_artists("Darude, Ashley Wallbridge, Foux") == [
+            "Darude",
+            "Ashley Wallbridge",
+            "Foux",
+        ]
+
+    def test_ampersand(self):
+        assert split_artists("Big & Rich") == ["Big", "Rich"]
+
+    def test_and_keyword(self):
+        assert split_artists("Simon and Garfunkel") == ["Simon", "Garfunkel"]
+
+    def test_x_collab(self):
+        assert split_artists("Skrillex x Diplo") == ["Skrillex", "Diplo"]
+
+    def test_featuring(self):
+        assert split_artists("deadmau5 feat. Kaskade") == ["deadmau5", "Kaskade"]
+
+    def test_ft_no_dot(self):
+        assert split_artists("Drake ft Rihanna") == ["Drake", "Rihanna"]
+
+    def test_featuring_full(self):
+        assert split_artists("Eminem featuring Rihanna") == ["Eminem", "Rihanna"]
+
+    def test_with_keyword(self):
+        assert split_artists("Calvin Harris with Rihanna") == ["Calvin Harris", "Rihanna"]
+
+    def test_mixed_delimiters(self):
+        result = split_artists("Darude, Ashley Wallbridge feat. Foux")
+        assert result == ["Darude", "Ashley Wallbridge", "Foux"]
+
+    def test_strips_whitespace(self):
+        assert split_artists("  Darude ,  Tiësto  ") == ["Darude", "Tiësto"]
+
+    def test_empty_string_returns_list(self):
+        assert split_artists("") == [""]
+
+    def test_filters_empty_segments(self):
+        # Edge case: consecutive delimiters could produce empty strings
+        result = split_artists("Darude, , Tiësto")
+        assert "" not in result
+        assert "Darude" in result
+        assert "Tiësto" in result
+
+
+class TestArtistMatchScore:
+    """Tests for artist_match_score()."""
+
+    def test_identical_single_artists(self):
+        assert artist_match_score("Darude", "Darude") == 1.0
+
+    def test_single_in_multi(self):
+        score = artist_match_score("Darude", "Darude, Ashley Wallbridge, Foux")
+        assert score >= 0.95
+
+    def test_multi_in_single(self):
+        score = artist_match_score("Darude, Ashley Wallbridge, Foux", "Darude")
+        assert score >= 0.95
+
+    def test_overlapping_multi(self):
+        score = artist_match_score("Darude, Ashley Wallbridge", "Ashley Wallbridge, Foux")
+        assert score >= 0.95
+
+    def test_no_overlap(self):
+        score = artist_match_score("Darude", "deadmau5")
+        assert score < 0.5
+
+    def test_case_insensitive(self):
+        score = artist_match_score("DARUDE", "darude")
+        assert score >= 0.95
+
+    def test_feat_vs_comma(self):
+        score = artist_match_score("Drake feat. Rihanna", "Drake, Rihanna")
+        assert score >= 0.95
+
+    def test_full_normalized_exact(self):
+        score = artist_match_score("Above & Beyond", "Above & Beyond")
+        assert score == 1.0
+
+
+class TestPrimaryArtist:
+    """Tests for primary_artist()."""
+
+    def test_single_artist(self):
+        assert primary_artist("Darude") == "Darude"
+
+    def test_comma_separated(self):
+        assert primary_artist("Darude, Ashley Wallbridge, Foux") == "Darude"
+
+    def test_featuring(self):
+        assert primary_artist("deadmau5 feat. Kaskade") == "deadmau5"
+
+    def test_ampersand(self):
+        assert primary_artist("Big & Rich") == "Big"
+
+
+class TestNormalizeBpmToContext:
+    """Tests for normalize_bpm_to_context()."""
+
+    def test_half_time_corrected_up(self):
+        # 66 BPM in a trance set (128-132) → should double to 132
+        assert normalize_bpm_to_context(66.0, [128, 130, 126, 132]) == 132.0
+
+    def test_double_time_corrected_down(self):
+        # 260 BPM in a 130 BPM set → should halve to 130
+        assert normalize_bpm_to_context(260.0, [128, 130, 126, 132]) == 130.0
+
+    def test_already_correct_unchanged(self):
+        # 128 BPM in a 128-132 set → no correction needed
+        assert normalize_bpm_to_context(128.0, [128, 130, 126, 132]) == 128.0
+
+    def test_insufficient_context_returns_raw(self):
+        # < 3 context values → return raw
+        assert normalize_bpm_to_context(66.0, [128, 130]) == 66.0
+
+    def test_empty_context_returns_raw(self):
+        assert normalize_bpm_to_context(66.0, []) == 66.0
+
+    def test_ambiguous_not_corrected(self):
+        # 90 BPM in a 128-ish set: doubling gives 180, halving gives 45
+        # Neither is close enough to median (129) to justify correction
+        assert normalize_bpm_to_context(90.0, [128, 130, 126, 132]) == 90.0
+
+    def test_hip_hop_context(self):
+        # 45 BPM in a hip-hop set (85-95) → should double to 90
+        assert normalize_bpm_to_context(45.0, [85, 90, 88, 92, 95]) == 90.0
+
+    def test_zero_bpm_returns_raw(self):
+        assert normalize_bpm_to_context(0.0, [128, 130, 126]) == 0.0
