@@ -39,6 +39,11 @@ class Event(Base):
         Boolean, default=True, nullable=False, server_default="1"
     )
 
+    # Kiosk display-only mode (hide request button, enable auto-scroll)
+    kiosk_display_only: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="0"
+    )
+
     # Custom banner image
     banner_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     banner_colors: Mapped[str | None] = mapped_column(Text, nullable=True)

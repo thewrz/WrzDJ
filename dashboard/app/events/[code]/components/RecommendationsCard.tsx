@@ -17,9 +17,10 @@ interface ModeResultCache {
   profile: EventMusicProfile | null;
   llmQueries: LLMQueryInfo[];
   llmModel: string;
+  scrollTop: number;
 }
 
-const emptyCache: ModeResultCache = { suggestions: [], profile: null, llmQueries: [], llmModel: '' };
+const emptyCache: ModeResultCache = { suggestions: [], profile: null, llmQueries: [], llmModel: '', scrollTop: 0 };
 
 interface RecommendationsCardProps {
   code: string;
@@ -63,6 +64,12 @@ export function RecommendationsCard({
   const [showReasoning, setShowReasoning] = useState(false);
   const [llmModel, setLlmModel] = useState('');
 
+  // Ref for the suggestions list container (scroll position save/restore)
+  const suggestionsContainerRef = useRef<HTMLDivElement>(null);
+
+  // Lock container height during mode switches to prevent page-level scroll jumps
+  const [lockedHeight, setLockedHeight] = useState<number | null>(null);
+
   // Per-mode results cache — persists suggestions across mode switches
   const resultsCacheRef = useRef<Record<Mode, ModeResultCache>>({
     requests: { ...emptyCache },
@@ -87,12 +94,18 @@ export function RecommendationsCard({
   const handleModeChange = (newMode: Mode) => {
     if (newMode === mode) return;
 
-    // Save current mode's results to cache
+    // Lock container height to prevent page-level scroll jump
+    if (suggestionsContainerRef.current) {
+      setLockedHeight(suggestionsContainerRef.current.offsetHeight);
+    }
+
+    // Save current mode's results and scroll position to cache
     resultsCacheRef.current[mode] = {
       suggestions,
       profile,
       llmQueries,
       llmModel,
+      scrollTop: suggestionsContainerRef.current?.scrollTop ?? 0,
     };
 
     // Restore cached results for the new mode
@@ -101,6 +114,14 @@ export function RecommendationsCard({
     setProfile(cached.profile);
     setLlmQueries(cached.llmQueries);
     setLlmModel(cached.llmModel);
+
+    // Restore scroll position after DOM update
+    const savedScrollTop = cached.scrollTop;
+    requestAnimationFrame(() => {
+      if (suggestionsContainerRef.current) {
+        suggestionsContainerRef.current.scrollTop = savedScrollTop;
+      }
+    });
 
     setMode(newMode);
     setError(null);
@@ -143,6 +164,7 @@ export function RecommendationsCard({
         setProfile(result.profile);
         setLlmAvailable(result.llm_available);
       }
+      setLockedHeight(null);
       setGenerateState('complete');
       completeTimerRef.current = setTimeout(() => setGenerateState('idle'), 2000);
     } catch (err) {
@@ -186,6 +208,7 @@ export function RecommendationsCard({
     setError(null);
     setLlmQueries([]);
     setShowReasoning(false);
+    setLockedHeight(null);
     // Also clear the cache for the current mode
     resultsCacheRef.current[mode] = { ...emptyCache };
   };
@@ -438,9 +461,18 @@ export function RecommendationsCard({
         </div>
       )}
 
-      {suggestions.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          {suggestions.map((track) => {
+      <div
+        ref={suggestionsContainerRef}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.5rem',
+          minHeight: lockedHeight ? `${lockedHeight}px` : '200px',
+          maxHeight: '600px',
+          overflowY: 'auto',
+        }}
+      >
+        {suggestions.map((track) => {
             const trackKey = `${track.artist}-${track.title}`;
             const isAccepting = acceptingId === trackKey;
             return (
@@ -448,12 +480,11 @@ export function RecommendationsCard({
                 key={trackKey}
                 style={{
                   display: 'flex',
-                  alignItems: 'center',
+                  alignItems: 'flex-start',
                   gap: '0.75rem',
                   padding: '0.5rem',
                   borderRadius: '0.375rem',
                   background: '#1a1a1a',
-                  overflow: 'hidden',
                 }}
               >
                 {track.cover_url && (
@@ -463,6 +494,7 @@ export function RecommendationsCard({
                     style={{
                       width: 40, height: 40,
                       borderRadius: '0.25rem', objectFit: 'cover',
+                      flexShrink: 0,
                     }}
                   />
                 )}
@@ -534,8 +566,7 @@ export function RecommendationsCard({
               </div>
             );
           })}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

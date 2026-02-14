@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db
@@ -9,13 +9,39 @@ from app.services.event import set_now_playing
 from app.services.now_playing import add_manual_play
 from app.services.request import (
     InvalidStatusTransitionError,
+    clear_request_metadata,
+    delete_request,
     get_request_by_id,
     update_request_status,
 )
-from app.services.sync.orchestrator import sync_request_to_services
+from app.services.sync.orchestrator import enrich_request_metadata, sync_request_to_services
 from app.services.sync.registry import get_connected_adapters
 
 router = APIRouter()
+
+
+def _request_to_out(r) -> RequestOut:
+    return RequestOut(
+        id=r.id,
+        event_id=r.event_id,
+        song_title=r.song_title,
+        artist=r.artist,
+        source=r.source,
+        source_url=r.source_url,
+        artwork_url=r.artwork_url,
+        note=r.note,
+        status=r.status,
+        created_at=r.created_at,
+        updated_at=r.updated_at,
+        tidal_track_id=r.tidal_track_id,
+        tidal_sync_status=r.tidal_sync_status,
+        raw_search_query=r.raw_search_query,
+        sync_results_json=r.sync_results_json,
+        vote_count=r.vote_count,
+        genre=r.genre,
+        bpm=r.bpm,
+        musical_key=r.musical_key,
+    )
 
 
 @router.patch("/{request_id}", response_model=RequestOut)
@@ -53,24 +79,46 @@ def update_request(
             set_now_playing(db, request.event, None)
         add_manual_play(db, request.event, request)
 
-    return RequestOut(
-        id=updated.id,
-        event_id=updated.event_id,
-        song_title=updated.song_title,
-        artist=updated.artist,
-        source=updated.source,
-        source_url=updated.source_url,
-        artwork_url=updated.artwork_url,
-        note=updated.note,
-        status=updated.status,
-        created_at=updated.created_at,
-        updated_at=updated.updated_at,
-        tidal_track_id=updated.tidal_track_id,
-        tidal_sync_status=updated.tidal_sync_status,
-        raw_search_query=updated.raw_search_query,
-        sync_results_json=updated.sync_results_json,
-        vote_count=updated.vote_count,
-        genre=updated.genre,
-        bpm=updated.bpm,
-        musical_key=updated.musical_key,
-    )
+    return _request_to_out(updated)
+
+
+@router.delete("/{request_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_request_endpoint(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> None:
+    """Delete a single request. Ownership verified via event."""
+    request = get_request_by_id(db, request_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    if request.event.created_by_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this request")
+
+    # Clear now_playing if this request is currently playing
+    if request.event.now_playing_request_id == request.id:
+        set_now_playing(db, request.event, None)
+
+    delete_request(db, request)
+
+
+@router.post("/{request_id}/refresh-metadata", response_model=RequestOut)
+def refresh_request_metadata(
+    request_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> RequestOut:
+    """Clear existing metadata and re-enrich from external services."""
+    request = get_request_by_id(db, request_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    if request.event.created_by_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this request")
+
+    cleared = clear_request_metadata(db, request)
+    background_tasks.add_task(enrich_request_metadata, db, cleared.id)
+
+    return _request_to_out(cleared)

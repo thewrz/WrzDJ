@@ -55,6 +55,7 @@ class KioskDisplayResponse(BaseModel):
     now_playing: PublicRequestInfo | None
     now_playing_hidden: bool
     requests_open: bool = True
+    kiosk_display_only: bool = False
     updated_at: datetime
     banner_url: str | None = None
     banner_kiosk_url: str | None = None
@@ -138,6 +139,7 @@ def get_kiosk_display(
         now_playing=now_playing,
         now_playing_hidden=now_playing_is_hidden,
         requests_open=event.requests_open,
+        kiosk_display_only=event.kiosk_display_only,
         updated_at=utcnow(),
         banner_url=banner_url,
         banner_kiosk_url=banner_kiosk_url,

@@ -178,6 +178,25 @@ def get_guest_visible_requests(
     )
 
 
+def delete_request(db: Session, request: Request) -> None:
+    """Delete a request and its associated votes."""
+    from app.models.request_vote import RequestVote
+
+    db.query(RequestVote).filter(RequestVote.request_id == request.id).delete()
+    db.delete(request)
+    db.commit()
+
+
+def clear_request_metadata(db: Session, request: Request) -> Request:
+    """Clear enrichment metadata so it can be re-fetched."""
+    request.genre = None
+    request.bpm = None
+    request.musical_key = None
+    db.commit()
+    db.refresh(request)
+    return request
+
+
 def get_request_by_id(db: Session, request_id: int) -> Request | None:
     """Get a request by its ID."""
     return db.query(Request).filter(Request.id == request_id).first()

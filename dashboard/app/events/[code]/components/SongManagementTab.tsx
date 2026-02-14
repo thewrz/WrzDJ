@@ -31,6 +31,10 @@ interface SongManagementTabProps {
   tidalLinked: boolean;
   beatportLinked: boolean;
   onAcceptTrack: (track: RecommendedTrack) => Promise<void>;
+  onDeleteRequest?: (requestId: number) => void;
+  onRefreshMetadata?: (requestId: number) => void;
+  deletingRequest?: number | null;
+  refreshingRequest?: number | null;
 }
 
 export function SongManagementTab(props: SongManagementTabProps) {
@@ -48,6 +52,10 @@ export function SongManagementTab(props: SongManagementTabProps) {
         onSyncToTidal={props.onSyncToTidal}
         onOpenTidalPicker={props.onOpenTidalPicker}
         onScrollToSyncReport={props.onScrollToSyncReport}
+        onDeleteRequest={props.onDeleteRequest}
+        onRefreshMetadata={props.onRefreshMetadata}
+        deletingRequest={props.deletingRequest}
+        refreshingRequest={props.refreshingRequest}
       />
 
       <SyncReportPanel

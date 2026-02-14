@@ -129,6 +129,7 @@ KIOSK_DISPLAY_KEYS = {
     "banner_url",
     "banner_kiosk_url",
     "banner_colors",
+    "kiosk_display_only",
 }
 
 PUBLIC_EVENT_INFO_KEYS = {"code", "name"}
@@ -144,6 +145,7 @@ DISPLAY_SETTINGS_KEYS = {
     "now_playing_hidden",
     "now_playing_auto_hide_minutes",
     "requests_open",
+    "kiosk_display_only",
 }
 
 ACCEPT_ALL_KEYS = {"status", "accepted_count"}

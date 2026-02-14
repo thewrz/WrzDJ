@@ -22,6 +22,9 @@ interface EventManagementTabProps {
   savingAutoHide: boolean;
   onAutoHideInputChange: (value: string) => void;
   onSaveAutoHide: () => void;
+  kioskDisplayOnly: boolean;
+  togglingDisplayOnly: boolean;
+  onToggleDisplayOnly: () => void;
   tidalStatus: TidalStatus | null;
   tidalSyncEnabled: boolean;
   togglingTidalSync: boolean;
@@ -55,6 +58,9 @@ export function EventManagementTab(props: EventManagementTabProps) {
         savingAutoHide={props.savingAutoHide}
         onAutoHideInputChange={props.onAutoHideInputChange}
         onSaveAutoHide={props.onSaveAutoHide}
+        kioskDisplayOnly={props.kioskDisplayOnly}
+        togglingDisplayOnly={props.togglingDisplayOnly}
+        onToggleDisplayOnly={props.onToggleDisplayOnly}
       />
 
       <StreamOverlayCard code={props.code} />
