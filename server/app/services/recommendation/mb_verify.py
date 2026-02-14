@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models.mb_artist_cache import MbArtistCache
 from app.services.musicbrainz import check_artist_exists
+from app.services.track_normalizer import split_artists
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +29,22 @@ def verify_artists_batch(db: Session, artist_names: Iterable[str]) -> dict[str, 
     MusicBrainz API for any uncached artists (1 req/sec throttled).
     """
     # Build mapping: normalized -> set of original names
+    # Split multi-artist strings so each individual gets verified separately
     normalized_map: dict[str, list[str]] = {}
+    composite_originals: dict[str, list[str]] = {}  # original composite -> individual names
     for name in artist_names:
         if not name or not name.strip():
             continue
-        key = _normalize(name)
-        if key not in normalized_map:
-            normalized_map[key] = []
-        normalized_map[key].append(name)
+        individuals = split_artists(name)
+        if len(individuals) > 1:
+            composite_originals[name] = individuals
+        for individual in individuals:
+            key = _normalize(individual)
+            if not key:
+                continue
+            if key not in normalized_map:
+                normalized_map[key] = []
+            normalized_map[key].append(individual)
 
     if not normalized_map:
         return {}
@@ -70,6 +79,11 @@ def verify_artists_batch(db: Session, artist_names: Iterable[str]) -> dict[str, 
 
         for orig in original_names:
             result[orig] = verified
+
+    # For composite artist names, mark as verified if ANY constituent is verified
+    for composite, individuals in composite_originals.items():
+        any_verified = any(result.get(ind, False) for ind in individuals)
+        result[composite] = any_verified
 
     if api_count > 0:
         db.commit()

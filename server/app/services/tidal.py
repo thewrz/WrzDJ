@@ -18,6 +18,7 @@ from app.models.event import Event
 from app.models.request import Request, TidalSyncStatus
 from app.models.user import User
 from app.schemas.tidal import TidalSearchResult, TidalSyncResult
+from app.services.track_normalizer import artist_match_score, primary_artist
 
 logger = logging.getLogger(__name__)
 
@@ -232,22 +233,21 @@ def search_track(
         return None
 
     try:
-        query = f"{artist} {title}"
+        query = f"{primary_artist(artist)} {title}"
         results = session.search(query, models=[tidalapi.media.Track], limit=10)
 
         tracks = results.get("tracks", [])
         if not tracks:
             return None
 
-        # Find best match
-        artist_lower = artist.lower()
+        # Find best match using multi-artist-aware scoring
         title_lower = title.lower()
 
         for track in tracks:
-            track_artist = _get_artist_name(track).lower()
-            track_title = track.name.lower() if track.name else ""
+            track_artist = _get_artist_name(track)
+            track_title = (track.name or "").lower()
 
-            if artist_lower in track_artist and title_lower in track_title:
+            if artist_match_score(artist, track_artist) >= 0.7 and title_lower in track_title:
                 return _track_to_result(track)
 
         return _track_to_result(tracks[0])

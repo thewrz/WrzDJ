@@ -17,6 +17,8 @@ import time
 
 import httpx
 
+from app.services.track_normalizer import primary_artist as _primary_artist
+
 logger = logging.getLogger(__name__)
 
 MUSICBRAINZ_BASE = "https://musicbrainz.org/ws/2"
@@ -104,7 +106,7 @@ def lookup_artist_genres(artist_name: str) -> list[str]:
     # Step 1: Search for artist
     search_data = _throttled_get(
         f"{MUSICBRAINZ_BASE}/artist/",
-        {"query": f"artist:{artist_name}", "fmt": "json", "limit": "3"},
+        {"query": f"artist:{_primary_artist(artist_name)}", "fmt": "json", "limit": "3"},
     )
     if not search_data:
         return []

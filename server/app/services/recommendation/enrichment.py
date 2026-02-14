@@ -13,7 +13,7 @@ from app.models.user import User
 from app.services.beatport import search_beatport_tracks
 from app.services.recommendation.scorer import TrackProfile
 from app.services.tidal import _get_artist_name, get_tidal_session
-from app.services.track_normalizer import fuzzy_match_score
+from app.services.track_normalizer import artist_match_score, fuzzy_match_score, primary_artist
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def enrich_from_tidal(
         return None
 
     try:
-        query = f"{artist} {title}"
+        query = f"{primary_artist(artist)} {title}"
         results = session.search(query, models=[tidalapi.media.Track], limit=5)
         tracks = results.get("tracks", [])
         if not tracks:
@@ -50,7 +50,7 @@ def enrich_from_tidal(
             track_artist = _get_artist_name(track)
             track_title = track.name or ""
             title_score = fuzzy_match_score(title, track_title)
-            artist_score = fuzzy_match_score(artist, track_artist)
+            artist_score = artist_match_score(artist, track_artist)
             combined = title_score * 0.6 + artist_score * 0.4
             if combined > best_score:
                 best_score = combined
@@ -101,7 +101,7 @@ def enrich_from_beatport(
     artist: str,
 ) -> TrackProfile | None:
     """Search Beatport and extract BPM/key/genre from the result."""
-    results = search_beatport_tracks(db, user, f"{artist} {title}", limit=5)
+    results = search_beatport_tracks(db, user, f"{primary_artist(artist)} {title}", limit=5)
     if not results:
         return None
 
@@ -110,7 +110,7 @@ def enrich_from_beatport(
     best_score = 0.0
     for result in results:
         title_score = fuzzy_match_score(title, result.title)
-        artist_score = fuzzy_match_score(artist, result.artist)
+        artist_score = artist_match_score(artist, result.artist)
         combined = title_score * 0.6 + artist_score * 0.4
         if combined > best_score:
             best_score = combined
