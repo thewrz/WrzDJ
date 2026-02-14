@@ -4,6 +4,8 @@ from app.services.track_normalizer import (
     NormalizedTrack,
     artist_match_score,
     fuzzy_match_score,
+    is_original_mix_name,
+    is_remix_title,
     normalize_artist,
     normalize_bpm_to_context,
     normalize_track,
@@ -297,3 +299,77 @@ class TestNormalizeBpmToContext:
 
     def test_zero_bpm_returns_raw(self):
         assert normalize_bpm_to_context(0.0, [128, 130, 126]) == 0.0
+
+
+class TestIsRemixTitle:
+    """Tests for is_remix_title()."""
+
+    def test_original_mix_not_remix(self):
+        assert is_remix_title("Surrender (Original Mix)") is False
+
+    def test_named_remix_detected(self):
+        assert is_remix_title("Surrender (Hardstyle Remix)") is True
+
+    def test_plain_title_not_remix(self):
+        assert is_remix_title("Surrender") is False
+
+    def test_dash_remix_detected(self):
+        assert is_remix_title("Surrender - DJ Snake Remix") is True
+
+    def test_bootleg_detected(self):
+        assert is_remix_title("Strobe (DJ Snake Bootleg)") is True
+
+    def test_edit_detected(self):
+        assert is_remix_title("Losing It (Patrick Topping Edit)") is True
+
+    def test_extended_mix_not_remix(self):
+        assert is_remix_title("Strobe (Extended Mix)") is False
+
+    def test_radio_edit_not_remix(self):
+        assert is_remix_title("Strobe (Radio Edit)") is False
+
+    def test_radio_mix_not_remix(self):
+        assert is_remix_title("Strobe (Radio Mix)") is False
+
+    def test_instrumental_mix_not_remix(self):
+        assert is_remix_title("Strobe (Instrumental Mix)") is False
+
+
+class TestIsOriginalMixName:
+    """Tests for is_original_mix_name()."""
+
+    def test_original_mix(self):
+        assert is_original_mix_name("Original Mix") is True
+
+    def test_extended_mix(self):
+        assert is_original_mix_name("Extended Mix") is True
+
+    def test_radio_edit(self):
+        assert is_original_mix_name("Radio Edit") is True
+
+    def test_club_mix(self):
+        assert is_original_mix_name("Club Mix") is True
+
+    def test_named_remix_not_original(self):
+        assert is_original_mix_name("Hardstyle Remix") is False
+
+    def test_arbitrary_string_not_original(self):
+        assert is_original_mix_name("DJ Snake Bootleg") is False
+
+    def test_radio_mix(self):
+        assert is_original_mix_name("Radio Mix") is True
+
+    def test_instrumental_mix(self):
+        assert is_original_mix_name("Instrumental Mix") is True
+
+    def test_strips_whitespace(self):
+        assert is_original_mix_name("  Original Mix  ") is True
+
+    def test_remastered_original_mix(self):
+        assert is_original_mix_name("Remastered Original Mix") is True
+
+    def test_original_remastered_mix(self):
+        assert is_original_mix_name("Original Remastered Mix") is True
+
+    def test_just_remastered(self):
+        assert is_original_mix_name("Remastered") is False

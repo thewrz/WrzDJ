@@ -19,8 +19,8 @@ interface RequestQueueSectionProps {
   onSyncToTidal: (requestId: number) => void;
   onOpenTidalPicker: (requestId: number) => void;
   onScrollToSyncReport?: (requestId: number) => void;
-  onDeleteRequest?: (requestId: number) => void;
-  onRefreshMetadata?: (requestId: number) => void;
+  onDeleteRequest?: (requestId: number) => Promise<void>;
+  onRefreshMetadata?: (requestId: number) => Promise<void>;
   deletingRequest?: number | null;
   refreshingRequest?: number | null;
 }
@@ -44,6 +44,8 @@ export function RequestQueueSection({
 }: RequestQueueSectionProps) {
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [advancedMode, setAdvancedMode] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
 
   const statusCounts = useMemo(() => {
     const counts = { all: requests.length, new: 0, accepted: 0, playing: 0, played: 0, rejected: 0 };
@@ -68,6 +70,34 @@ export function RequestQueueSection({
     () => requests.filter((r) => (filter === 'all' ? true : r.status === filter)),
     [requests, filter]
   );
+
+  const handleDeleteAll = async () => {
+    const count = filteredRequests.length;
+    if (count === 0) return;
+    if (!window.confirm(`Delete all ${count} ${filter === 'all' ? '' : filter + ' '}request${count === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    setDeletingAll(true);
+    try {
+      const ids = filteredRequests.map((r) => r.id);
+      for (const id of ids) {
+        await onDeleteRequest?.(id);
+      }
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
+  const handleRefreshAll = async () => {
+    if (filteredRequests.length === 0) return;
+    setRefreshingAll(true);
+    try {
+      const ids = filteredRequests.map((r) => r.id);
+      for (const id of ids) {
+        await onRefreshMetadata?.(id);
+      }
+    } finally {
+      setRefreshingAll(false);
+    }
+  };
 
   return (
     <>
@@ -102,6 +132,26 @@ export function RequestQueueSection({
               >
                 {acceptingAll ? 'Accepting...' : `Accept All (${statusCounts.new})`}
               </button>
+            )}
+            {advancedMode && (
+              <>
+                <button
+                  className="btn btn-sm"
+                  style={{ background: '#374151', fontSize: '0.7rem' }}
+                  onClick={handleRefreshAll}
+                  disabled={refreshingAll || filteredRequests.length === 0}
+                >
+                  {refreshingAll ? 'Refreshing...' : 'Refresh All'}
+                </button>
+                <button
+                  className="btn btn-sm"
+                  style={{ background: '#991b1b', fontSize: '0.7rem' }}
+                  onClick={handleDeleteAll}
+                  disabled={deletingAll || filteredRequests.length === 0}
+                >
+                  {deletingAll ? 'Deleting...' : 'Delete All'}
+                </button>
+              </>
             )}
           </div>
         )}

@@ -145,7 +145,8 @@ export default function JoinEventPage() {
           genre: selectedSong.genre ?? undefined,
           bpm: selectedSong.bpm ?? undefined,
           musical_key: selectedSong.key ?? undefined,
-        }
+        },
+        selectedSong.source,
       );
       setSubmitted(true);
       setSubmitIsDuplicate(result.is_duplicate ?? false);

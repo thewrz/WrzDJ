@@ -31,8 +31,8 @@ interface SongManagementTabProps {
   tidalLinked: boolean;
   beatportLinked: boolean;
   onAcceptTrack: (track: RecommendedTrack) => Promise<void>;
-  onDeleteRequest?: (requestId: number) => void;
-  onRefreshMetadata?: (requestId: number) => void;
+  onDeleteRequest?: (requestId: number) => Promise<void>;
+  onRefreshMetadata?: (requestId: number) => Promise<void>;
   deletingRequest?: number | null;
   refreshingRequest?: number | null;
 }

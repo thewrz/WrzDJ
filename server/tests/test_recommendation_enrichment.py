@@ -385,3 +385,53 @@ class TestEnrichEventTracks:
         result = enrich_event_tracks(db, user, requests)
         assert len(result) == 1
         assert mock_enrich.call_count == 1
+
+
+class TestEnrichVersionPreference:
+    """Tests for original-preference scoring in enrichment functions."""
+
+    @patch("app.services.recommendation.enrichment.search_beatport_tracks")
+    def test_beatport_prefers_original_over_remix(self, mock_search):
+        """Beatport enrichment prefers Original Mix over remix for non-remix queries."""
+        from app.schemas.beatport import BeatportSearchResult
+
+        mock_search.return_value = [
+            BeatportSearchResult(
+                track_id="1",
+                title="Surrender",
+                artist="Darude",
+                mix_name="Hardstyle Remix",
+                bpm=165,
+                key="A Minor",
+            ),
+            BeatportSearchResult(
+                track_id="2",
+                title="Surrender",
+                artist="Darude",
+                mix_name="Original Mix",
+                bpm=132,
+                key="B Minor",
+            ),
+        ]
+        db = MagicMock()
+        user = _make_user()
+
+        result = enrich_from_beatport(db, user, "Surrender", "Darude")
+        assert result is not None
+        assert result.bpm == 132.0  # Original Mix, not Hardstyle Remix's 165
+
+    @patch("app.services.recommendation.enrichment.get_tidal_session")
+    def test_tidal_penalizes_remix_for_original_query(self, mock_session):
+        """Tidal enrichment penalizes remix results when searching for an original."""
+        session = MagicMock()
+        original = _make_tidal_track(name="Surrender", artist_name="Darude", bpm=132)
+        remix = _make_tidal_track(name="Surrender (Hardstyle Remix)", artist_name="Darude", bpm=165)
+        session.search.return_value = {"tracks": [remix, original]}
+        mock_session.return_value = session
+
+        db = MagicMock()
+        user = _make_user()
+
+        result = enrich_from_tidal(db, user, "Surrender", "Darude")
+        assert result is not None
+        assert result.bpm == 132.0  # Original, not remix's 165
