@@ -24,7 +24,7 @@ from app.services.musicbrainz import lookup_artist_genre
 from app.services.request import normalize_key
 from app.services.sync.base import SyncResult, SyncStatus, TrackMatch, sanitize_sync_error
 from app.services.sync.registry import get_connected_adapters
-from app.services.track_normalizer import normalize_track
+from app.services.track_normalizer import fuzzy_match_score, normalize_track
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +248,34 @@ def _is_already_synced(request: Request, service_name: str) -> bool:
     return False
 
 
+def _find_best_match(
+    results, title: str, artist: str, min_score: float = 0.4, min_artist_score: float = 0.35
+):
+    """Find the best fuzzy match from search results.
+
+    Scores each result by title (60%) + artist (40%) similarity.
+    Returns the best match above min_score, or None if no good match.
+
+    A separate min_artist_score floor prevents a perfect title match
+    from carrying a completely wrong artist (e.g., "Feel the Beat" by
+    LB aka LABAT matching a request for Darude).
+    """
+    best = None
+    best_score = 0.0
+    for result in results:
+        title_score = fuzzy_match_score(title, result.title)
+        artist_score = fuzzy_match_score(artist, result.artist)
+        if artist_score < min_artist_score:
+            continue
+        combined = title_score * 0.6 + artist_score * 0.4
+        if combined > best_score:
+            best_score = combined
+            best = result
+    if best and best_score >= min_score:
+        return best
+    return None
+
+
 def enrich_request_metadata(db: Session, request_id: int) -> None:
     """Background task: fill missing genre/BPM/key on a request.
 
@@ -257,6 +285,8 @@ def enrich_request_metadata(db: Session, request_id: int) -> None:
     3. Tidal search (BPM + key backup when Beatport unavailable)
 
     Only queries sources for missing fields. Skips if all fields present.
+    Results are fuzzy-matched against the request to avoid enriching
+    with metadata from a wrong track.
     """
     # Re-fetch request in this background task's context
     request = db.query(Request).filter(Request.id == request_id).first()
@@ -284,15 +314,16 @@ def enrich_request_metadata(db: Session, request_id: int) -> None:
             try:
                 from app.services.beatport import search_beatport_tracks
 
-                results = search_beatport_tracks(db, user, search_query, limit=3)
+                results = search_beatport_tracks(db, user, search_query, limit=5)
                 if results:
-                    best = results[0]
-                    if not request.genre and best.genre:
-                        request.genre = best.genre
-                    if not request.bpm and best.bpm:
-                        request.bpm = float(best.bpm)
-                    if not request.musical_key and best.key:
-                        request.musical_key = normalize_key(best.key)
+                    best = _find_best_match(results, request.song_title, request.artist)
+                    if best:
+                        if not request.genre and best.genre:
+                            request.genre = best.genre
+                        if not request.bpm and best.bpm:
+                            request.bpm = float(best.bpm)
+                        if not request.musical_key and best.key:
+                            request.musical_key = normalize_key(best.key)
             except Exception:
                 logger.warning("Beatport enrichment failed for request %d", request_id)
 
@@ -302,13 +333,14 @@ def enrich_request_metadata(db: Session, request_id: int) -> None:
             try:
                 from app.services.tidal import search_tidal_tracks
 
-                results = search_tidal_tracks(db, user, search_query, limit=3)
+                results = search_tidal_tracks(db, user, search_query, limit=5)
                 if results:
-                    best = results[0]
-                    if not request.bpm and best.bpm:
-                        request.bpm = float(best.bpm)
-                    if not request.musical_key and best.key:
-                        request.musical_key = normalize_key(best.key)
+                    best = _find_best_match(results, request.song_title, request.artist)
+                    if best:
+                        if not request.bpm and best.bpm:
+                            request.bpm = float(best.bpm)
+                        if not request.musical_key and best.key:
+                            request.musical_key = normalize_key(best.key)
             except Exception:
                 logger.warning("Tidal enrichment failed for request %d", request_id)
 
