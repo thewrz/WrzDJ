@@ -275,7 +275,7 @@ NEW → REJECTED
 ### Recommendation Engine
 - `server/app/services/recommendation/` — multi-stage pipeline:
   - `service.py` — orchestrator: profile analysis → search → scoring → deduplication
-  - `enrichment.py` — fills missing BPM/key/genre from Beatport/MusicBrainz/Tidal
+  - `enrichment.py` — fills missing BPM/key/genre from Beatport/MusicBrainz/Tidal (for recommendations; request-level enrichment is in `sync/orchestrator.py`)
   - `scorer.py` — multi-dimensional scoring: BPM compatibility, harmonic mixing, genre affinity, artist diversity penalties
   - `camelot.py` — harmonic mixing wheel (Camelot key compatibility, half-time/double-time BPM)
   - `llm_client.py` — Claude Haiku integration (6/min rate limit, forced tool_use schema for structured JSON)
@@ -291,9 +291,24 @@ NEW → REJECTED
   - `base.py` — abstract `PlaylistSyncAdapter` interface
   - `tidal_adapter.py` — Tidal sync with batched track adding
   - `beatport_adapter.py` — Beatport sync (mirrors Tidal pattern)
-  - `orchestrator.py` — coordinates all connected adapters, deduplicates
+  - `orchestrator.py` — coordinates all connected adapters, deduplicates, and runs enrichment pipeline
   - `registry.py` — service registry for multi-service fan-out
 - Request model stores per-service sync results in `sync_results_json` (JSON column)
+
+### Enrichment Pipeline (`enrich_request_metadata` in orchestrator.py)
+- Background task fills missing genre/BPM/key on requests via a priority cascade:
+  0. **Direct fetch** — if `source_url` is a Beatport or Tidal URL, extract track ID via regex and fetch metadata directly (no search, no fuzzy matching)
+  0b. **ISRC matching** — if `source_url` is Spotify, call `sp.track(id)` to get ISRC, then `session.get_tracks_by_isrc(isrc)` for exact Tidal match
+  1. **MusicBrainz** — artist-level genre lookup (1 req/sec rate limit)
+  2. **Beatport fuzzy search** — BPM + key + genre backfill, version-aware scoring
+  3. **Tidal fuzzy search** — BPM + key backup when Beatport unavailable
+- `_extract_source_track_id()` parses Spotify/Beatport/Tidal URLs via compiled regexes
+- `_get_isrc_from_spotify()` fetches ISRC (International Standard Recording Code) from Spotify API
+- `_apply_enrichment_result()` helper only fills missing fields — never overwrites existing metadata
+- `_find_best_match()` scores results by title (60%) + artist (40%) with original-version bonus, remix penalty, and BPM consensus tiebreaker
+- `is_original_mix_name()` strips "remaster(ed)" before checking, so "Remastered Original Mix" gets the +0.1 original bonus
+- Tidal service: `search_tidal_by_isrc()` and `get_tidal_track_by_id()` for exact lookups
+- Spotify `search_songs()` joins all artist names (not just first) for better fuzzy matching
 
 ### OAuth Token Encryption
 - `EncryptedText` SQLAlchemy TypeDecorator (Fernet AES-128-CBC + HMAC) in `server/app/models/base.py`
