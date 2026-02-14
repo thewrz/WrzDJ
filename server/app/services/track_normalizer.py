@@ -5,6 +5,7 @@ used by the sync pipeline, fuzzy matching, and version filtering.
 """
 
 import re
+import statistics
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
@@ -63,6 +64,94 @@ def normalize_artist(artist: str) -> str:
 def fuzzy_match_score(a: str, b: str) -> float:
     """Compute similarity ratio between two strings (0.0 to 1.0)."""
     return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
+
+
+# Splitting pattern: comma, ampersand, "and", "x" (collab), feat variants
+_SPLIT_RE = re.compile(
+    r"\s*,\s*"  # comma
+    r"|\s+&\s+"  # ampersand
+    r"|\s+and\s+"  # "and" keyword
+    r"|\s+x\s+"  # "x" collab
+    r"|\s+(?:featuring|feat\.?|ft\.?|with)\s+",  # feat variants
+    re.IGNORECASE,
+)
+
+
+def split_artists(artist: str) -> list[str]:
+    """Split a composite artist string into individual artist names.
+
+    Handles comma, ampersand, "and", "x" (collab), and feat/ft/featuring/with
+    delimiters. Returns at least one element. Strips whitespace and filters
+    empty segments.
+    """
+    parts = _SPLIT_RE.split(artist)
+    result = [p.strip() for p in parts if p.strip()]
+    return result if result else [artist.strip()]
+
+
+def artist_match_score(a: str, b: str) -> float:
+    """Multi-artist-aware similarity score (0.0 to 1.0).
+
+    Splits both strings via split_artists(), then computes the maximum
+    pairwise fuzzy_match_score. Also checks full normalized strings
+    for exact-match edge cases (e.g., "Above & Beyond" vs "Above & Beyond").
+    """
+    # Fast path: full normalized match
+    full_score = fuzzy_match_score(a, b)
+    if full_score >= 0.95:
+        return full_score
+
+    parts_a = split_artists(a)
+    parts_b = split_artists(b)
+
+    best = 0.0
+    for pa in parts_a:
+        for pb in parts_b:
+            score = fuzzy_match_score(pa, pb)
+            if score > best:
+                best = score
+                if best >= 0.99:
+                    return best
+    return max(best, full_score)
+
+
+def primary_artist(artist: str) -> str:
+    """Return the first/primary artist from a composite artist string.
+
+    Used to build search queries — multi-artist strings produce overly
+    specific queries that miss results.
+    """
+    return split_artists(artist)[0]
+
+
+def normalize_bpm_to_context(bpm: float, context_bpms: list[float]) -> float:
+    """Correct half-time or double-time BPM using event context.
+
+    Checks if bpm, bpm*2, or bpm/2 is closer to the median of context_bpms.
+    Conservative: only corrects when raw is >30% away from median AND the
+    corrected value is <15% away. Requires >= 3 context values.
+    """
+    if bpm <= 0 or len(context_bpms) < 3:
+        return bpm
+
+    median = statistics.median(context_bpms)
+    if median <= 0:
+        return bpm
+
+    raw_distance = abs(bpm - median) / median
+
+    # If raw is already within 30%, don't correct
+    if raw_distance <= 0.30:
+        return bpm
+
+    # Check doubled and halved candidates
+    candidates = [bpm * 2, bpm / 2]
+    for candidate in candidates:
+        candidate_distance = abs(candidate - median) / median
+        if candidate_distance < 0.15:
+            return candidate
+
+    return bpm
 
 
 @dataclass(frozen=True)

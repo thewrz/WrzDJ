@@ -2,7 +2,7 @@
 
 from app.schemas.beatport import BeatportSearchResult
 from app.schemas.search import SearchResult
-from app.services.track_normalizer import fuzzy_match_score
+from app.services.track_normalizer import artist_match_score, fuzzy_match_score
 
 
 def merge_search_results(
@@ -42,7 +42,7 @@ def merge_search_results(
         is_duplicate = False
         for sp_result in spotify_results:
             title_score = fuzzy_match_score(bp_result.title, sp_result.title)
-            artist_score = fuzzy_match_score(bp_result.artist, sp_result.artist)
+            artist_score = artist_match_score(bp_result.artist, sp_result.artist)
             combined = title_score * 0.6 + artist_score * 0.4
             if combined >= dedup_threshold:
                 is_duplicate = True

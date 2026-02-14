@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import statistics
 from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
@@ -24,7 +25,13 @@ from app.services.musicbrainz import lookup_artist_genre
 from app.services.request import normalize_key
 from app.services.sync.base import SyncResult, SyncStatus, TrackMatch, sanitize_sync_error
 from app.services.sync.registry import get_connected_adapters
-from app.services.track_normalizer import fuzzy_match_score, normalize_track
+from app.services.track_normalizer import (
+    artist_match_score,
+    fuzzy_match_score,
+    normalize_bpm_to_context,
+    normalize_track,
+    primary_artist,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +271,7 @@ def _find_best_match(
     best_score = 0.0
     for result in results:
         title_score = fuzzy_match_score(title, result.title)
-        artist_score = fuzzy_match_score(artist, result.artist)
+        artist_score = artist_match_score(artist, result.artist)
         if artist_score < min_artist_score:
             continue
         combined = title_score * 0.6 + artist_score * 0.4
@@ -297,7 +304,7 @@ def enrich_request_metadata(db: Session, request_id: int) -> None:
         return  # Already complete
 
     user = request.event.created_by
-    search_query = f"{request.artist} {request.song_title}"
+    search_query = f"{primary_artist(request.artist)} {request.song_title}"
 
     # 1. MusicBrainz for genre (artist-level, free, rate-limited)
     if not request.genre and request.artist:
@@ -347,6 +354,29 @@ def enrich_request_metadata(db: Session, request_id: int) -> None:
     # Normalize key if we got one from enrichment
     if request.musical_key:
         request.musical_key = normalize_key(request.musical_key)
+
+    # 4. BPM context correction: detect half-time/double-time from other event tracks
+    if request.bpm:
+        context_bpms = [
+            float(r.bpm)
+            for r in db.query(Request)
+            .filter(
+                Request.event_id == request.event_id,
+                Request.id != request.id,
+                Request.bpm.isnot(None),
+            )
+            .all()
+        ]
+        corrected = normalize_bpm_to_context(request.bpm, context_bpms)
+        if corrected != request.bpm:
+            logger.info(
+                "BPM corrected for request %d: %.1f → %.1f (median context: %.1f)",
+                request_id,
+                request.bpm,
+                corrected,
+                statistics.median(context_bpms),
+            )
+            request.bpm = corrected
 
     db.commit()
     logger.info(
