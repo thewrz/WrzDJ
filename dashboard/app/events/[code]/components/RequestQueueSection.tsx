@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import { SongRequest } from '@/lib/api';
 import { StatusFilter } from './types';
 import { SyncStatusBadges } from './SyncStatusBadges';
+import { KeyBadge, BpmBadge, GenreBadge } from '@/components/MusicBadges';
+import { computeBpmContext } from '@/lib/bpm-stats';
 
 interface RequestQueueSectionProps {
   requests: SongRequest[];
@@ -50,6 +52,16 @@ export function RequestQueueSection({
       if (s in counts) counts[s]++;
     }
     return counts;
+  }, [requests]);
+
+  // Compute BPM context from the DJ's active set (accepted + playing)
+  // so badges show proximity relative to the current musical direction
+  const bpmContext = useMemo(() => {
+    const activeBpms = requests
+      .filter((r) => r.status === 'accepted' || r.status === 'playing')
+      .map((r) => r.bpm)
+      .filter((b): b is number => b != null);
+    return computeBpmContext(activeBpms);
   }, [requests]);
 
   const filteredRequests = useMemo(
@@ -126,12 +138,16 @@ export function RequestQueueSection({
                 <p>{request.artist}</p>
                 {(request.bpm || request.musical_key || request.genre) && (
                   <div style={{
-                    fontSize: '0.7rem', color: '#6b7280',
-                    display: 'flex', gap: '0.5rem', marginTop: '0.125rem',
+                    display: 'flex', gap: '0.375rem', marginTop: '0.25rem',
+                    flexWrap: 'wrap', alignItems: 'center',
                   }}>
-                    {request.bpm && <span>{Math.round(request.bpm)} BPM</span>}
-                    {request.musical_key && <span>{request.musical_key}</span>}
-                    {request.genre && <span>{request.genre}</span>}
+                    <BpmBadge
+                      bpm={request.bpm}
+                      avgBpm={bpmContext.average}
+                      isOutlier={request.bpm != null ? bpmContext.isOutlier(request.bpm) : false}
+                    />
+                    <KeyBadge musicalKey={request.musical_key} />
+                    <GenreBadge genre={request.genre} />
                   </div>
                 )}
                 {request.note && <div className="note">{request.note}</div>}
