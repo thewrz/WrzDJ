@@ -199,7 +199,7 @@ describe('KioskDisplayPage', () => {
       await screen.findByText('Test Event');
 
       expect(screen.getByRole('button', { name: /request a song/i })).toBeInTheDocument();
-      expect(screen.queryByText('Requests are closed')).not.toBeInTheDocument();
+      expect(screen.queryByText('Requests Closed')).not.toBeInTheDocument();
     });
 
     it('shows closed status when requests_open is false', async () => {
@@ -214,7 +214,7 @@ describe('KioskDisplayPage', () => {
 
       await screen.findByText('Test Event');
 
-      expect(screen.getByText('Requests are closed')).toBeInTheDocument();
+      expect(screen.getByText('Requests Closed')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /request a song/i })).not.toBeInTheDocument();
     });
   });
