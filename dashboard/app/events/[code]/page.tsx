@@ -868,7 +868,7 @@ export default function EventQueuePage() {
             </button>
           </div>
 
-          {activeTab === 'songs' && (
+          <div style={{ display: activeTab === 'songs' ? undefined : 'none' }}>
             <SongManagementTab
               code={code}
               requests={requests}
@@ -899,9 +899,9 @@ export default function EventQueuePage() {
               deletingRequest={deletingRequest}
               refreshingRequest={refreshingRequest}
             />
-          )}
+          </div>
 
-          {activeTab === 'manage' && (
+          <div style={{ display: activeTab === 'manage' ? undefined : 'none' }}>
             <EventManagementTab
               code={code}
               event={event}
@@ -936,7 +936,7 @@ export default function EventQueuePage() {
               onBannerSelect={handleBannerSelect}
               onDeleteBanner={handleDeleteBanner}
             />
-          )}
+          </div>
         </>
       )}
 
