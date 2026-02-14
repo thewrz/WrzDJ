@@ -15,6 +15,10 @@ from app.core.security_headers import SecurityHeadersMiddleware
 
 settings = get_settings()
 
+# Configure app-level logging so module loggers (enrichment, sync, etc.)
+# emit INFO-level diagnostics instead of being silenced by Python's default WARNING level.
+logging.getLogger("app").setLevel(logging.INFO)
+
 # Explicit CORS methods for non-wildcard origins — must include every HTTP method used by the API
 CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 

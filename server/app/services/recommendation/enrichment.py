@@ -53,14 +53,28 @@ def enrich_from_tidal(
         want_remix = is_remix_title(title)
         best_track = None
         best_score = 0.0
-        for track in tracks:
+        for i, track in enumerate(tracks):
             track_artist = _get_artist_name(track)
             track_title = track.name or ""
             title_score = fuzzy_match_score(title, track_title)
             artist_score = artist_match_score(artist, track_artist)
             combined = title_score * 0.6 + artist_score * 0.4
+            version_adj = 0.0
             if not want_remix and is_remix_title(track_title):
+                version_adj = -0.1
                 combined -= 0.1
+            logger.info(
+                "  Tidal enrich [%d] title=%s artist=%s bpm=%s | "
+                "title_sc=%.3f artist_sc=%.3f ver_adj=%+.2f => combined=%.4f",
+                i,
+                track_title,
+                track_artist,
+                getattr(track, "bpm", "?"),
+                title_score,
+                artist_score,
+                version_adj,
+                combined,
+            )
             if combined > best_score:
                 best_score = combined
                 best_track = track
@@ -118,15 +132,31 @@ def enrich_from_beatport(
     want_remix = is_remix_title(title)
     best_result = None
     best_score = 0.0
-    for result in results:
+    for i, result in enumerate(results):
         title_score = fuzzy_match_score(title, result.title)
         artist_score = artist_match_score(artist, result.artist)
         combined = title_score * 0.6 + artist_score * 0.4
+        version_adj = 0.0
         if not want_remix and result.mix_name:
             if is_original_mix_name(result.mix_name):
+                version_adj = 0.1
                 combined += 0.1
         elif not want_remix and is_remix_title(result.title):
+            version_adj = -0.1
             combined -= 0.1
+        logger.info(
+            "  Beatport enrich [%d] title=%s artist=%s bpm=%s mix=%s | "
+            "title_sc=%.3f artist_sc=%.3f ver_adj=%+.2f => combined=%.4f",
+            i,
+            result.title,
+            result.artist,
+            result.bpm,
+            result.mix_name or "-",
+            title_score,
+            artist_score,
+            version_adj,
+            combined,
+        )
         if combined > best_score:
             best_score = combined
             best_result = result

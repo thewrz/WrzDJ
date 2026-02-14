@@ -364,3 +364,12 @@ class TestIsOriginalMixName:
 
     def test_strips_whitespace(self):
         assert is_original_mix_name("  Original Mix  ") is True
+
+    def test_remastered_original_mix(self):
+        assert is_original_mix_name("Remastered Original Mix") is True
+
+    def test_original_remastered_mix(self):
+        assert is_original_mix_name("Original Remastered Mix") is True
+
+    def test_just_remastered(self):
+        assert is_original_mix_name("Remastered") is False

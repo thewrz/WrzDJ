@@ -38,6 +38,8 @@ _REMIX_DASH_RE = re.compile(
 
 _GENERIC_SUFFIX_EXACT_RE = re.compile(rf"^(?:{_GENERIC_SUFFIXES})$", re.IGNORECASE)
 
+_REMASTER_RE = re.compile(r"\bremaster(?:ed)?\b", re.IGNORECASE)
+
 
 def is_remix_title(title: str) -> bool:
     """Check if a title contains a named remix/edit/bootleg pattern.
@@ -60,9 +62,13 @@ def is_original_mix_name(mix_name: str) -> bool:
     """Check if a Beatport mix_name indicates an original/standard version.
 
     Matches "Original Mix", "Extended Mix", "Radio Edit", "Club Mix", etc.
+    Also handles remastered variants like "Remastered Original Mix" by
+    stripping "remaster(ed)" before checking.
     Used by version-aware scoring to prefer originals over remixes.
     """
-    return bool(_GENERIC_SUFFIX_EXACT_RE.match(mix_name.strip()))
+    cleaned = _REMASTER_RE.sub("", mix_name).strip()
+    cleaned = MULTI_SPACE_RE.sub(" ", cleaned)
+    return bool(_GENERIC_SUFFIX_EXACT_RE.match(cleaned))
 
 
 def normalize_track_title(title: str) -> str:

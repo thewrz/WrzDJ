@@ -13,7 +13,9 @@ from app.models.user import User
 from app.services.sync.base import SyncResult, SyncStatus, TrackMatch
 from app.services.sync.orchestrator import (
     MultiSyncResult,
+    _extract_source_track_id,
     _find_best_match,
+    _get_isrc_from_spotify,
     _is_already_synced,
     _persist_sync_result,
     enrich_request_metadata,
@@ -1131,3 +1133,246 @@ class TestFindBestMatchVersionPreference:
         ]
         best = _find_best_match(results, "Surrender", "Darude", prefer_original=True)
         assert best.bpm == 132.0  # Modal BPM among results
+
+
+class TestExtractSourceTrackId:
+    """Tests for _extract_source_track_id()."""
+
+    def test_spotify_url(self):
+        svc, tid = _extract_source_track_id("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC")
+        assert svc == "spotify"
+        assert tid == "4uLU6hMCjMI75M1A2tKUQC"
+
+    def test_beatport_url(self):
+        svc, tid = _extract_source_track_id(
+            "https://www.beatport.com/track/the-house-of-house/12345"
+        )
+        assert svc == "beatport"
+        assert tid == "12345"
+
+    def test_tidal_url(self):
+        svc, tid = _extract_source_track_id("https://tidal.com/browse/track/67890")
+        assert svc == "tidal"
+        assert tid == "67890"
+
+    def test_tidal_url_no_browse(self):
+        svc, tid = _extract_source_track_id("https://tidal.com/track/99999")
+        assert svc == "tidal"
+        assert tid == "99999"
+
+    def test_none_url(self):
+        svc, tid = _extract_source_track_id(None)
+        assert svc is None
+        assert tid is None
+
+    def test_non_music_url(self):
+        svc, tid = _extract_source_track_id("https://example.com/page")
+        assert svc is None
+        assert tid is None
+
+    def test_empty_string(self):
+        svc, tid = _extract_source_track_id("")
+        assert svc is None
+        assert tid is None
+
+
+class TestGetIsrcFromSpotify:
+    """Tests for _get_isrc_from_spotify()."""
+
+    def test_returns_isrc_for_spotify_url(self):
+        with patch(
+            "app.services.spotify._get_spotify_client",
+        ) as mock_client:
+            mock_client.return_value.track.return_value = {
+                "external_ids": {"isrc": "USRC11700041"},
+            }
+            isrc = _get_isrc_from_spotify("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC")
+            assert isrc == "USRC11700041"
+            mock_client.return_value.track.assert_called_once_with("4uLU6hMCjMI75M1A2tKUQC")
+
+    def test_returns_none_for_non_spotify_url(self):
+        isrc = _get_isrc_from_spotify("https://tidal.com/browse/track/123")
+        assert isrc is None
+
+    def test_returns_none_on_api_error(self):
+        with patch(
+            "app.services.spotify._get_spotify_client",
+            side_effect=RuntimeError("API down"),
+        ):
+            isrc = _get_isrc_from_spotify("https://open.spotify.com/track/abc123")
+            assert isrc is None
+
+    def test_returns_none_for_none_url(self):
+        assert _get_isrc_from_spotify(None) is None
+
+
+class TestDirectFetchEnrichment:
+    """Tests for source URL direct fetch in enrich_request_metadata."""
+
+    def test_direct_beatport_enrichment(self, db, tidal_event, tidal_user):
+        """Beatport source URL triggers direct fetch, skipping fuzzy search."""
+        tidal_user.beatport_access_token = "fake_bp_token"
+        db.commit()
+
+        request = _make_accepted_request(
+            db, tidal_event, "The House of House", "Cherrymoon Trax", "enrich_bp_direct"
+        )
+        request.source_url = "https://www.beatport.com/track/the-house-of-house/99999"
+        db.commit()
+
+        from app.schemas.beatport import BeatportSearchResult
+
+        direct_track = BeatportSearchResult(
+            track_id="99999",
+            title="The House Of House",
+            artist="Cherrymoon Trax",
+            genre="Trance",
+            bpm=132,
+            key="A Minor",
+            mix_name="Original Mix",
+        )
+
+        with (
+            patch(
+                "app.services.sync.orchestrator.lookup_artist_genre",
+                return_value=None,
+            ),
+            patch(
+                "app.services.beatport.get_beatport_track",
+                return_value=direct_track,
+            ) as mock_direct,
+            patch(
+                "app.services.beatport.search_beatport_tracks",
+                return_value=[],
+            ),
+        ):
+            enrich_request_metadata(db, request.id)
+
+        db.refresh(request)
+        # Direct fetch should have been called with the extracted track ID
+        mock_direct.assert_called_once_with(db, tidal_user, "99999")
+        assert request.bpm == 132.0
+        assert request.genre == "Trance"
+
+    def test_isrc_tidal_enrichment(self, db, tidal_event, tidal_user):
+        """Spotify source URL triggers ISRC lookup → exact Tidal match."""
+        request = _make_accepted_request(
+            db, tidal_event, "The House of House", "Cherrymoon Trax", "enrich_isrc"
+        )
+        request.source_url = "https://open.spotify.com/track/abc123"
+        db.commit()
+
+        from app.schemas.tidal import TidalSearchResult
+
+        isrc_match = TidalSearchResult(
+            track_id="777",
+            title="The House Of House",
+            artist="Cherrymoon Trax",
+            bpm=132.0,
+            key="A Minor",
+        )
+
+        with (
+            patch(
+                "app.services.sync.orchestrator._get_isrc_from_spotify",
+                return_value="NLRD19800001",
+            ),
+            patch(
+                "app.services.tidal.search_tidal_by_isrc",
+                return_value=isrc_match,
+            ) as mock_isrc,
+            patch(
+                "app.services.sync.orchestrator.lookup_artist_genre",
+                return_value="trance",
+            ),
+            patch(
+                "app.services.tidal.search_tidal_tracks",
+                return_value=[],
+            ),
+        ):
+            enrich_request_metadata(db, request.id)
+
+        db.refresh(request)
+        mock_isrc.assert_called_once_with(db, tidal_user, "NLRD19800001")
+        assert request.bpm == 132.0  # From ISRC match, not fuzzy search
+        assert request.genre == "trance"  # From MusicBrainz
+
+    def test_isrc_fallback_to_fuzzy_when_no_match(self, db, tidal_event, tidal_user):
+        """When ISRC returns no Tidal match, falls through to fuzzy search."""
+        request = _make_accepted_request(
+            db, tidal_event, "Test Song", "Test Artist", "enrich_isrc_fallback"
+        )
+        request.source_url = "https://open.spotify.com/track/xyz789"
+        db.commit()
+
+        from app.schemas.tidal import TidalSearchResult
+
+        fuzzy_result = TidalSearchResult(
+            track_id="888",
+            title="Test Song",
+            artist="Test Artist",
+            bpm=120.0,
+            key="C Major",
+        )
+
+        with (
+            patch(
+                "app.services.sync.orchestrator._get_isrc_from_spotify",
+                return_value="TEST12345678",
+            ),
+            patch(
+                "app.services.tidal.search_tidal_by_isrc",
+                return_value=None,
+            ),
+            patch(
+                "app.services.sync.orchestrator.lookup_artist_genre",
+                return_value=None,
+            ),
+            patch(
+                "app.services.tidal.search_tidal_tracks",
+                return_value=[fuzzy_result],
+            ),
+        ):
+            enrich_request_metadata(db, request.id)
+
+        db.refresh(request)
+        # Should have fallen through to fuzzy Tidal search
+        assert request.bpm == 120.0
+
+    def test_direct_tidal_enrichment(self, db, tidal_event, tidal_user):
+        """Tidal source URL triggers direct fetch by track ID."""
+        request = _make_accepted_request(
+            db, tidal_event, "Test Song", "Test Artist", "enrich_tidal_direct"
+        )
+        request.source_url = "https://tidal.com/browse/track/55555"
+        db.commit()
+
+        from app.schemas.tidal import TidalSearchResult
+
+        direct_track = TidalSearchResult(
+            track_id="55555",
+            title="Test Song",
+            artist="Test Artist",
+            bpm=140.0,
+            key="D Minor",
+        )
+
+        with (
+            patch(
+                "app.services.tidal.get_tidal_track_by_id",
+                return_value=direct_track,
+            ) as mock_direct,
+            patch(
+                "app.services.sync.orchestrator.lookup_artist_genre",
+                return_value=None,
+            ),
+            patch(
+                "app.services.tidal.search_tidal_tracks",
+                return_value=[],
+            ),
+        ):
+            enrich_request_metadata(db, request.id)
+
+        db.refresh(request)
+        mock_direct.assert_called_once_with(db, tidal_user, "55555")
+        assert request.bpm == 140.0
