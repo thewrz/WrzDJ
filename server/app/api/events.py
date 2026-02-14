@@ -93,7 +93,10 @@ def _get_base_url(request: Request | None) -> str | None:
 
 def _get_api_base_url(request: Request) -> str:
     """Get the API server's own base URL for constructing asset URLs (uploads, etc.)."""
-    return str(request.base_url).rstrip("/")
+    base = str(request.base_url).rstrip("/")
+    if request.headers.get("x-forwarded-proto") == "https" and base.startswith("http://"):
+        base = "https://" + base[len("http://") :]
+    return base
 
 
 def _get_banner_urls(event, request: Request | None) -> tuple[str | None, str | None]:
