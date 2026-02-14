@@ -12,15 +12,10 @@ import { NowPlayingBadge } from './components/NowPlayingBadge';
 import { TidalLoginModal } from './components/TidalLoginModal';
 import { BeatportLoginModal } from './components/BeatportLoginModal';
 import { ServiceTrackPickerModal } from './components/ServiceTrackPickerModal';
-import { PlayHistorySection } from './components/PlayHistorySection';
 import { RequestQueueSection } from './components/RequestQueueSection';
-import { KioskControlsCard } from './components/KioskControlsCard';
-import { StreamOverlayCard } from './components/StreamOverlayCard';
-import { BridgeStatusCard } from './components/BridgeStatusCard';
-import { CloudProvidersCard } from './components/CloudProvidersCard';
-import { SyncReportPanel } from './components/SyncReportPanel';
-import { EventCustomizationCard } from './components/EventCustomizationCard';
-import { RecommendationsCard } from './components/RecommendationsCard';
+import { PlayHistorySection } from './components/PlayHistorySection';
+import { SongManagementTab } from './components/SongManagementTab';
+import { EventManagementTab } from './components/EventManagementTab';
 import type { RecommendedTrack } from '@/lib/api-types';
 
 function toLocalDateTimeString(date: Date): string {
@@ -95,6 +90,9 @@ export default function EventQueuePage() {
 
   // Inline action error (auto-dismissing)
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'songs' | 'manage'>('songs');
 
   // Banner upload state
   const [uploadingBanner, setUploadingBanner] = useState(false);
@@ -651,7 +649,7 @@ export default function EventQueuePage() {
                 ? 'This event does not exist.'
                 : error?.message || 'Event not found or expired.'}
           </p>
-          <Link href="/events" className="btn btn-primary" style={{ marginTop: '1rem' }}>
+          <Link href="/dashboard" className="btn btn-primary" style={{ marginTop: '1rem' }}>
             Back to Events
           </Link>
         </div>
@@ -679,7 +677,7 @@ export default function EventQueuePage() {
       {/* 1. Header */}
       <div className="header">
         <div>
-          <Link href="/events" style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+          <Link href="/dashboard" style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
             &larr; Back to Events
           </Link>
           <h1 style={{ marginTop: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{event.name}</h1>
@@ -784,107 +782,109 @@ export default function EventQueuePage() {
         </div>
       </div>
 
-      {/* 2. Request Queue */}
-      <RequestQueueSection
-        requests={requests}
-        isExpiredOrArchived={isExpiredOrArchived}
-        connectedServices={connectedServices}
-        updating={updating}
-        acceptingAll={acceptingAll}
-        syncingRequest={syncingRequest}
-        onUpdateStatus={updateStatus}
-        onAcceptAll={handleAcceptAll}
-        onSyncToTidal={handleSyncToTidal}
-        onOpenTidalPicker={handleOpenTidalPicker}
-        onScrollToSyncReport={handleScrollToSyncReport}
-      />
+      {/* Tabs or direct content for expired/archived */}
+      {isExpiredOrArchived ? (
+        <>
+          <RequestQueueSection
+            requests={requests}
+            isExpiredOrArchived={isExpiredOrArchived}
+            connectedServices={connectedServices}
+            updating={updating}
+            acceptingAll={acceptingAll}
+            syncingRequest={syncingRequest}
+            onUpdateStatus={updateStatus}
+            onAcceptAll={handleAcceptAll}
+            onSyncToTidal={handleSyncToTidal}
+            onOpenTidalPicker={handleOpenTidalPicker}
+            onScrollToSyncReport={handleScrollToSyncReport}
+          />
+          <PlayHistorySection
+            items={playHistory}
+            total={playHistoryTotal}
+            exporting={exportingHistory}
+            onExport={handleExportPlayHistoryCsv}
+          />
+        </>
+      ) : (
+        <>
+          <div className="event-tabs">
+            <button
+              className={`event-tab${activeTab === 'songs' ? ' active' : ''}`}
+              onClick={() => setActiveTab('songs')}
+            >
+              Song Management
+            </button>
+            <button
+              className={`event-tab${activeTab === 'manage' ? ' active' : ''}`}
+              onClick={() => setActiveTab('manage')}
+            >
+              Event Management
+            </button>
+          </div>
 
-      {/* 2b. Sync Report */}
-      <SyncReportPanel
-        requests={requests}
-        connectedServices={connectedServices}
-        expanded={syncReportExpanded}
-        onToggleExpanded={() => setSyncReportExpanded((prev) => !prev)}
-        focusedRequestId={focusedSyncRequestId}
-        onClearFocus={() => setFocusedSyncRequestId(null)}
-        onRetrySync={handleSyncToTidal}
-        onOpenTidalPicker={handleOpenTidalPicker}
-        onOpenBeatportPicker={handleOpenBeatportPicker}
-      />
+          {activeTab === 'songs' && (
+            <SongManagementTab
+              code={code}
+              requests={requests}
+              isExpiredOrArchived={false}
+              connectedServices={connectedServices}
+              updating={updating}
+              acceptingAll={acceptingAll}
+              syncingRequest={syncingRequest}
+              onUpdateStatus={updateStatus}
+              onAcceptAll={handleAcceptAll}
+              onSyncToTidal={handleSyncToTidal}
+              onOpenTidalPicker={handleOpenTidalPicker}
+              onOpenBeatportPicker={handleOpenBeatportPicker}
+              onScrollToSyncReport={handleScrollToSyncReport}
+              syncReportExpanded={syncReportExpanded}
+              onToggleSyncReport={() => setSyncReportExpanded((prev) => !prev)}
+              focusedSyncRequestId={focusedSyncRequestId}
+              onClearSyncFocus={() => setFocusedSyncRequestId(null)}
+              playHistory={playHistory}
+              playHistoryTotal={playHistoryTotal}
+              exportingHistory={exportingHistory}
+              onExportPlayHistory={handleExportPlayHistoryCsv}
+              tidalLinked={!!tidalStatus?.linked}
+              beatportLinked={!!beatportStatus?.linked}
+              onAcceptTrack={handleAcceptRecommendedTrack}
+            />
+          )}
 
-      {/* 3. Play History */}
-      <PlayHistorySection
-        items={playHistory}
-        total={playHistoryTotal}
-        exporting={exportingHistory}
-        onExport={handleExportPlayHistoryCsv}
-      />
-
-      {/* 4. Kiosk Controls */}
-      {!isExpiredOrArchived && (
-        <KioskControlsCard
-          code={code}
-          requestsOpen={requestsOpen}
-          togglingRequests={togglingRequests}
-          onToggleRequests={handleToggleRequests}
-          nowPlayingHidden={nowPlayingHidden}
-          togglingNowPlaying={togglingNowPlaying}
-          onToggleNowPlaying={handleToggleNowPlaying}
-          autoHideInput={autoHideInput}
-          autoHideMinutes={autoHideMinutes}
-          savingAutoHide={savingAutoHide}
-          onAutoHideInputChange={setAutoHideInput}
-          onSaveAutoHide={handleSaveAutoHide}
-        />
-      )}
-
-      {/* 5. Stream Overlay */}
-      {!isExpiredOrArchived && (
-        <StreamOverlayCard code={code} />
-      )}
-
-      {/* 6. Bridge Status */}
-      {!isExpiredOrArchived && (
-        <BridgeStatusCard bridgeConnected={bridgeConnected} />
-      )}
-
-      {/* 7. Cloud Providers */}
-      {!isExpiredOrArchived && (
-        <CloudProvidersCard
-          tidalStatus={tidalStatus}
-          tidalSyncEnabled={tidalSyncEnabled}
-          togglingTidalSync={togglingTidalSync}
-          onToggleTidalSync={handleToggleTidalSync}
-          onConnectTidal={handleConnectTidal}
-          onDisconnectTidal={handleDisconnectTidal}
-          beatportStatus={beatportStatus}
-          beatportSyncEnabled={beatportSyncEnabled}
-          togglingBeatportSync={togglingBeatportSync}
-          onToggleBeatportSync={handleToggleBeatportSync}
-          onConnectBeatport={handleConnectBeatport}
-          onDisconnectBeatport={handleDisconnectBeatport}
-        />
-      )}
-
-      {/* 8. Song Suggestions */}
-      {!isExpiredOrArchived && (
-        <RecommendationsCard
-          code={code}
-          hasAcceptedRequests={requests.some((r) => r.status === 'accepted' || r.status === 'played')}
-          tidalLinked={!!tidalStatus?.linked}
-          beatportLinked={!!beatportStatus?.linked}
-          onAcceptTrack={handleAcceptRecommendedTrack}
-        />
-      )}
-
-      {/* 9. Event Customization */}
-      {!isExpiredOrArchived && (
-        <EventCustomizationCard
-          event={event}
-          uploadingBanner={uploadingBanner}
-          onBannerSelect={handleBannerSelect}
-          onDeleteBanner={handleDeleteBanner}
-        />
+          {activeTab === 'manage' && (
+            <EventManagementTab
+              code={code}
+              event={event}
+              bridgeConnected={bridgeConnected}
+              requestsOpen={requestsOpen}
+              togglingRequests={togglingRequests}
+              onToggleRequests={handleToggleRequests}
+              nowPlayingHidden={nowPlayingHidden}
+              togglingNowPlaying={togglingNowPlaying}
+              onToggleNowPlaying={handleToggleNowPlaying}
+              autoHideInput={autoHideInput}
+              autoHideMinutes={autoHideMinutes}
+              savingAutoHide={savingAutoHide}
+              onAutoHideInputChange={setAutoHideInput}
+              onSaveAutoHide={handleSaveAutoHide}
+              tidalStatus={tidalStatus}
+              tidalSyncEnabled={tidalSyncEnabled}
+              togglingTidalSync={togglingTidalSync}
+              onToggleTidalSync={handleToggleTidalSync}
+              onConnectTidal={handleConnectTidal}
+              onDisconnectTidal={handleDisconnectTidal}
+              beatportStatus={beatportStatus}
+              beatportSyncEnabled={beatportSyncEnabled}
+              togglingBeatportSync={togglingBeatportSync}
+              onToggleBeatportSync={handleToggleBeatportSync}
+              onConnectBeatport={handleConnectBeatport}
+              onDisconnectBeatport={handleDisconnectBeatport}
+              uploadingBanner={uploadingBanner}
+              onBannerSelect={handleBannerSelect}
+              onDeleteBanner={handleDeleteBanner}
+            />
+          )}
+        </>
       )}
 
       {/* Modals */}

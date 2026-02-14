@@ -1,5 +1,7 @@
 """Admin API endpoints for user management, event oversight, and system settings."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi import Request as FastAPIRequest
 from sqlalchemy import func
@@ -10,6 +12,7 @@ from app.core.rate_limit import limiter
 from app.models.event import Event
 from app.models.request import Request
 from app.models.user import User, UserRole
+from app.schemas.ai_settings import AIModelInfo, AIModelsResponse, AISettingsOut, AISettingsUpdate
 from app.schemas.event import EventUpdate
 from app.schemas.integration_health import (
     IntegrationCheckResponse,
@@ -44,6 +47,14 @@ from app.services.integration_health import (
     get_all_integration_statuses,
 )
 from app.services.system_settings import get_system_settings, update_system_settings
+
+logger = logging.getLogger(__name__)
+
+# Hardcoded fallback model list (used when Anthropic API is unreachable)
+FALLBACK_MODELS = [
+    AIModelInfo(id="claude-haiku-4-5-20251001", name="Claude Haiku 4.5"),
+    AIModelInfo(id="claude-sonnet-4-5-20250929", name="Claude Sonnet 4.5"),
+]
 
 router = APIRouter()
 
@@ -238,6 +249,9 @@ def admin_update_settings(
         tidal_enabled=update_data.tidal_enabled,
         beatport_enabled=update_data.beatport_enabled,
         bridge_enabled=update_data.bridge_enabled,
+        llm_enabled=update_data.llm_enabled,
+        llm_model=update_data.llm_model,
+        llm_rate_limit_per_minute=update_data.llm_rate_limit_per_minute,
     )
     return SystemSettingsOut.model_validate(settings)
 
@@ -287,4 +301,97 @@ def admin_check_integration(
         healthy=healthy,
         capabilities=capabilities,
         error=error,
+    )
+
+
+# ========== AI / LLM Settings ==========
+
+
+def _mask_api_key(key: str) -> str:
+    """Mask an API key, showing only last 4 characters."""
+    if not key:
+        return "Not configured"
+    return f"...{key[-4:]}"
+
+
+def _list_anthropic_models() -> list[AIModelInfo]:
+    """Try to list models from Anthropic API, fall back to hardcoded list."""
+    from app.core.config import get_settings
+
+    api_key = get_settings().anthropic_api_key
+    if not api_key:
+        return list(FALLBACK_MODELS)
+
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.models.list(limit=20)
+        models = []
+        for model in response.data:
+            if "claude" in model.id:
+                display_name = model.display_name if hasattr(model, "display_name") else model.id
+                models.append(AIModelInfo(id=model.id, name=display_name))
+        if models:
+            return models
+    except Exception:
+        logger.warning("Failed to fetch models from Anthropic API, using fallback list")
+
+    return list(FALLBACK_MODELS)
+
+
+@router.get("/ai/models", response_model=AIModelsResponse)
+@limiter.limit("30/minute")
+def admin_get_ai_models(
+    request: FastAPIRequest,
+    _admin: User = Depends(get_current_admin),
+) -> AIModelsResponse:
+    """List available AI models."""
+    models = _list_anthropic_models()
+    return AIModelsResponse(models=models)
+
+
+@router.get("/ai/settings", response_model=AISettingsOut)
+@limiter.limit("120/minute")
+def admin_get_ai_settings(
+    request: FastAPIRequest,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> AISettingsOut:
+    """Get AI/LLM configuration."""
+    from app.core.config import get_settings
+
+    config = get_settings()
+    settings = get_system_settings(db)
+    return AISettingsOut(
+        llm_enabled=settings.llm_enabled,
+        llm_model=settings.llm_model,
+        llm_rate_limit_per_minute=settings.llm_rate_limit_per_minute,
+        api_key_configured=bool(config.anthropic_api_key),
+        api_key_masked=_mask_api_key(config.anthropic_api_key),
+    )
+
+
+@router.put("/ai/settings", response_model=AISettingsOut)
+def admin_update_ai_settings(
+    update_data: AISettingsUpdate,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> AISettingsOut:
+    """Update AI/LLM configuration."""
+    from app.core.config import get_settings
+
+    config = get_settings()
+    settings = update_system_settings(
+        db,
+        llm_enabled=update_data.llm_enabled,
+        llm_model=update_data.llm_model,
+        llm_rate_limit_per_minute=update_data.llm_rate_limit_per_minute,
+    )
+    return AISettingsOut(
+        llm_enabled=settings.llm_enabled,
+        llm_model=settings.llm_model,
+        llm_rate_limit_per_minute=settings.llm_rate_limit_per_minute,
+        api_key_configured=bool(config.anthropic_api_key),
+        api_key_masked=_mask_api_key(config.anthropic_api_key),
     )

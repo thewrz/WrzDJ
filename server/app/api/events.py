@@ -64,6 +64,9 @@ from app.services.sync.registry import get_connected_adapters
 router = APIRouter()
 settings = get_settings()
 
+# Cached LLM rate limit (refreshed when admin changes it)
+_llm_rate_limit_cache: dict[str, int] = {"value": 3}
+
 # Maximum number of requests to export in a single CSV
 # Set to 10,000 to prevent memory issues and excessive download times
 MAX_EXPORT_REQUESTS = 10000
@@ -186,6 +189,33 @@ def list_archived_events(
         result.append(_event_to_out(event, request, request_count=count, include_status=True))
 
     return result
+
+
+@router.get("/activity", response_model=list)
+@limiter.limit("60/minute")
+def get_activity_log(
+    request: Request,
+    event_code: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get recent activity log entries for the current user's events."""
+    from app.schemas.activity_log import ActivityLogEntry
+    from app.services.activity_log import get_recent_activity
+
+    entries = get_recent_activity(db, limit=limit, event_code=event_code, user_id=current_user.id)
+    return [
+        ActivityLogEntry(
+            id=e.id,
+            created_at=e.created_at.isoformat(),
+            level=e.level,
+            source=e.source,
+            message=e.message,
+            event_code=e.event_code,
+        )
+        for e in entries
+    ]
 
 
 @router.get("/{code}", response_model=EventOut)
@@ -583,7 +613,7 @@ def get_recommendations(
         profile=profile,
         services_used=result.services_used,
         total_candidates_searched=result.total_candidates_searched,
-        llm_available=is_llm_available(),
+        llm_available=is_llm_available(db),
     )
 
 
@@ -707,12 +737,12 @@ def get_recommendations_from_template(
         profile=profile,
         services_used=result.services_used,
         total_candidates_searched=result.total_candidates_searched,
-        llm_available=is_llm_available(),
+        llm_available=is_llm_available(db),
     )
 
 
 @router.post("/{code}/recommendations/llm")
-@limiter.limit("3/minute")
+@limiter.limit(lambda: f"{_llm_rate_limit_cache['value']}/minute")
 async def get_llm_recommendations(
     request: Request,
     prompt_request: LLMPromptRequest,
@@ -729,8 +759,13 @@ async def get_llm_recommendations(
     from app.services.recommendation.camelot import parse_key
     from app.services.recommendation.llm_hooks import is_llm_available
     from app.services.recommendation.service import generate_recommendations_from_llm
+    from app.services.system_settings import get_system_settings
 
-    if not is_llm_available():
+    # Refresh LLM rate limit cache from DB
+    sys_settings = get_system_settings(db)
+    _llm_rate_limit_cache["value"] = sys_settings.llm_rate_limit_per_minute
+
+    if not is_llm_available(db):
         raise HTTPException(
             status_code=503,
             detail="LLM recommendations not configured. Set ANTHROPIC_API_KEY to enable.",

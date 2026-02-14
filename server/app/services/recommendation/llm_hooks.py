@@ -49,8 +49,21 @@ async def generate_llm_suggestions(
     return await call_llm(event_profile, prompt, max_queries, tracks=tracks)
 
 
-def is_llm_available() -> bool:
-    """Check if LLM recommendations are configured and available."""
+def is_llm_available(db=None) -> bool:
+    """Check if LLM recommendations are configured and available.
+
+    When db is provided, also checks the DB-backed llm_enabled toggle.
+    """
     from app.core.config import get_settings
 
-    return bool(get_settings().anthropic_api_key)
+    if not get_settings().anthropic_api_key:
+        return False
+
+    if db is not None:
+        from app.services.system_settings import get_system_settings
+
+        settings = get_system_settings(db)
+        if not settings.llm_enabled:
+            return False
+
+    return True

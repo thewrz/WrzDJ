@@ -1,6 +1,10 @@
 import type {
   AdminEvent,
   AdminUser,
+  AIModelsResponse,
+  AISettings,
+  AISettingsUpdate,
+  ActivityLogEntry,
   ArchivedEvent,
   BeatportEventSettings,
   BeatportSearchResult,
@@ -31,8 +35,13 @@ import type {
 } from './api-types';
 
 export type {
+  ActivityLogEntry,
   AdminEvent,
   AdminUser,
+  AIModelInfo,
+  AIModelsResponse,
+  AISettings,
+  AISettingsUpdate,
   ArchivedEvent,
   BeatportEventSettings,
   BeatportSearchResult,
@@ -722,6 +731,31 @@ class ApiClient {
     return this.fetch(`/api/admin/integrations/${service}/check`, {
       method: 'POST',
     });
+  }
+
+  // ========== Admin AI Settings ==========
+
+  async getAIModels(): Promise<AIModelsResponse> {
+    return this.fetch('/api/admin/ai/models');
+  }
+
+  async getAISettings(): Promise<AISettings> {
+    return this.fetch('/api/admin/ai/settings');
+  }
+
+  async updateAISettings(data: AISettingsUpdate): Promise<AISettings> {
+    return this.fetch('/api/admin/ai/settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ========== Activity Log ==========
+
+  async getActivityLog(eventCode?: string, limit: number = 50): Promise<ActivityLogEntry[]> {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (eventCode) params.set('event_code', eventCode);
+    return this.fetch(`/api/events/activity?${params}`);
   }
 }
 

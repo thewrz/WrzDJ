@@ -353,6 +353,7 @@ NEW → REJECTED
 - Setup: `./scripts/setup-hooks.sh`
 
 ## Common Pitfalls
+- **Alembic model/migration drift**: CI runs `alembic check` which detects differences between SQLAlchemy models and migration history. When writing migrations that create indexes (e.g. `op.create_index`), the corresponding model column **must** have `index=True`. When adding columns, the model `Mapped` column must exactly match the migration (type, nullable, defaults). Always run `cd server && .venv/bin/alembic upgrade head && .venv/bin/alembic check` locally before pushing to catch drift early.
 - `next-env.d.ts` gets auto-modified by builds — always `git checkout` before committing
 - Frontend `next build` is needed for TypeScript validation (stricter than dev mode)
 - The `request.client.host` in events.py submit_request differs from `X-Forwarded-For` logic in votes.py — known inconsistency behind proxies

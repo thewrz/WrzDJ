@@ -1,3 +1,4 @@
+from app.models.activity_log import ActivityLog
 from app.models.base import Base
 from app.models.event import Event
 from app.models.mb_artist_cache import MbArtistCache
@@ -10,6 +11,7 @@ from app.models.system_settings import SystemSettings
 from app.models.user import User
 
 __all__ = [
+    "ActivityLog",
     "Base",
     "User",
     "Event",

@@ -1,8 +1,14 @@
 """Tests for LLM hooks module."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 from app.services.recommendation.llm_hooks import (
     LLMSuggestionQuery,
@@ -23,6 +29,26 @@ class TestIsLLMAvailable:
     def test_returns_false_when_key_empty(self, mock_settings):
         mock_settings.return_value.anthropic_api_key = ""
         assert is_llm_available() is False
+
+    @patch("app.core.config.get_settings")
+    def test_returns_false_when_llm_disabled_in_settings(self, mock_settings, db: Session):
+        """When API key is set but llm_enabled is False in DB, returns False."""
+        mock_settings.return_value.anthropic_api_key = "sk-ant-test"
+        from app.services.system_settings import update_system_settings
+
+        update_system_settings(db, llm_enabled=False)
+        assert is_llm_available(db) is False
+        # Reset
+        update_system_settings(db, llm_enabled=True)
+
+    @patch("app.core.config.get_settings")
+    def test_returns_true_when_llm_enabled_and_key_set(self, mock_settings, db: Session):
+        """When API key is set and llm_enabled is True in DB, returns True."""
+        mock_settings.return_value.anthropic_api_key = "sk-ant-test"
+        from app.services.system_settings import update_system_settings
+
+        update_system_settings(db, llm_enabled=True)
+        assert is_llm_available(db) is True
 
 
 class TestGenerateLLMSuggestions:

@@ -452,6 +452,110 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('AI Settings API', () => {
+    beforeEach(() => {
+      api.setToken('admin-token');
+    });
+
+    it('fetches AI models', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          models: [
+            { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5' },
+          ],
+        }),
+      });
+
+      const result = await api.getAIModels();
+      expect(result.models).toHaveLength(1);
+      expect(result.models[0].id).toBe('claude-haiku-4-5-20251001');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/admin/ai/models');
+    });
+
+    it('fetches AI settings', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          llm_enabled: true,
+          llm_model: 'claude-haiku-4-5-20251001',
+          llm_rate_limit_per_minute: 3,
+          api_key_configured: true,
+          api_key_masked: '...test',
+        }),
+      });
+
+      const result = await api.getAISettings();
+      expect(result.llm_enabled).toBe(true);
+      expect(result.api_key_configured).toBe(true);
+    });
+
+    it('updates AI settings', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          llm_enabled: false,
+          llm_model: 'claude-sonnet-4-5-20250929',
+          llm_rate_limit_per_minute: 5,
+          api_key_configured: true,
+          api_key_masked: '...test',
+        }),
+      });
+
+      const result = await api.updateAISettings({
+        llm_enabled: false,
+        llm_model: 'claude-sonnet-4-5-20250929',
+      });
+      expect(result.llm_enabled).toBe(false);
+
+      const [, options] = mockFetch.mock.calls[0];
+      expect(options.method).toBe('PUT');
+    });
+  });
+
+  describe('Activity Log API', () => {
+    beforeEach(() => {
+      api.setToken('test-token');
+    });
+
+    it('fetches activity log', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 1,
+            created_at: '2026-01-01T00:00:00Z',
+            level: 'info',
+            source: 'bridge',
+            message: 'Bridge connected',
+            event_code: 'ABC123',
+          },
+        ],
+      });
+
+      const result = await api.getActivityLog();
+      expect(result).toHaveLength(1);
+      expect(result[0].source).toBe('bridge');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/activity');
+    });
+
+    it('passes event_code filter', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      });
+
+      await api.getActivityLog('ABC123');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('event_code=ABC123');
+    });
+  });
+
   describe('Beatport API', () => {
     beforeEach(() => {
       api.setToken('test-token');
