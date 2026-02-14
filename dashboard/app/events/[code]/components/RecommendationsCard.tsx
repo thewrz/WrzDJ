@@ -67,6 +67,9 @@ export function RecommendationsCard({
   // Ref for the suggestions list container (scroll position save/restore)
   const suggestionsContainerRef = useRef<HTMLDivElement>(null);
 
+  // Lock container height during mode switches to prevent page-level scroll jumps
+  const [lockedHeight, setLockedHeight] = useState<number | null>(null);
+
   // Per-mode results cache — persists suggestions across mode switches
   const resultsCacheRef = useRef<Record<Mode, ModeResultCache>>({
     requests: { ...emptyCache },
@@ -90,6 +93,11 @@ export function RecommendationsCard({
 
   const handleModeChange = (newMode: Mode) => {
     if (newMode === mode) return;
+
+    // Lock container height to prevent page-level scroll jump
+    if (suggestionsContainerRef.current) {
+      setLockedHeight(suggestionsContainerRef.current.offsetHeight);
+    }
 
     // Save current mode's results and scroll position to cache
     resultsCacheRef.current[mode] = {
@@ -156,6 +164,7 @@ export function RecommendationsCard({
         setProfile(result.profile);
         setLlmAvailable(result.llm_available);
       }
+      setLockedHeight(null);
       setGenerateState('complete');
       completeTimerRef.current = setTimeout(() => setGenerateState('idle'), 2000);
     } catch (err) {
@@ -199,6 +208,7 @@ export function RecommendationsCard({
     setError(null);
     setLlmQueries([]);
     setShowReasoning(false);
+    setLockedHeight(null);
     // Also clear the cache for the current mode
     resultsCacheRef.current[mode] = { ...emptyCache };
   };
@@ -457,9 +467,9 @@ export function RecommendationsCard({
           display: 'flex',
           flexDirection: 'column',
           gap: '0.5rem',
-          minHeight: suggestions.length > 0 ? '200px' : undefined,
+          minHeight: lockedHeight ? `${lockedHeight}px` : '200px',
           maxHeight: '600px',
-          overflowY: suggestions.length > 0 ? 'auto' : undefined,
+          overflowY: 'auto',
         }}
       >
         {suggestions.map((track) => {
@@ -470,12 +480,11 @@ export function RecommendationsCard({
                 key={trackKey}
                 style={{
                   display: 'flex',
-                  alignItems: 'center',
+                  alignItems: 'flex-start',
                   gap: '0.75rem',
                   padding: '0.5rem',
                   borderRadius: '0.375rem',
                   background: '#1a1a1a',
-                  overflow: 'hidden',
                 }}
               >
                 {track.cover_url && (
@@ -485,6 +494,7 @@ export function RecommendationsCard({
                     style={{
                       width: 40, height: 40,
                       borderRadius: '0.25rem', objectFit: 'cover',
+                      flexShrink: 0,
                     }}
                   />
                 )}

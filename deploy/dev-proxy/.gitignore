@@ -1,2 +1,5 @@
 # Generated self-signed certs — never commit
 certs/
+
+# Generated from *.conf.template by setup.sh — never commit
+nginx/*.conf

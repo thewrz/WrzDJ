@@ -1,5 +1,6 @@
 # Dev proxy: Frontend (Next.js) — mirrors deploy/nginx/app.conf.template
 # Routes https://app.local -> host machine :3000
+# LAN devices use https://<LAN_IP> (port 443)
 
 server {
     listen 80;
@@ -11,7 +12,7 @@ server {
 }
 
 server {
-    listen 443 ssl;
+    listen 443 ssl default_server;
     http2 on;
     server_name app.local;
 
@@ -28,7 +29,7 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://api.local https://i.scdn.co https://resources.tidal.com https://geo-media.beatport.com; media-src 'self' data:; connect-src 'self' https://api.local wss://app.local; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://api.local https://${LAN_IP}:8443 https://i.scdn.co https://resources.tidal.com https://geo-media.beatport.com; media-src 'self' data:; connect-src 'self' https://api.local https://${LAN_IP}:8443 wss://app.local wss://${LAN_IP}; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'" always;
 
     # Strip security headers from upstream (Next.js sets them too — nginx is authoritative)
     proxy_hide_header Strict-Transport-Security;
@@ -50,7 +51,7 @@ server {
 
     # OBS/streaming overlay — allow embedding from any origin (same as production)
     location ~ ^/e/[^/]+/overlay {
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://api.local https://i.scdn.co https://resources.tidal.com https://geo-media.beatport.com; media-src 'self' data:; connect-src 'self' https://api.local wss://app.local; frame-src https://challenges.cloudflare.com; frame-ancestors *" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://api.local https://${LAN_IP}:8443 https://i.scdn.co https://resources.tidal.com https://geo-media.beatport.com; media-src 'self' data:; connect-src 'self' https://api.local https://${LAN_IP}:8443 wss://app.local wss://${LAN_IP}; frame-src https://challenges.cloudflare.com; frame-ancestors *" always;
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-XSS-Protection "1; mode=block" always;

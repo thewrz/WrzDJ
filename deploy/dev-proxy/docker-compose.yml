@@ -4,9 +4,13 @@
 #   ./deploy/dev-proxy/setup.sh     # generate certs, update /etc/hosts, start
 #   ./deploy/dev-proxy/stop.sh      # tear down
 #
-# Then access:
-#   https://app.local  (frontend)
-#   https://api.local  (backend)
+# Then access (local machine):
+#   https://app.local       (frontend)
+#   https://api.local       (backend)
+#
+# LAN access (other devices):
+#   https://<LAN_IP>        (frontend, port 443)
+#   https://<LAN_IP>:8443   (backend API)
 
 services:
   proxy:
@@ -15,6 +19,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "8443:8443"
     volumes:
       - ./nginx:/etc/nginx/conf.d:ro
       - ./certs:/etc/nginx/certs:ro

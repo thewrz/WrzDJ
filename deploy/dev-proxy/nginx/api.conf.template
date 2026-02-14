@@ -1,17 +1,18 @@
 # Dev proxy: API (FastAPI) — mirrors deploy/nginx/api.conf.template
-# Routes https://api.local -> host machine :8000
+# Routes https://api.local:8443 -> host machine :8000
+# LAN devices use https://<LAN_IP>:8443
 
 server {
     listen 80;
     server_name api.local;
 
     location / {
-        return 301 https://$server_name$request_uri;
+        return 301 https://$server_name:8443$request_uri;
     }
 }
 
 server {
-    listen 443 ssl;
+    listen 8443 ssl default_server;
     http2 on;
     server_name api.local;
 
@@ -55,7 +56,7 @@ server {
     # Return JSON error with CORS headers when backend is unreachable
     location @backend_down {
         default_type application/json;
-        add_header Access-Control-Allow-Origin "https://app.local" always;
+        add_header Access-Control-Allow-Origin "https://${LAN_IP}" always;
         add_header Access-Control-Allow-Methods "GET, POST, PATCH, DELETE, OPTIONS" always;
         add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
         return 502 '{"error":"Service temporarily unavailable"}';
