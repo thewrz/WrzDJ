@@ -4,7 +4,7 @@
 
 WrzDJ is a DJ song request management system with four services:
 - **Backend**: Python FastAPI (`server/`) — SQLAlchemy 2.0, PostgreSQL, Alembic migrations
-- **Frontend**: Next.js 16+ with React 18 (`dashboard/`) — TypeScript, vanilla CSS (dark theme)
+- **Frontend**: Next.js 16+ with React 19 (`dashboard/`) — TypeScript, vanilla CSS (dark theme)
 - **Bridge**: Node.js DJ equipment integration (`bridge/`) — plugin system for Denon StageLinQ, Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast
 - **Bridge App**: Electron GUI for the bridge (`bridge-app/`) — React + Vite, cross-platform installers
 
@@ -62,6 +62,10 @@ NEXT_PUBLIC_API_URL="http://LAN_IP:8000" npm run dev
 - Key vars: `DATABASE_URL`, `JWT_SECRET`, `SPOTIFY_CLIENT_ID/SECRET`, `CORS_ORIGINS`, `PUBLIC_URL`, `NEXT_PUBLIC_API_URL`
 - Turnstile vars (for self-registration CAPTCHA): `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`
 - Upload vars: `UPLOADS_DIR` (defaults to `server/uploads/` locally, `/app/uploads` in Docker)
+- Encryption: `TOKEN_ENCRYPTION_KEY` (Fernet, 44 chars base64) — required in production for OAuth token encryption
+- Beatport: `BEATPORT_CLIENT_ID`, `BEATPORT_CLIENT_SECRET`, `BEATPORT_REDIRECT_URI`, `BEATPORT_AUTH_BASE_URL`
+- Soundcharts: `SOUNDCHARTS_APP_ID`, `SOUNDCHARTS_API_KEY` (song discovery for recommendations)
+- Anthropic (LLM recommendations): `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` (default: `claude-haiku-4-5-20251001`), `ANTHROPIC_MAX_TOKENS`, `ANTHROPIC_TIMEOUT_SECONDS`
 
 ## Running CI Checks Locally
 
@@ -72,26 +76,26 @@ NEXT_PUBLIC_API_URL="http://LAN_IP:8000" npm run dev
 .venv/bin/ruff check .                        # Lint (E, F, I, UP rules)
 .venv/bin/ruff format --check .               # Format check (line-length=100)
 .venv/bin/bandit -r app -c pyproject.toml -q  # Security scan
-.venv/bin/pytest --tb=short -q                # Tests (70% coverage minimum)
+.venv/bin/pytest --tb=short -q                # Tests (80% coverage minimum)
 ```
 
 ### Frontend (from `dashboard/`)
 ```bash
 npm run lint              # ESLint
 npx tsc --noEmit          # TypeScript type check (strict)
-npm test -- --run         # Vitest (28 tests)
+npm test -- --run         # Vitest
 ```
 
 ### Bridge (from `bridge/`)
 ```bash
 npx tsc --noEmit          # TypeScript type check
-npm test -- --run         # Vitest (209 tests)
+npm test -- --run         # Vitest
 ```
 
 ### Bridge App (from `bridge-app/`)
 ```bash
 npx tsc --noEmit          # TypeScript type check
-npm test -- --run         # Vitest (34 tests)
+npm test -- --run         # Vitest
 ```
 
 ### Quick fix commands
@@ -107,7 +111,7 @@ npm test -- --run         # Vitest (34 tests)
 - Test DB: SQLite in-memory (not PostgreSQL)
 - Fixtures in `server/tests/conftest.py`: `db`, `client`, `test_user`, `auth_headers`, `admin_user`, `admin_headers`, `pending_user`, `pending_headers`, `test_event`, `test_request`
 - TestClient's default host is `"testclient"` — use this for client_fingerprint in test fixtures
-- Coverage minimum: 70% (`--cov-fail-under=70`)
+- Coverage minimum: 80% (`--cov-fail-under=80`)
 - Run single file: `.venv/bin/pytest tests/test_requests.py -v`
 
 ### Frontend (vitest)
@@ -152,6 +156,7 @@ npm test -- --run         # Vitest (34 tests)
 - Users (`/admin/users`): CRUD with role filter tabs, approve/reject pending users
 - Events (`/admin/events`): View/edit/delete any event regardless of owner
 - Settings (`/admin/settings`): Toggle registration, adjust search rate limit
+- Integrations (`/admin/integrations`): Service health dashboard — toggle Spotify/Tidal/Beatport/Bridge on/off, manual health checks, status indicators
 - Auth guard: non-admin users redirected to `/events`
 
 ### Self-Registration
@@ -167,19 +172,23 @@ npm test -- --run         # Vitest (34 tests)
 - DB-backed singleton in `system_settings` table (`server/app/models/system_settings.py`)
 - `registration_enabled` (bool) — controls self-registration
 - `search_rate_limit_per_minute` (int) — admin-configurable external API rate limit
+- Integration toggles (admin can disable broken services at runtime):
+  - `spotify_enabled`, `tidal_enabled`, `beatport_enabled`, `bridge_enabled` (all default `True`)
 - Service: `server/app/services/system_settings.py` — lazy-creates with defaults if missing
 
 ### API Structure
-- Admin endpoints: `server/app/api/admin.py` — 10 endpoints under `/api/admin/`
-- Authenticated endpoints: `server/app/api/events.py`, `requests.py`
+- Admin endpoints: `server/app/api/admin.py` — endpoints under `/api/admin/` (includes integration health/toggle)
+- Authenticated endpoints: `server/app/api/events.py`, `requests.py`, `search.py`, `beatport.py`, `tidal.py`
 - Public endpoints (no auth): `server/app/api/public.py`, `votes.py`, `bridge.py`, auth settings/register
 - Rate limiting via slowapi: `@limiter.limit("N/minute")`
 - Client fingerprinting: IP-based via `X-Forwarded-For` header fallback to `request.client.host`
+- Global error handler: prevents token/credential leakage in error responses (generic 500 in production)
 
 ### Frontend API Client
 - `dashboard/lib/api.ts` — singleton `ApiClient` class
 - Authenticated calls: use `this.fetch()` (adds Bearer token)
 - Public calls: use raw `fetch()` without auth headers
+- 401 interceptor: expired JWT auto-redirects to login page
 - Types mirror backend Pydantic schemas
 
 ### Request Status Flow
@@ -187,6 +196,7 @@ npm test -- --run         # Vitest (34 tests)
 NEW → ACCEPTED → PLAYING → PLAYED
 NEW → REJECTED
 ```
+- State machine enforced: invalid transitions (e.g., NEW → PLAYED) are rejected with 400
 
 ### Banner / Image Upload
 - DJs upload banner images per event via `POST /api/events/{code}/banner` (multipart)
@@ -206,11 +216,48 @@ NEW → REJECTED
 - `server/app/services/request.py` — CRUD, deduplication, bulk accept
 - `server/app/services/vote.py` — idempotent voting with atomic increments
 - `server/app/services/event.py` — event lifecycle, status computation
-- `server/app/services/tidal.py` — Tidal playlist sync (background tasks)
+- `server/app/services/tidal.py` — Tidal OAuth + playlist sync (background tasks)
+- `server/app/services/beatport.py` — Beatport OAuth2 + PKCE, search, playlist sync, subscription detection
 - `server/app/services/admin.py` — user/event CRUD for admins, system stats, last-admin protection
 - `server/app/services/system_settings.py` — DB-backed singleton settings
 - `server/app/services/turnstile.py` — Cloudflare Turnstile CAPTCHA verification
 - `server/app/services/banner.py` — banner image processing (resize, WebP, desaturate, color extraction)
+- `server/app/services/integration_health.py` — health checks & admin toggles for all external services
+- `server/app/services/search_merge.py` — deduplicates search results across Spotify/Beatport
+- `server/app/services/musicbrainz.py` — rate-limited MusicBrainz API client (genre/artist lookup)
+- `server/app/services/soundcharts.py` — Soundcharts API for track discovery (BPM, key, genre)
+- `server/app/services/intent_parser.py` — detects version tags (sped up, live, acoustic) & remix artists
+- `server/app/services/track_normalizer.py` — track normalization & remix detection
+- `server/app/services/version_filter.py` — filters unwanted versions (karaoke, demo) with fuzzy matching
+
+### Recommendation Engine
+- `server/app/services/recommendation/` — multi-stage pipeline:
+  - `service.py` — orchestrator: profile analysis → search → scoring → deduplication
+  - `enrichment.py` — fills missing BPM/key/genre from Beatport/MusicBrainz/Tidal
+  - `scorer.py` — multi-dimensional scoring: BPM compatibility, harmonic mixing, genre affinity, artist diversity penalties
+  - `camelot.py` — harmonic mixing wheel (Camelot key compatibility, half-time/double-time BPM)
+  - `llm_client.py` — Claude Haiku integration (6/min rate limit, forced tool_use schema for structured JSON)
+  - `llm_hooks.py` — structured response models for LLM queries
+  - `template.py` — playlist-based template recommendations (DJ picks a Tidal/Beatport playlist as "vibe" source)
+  - `mb_verify.py` — MusicBrainz artist verification to detect AI-generated filler tracks (cached in DB)
+  - `soundcharts_candidates.py` — Soundcharts API as third candidate source
+- Three modes: From Requests (event profile), From Playlist (template), AI Assist (Claude Haiku)
+- Endpoints on `events.py`: `POST /{code}/recommendations`, `POST /{code}/recommendations/from-template`, `POST /{code}/recommendations/llm`, `GET /{code}/playlists`
+
+### Multi-Service Playlist Sync
+- `server/app/services/sync/` — plugin-based sync adapter system:
+  - `base.py` — abstract `PlaylistSyncAdapter` interface
+  - `tidal_adapter.py` — Tidal sync with batched track adding
+  - `beatport_adapter.py` — Beatport sync (mirrors Tidal pattern)
+  - `orchestrator.py` — coordinates all connected adapters, deduplicates
+  - `registry.py` — service registry for multi-service fan-out
+- Request model stores per-service sync results in `sync_results_json` (JSON column)
+
+### OAuth Token Encryption
+- `EncryptedText` SQLAlchemy TypeDecorator (Fernet AES-128-CBC + HMAC) in `server/app/models/base.py`
+- Tidal + Beatport OAuth tokens encrypted transparently at rest
+- Dev: ephemeral key auto-generated if `TOKEN_ENCRYPTION_KEY` not set
+- Production: missing key = fatal startup error
 
 ### Bridge Plugin System
 - Built-in plugins: StageLinQ (Denon), Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast
@@ -242,6 +289,13 @@ NEW → REJECTED
 - `alphatheta-connect` uses `better-sqlite3-multiple-ciphers` natively — no `overrides` needed
 - Serato and Traktor plugins use only Node.js built-ins — no externalization needed
 
+### CI Pipeline
+- Main workflow: `.github/workflows/ci.yml` — 5 jobs: backend, frontend, bridge, bridge-app, docker-build
+- CodeQL SAST: `.github/workflows/codeql.yml` — Python & JS/TS security scanning
+- Backend CI includes: ruff lint, ruff format, bandit, pip-audit, pytest with coverage, Alembic migration check (`alembic upgrade head && alembic check`)
+- Frontend/bridge/bridge-app CI includes: ESLint (frontend), TypeScript type check, vitest with coverage, npm audit (frontend + bridge-app)
+- Docker smoke test: builds both backend and frontend images to catch Dockerfile issues
+
 ### Release System
 - GitHub Actions release workflow: `.github/workflows/release.yml`
 - Triggers on tag push (`v*`), not on PR merge
@@ -267,6 +321,11 @@ NEW → REJECTED
 - Banner upload uses `File(...)` not `UploadFile(...)` for proper FastAPI file validation
 - Banner colors stored as JSON string in DB — parse with `json.loads()` when reading, serialize with `json.dumps()` when writing
 - Deploy: `api_uploads` Docker volume persists uploaded files across container restarts
+- `TOKEN_ENCRYPTION_KEY` must be set in production — missing key causes fatal startup error
+- Beatport OAuth uses PKCE (S256 code challenge) — `beatport_oauth_code_verifier` stored temporarily on the user model
+- Request status transitions are enforced by a state machine — invalid transitions (e.g., NEW → PLAYED) return 400
+- Alembic migrations must stay in sync with models — CI runs `alembic check` to detect drift
+- Services that call only sync APIs (Spotify, Beatport search) should not be `async` — avoids unnecessary `await`
 
 ## Upstream Dependency Health Checks
 
