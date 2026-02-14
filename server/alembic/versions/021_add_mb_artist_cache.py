@@ -24,7 +24,7 @@ def upgrade() -> None:
         sa.Column("artist_name", sa.String(255), nullable=False),
         sa.Column("mbid", sa.String(36), nullable=True),
         sa.Column("verified", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("created_at", sa.DateTime(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
     )
     op.create_index(
         "ix_mb_artist_cache_artist_name", "mb_artist_cache", ["artist_name"], unique=True
