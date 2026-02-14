@@ -11,10 +11,10 @@ class ActivityLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+        DateTime, nullable=False, index=True, default=lambda: datetime.now(UTC)
     )
     level: Mapped[str] = mapped_column(String(10), nullable=False)  # info/warning/error
     source: Mapped[str] = mapped_column(String(30), nullable=False)
     message: Mapped[str] = mapped_column(String(500), nullable=False)
-    event_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    event_code: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
     user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
