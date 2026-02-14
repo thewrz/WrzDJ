@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { api, ApiError } from '@/lib/api';
+import { KeyBadge, BpmBadge, GenreBadge } from '@/components/MusicBadges';
 import type {
   RecommendedTrack,
   EventMusicProfile,
@@ -448,12 +449,14 @@ export function RecommendationsCard({
       {profile && (
         <div style={{
           fontSize: '0.8rem', color: '#9ca3af', marginBottom: '0.75rem',
-          display: 'flex', gap: '0.75rem', flexWrap: 'wrap',
+          display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center',
         }}>
-          {profile.avg_bpm && <span>~{Math.round(profile.avg_bpm)} BPM</span>}
-          {profile.dominant_keys.length > 0 && (
-            <span>{profile.dominant_keys.join(', ')}</span>
+          {profile.avg_bpm && (
+            <span style={{ fontSize: '0.75rem' }}>~{Math.round(profile.avg_bpm)} BPM</span>
           )}
+          {profile.dominant_keys.map((k) => (
+            <KeyBadge key={k} musicalKey={k} />
+          ))}
           {profile.dominant_genres.length > 0 && (
             <span>{profile.dominant_genres.join(', ')}</span>
           )}
@@ -520,14 +523,14 @@ export function RecommendationsCard({
                     )}
                   </div>
                   <div style={{
-                    fontSize: '0.75rem', color: '#9ca3af',
-                    display: 'flex', gap: '0.5rem', flexWrap: 'wrap',
+                    display: 'flex', gap: '0.375rem', flexWrap: 'wrap',
+                    alignItems: 'center',
                   }}>
-                    {track.bpm && <span>{track.bpm} BPM</span>}
-                    {track.key && <span>{track.key}</span>}
-                    {track.genre && <span>{track.genre}</span>}
-                    <span style={{ color: '#3b82f6' }}>
-                      Score: {track.score.toFixed(2)}
+                    <BpmBadge bpm={track.bpm} avgBpm={profile?.avg_bpm} />
+                    <KeyBadge musicalKey={track.key} />
+                    <GenreBadge genre={track.genre} />
+                    <span style={{ color: '#3b82f6', fontSize: '0.7rem' }}>
+                      {track.score.toFixed(2)}
                     </span>
                     {track.mb_verified && (
                       <span style={{

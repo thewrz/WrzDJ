@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { SongRequest } from '@/lib/api';
 import { StatusFilter } from './types';
 import { SyncStatusBadges } from './SyncStatusBadges';
+import { KeyBadge, BpmBadge, GenreBadge } from '@/components/MusicBadges';
 
 interface RequestQueueSectionProps {
   requests: SongRequest[];
@@ -126,12 +127,12 @@ export function RequestQueueSection({
                 <p>{request.artist}</p>
                 {(request.bpm || request.musical_key || request.genre) && (
                   <div style={{
-                    fontSize: '0.7rem', color: '#6b7280',
-                    display: 'flex', gap: '0.5rem', marginTop: '0.125rem',
+                    display: 'flex', gap: '0.375rem', marginTop: '0.25rem',
+                    flexWrap: 'wrap', alignItems: 'center',
                   }}>
-                    {request.bpm && <span>{Math.round(request.bpm)} BPM</span>}
-                    {request.musical_key && <span>{request.musical_key}</span>}
-                    {request.genre && <span>{request.genre}</span>}
+                    <BpmBadge bpm={request.bpm} />
+                    <KeyBadge musicalKey={request.musical_key} />
+                    <GenreBadge genre={request.genre} />
                   </div>
                 )}
                 {request.note && <div className="note">{request.note}</div>}
