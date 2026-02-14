@@ -306,6 +306,59 @@ class TestPendingUserBlocking:
         assert response.status_code == 403
 
 
+class TestAdminLLMSettings:
+    def test_get_settings_includes_llm_fields(self, client: TestClient, admin_headers: dict):
+        response = client.get("/api/admin/settings", headers=admin_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert "llm_enabled" in data
+        assert "llm_model" in data
+        assert "llm_rate_limit_per_minute" in data
+
+    def test_update_llm_enabled(self, client: TestClient, admin_headers: dict):
+        response = client.patch(
+            "/api/admin/settings",
+            headers=admin_headers,
+            json={"llm_enabled": False},
+        )
+        assert response.status_code == 200
+        assert response.json()["llm_enabled"] is False
+
+    def test_update_llm_model(self, client: TestClient, admin_headers: dict):
+        response = client.patch(
+            "/api/admin/settings",
+            headers=admin_headers,
+            json={"llm_model": "claude-sonnet-4-5-20250929"},
+        )
+        assert response.status_code == 200
+        assert response.json()["llm_model"] == "claude-sonnet-4-5-20250929"
+
+    def test_update_llm_rate_limit(self, client: TestClient, admin_headers: dict):
+        response = client.patch(
+            "/api/admin/settings",
+            headers=admin_headers,
+            json={"llm_rate_limit_per_minute": 10},
+        )
+        assert response.status_code == 200
+        assert response.json()["llm_rate_limit_per_minute"] == 10
+
+    def test_llm_rate_limit_validation_min(self, client: TestClient, admin_headers: dict):
+        response = client.patch(
+            "/api/admin/settings",
+            headers=admin_headers,
+            json={"llm_rate_limit_per_minute": 0},
+        )
+        assert response.status_code == 422
+
+    def test_llm_rate_limit_validation_max(self, client: TestClient, admin_headers: dict):
+        response = client.patch(
+            "/api/admin/settings",
+            headers=admin_headers,
+            json={"llm_rate_limit_per_minute": 31},
+        )
+        assert response.status_code == 422
+
+
 class TestAuthMeRole:
     def test_me_returns_role_for_admin(self, client: TestClient, admin_headers: dict):
         response = client.get("/api/auth/me", headers=admin_headers)

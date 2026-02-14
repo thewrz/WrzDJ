@@ -91,9 +91,30 @@ def sync_request_to_services(db: Session, request: Request) -> MultiSyncResult:
                 )
             )
 
-    # Persist results
+    # Persist results and log activity
     for result in multi_result.results:
         _persist_sync_result(request, result)
+        if result.status in (SyncStatus.NOT_FOUND, SyncStatus.ERROR):
+            try:
+                from app.services.activity_log import log_activity
+
+                level = "warning" if result.status == SyncStatus.NOT_FOUND else "error"
+                msg = (
+                    f"Sync {result.status.value}: "
+                    f"{request.artist} - {request.song_title} on {result.service}"
+                )
+                if result.error:
+                    msg += f" ({result.error})"
+                log_activity(
+                    db,
+                    level,
+                    result.service,
+                    msg[:500],
+                    event_code=event.code,
+                    user_id=user.id,
+                )
+            except Exception:
+                pass  # nosec B110
 
     db.commit()
     return multi_result

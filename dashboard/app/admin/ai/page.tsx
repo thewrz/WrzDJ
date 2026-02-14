@@ -1,0 +1,177 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+import type { AISettings, AIModelInfo } from '@/lib/api-types';
+
+export default function AdminAISettingsPage() {
+  const [settings, setSettings] = useState<AISettings | null>(null);
+  const [models, setModels] = useState<AIModelInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    Promise.all([api.getAISettings(), api.getAIModels()])
+      .then(([settingsData, modelsData]) => {
+        setSettings(settingsData);
+        setModels(modelsData.models);
+      })
+      .catch(() => setError('Failed to load AI settings'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    if (!settings) return;
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      const updated = await api.updateAISettings({
+        llm_enabled: settings.llm_enabled,
+        llm_model: settings.llm_model,
+        llm_rate_limit_per_minute: settings.llm_rate_limit_per_minute,
+      });
+      setSettings(updated);
+      setSuccess('Settings saved');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="container">
+        <div className="loading">Loading AI settings...</div>
+      </div>
+    );
+  }
+
+  if (!settings) {
+    return (
+      <div className="container">
+        <div className="card" style={{ color: '#ef4444' }}>{error || 'Failed to load'}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container">
+      <h1 style={{ marginBottom: '2rem' }}>AI / LLM Settings</h1>
+
+      {error && (
+        <div style={{ color: '#ef4444', marginBottom: '1rem' }}>{error}</div>
+      )}
+      {success && (
+        <div style={{ color: '#22c55e', marginBottom: '1rem' }}>{success}</div>
+      )}
+
+      <div className="card">
+        {/* API Key Status */}
+        <div className="form-group">
+          <label style={{ fontWeight: 500 }}>API Key Status</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
+            <span
+              style={{
+                display: 'inline-block',
+                padding: '0.25rem 0.75rem',
+                borderRadius: '9999px',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                background: settings.api_key_configured ? '#065f46' : '#7f1d1d',
+                color: settings.api_key_configured ? '#6ee7b7' : '#fca5a5',
+              }}
+            >
+              {settings.api_key_configured ? 'Configured' : 'Not Configured'}
+            </span>
+            <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+              {settings.api_key_masked}
+            </span>
+          </div>
+          {!settings.api_key_configured && (
+            <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+              Set ANTHROPIC_API_KEY in your environment to enable AI features.
+            </p>
+          )}
+        </div>
+
+        {/* LLM Enable/Disable */}
+        <div className="form-group" style={{ marginTop: '1.5rem' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={settings.llm_enabled}
+              onChange={(e) => setSettings({ ...settings, llm_enabled: e.target.checked })}
+              style={{ width: '1.25rem', height: '1.25rem' }}
+            />
+            <div>
+              <div style={{ fontWeight: 500 }}>Enable AI Recommendations</div>
+              <div style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+                When enabled, DJs can use AI Assist to get intelligent song suggestions.
+              </div>
+            </div>
+          </label>
+        </div>
+
+        {/* Model Selection */}
+        <div className="form-group" style={{ marginTop: '1.5rem' }}>
+          <label htmlFor="ai-model">Model</label>
+          <div style={{ color: '#9ca3af', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+            Select which Claude model to use for recommendations.
+          </div>
+          <select
+            id="ai-model"
+            className="input"
+            style={{ maxWidth: '400px' }}
+            value={settings.llm_model}
+            onChange={(e) => setSettings({ ...settings, llm_model: e.target.value })}
+          >
+            {models.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+            {/* Include current model if not in list */}
+            {!models.some((m) => m.id === settings.llm_model) && (
+              <option value={settings.llm_model}>{settings.llm_model}</option>
+            )}
+          </select>
+        </div>
+
+        {/* Rate Limit */}
+        <div className="form-group" style={{ marginTop: '1.5rem' }}>
+          <label htmlFor="ai-rate-limit">Rate Limit (requests per minute per DJ)</label>
+          <div style={{ color: '#9ca3af', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+            Controls how many AI recommendation requests each DJ can make per minute. Range: 1-30.
+          </div>
+          <input
+            id="ai-rate-limit"
+            type="number"
+            className="input"
+            style={{ maxWidth: '200px' }}
+            min={1}
+            max={30}
+            value={settings.llm_rate_limit_per_minute}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                llm_rate_limit_per_minute: parseInt(e.target.value) || 1,
+              })
+            }
+          />
+        </div>
+
+        <button
+          className="btn btn-primary"
+          style={{ marginTop: '1.5rem' }}
+          onClick={handleSave}
+          disabled={saving}
+        >
+          {saving ? 'Saving...' : 'Save Settings'}
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -111,6 +111,9 @@ SYSTEM_SETTINGS_KEYS = {
     "tidal_enabled",
     "beatport_enabled",
     "bridge_enabled",
+    "llm_enabled",
+    "llm_model",
+    "llm_rate_limit_per_minute",
 }
 
 PUBLIC_SETTINGS_KEYS = {"registration_enabled", "turnstile_site_key"}

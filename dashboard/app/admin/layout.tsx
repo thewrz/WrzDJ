@@ -31,6 +31,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/users', label: 'Users' },
     { href: '/admin/events', label: 'Events' },
     { href: '/admin/integrations', label: 'Integrations' },
+    { href: '/admin/ai', label: 'AI / LLM' },
     { href: '/admin/settings', label: 'Settings' },
   ];
 
@@ -52,7 +53,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           ))}
         </nav>
         <div className="admin-sidebar-footer">
-          <Link href="/events" className="admin-sidebar-link">
+          <Link href="/dashboard" className="admin-sidebar-link">
             DJ View
           </Link>
           <button

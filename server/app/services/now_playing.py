@@ -364,6 +364,32 @@ def update_bridge_status(
         )
         db.add(now_playing)
 
+    # Log bridge connection/disconnection
+    try:
+        from app.services.activity_log import log_activity
+
+        if connected:
+            device_info = f" ({device_name})" if device_name else ""
+            log_activity(
+                db,
+                "info",
+                "bridge",
+                f"Bridge connected{device_info}",
+                event_code=event_code,
+                user_id=event.created_by_user_id,
+            )
+        else:
+            log_activity(
+                db,
+                "warning",
+                "bridge",
+                "Bridge disconnected",
+                event_code=event_code,
+                user_id=event.created_by_user_id,
+            )
+    except Exception:
+        pass  # nosec B110
+
     db.commit()
     return True
 

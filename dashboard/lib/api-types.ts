@@ -265,6 +265,46 @@ export interface SystemSettings {
   tidal_enabled: boolean;
   beatport_enabled: boolean;
   bridge_enabled: boolean;
+  llm_enabled: boolean;
+  llm_model: string;
+  llm_rate_limit_per_minute: number;
+}
+
+/** AI model info from admin endpoint */
+export interface AIModelInfo {
+  id: string;
+  name: string;
+}
+
+/** Response from GET /api/admin/ai/models */
+export interface AIModelsResponse {
+  models: AIModelInfo[];
+}
+
+/** AI settings from admin endpoint */
+export interface AISettings {
+  llm_enabled: boolean;
+  llm_model: string;
+  llm_rate_limit_per_minute: number;
+  api_key_configured: boolean;
+  api_key_masked: string;
+}
+
+/** Update payload for PUT /api/admin/ai/settings */
+export interface AISettingsUpdate {
+  llm_enabled?: boolean;
+  llm_model?: string;
+  llm_rate_limit_per_minute?: number;
+}
+
+/** Activity log entry */
+export interface ActivityLogEntry {
+  id: number;
+  created_at: string;
+  level: 'info' | 'warning' | 'error';
+  source: string;
+  message: string;
+  event_code: string | null;
 }
 
 /** Capability status for integration services */
