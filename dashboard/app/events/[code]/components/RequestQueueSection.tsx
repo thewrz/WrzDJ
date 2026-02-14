@@ -17,6 +17,10 @@ interface RequestQueueSectionProps {
   onSyncToTidal: (requestId: number) => void;
   onOpenTidalPicker: (requestId: number) => void;
   onScrollToSyncReport?: (requestId: number) => void;
+  onDeleteRequest?: (requestId: number) => void;
+  onRefreshMetadata?: (requestId: number) => void;
+  deletingRequest?: number | null;
+  refreshingRequest?: number | null;
 }
 
 export function RequestQueueSection({
@@ -31,8 +35,13 @@ export function RequestQueueSection({
   onSyncToTidal,
   onOpenTidalPicker,
   onScrollToSyncReport,
+  onDeleteRequest,
+  onRefreshMetadata,
+  deletingRequest,
+  refreshingRequest,
 }: RequestQueueSectionProps) {
   const [filter, setFilter] = useState<StatusFilter>('all');
+  const [advancedMode, setAdvancedMode] = useState(false);
 
   const statusCounts = useMemo(() => {
     const counts = { all: requests.length, new: 0, accepted: 0, playing: 0, played: 0, rejected: 0 };
@@ -62,15 +71,27 @@ export function RequestQueueSection({
             </button>
           ))}
         </div>
-        {!isExpiredOrArchived && statusCounts.new > 0 && (
-          <button
-            className="btn btn-success btn-sm"
-            onClick={onAcceptAll}
-            disabled={acceptingAll}
-            style={{ marginLeft: 'auto' }}
-          >
-            {acceptingAll ? 'Accepting...' : `Accept All (${statusCounts.new})`}
-          </button>
+        {!isExpiredOrArchived && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginLeft: 'auto' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: '#9ca3af', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={advancedMode}
+                onChange={(e) => setAdvancedMode(e.target.checked)}
+                style={{ accentColor: '#3b82f6' }}
+              />
+              Advanced
+            </label>
+            {statusCounts.new > 0 && (
+              <button
+                className="btn btn-success btn-sm"
+                onClick={onAcceptAll}
+                disabled={acceptingAll}
+              >
+                {acceptingAll ? 'Accepting...' : `Accept All (${statusCounts.new})`}
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -190,6 +211,31 @@ export function RequestQueueSection({
                       >
                         Played
                       </button>
+                    )}
+                    {advancedMode && (
+                      <>
+                        <button
+                          className="btn btn-sm"
+                          style={{ background: '#374151', fontSize: '0.7rem' }}
+                          onClick={() => onRefreshMetadata?.(request.id)}
+                          disabled={refreshingRequest === request.id}
+                          title="Re-fetch BPM, key, and genre from external services"
+                        >
+                          {refreshingRequest === request.id ? '...' : 'Refresh'}
+                        </button>
+                        <button
+                          className="btn btn-sm"
+                          style={{ background: '#991b1b', fontSize: '0.7rem' }}
+                          onClick={() => {
+                            if (window.confirm(`Delete "${request.song_title}" by ${request.artist}?`)) {
+                              onDeleteRequest?.(request.id);
+                            }
+                          }}
+                          disabled={deletingRequest === request.id}
+                        >
+                          {deletingRequest === request.id ? '...' : 'Delete'}
+                        </button>
+                      </>
                     )}
                   </div>
                 )}

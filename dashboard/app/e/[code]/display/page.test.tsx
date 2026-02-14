@@ -29,6 +29,7 @@ const mockKioskDisplay = {
   banner_url: null,
   banner_kiosk_url: null,
   banner_colors: null,
+  kiosk_display_only: false,
 };
 
 const mockNowPlaying = {

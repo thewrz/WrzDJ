@@ -13,6 +13,9 @@ interface KioskControlsCardProps {
   savingAutoHide: boolean;
   onAutoHideInputChange: (value: string) => void;
   onSaveAutoHide: () => void;
+  kioskDisplayOnly: boolean;
+  togglingDisplayOnly: boolean;
+  onToggleDisplayOnly: () => void;
 }
 
 export function KioskControlsCard({
@@ -28,6 +31,9 @@ export function KioskControlsCard({
   savingAutoHide,
   onAutoHideInputChange,
   onSaveAutoHide,
+  kioskDisplayOnly,
+  togglingDisplayOnly,
+  onToggleDisplayOnly,
 }: KioskControlsCardProps) {
   return (
     <div className="card" style={{ marginBottom: '1rem', padding: '1rem' }}>
@@ -67,6 +73,15 @@ export function KioskControlsCard({
           disabled={togglingNowPlaying}
         >
           {togglingNowPlaying ? '...' : nowPlayingHidden ? 'Hidden' : 'Visible'}
+        </button>
+        <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>Display Only:</span>
+        <button
+          className={`btn btn-sm ${kioskDisplayOnly ? 'btn-primary' : ''}`}
+          style={{ minWidth: '100px', background: kioskDisplayOnly ? undefined : '#374151' }}
+          onClick={onToggleDisplayOnly}
+          disabled={togglingDisplayOnly}
+        >
+          {togglingDisplayOnly ? '...' : kioskDisplayOnly ? 'On' : 'Off'}
         </button>
       </div>
 

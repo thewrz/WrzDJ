@@ -357,6 +357,9 @@ def update_display_settings(
     if settings.requests_open is not None:
         event.requests_open = settings.requests_open
 
+    if settings.kiosk_display_only is not None:
+        event.kiosk_display_only = settings.kiosk_display_only
+
     db.commit()
 
     hidden = get_manual_hide_setting(db, event.id)
@@ -365,6 +368,7 @@ def update_display_settings(
         now_playing_hidden=hidden,
         now_playing_auto_hide_minutes=event.now_playing_auto_hide_minutes,
         requests_open=event.requests_open,
+        kiosk_display_only=event.kiosk_display_only,
     )
 
 
@@ -381,6 +385,7 @@ def get_display_settings(
         now_playing_hidden=hidden,
         now_playing_auto_hide_minutes=event.now_playing_auto_hide_minutes,
         requests_open=event.requests_open,
+        kiosk_display_only=event.kiosk_display_only,
     )
 
 

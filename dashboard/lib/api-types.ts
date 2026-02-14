@@ -88,6 +88,7 @@ export interface KioskDisplay {
   now_playing: PublicRequestInfo | null;
   now_playing_hidden: boolean;
   requests_open: boolean;
+  kiosk_display_only: boolean;
   updated_at: string;
   banner_url: string | null;
   banner_kiosk_url: string | null;
@@ -99,6 +100,7 @@ export interface DisplaySettingsResponse {
   now_playing_hidden: boolean;
   now_playing_auto_hide_minutes: number;
   requests_open: boolean;
+  kiosk_display_only: boolean;
 }
 
 export interface SearchResult {

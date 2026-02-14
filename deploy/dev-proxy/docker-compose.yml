@@ -1,0 +1,23 @@
+# Dev reverse proxy — simulates production nginx CORS/CSP/security headers
+#
+# Usage:
+#   ./deploy/dev-proxy/setup.sh     # generate certs, update /etc/hosts, start
+#   ./deploy/dev-proxy/stop.sh      # tear down
+#
+# Then access:
+#   https://app.local  (frontend)
+#   https://api.local  (backend)
+
+services:
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: wrzdj-dev-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d:ro
+      - ./certs:/etc/nginx/certs:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

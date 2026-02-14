@@ -304,6 +304,16 @@ class ApiClient {
     });
   }
 
+  async deleteRequest(requestId: number): Promise<void> {
+    return this.fetch(`/api/requests/${requestId}`, { method: 'DELETE' });
+  }
+
+  async refreshRequestMetadata(requestId: number): Promise<SongRequest> {
+    return this.fetch(`/api/requests/${requestId}/refresh-metadata`, {
+      method: 'POST',
+    });
+  }
+
   async submitRequest(
     code: string,
     artist: string,
@@ -448,6 +458,16 @@ class ApiClient {
     return this.fetch(`/api/events/${code}/display-settings`, {
       method: 'PATCH',
       body: JSON.stringify({ requests_open: open }),
+    });
+  }
+
+  /**
+   * Toggle kiosk display-only mode.
+   */
+  async setKioskDisplayOnly(code: string, displayOnly: boolean): Promise<DisplaySettingsResponse> {
+    return this.fetch(`/api/events/${code}/display-settings`, {
+      method: 'PATCH',
+      body: JSON.stringify({ kiosk_display_only: displayOnly }),
     });
   }
 

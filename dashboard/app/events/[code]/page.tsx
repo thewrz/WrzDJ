@@ -59,6 +59,10 @@ export default function EventQueuePage() {
   const [requestsOpen, setRequestsOpen] = useState(true);
   const [togglingRequests, setTogglingRequests] = useState(false);
 
+  // Kiosk display-only mode
+  const [kioskDisplayOnly, setKioskDisplayOnly] = useState(false);
+  const [togglingDisplayOnly, setTogglingDisplayOnly] = useState(false);
+
   // Bridge / now-playing state
   const [bridgeConnected, setBridgeConnected] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<NowPlayingInfo | null>(null);
@@ -127,7 +131,7 @@ export default function EventQueuePage() {
         api.getEvent(code),
         api.getRequests(code),
         api.getPlayHistory(code).catch((): undefined => undefined),
-        api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false, now_playing_auto_hide_minutes: 10, requests_open: true })),
+        api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false, now_playing_auto_hide_minutes: 10, requests_open: true, kiosk_display_only: false })),
         api.getTidalStatus().catch(() => ({ linked: false, user_id: null, expires_at: null, integration_enabled: true })),
         api.getBeatportStatus().catch(() => ({ linked: false, expires_at: null, configured: false, subscription: null, integration_enabled: true })),
         api.getNowPlaying(code).catch((): undefined => undefined),
@@ -140,6 +144,7 @@ export default function EventQueuePage() {
       }
       setNowPlayingHidden(displaySettings.now_playing_hidden);
       setRequestsOpen(displaySettings.requests_open ?? true);
+      setKioskDisplayOnly(displaySettings.kiosk_display_only ?? false);
       const serverAutoHide = displaySettings.now_playing_auto_hide_minutes ?? 10;
       setAutoHideMinutes(serverAutoHide);
       if (!savingAutoHide) {
@@ -351,6 +356,19 @@ export default function EventQueuePage() {
       // Silently fail — next poll will restore the server state
     } finally {
       setTogglingRequests(false);
+    }
+  };
+
+  const handleToggleDisplayOnly = async () => {
+    setTogglingDisplayOnly(true);
+    try {
+      const newValue = !kioskDisplayOnly;
+      await api.setKioskDisplayOnly(code, newValue);
+      setKioskDisplayOnly(newValue);
+    } catch {
+      // Silently fail — next poll will restore the server state
+    } finally {
+      setTogglingDisplayOnly(false);
     }
   };
 
@@ -602,6 +620,34 @@ export default function EventQueuePage() {
     }
   };
 
+  // Advanced mode state
+  const [deletingRequest, setDeletingRequest] = useState<number | null>(null);
+  const [refreshingRequest, setRefreshingRequest] = useState<number | null>(null);
+
+  const handleDeleteRequest = async (requestId: number) => {
+    setDeletingRequest(requestId);
+    try {
+      await api.deleteRequest(requestId);
+      setRequests((prev) => prev.filter((r) => r.id !== requestId));
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Failed to delete request');
+    } finally {
+      setDeletingRequest(null);
+    }
+  };
+
+  const handleRefreshMetadata = async (requestId: number) => {
+    setRefreshingRequest(requestId);
+    try {
+      const updated = await api.refreshRequestMetadata(requestId);
+      setRequests((prev) => prev.map((r) => (r.id === requestId ? updated : r)));
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Failed to refresh metadata');
+    } finally {
+      setRefreshingRequest(null);
+    }
+  };
+
   const handleAcceptRecommendedTrack = async (track: RecommendedTrack) => {
     await api.submitRequest(
       code,
@@ -848,6 +894,10 @@ export default function EventQueuePage() {
               tidalLinked={!!tidalStatus?.linked}
               beatportLinked={!!beatportStatus?.linked}
               onAcceptTrack={handleAcceptRecommendedTrack}
+              onDeleteRequest={handleDeleteRequest}
+              onRefreshMetadata={handleRefreshMetadata}
+              deletingRequest={deletingRequest}
+              refreshingRequest={refreshingRequest}
             />
           )}
 
@@ -867,6 +917,9 @@ export default function EventQueuePage() {
               savingAutoHide={savingAutoHide}
               onAutoHideInputChange={setAutoHideInput}
               onSaveAutoHide={handleSaveAutoHide}
+              kioskDisplayOnly={kioskDisplayOnly}
+              togglingDisplayOnly={togglingDisplayOnly}
+              onToggleDisplayOnly={handleToggleDisplayOnly}
               tidalStatus={tidalStatus}
               tidalSyncEnabled={tidalSyncEnabled}
               togglingTidalSync={togglingTidalSync}

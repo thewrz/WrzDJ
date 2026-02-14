@@ -6,6 +6,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { api, ApiError, KioskDisplay, SearchResult, NowPlayingInfo, PlayHistoryItem } from '@/lib/api';
 
 const INACTIVITY_TIMEOUT = 60000; // 60 seconds
+const AUTO_SCROLL_INTERVAL = 5000; // 5 seconds between auto-scrolls
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 function safeColor(c: string | undefined, fallback: string): string {
   return c && HEX_COLOR_RE.test(c) ? c : fallback;
@@ -27,6 +28,13 @@ export default function KioskDisplayPage() {
   const [lastKnownNowPlaying, setLastKnownNowPlaying] = useState<NowPlayingInfo | null>(null);
   const [nowPlayingFading, setNowPlayingFading] = useState(false);
   const staleTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Track previous accepted queue IDs for animation
+  const prevAcceptedIdsRef = useRef<Set<number>>(new Set());
+  const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
+
+  // Auto-scroll ref for display-only mode
+  const queueListRef = useRef<HTMLDivElement>(null);
 
   // Request modal state
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -197,6 +205,49 @@ export default function KioskDisplayPage() {
       document.removeEventListener('dragstart', preventDefaults);
     };
   }, []);
+
+  // Detect newly accepted items for animation
+  useEffect(() => {
+    if (!display) return;
+    const currentIds = new Set(display.accepted_queue.map((item) => item.id));
+    const prev = prevAcceptedIdsRef.current;
+
+    // Find IDs that are in current but not in previous
+    const fresh = new Set<number>();
+    for (const id of currentIds) {
+      if (!prev.has(id)) fresh.add(id);
+    }
+
+    if (fresh.size > 0) {
+      setNewItemIds(fresh);
+      // Remove animation class after animation completes
+      const timer = setTimeout(() => setNewItemIds(new Set()), 800);
+      prevAcceptedIdsRef.current = currentIds;
+      return () => clearTimeout(timer);
+    }
+
+    prevAcceptedIdsRef.current = currentIds;
+  }, [display?.accepted_queue]);
+
+  // Auto-scroll queue list in display-only mode
+  useEffect(() => {
+    if (!display?.kiosk_display_only) return;
+
+    const interval = setInterval(() => {
+      const el = queueListRef.current;
+      if (!el) return;
+
+      // If near the bottom, scroll back to top
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 10) {
+        el.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        // Scroll by one item height (~73px for a queue-item + gap)
+        el.scrollBy({ top: 73, behavior: 'smooth' });
+      }
+    }, AUTO_SCROLL_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [display?.kiosk_display_only]);
 
   const closeModal = () => {
     setShowRequestModal(false);
@@ -526,6 +577,24 @@ export default function KioskDisplayPage() {
           border-radius: 1rem;
           white-space: nowrap;
           flex-shrink: 0;
+        }
+        .queue-item-new {
+          animation: slide-in-glow 0.8s ease-out;
+        }
+        @keyframes slide-in-glow {
+          0% {
+            transform: translateX(-30px);
+            opacity: 0;
+            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+          }
+          30% {
+            opacity: 1;
+            box-shadow: 0 0 20px 4px rgba(34, 197, 94, 0.4);
+          }
+          100% {
+            transform: translateX(0);
+            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+          }
         }
         .queue-empty {
           color: #6b7280;
@@ -900,9 +969,9 @@ export default function KioskDisplayPage() {
               <div className="queue-section">
                 <div className="queue-label">Accepted Requests</div>
                 {display.accepted_queue.length > 0 ? (
-                  <div className="queue-list">
+                  <div className="queue-list" ref={queueListRef}>
                     {display.accepted_queue.map((item) => (
-                      <div key={item.id} className="queue-item">
+                      <div key={item.id} className={`queue-item${newItemIds.has(item.id) ? ' queue-item-new' : ''}`}>
                         {item.artwork_url ? (
                           <img src={item.artwork_url} alt={item.title} className="queue-item-art" />
                         ) : (
@@ -968,27 +1037,29 @@ export default function KioskDisplayPage() {
           );
         })()}
 
-        {display.requests_open ? (
-          <button className="request-button" onClick={() => setShowRequestModal(true)}>
-            🎵 Request a Song
-          </button>
-        ) : (
-          <div style={{
-            marginTop: '1.5rem',
-            alignSelf: 'center',
-            flexShrink: 0,
-            position: 'relative',
-            zIndex: 1,
-            background: 'rgba(255,255,255,0.08)',
-            color: '#9ca3af',
-            padding: '1rem 2rem',
-            fontSize: '1.1rem',
-            fontWeight: 500,
-            borderRadius: '1rem',
-            textAlign: 'center',
-          }}>
-            Requests are closed
-          </div>
+        {!display.kiosk_display_only && (
+          display.requests_open ? (
+            <button className="request-button" onClick={() => setShowRequestModal(true)}>
+              🎵 Request a Song
+            </button>
+          ) : (
+            <div style={{
+              marginTop: '1.5rem',
+              alignSelf: 'center',
+              flexShrink: 0,
+              position: 'relative',
+              zIndex: 1,
+              background: 'rgba(255,255,255,0.08)',
+              color: '#9ca3af',
+              padding: '1rem 2rem',
+              fontSize: '1.1rem',
+              fontWeight: 500,
+              borderRadius: '1rem',
+              textAlign: 'center',
+            }}>
+              Requests are closed
+            </div>
+          )
         )}
       </div>
 

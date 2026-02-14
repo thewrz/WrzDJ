@@ -902,6 +902,79 @@ class TestDisplaySettings:
         # Hidden should still be True — not reset by the auto-hide PATCH
         assert data["now_playing_hidden"] is True
 
+    def test_kiosk_display_only_defaults_false(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test that kiosk_display_only defaults to false."""
+        response = client.get(
+            f"/api/events/{test_event.code}/display-settings",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["kiosk_display_only"] is False
+
+    def test_update_kiosk_display_only(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test setting kiosk_display_only to true and verifying persistence."""
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"kiosk_display_only": True},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["kiosk_display_only"] is True
+
+        # Verify it persists on GET
+        response = client.get(
+            f"/api/events/{test_event.code}/display-settings",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["kiosk_display_only"] is True
+
+    def test_kiosk_display_only_toggle_off(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test toggling kiosk_display_only back to false."""
+        # Enable
+        client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"kiosk_display_only": True},
+            headers=auth_headers,
+        )
+        # Disable
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"kiosk_display_only": False},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["kiosk_display_only"] is False
+
+    def test_kiosk_display_only_does_not_affect_other_settings(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test that toggling kiosk_display_only doesn't change other display settings."""
+        # Set some other settings first
+        client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"now_playing_hidden": True, "now_playing_auto_hide_minutes": 20},
+            headers=auth_headers,
+        )
+
+        # Toggle kiosk_display_only
+        response = client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"kiosk_display_only": True},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["kiosk_display_only"] is True
+        assert data["now_playing_hidden"] is True
+        assert data["now_playing_auto_hide_minutes"] == 20
+
     def test_update_display_settings_not_owner(
         self, client: TestClient, db: Session, test_user: User, auth_headers: dict
     ):
@@ -1081,6 +1154,34 @@ class TestKioskDisplayNowPlayingHidden:
         assert response.status_code == 200
         data = response.json()
         assert data["now_playing_hidden"] is False
+
+
+class TestKioskDisplayOnly:
+    """Tests for kiosk_display_only in the public kiosk display endpoint."""
+
+    def test_kiosk_display_includes_display_only_field(self, client: TestClient, test_event: Event):
+        """Test that kiosk display response includes kiosk_display_only."""
+        response = client.get(f"/api/public/events/{test_event.code}/display")
+        assert response.status_code == 200
+        data = response.json()
+        assert "kiosk_display_only" in data
+        assert data["kiosk_display_only"] is False
+
+    def test_kiosk_display_only_reflects_setting(
+        self, client: TestClient, auth_headers: dict, test_event: Event
+    ):
+        """Test that kiosk display endpoint reflects the display-only setting."""
+        # Enable display-only mode
+        client.patch(
+            f"/api/events/{test_event.code}/display-settings",
+            json={"kiosk_display_only": True},
+            headers=auth_headers,
+        )
+
+        # Check public kiosk endpoint
+        response = client.get(f"/api/public/events/{test_event.code}/display")
+        assert response.status_code == 200
+        assert response.json()["kiosk_display_only"] is True
 
 
 class TestPlayHistoryCsvExport:

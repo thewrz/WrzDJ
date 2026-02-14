@@ -17,9 +17,10 @@ interface ModeResultCache {
   profile: EventMusicProfile | null;
   llmQueries: LLMQueryInfo[];
   llmModel: string;
+  scrollTop: number;
 }
 
-const emptyCache: ModeResultCache = { suggestions: [], profile: null, llmQueries: [], llmModel: '' };
+const emptyCache: ModeResultCache = { suggestions: [], profile: null, llmQueries: [], llmModel: '', scrollTop: 0 };
 
 interface RecommendationsCardProps {
   code: string;
@@ -63,6 +64,9 @@ export function RecommendationsCard({
   const [showReasoning, setShowReasoning] = useState(false);
   const [llmModel, setLlmModel] = useState('');
 
+  // Ref for the suggestions list container (scroll position save/restore)
+  const suggestionsContainerRef = useRef<HTMLDivElement>(null);
+
   // Per-mode results cache — persists suggestions across mode switches
   const resultsCacheRef = useRef<Record<Mode, ModeResultCache>>({
     requests: { ...emptyCache },
@@ -87,12 +91,13 @@ export function RecommendationsCard({
   const handleModeChange = (newMode: Mode) => {
     if (newMode === mode) return;
 
-    // Save current mode's results to cache
+    // Save current mode's results and scroll position to cache
     resultsCacheRef.current[mode] = {
       suggestions,
       profile,
       llmQueries,
       llmModel,
+      scrollTop: suggestionsContainerRef.current?.scrollTop ?? 0,
     };
 
     // Restore cached results for the new mode
@@ -101,6 +106,14 @@ export function RecommendationsCard({
     setProfile(cached.profile);
     setLlmQueries(cached.llmQueries);
     setLlmModel(cached.llmModel);
+
+    // Restore scroll position after DOM update
+    const savedScrollTop = cached.scrollTop;
+    requestAnimationFrame(() => {
+      if (suggestionsContainerRef.current) {
+        suggestionsContainerRef.current.scrollTop = savedScrollTop;
+      }
+    });
 
     setMode(newMode);
     setError(null);
@@ -438,9 +451,18 @@ export function RecommendationsCard({
         </div>
       )}
 
-      {suggestions.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          {suggestions.map((track) => {
+      <div
+        ref={suggestionsContainerRef}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.5rem',
+          minHeight: suggestions.length > 0 ? '200px' : undefined,
+          maxHeight: '600px',
+          overflowY: suggestions.length > 0 ? 'auto' : undefined,
+        }}
+      >
+        {suggestions.map((track) => {
             const trackKey = `${track.artist}-${track.title}`;
             const isAccepting = acceptingId === trackKey;
             return (
@@ -534,8 +556,7 @@ export function RecommendationsCard({
               </div>
             );
           })}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
