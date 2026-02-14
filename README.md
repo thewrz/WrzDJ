@@ -28,6 +28,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - **Live track detection** -- the bridge connects to DJ equipment via plugins (Denon, Pioneer, Serato, Traktor), so the kiosk and dashboard update in real-time as the DJ plays.
 - **Automatic request matching** -- when the DJ plays a requested song, WrzDJ detects it via fuzzy matching and moves it through the workflow automatically.
 - **Multi-service playlist sync** -- accepted requests are automatically searched and added to your Tidal and Beatport playlists, with smart version filtering that respects remix/acoustic/live intent.
+- **Smart song recommendations** -- three modes (from requests, from a playlist, or AI-powered natural language prompts) suggest tracks that match BPM, key, and genre. MusicBrainz verification badges help DJs spot real artists vs. AI-generated filler.
 - **Desktop app for the bridge** -- no terminal needed. Sign in, pick your event, click Start.
 
 ---
@@ -56,6 +57,21 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Edit event expiry, delete events
 - Cloud Providers card -- connect Tidal and Beatport via OAuth, toggle sync per event, see subscription tier
 - QR code display for easy guest onboarding
+
+### Song Recommendations
+- **Three recommendation modes** to help DJs discover tracks that fit the vibe:
+  - **From Requests** -- builds a musical profile (BPM, key, genre) from accepted/played requests, then searches Tidal and Beatport for compatible tracks
+  - **From Playlist** -- select any Tidal or Beatport playlist as the profile source instead of requests
+  - **AI Assist** -- describe what you want in plain English (e.g., "90s hip hop vibes", "dark techno like Amelie Lens") and Claude Haiku interprets the prompt into structured search queries
+- Tracks scored on BPM compatibility, key harmony (Camelot wheel), and genre similarity
+- Half-time BPM matching (e.g., 65 BPM matches 130 BPM tracks) and genre family grouping
+- Artist diversity penalties keep results varied -- repeated and source artists are downranked
+- Junk filtering removes backing tracks, drumless versions, karaoke, DJ tools, and cover/tribute versions
+- **MusicBrainz artist verification** -- recommended artists are checked against MusicBrainz's community-curated database, with a green "Verified Artist" badge to distinguish real artists from AI-generated filler. Results cached server-wide for instant subsequent lookups.
+- Background metadata enrichment -- submitted requests are enriched with genre, BPM, and key from MusicBrainz and Beatport
+- Soundcharts discovery integration -- when configured, uses genre+BPM+key filtered search for higher-quality candidates
+- One-click accept to add a suggestion as a request, or Accept All for the full batch
+- Suggestions persist across mode switches so you don't lose results when exploring different approaches
 
 ### Admin Dashboard
 - System overview with user, event, and request counts
@@ -146,6 +162,12 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
    | scan QR                   | dashboard
    v                           v
 [Next.js Frontend] <------> [FastAPI Backend] <--- [PostgreSQL]
+                               |          |
+                     +---------+----------+---------+
+                     |         |          |         |
+                  [Spotify] [Tidal]  [Beatport]  [MusicBrainz]
+                  (search)  (sync +   (sync +    (genre +
+                            search)   search)    verification)
                                ^
                                | HTTP (API key auth)
                                |
@@ -332,6 +354,7 @@ TIDAL_CLIENT_SECRET=<from Tidal Developer Portal>
 BEATPORT_CLIENT_ID=<from Beatport API>
 BEATPORT_CLIENT_SECRET=<from Beatport API>
 BRIDGE_API_KEY=<openssl rand -hex 32>
+ANTHROPIC_API_KEY=<from Anthropic Console, optional -- enables AI Assist recommendations>
 CORS_ORIGINS=https://app.yourdomain.com
 PUBLIC_URL=https://app.yourdomain.com
 ```
@@ -352,6 +375,10 @@ PUBLIC_URL=https://app.yourdomain.com
 | `POST /api/requests` | Submit song request |
 | `PATCH /api/requests/{id}` | Update request status |
 | `POST /api/votes/{request_id}` | Upvote a request |
+| `POST /api/events/{code}/recommendations` | Generate algorithmic song recommendations |
+| `POST /api/events/{code}/recommendations/from-template` | Generate recommendations from a playlist |
+| `POST /api/events/{code}/recommendations/llm` | Generate LLM-powered recommendations from a prompt |
+| `GET /api/events/{code}/playlists` | List DJ's playlists from connected services |
 | `GET /api/bridge/apikey` | Get bridge API key (JWT auth) |
 
 ### Bridge Endpoints (API Key Auth)
@@ -390,8 +417,10 @@ WrzDJ is built on these excellent open source projects:
 - [stagelinq](https://github.com/chrisle/stagelinq) -- Node.js library for the Denon StageLinQ protocol
 - [alphatheta-connect](https://github.com/chrisle/alphatheta-connect) -- TypeScript library for the Pioneer PRO DJ LINK protocol (maintained fork with encrypted Rekordbox DB support)
 - [Spotipy](https://github.com/spotipy-dev/spotipy) -- Python client for the Spotify Web API (song search)
-- [python-tidalapi](https://github.com/tamland/python-tidal) -- Python client for the Tidal API (playlist sync)
-- [Beatport API v4](https://api.beatport.com) -- Beatport catalog search and playlist sync
+- [python-tidalapi](https://github.com/tamland/python-tidal) -- Python client for the Tidal API (playlist sync + recommendation search)
+- [Beatport API v4](https://api.beatport.com) -- Beatport catalog search, playlist sync, and recommendation candidates
+- [MusicBrainz API](https://musicbrainz.org/doc/MusicBrainz_API) -- community-curated artist genre enrichment and artist verification
+- [Anthropic Claude API](https://docs.anthropic.com/) -- LLM-powered AI Assist mode for natural language recommendation prompts
 
 ### Desktop App
 - [Electron](https://github.com/electron/electron) -- cross-platform desktop framework
@@ -420,6 +449,8 @@ WrzDJ/
       models/          # SQLAlchemy models
       schemas/         # Pydantic schemas
       services/        # Business logic
+        recommendation/  # Scoring, enrichment, LLM, MusicBrainz verification
+        sync/            # Multi-service playlist sync orchestrator
     scripts/           # Startup scripts
     Dockerfile
   dashboard/           # Next.js frontend
