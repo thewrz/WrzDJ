@@ -488,6 +488,51 @@ def get_playlist_tracks(db: Session, user: User, playlist_id: str) -> list:
         return []
 
 
+def search_tidal_by_isrc(
+    db: Session,
+    user: User,
+    isrc: str,
+) -> TidalSearchResult | None:
+    """Look up a Tidal track by ISRC (exact match, no fuzzy needed).
+
+    ISRC (International Standard Recording Code) uniquely identifies a
+    recording across services. When we have a Spotify ISRC, this gives
+    us the exact same recording on Tidal — bypassing fuzzy matching.
+    """
+    session = get_tidal_session(db, user)
+    if not session:
+        return None
+
+    try:
+        tracks = session.get_tracks_by_isrc(isrc)
+        if tracks:
+            return _track_to_result(tracks[0])
+        return None
+    except Exception as e:
+        logger.error("Tidal ISRC lookup failed for %s: %s", isrc, type(e).__name__)
+        return None
+
+
+def get_tidal_track_by_id(
+    db: Session,
+    user: User,
+    track_id: str,
+) -> TidalSearchResult | None:
+    """Fetch a single Tidal track by its ID (direct lookup, no search)."""
+    session = get_tidal_session(db, user)
+    if not session:
+        return None
+
+    try:
+        track = session.track(int(track_id))
+        if track:
+            return _track_to_result(track)
+        return None
+    except Exception as e:
+        logger.error("Tidal track fetch failed for %s: %s", track_id, type(e).__name__)
+        return None
+
+
 def search_tidal_tracks(
     db: Session,
     user: User,

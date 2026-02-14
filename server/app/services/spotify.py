@@ -125,9 +125,13 @@ def _call_spotify_api(query: str) -> list[SearchResult]:
         popularity = track.get("popularity", 0)
         preview_url = track.get("preview_url")
 
-        # Get artist name
+        # Get artist name (join all artists, not just first)
         artists = track.get("artists", [])
-        artist = artists[0].get("name", "Unknown Artist") if artists else "Unknown Artist"
+        artist = (
+            ", ".join(a.get("name", "") for a in artists if a.get("name"))
+            if artists
+            else "Unknown Artist"
+        ) or "Unknown Artist"
 
         # Get album info
         album = track.get("album", {})
