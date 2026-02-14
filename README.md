@@ -44,6 +44,8 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - See what's playing now on the kiosk display
 
 ### DJ Dashboard
+- **Tabbed event detail** -- Song Management and Event Management tabs keep the interface focused; expired/archived events show a simplified view
+- **Dashboard landing page** -- events overview, cloud provider connection status, and collapsible activity log in one place
 - Accept, reject, and manage incoming song requests in real-time
 - Bulk accept all pending requests with one click
 - Mark songs as Playing/Played with full status workflow (new -> accepted -> playing -> played)
@@ -57,6 +59,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Edit event expiry, delete events
 - Cloud Providers card -- connect Tidal and Beatport via OAuth, toggle sync per event, see subscription tier
 - QR code display for easy guest onboarding
+- **Activity log** -- bridge connect/disconnect events and sync errors are logged and surfaced on the dashboard
 
 ### Song Recommendations
 - **Three recommendation modes** to help DJs discover tracks that fit the vibe:
@@ -79,6 +82,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Event management -- view and manage all events across all DJs
 - Integration health dashboard -- check auth status, catalog search, and playlist sync for each service
 - Per-service enable/disable toggles -- temporarily disable a broken integration; DJs see "Currently Unavailable"
+- **AI / LLM settings** -- enable/disable the LLM service, select Claude model, configure per-minute rate limits, view API key status
 - System settings -- toggle self-registration, adjust search rate limits
 
 ### Kiosk Display
