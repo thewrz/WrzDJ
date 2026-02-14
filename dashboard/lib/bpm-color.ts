@@ -9,6 +9,9 @@
  *
  * Also recognizes half-time (0.5x) and double-time (2.0x) relationships,
  * mirroring the backend scorer in server/app/services/recommendation/scorer.py
+ *
+ * Outlier BPMs (detected by bpm-stats.ts) are forced to "neutral" — they
+ * shouldn't show red just because they're far from a cluster they don't belong to.
  */
 
 export type BpmTier = 'match' | 'near' | 'far' | 'neutral';
@@ -42,9 +45,14 @@ function effectiveBpmDiff(bpm: number, avgBpm: number): number {
 
 /**
  * Get the display color for a BPM value relative to the event's average BPM.
+ * When `isOutlier` is true, the BPM is outside the cluster and gets neutral gray.
  */
-export function getBpmColor(bpm: number | null, avgBpm: number | null): BpmColorResult {
-  if (bpm == null || avgBpm == null) {
+export function getBpmColor(
+  bpm: number | null,
+  avgBpm: number | null,
+  isOutlier?: boolean,
+): BpmColorResult {
+  if (bpm == null || avgBpm == null || isOutlier) {
     return { ...TIER_COLORS.neutral, tier: 'neutral' };
   }
 

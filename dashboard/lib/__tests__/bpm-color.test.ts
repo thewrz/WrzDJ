@@ -93,6 +93,23 @@ describe('getBpmColor', () => {
     });
   });
 
+  describe('outlier override', () => {
+    it('returns neutral when isOutlier is true, even with valid avg', () => {
+      const result = getBpmColor(68, 128, true);
+      expect(result.tier).toBe('neutral');
+    });
+
+    it('returns normal tier when isOutlier is false', () => {
+      const result = getBpmColor(128, 128, false);
+      expect(result.tier).toBe('match');
+    });
+
+    it('returns normal tier when isOutlier is undefined', () => {
+      const result = getBpmColor(128, 128);
+      expect(result.tier).toBe('match');
+    });
+  });
+
   describe('half-time / double-time awareness', () => {
     it('recognizes half-time BPM as close match', () => {
       // 64 BPM is half of 128 — should be treated as compatible

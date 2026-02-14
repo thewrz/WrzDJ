@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { KeyBadge, BpmBadge, GenreBadge } from '@/components/MusicBadges';
+import { computeBpmContext } from '@/lib/bpm-stats';
 import type {
   RecommendedTrack,
   EventMusicProfile,
@@ -70,6 +71,14 @@ export function RecommendationsCard({
 
   // Lock container height during mode switches to prevent page-level scroll jumps
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
+
+  // BPM context from suggestion tracks — outlier-aware average for badge coloring
+  const suggestionBpmContext = useMemo(() => {
+    const bpms = suggestions
+      .map((s) => s.bpm)
+      .filter((b): b is number => b != null);
+    return computeBpmContext(bpms);
+  }, [suggestions]);
 
   // Per-mode results cache — persists suggestions across mode switches
   const resultsCacheRef = useRef<Record<Mode, ModeResultCache>>({
@@ -526,7 +535,11 @@ export function RecommendationsCard({
                     display: 'flex', gap: '0.375rem', flexWrap: 'wrap',
                     alignItems: 'center',
                   }}>
-                    <BpmBadge bpm={track.bpm} avgBpm={profile?.avg_bpm} />
+                    <BpmBadge
+                      bpm={track.bpm}
+                      avgBpm={profile?.avg_bpm ?? suggestionBpmContext.average}
+                      isOutlier={track.bpm != null ? suggestionBpmContext.isOutlier(track.bpm) : false}
+                    />
                     <KeyBadge musicalKey={track.key} />
                     <GenreBadge genre={track.genre} />
                     <span style={{ color: '#3b82f6', fontSize: '0.7rem' }}>

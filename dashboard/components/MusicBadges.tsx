@@ -38,14 +38,16 @@ export function KeyBadge({ musicalKey }: { musicalKey: string | null }) {
 export function BpmBadge({
   bpm,
   avgBpm,
+  isOutlier,
 }: {
   bpm: number | null;
   avgBpm?: number | null;
+  isOutlier?: boolean;
 }) {
   if (bpm == null) return null;
 
   const rounded = Math.round(bpm);
-  const color = getBpmColor(bpm, avgBpm ?? null);
+  const color = getBpmColor(bpm, avgBpm ?? null, isOutlier);
 
   return (
     <span

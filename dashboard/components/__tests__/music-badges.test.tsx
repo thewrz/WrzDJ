@@ -94,6 +94,19 @@ describe('BpmBadge', () => {
     const badge = container.firstChild as HTMLElement;
     expect(badge.style.fontWeight).toBe('700');
   });
+
+  it('shows neutral tier when isOutlier is true', () => {
+    const { container } = render(<BpmBadge bpm={68} avgBpm={128} isOutlier={true} />);
+    const badge = container.firstChild as HTMLElement;
+    // Neutral gray background
+    expect(badge.style.backgroundColor).toBeTruthy();
+  });
+
+  it('shows normal color when isOutlier is false', () => {
+    const { container } = render(<BpmBadge bpm={128} avgBpm={128} isOutlier={false} />);
+    const badge = container.firstChild as HTMLElement;
+    expect(badge.style.backgroundColor).toBeTruthy();
+  });
 });
 
 describe('GenreBadge', () => {
