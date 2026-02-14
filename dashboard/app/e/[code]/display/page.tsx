@@ -394,12 +394,28 @@ export default function KioskDisplayPage() {
           background: #fff;
           padding: 1rem;
           border-radius: 1rem;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
         }
         .kiosk-qr-label {
           text-align: center;
           color: #333;
-          font-size: 0.75rem;
+          font-size: 0.85rem;
+          font-weight: 600;
           margin-top: 0.5rem;
+          max-width: 120px;
+        }
+        .kiosk-closed-banner {
+          background: rgba(239, 68, 68, 0.35);
+          border: 2px solid rgba(239, 68, 68, 0.5);
+          color: #fca5a5;
+          padding: 1rem 2rem;
+          border-radius: 1rem;
+          font-size: 1.25rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
         }
         .kiosk-main {
           flex: 1;
@@ -908,10 +924,16 @@ export default function KioskDisplayPage() {
 
         <div className="kiosk-header">
           <h1 className="kiosk-event-name">{display.event.name}</h1>
-          <div className="kiosk-qr">
-            <QRCodeSVG value={display.qr_join_url} size={120} />
-            <p className="kiosk-qr-label">Scan to request from phone</p>
-          </div>
+          {!display.requests_open ? (
+            <div className="kiosk-closed-banner">
+              Requests Closed
+            </div>
+          ) : (
+            <div className="kiosk-qr">
+              <QRCodeSVG value={display.qr_join_url} size={120} />
+              <p className="kiosk-qr-label">Scan to request from phone</p>
+            </div>
+          )}
         </div>
 
         {/* Use StageLinQ now-playing if available, else fall back to request-based now_playing */}
@@ -1037,29 +1059,10 @@ export default function KioskDisplayPage() {
           );
         })()}
 
-        {!display.kiosk_display_only && (
-          display.requests_open ? (
-            <button className="request-button" onClick={() => setShowRequestModal(true)}>
-              🎵 Request a Song
-            </button>
-          ) : (
-            <div style={{
-              marginTop: '1.5rem',
-              alignSelf: 'center',
-              flexShrink: 0,
-              position: 'relative',
-              zIndex: 1,
-              background: 'rgba(255,255,255,0.08)',
-              color: '#9ca3af',
-              padding: '1rem 2rem',
-              fontSize: '1.1rem',
-              fontWeight: 500,
-              borderRadius: '1rem',
-              textAlign: 'center',
-            }}>
-              Requests are closed
-            </div>
-          )
+        {!display.kiosk_display_only && display.requests_open && (
+          <button className="request-button" onClick={() => setShowRequestModal(true)}>
+            🎵 Request a Song
+          </button>
         )}
       </div>
 
