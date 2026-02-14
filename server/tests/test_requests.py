@@ -88,6 +88,66 @@ class TestSubmitRequest:
         )
         assert response.status_code == 422
 
+    def test_submit_request_with_metadata(self, client: TestClient, test_event: Event):
+        """Test submitting a request with genre/bpm/key metadata."""
+        response = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={
+                "artist": "DJ Pierre",
+                "title": "Acid Phase",
+                "source": "spotify",
+                "genre": "Acid House",
+                "bpm": 126,
+                "musical_key": "F Minor",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["genre"] == "Acid House"
+        assert data["bpm"] == 126.0
+        assert data["musical_key"] == "4A"  # F Minor -> 4A in Camelot
+
+    def test_submit_request_metadata_optional(self, client: TestClient, test_event: Event):
+        """Test that metadata fields are optional and default to null."""
+        response = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={"artist": "Plain Artist", "title": "Plain Song"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["genre"] is None
+        assert data["bpm"] is None
+        assert data["musical_key"] is None
+
+    def test_submit_request_key_normalization(self, client: TestClient, test_event: Event):
+        """Test that musical key is normalized to Camelot notation."""
+        response = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={
+                "artist": "Artist",
+                "title": "Key Test",
+                "musical_key": "D Minor",
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["musical_key"] == "7A"
+
+    def test_submit_request_bpm_validation(self, client: TestClient, test_event: Event):
+        """Test BPM validation boundaries."""
+        # BPM too low
+        response = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={"artist": "A", "title": "T", "bpm": 0},
+        )
+        assert response.status_code == 422
+
+        # BPM too high
+        response = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={"artist": "A", "title": "T", "bpm": 1000},
+        )
+        assert response.status_code == 422
+
 
 class TestListRequests:
     """Tests for GET /api/events/{code}/requests endpoint."""

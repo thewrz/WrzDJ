@@ -171,20 +171,49 @@ def get_tidal_session(db: Session, user: User) -> tidalapi.Session | None:
         return None
 
 
+def _get_artist_name(track: tidalapi.Track) -> str:
+    """Get the full artist name from a Tidal track.
+
+    tidalapi's ``track.artist`` is only the *primary* artist (first in
+    the list).  For multi-artist tracks like "Big & Rich", Tidal stores
+    separate artist objects and ``track.artist.name`` returns just "Big".
+    We join all artist names to preserve the full credit.
+    """
+    if hasattr(track, "artists") and track.artists:
+        names = [a.name for a in track.artists if a and a.name]
+        if names:
+            return ", ".join(names)
+    return track.artist.name if track.artist else "Unknown"
+
+
 def _track_to_result(track: tidalapi.Track) -> TidalSearchResult:
     """Convert tidalapi Track to TidalSearchResult."""
     cover_url = None
     try:
         if track.album:
             cover_url = track.album.image(640)
-    except Exception:  # nosec B110 - cover art is optional, failure is non-critical
+    except Exception:  # nosec B110 — cover art is optional, failure is non-critical
         pass
+
+    bpm = None
+    try:
+        bpm = float(track.bpm) if hasattr(track, "bpm") and track.bpm else None
+    except (TypeError, ValueError):
+        pass  # nosec B110
+
+    key = None
+    try:
+        key = track.key if hasattr(track, "key") and track.key else None
+    except (TypeError, AttributeError):
+        pass  # nosec B110
 
     return TidalSearchResult(
         track_id=str(track.id),
         title=track.name or "Unknown",
-        artist=track.artist.name if track.artist else "Unknown",
+        artist=_get_artist_name(track),
         album=track.album.name if track.album else None,
+        bpm=bpm,
+        key=key,
         duration_seconds=track.duration if track.duration else None,
         cover_url=cover_url,
         tidal_url=f"https://tidal.com/browse/track/{track.id}",
@@ -215,7 +244,7 @@ def search_track(
         title_lower = title.lower()
 
         for track in tracks:
-            track_artist = track.artist.name.lower() if track.artist else ""
+            track_artist = _get_artist_name(track).lower()
             track_title = track.name.lower() if track.name else ""
 
             if artist_lower in track_artist and title_lower in track_title:
@@ -401,6 +430,62 @@ def manual_link_track(
             status=TidalSyncStatus.ERROR,
             error="Failed to add track to playlist",
         )
+
+
+@dataclass
+class TidalPlaylistInfo:
+    """Tidal playlist metadata."""
+
+    id: str
+    name: str
+    num_tracks: int
+    description: str | None = None
+    cover_url: str | None = None
+    source: str = "tidal"
+
+
+def list_user_playlists(db: Session, user: User) -> list[TidalPlaylistInfo]:
+    """List all playlists owned by the user on Tidal."""
+    session = get_tidal_session(db, user)
+    if not session:
+        return []
+
+    try:
+        playlists = session.user.playlists()
+        result = []
+        for p in playlists:
+            cover_url = None
+            try:
+                cover_url = p.image(480)
+            except Exception:  # nosec B110 - cover art is optional
+                pass
+            result.append(
+                TidalPlaylistInfo(
+                    id=str(p.id),
+                    name=p.name or "",
+                    num_tracks=p.num_tracks or 0,
+                    description=p.description,
+                    cover_url=cover_url,
+                )
+            )
+        return result
+    except Exception as e:
+        logger.error(f"Failed to list Tidal playlists: {e}")
+        return []
+
+
+def get_playlist_tracks(db: Session, user: User, playlist_id: str) -> list:
+    """Get tracks from a Tidal playlist. Returns raw tidalapi.Track objects."""
+    session = get_tidal_session(db, user)
+    if not session:
+        return []
+
+    try:
+        playlist = session.playlist(playlist_id)
+        return playlist.tracks() or []
+    except Exception as e:
+        logger.error(f"Failed to get Tidal playlist tracks: {e}")
+        return []
 
 
 def search_tidal_tracks(

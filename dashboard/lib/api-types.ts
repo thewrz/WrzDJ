@@ -46,6 +46,10 @@ export interface SongRequest {
   tidal_sync_status: 'pending' | 'synced' | 'not_found' | 'error' | null;
   // Multi-service sync results (JSON string)
   sync_results_json: string | null;
+  // Track metadata
+  genre: string | null;
+  bpm: number | null;
+  musical_key: string | null;
   // Voting
   vote_count: number;
 }
@@ -107,6 +111,10 @@ export interface SearchResult {
   preview_url: string | null;
   url: string | null;
   source: 'spotify' | 'beatport';
+  // Track metadata (from Beatport search results)
+  genre: string | null;
+  bpm: number | null;
+  key: string | null;
 }
 
 /** StageLinQ now-playing track info */
@@ -326,6 +334,7 @@ export interface RecommendedTrack {
   url: string | null;
   cover_url: string | null;
   duration_seconds: number | null;
+  mb_verified: boolean;
 }
 
 /** Music profile of an event derived from its requests */
@@ -346,4 +355,39 @@ export interface RecommendationResponse {
   services_used: string[];
   total_candidates_searched: number;
   llm_available: boolean;
+}
+
+/** LLM-generated search query with reasoning */
+export interface LLMQueryInfo {
+  search_query: string;
+  target_bpm: number | null;
+  target_key: string | null;
+  target_genre: string | null;
+  reasoning: string;
+}
+
+/** Response from POST /api/events/{code}/recommendations/llm */
+export interface LLMRecommendationResponse {
+  suggestions: RecommendedTrack[];
+  profile: EventMusicProfile;
+  services_used: string[];
+  total_candidates_searched: number;
+  llm_queries: LLMQueryInfo[];
+  llm_available: boolean;
+  llm_model: string;
+}
+
+/** Playlist info from connected music services */
+export interface PlaylistInfo {
+  id: string;
+  name: string;
+  num_tracks: number;
+  description: string | null;
+  cover_url: string | null;
+  source: 'tidal' | 'beatport';
+}
+
+/** Response from GET /api/events/{code}/playlists */
+export interface PlaylistListResponse {
+  playlists: PlaylistInfo[];
 }

@@ -115,6 +115,41 @@ class TestParseKey:
         assert parse_key("C# minor") == CamelotPosition(12, "A")
         assert parse_key("Db minor") == CamelotPosition(12, "A")
 
+    # Tidal bare key formats: "Eb", "G", "CSharp", "FSharp"
+    @pytest.mark.parametrize(
+        "key_str,expected",
+        [
+            # Single letter → major
+            ("C", CamelotPosition(8, "B")),
+            ("G", CamelotPosition(9, "B")),
+            ("D", CamelotPosition(10, "B")),
+            ("A", CamelotPosition(11, "B")),
+            ("E", CamelotPosition(12, "B")),
+            ("B", CamelotPosition(1, "B")),
+            ("F", CamelotPosition(7, "B")),
+            # Letter + accidental → major
+            ("Eb", CamelotPosition(5, "B")),
+            ("Bb", CamelotPosition(6, "B")),
+            ("Ab", CamelotPosition(4, "B")),
+            ("Db", CamelotPosition(3, "B")),
+            ("F#", CamelotPosition(2, "B")),
+            ("C#", CamelotPosition(3, "B")),
+            # Tidal "XSharp" / "XFlat" format
+            ("CSharp", CamelotPosition(3, "B")),
+            ("FSharp", CamelotPosition(2, "B")),
+            ("GSharp", CamelotPosition(4, "B")),
+            ("ASharp", CamelotPosition(6, "B")),
+            ("DSharp", CamelotPosition(5, "B")),
+            ("BFlat", CamelotPosition(6, "B")),
+            ("EFlat", CamelotPosition(5, "B")),
+            ("AFlat", CamelotPosition(4, "B")),
+            ("DFlat", CamelotPosition(3, "B")),
+            ("GFlat", CamelotPosition(2, "B")),
+        ],
+    )
+    def test_tidal_bare_key_formats(self, key_str, expected):
+        assert parse_key(key_str) == expected
+
     def test_all_12_minor_keys_parse(self):
         """Every minor key from 1A to 12A should be parseable."""
         for i in range(1, 13):

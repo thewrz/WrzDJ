@@ -102,6 +102,16 @@ class Settings(BaseSettings):
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key()...)"
     token_encryption_key: str = ""
 
+    # Soundcharts API (song discovery for recommendations)
+    soundcharts_app_id: str = ""
+    soundcharts_api_key: str = ""
+
+    # Anthropic API (LLM-powered recommendations)
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-haiku-4-5-20251001"
+    anthropic_max_tokens: int = 1024
+    anthropic_timeout_seconds: int = 15
+
     # Cache durations (1 hour for Spotify since popularity changes)
     search_cache_hours: int = 1
 

@@ -401,6 +401,8 @@ class TestTidalSearch:
         mock_track.id = 12345
         mock_track.name = "Strobe"
         mock_track.duration = 600
+        mock_track.bpm = 128
+        mock_track.key = "A Minor"
         mock_track.artist = MagicMock()
         mock_track.artist.name = "deadmau5"
         mock_track.album = MagicMock()
@@ -425,6 +427,8 @@ class TestTidalSearch:
         mock_track.id = 99999
         mock_track.name = "Some Other Track"
         mock_track.duration = 300
+        mock_track.bpm = None
+        mock_track.key = None
         mock_track.artist = MagicMock()
         mock_track.artist.name = "Other Artist"
         mock_track.album = MagicMock()
@@ -467,6 +471,8 @@ class TestTidalSearch:
         mock_track1.id = 111
         mock_track1.name = "Track A"
         mock_track1.duration = 200
+        mock_track1.bpm = 125
+        mock_track1.key = "C Major"
         mock_track1.artist = MagicMock()
         mock_track1.artist.name = "Artist A"
         mock_track1.album = MagicMock()
@@ -477,6 +483,8 @@ class TestTidalSearch:
         mock_track2.id = 222
         mock_track2.name = "Track B"
         mock_track2.duration = 300
+        mock_track2.bpm = None
+        mock_track2.key = None
         mock_track2.artist = MagicMock()
         mock_track2.artist.name = "Artist B"
         mock_track2.album = MagicMock()

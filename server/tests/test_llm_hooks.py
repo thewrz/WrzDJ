@@ -1,4 +1,6 @@
-"""Tests for LLM hooks stub module."""
+"""Tests for LLM hooks module."""
+
+from unittest.mock import patch
 
 import pytest
 
@@ -12,16 +14,50 @@ from app.services.recommendation.scorer import EventProfile
 
 
 class TestIsLLMAvailable:
-    def test_returns_false(self):
+    @patch("app.core.config.get_settings")
+    def test_returns_true_when_key_set(self, mock_settings):
+        mock_settings.return_value.anthropic_api_key = "sk-ant-test"
+        assert is_llm_available() is True
+
+    @patch("app.core.config.get_settings")
+    def test_returns_false_when_key_empty(self, mock_settings):
+        mock_settings.return_value.anthropic_api_key = ""
         assert is_llm_available() is False
 
 
 class TestGenerateLLMSuggestions:
     @pytest.mark.asyncio
-    async def test_raises_not_implemented(self):
-        profile = EventProfile(track_count=0)
-        with pytest.raises(NotImplementedError, match="Phase 3"):
-            await generate_llm_suggestions(profile, "chill vibes")
+    @patch("app.services.recommendation.llm_client.call_llm")
+    async def test_delegates_to_llm_client(self, mock_call_llm):
+        expected = LLMSuggestionResult(
+            queries=[LLMSuggestionQuery(search_query="chill house", reasoning="test")],
+            raw_response="{}",
+        )
+        mock_call_llm.return_value = expected
+
+        profile = EventProfile(track_count=5)
+        result = await generate_llm_suggestions(profile, "chill vibes", max_queries=3)
+
+        assert result is expected
+        mock_call_llm.assert_called_once_with(profile, "chill vibes", 3, tracks=None)
+
+    @pytest.mark.asyncio
+    @patch("app.services.recommendation.llm_client.call_llm")
+    async def test_passes_tracks_to_llm_client(self, mock_call_llm):
+        from app.services.recommendation.scorer import TrackProfile
+
+        expected = LLMSuggestionResult(
+            queries=[LLMSuggestionQuery(search_query="house", reasoning="test")],
+            raw_response="{}",
+        )
+        mock_call_llm.return_value = expected
+
+        profile = EventProfile(track_count=1)
+        tracks = [TrackProfile(title="Strobe", artist="deadmau5")]
+        result = await generate_llm_suggestions(profile, "more like this", tracks=tracks)
+
+        assert result is expected
+        mock_call_llm.assert_called_once_with(profile, "more like this", 6, tracks=tracks)
 
 
 class TestDataClasses:

@@ -16,13 +16,22 @@ def _spotify(title: str, artist: str, popularity: int = 50) -> SearchResult:
     )
 
 
-def _beatport(title: str, artist: str) -> BeatportSearchResult:
+def _beatport(
+    title: str,
+    artist: str,
+    genre: str | None = None,
+    bpm: int | None = None,
+    key: str | None = None,
+) -> BeatportSearchResult:
     return BeatportSearchResult(
         track_id=f"bp_{title.lower().replace(' ', '_')}",
         title=title,
         artist=artist,
         cover_url="https://img.beatport.com/test.jpg",
         beatport_url=f"https://www.beatport.com/track/{title.lower().replace(' ', '-')}/123",
+        genre=genre,
+        bpm=bpm,
+        key=key,
     )
 
 
@@ -99,3 +108,33 @@ class TestMergeSearchResults:
         beatport_count = sum(1 for r in result if r.source == "beatport")
         assert beatport_count == 5
         assert len(result) == 25
+
+    def test_beatport_metadata_preserved_in_merge(self):
+        """Beatport genre/bpm/key pass through to merged SearchResult."""
+        beatport = [
+            _beatport("Acid Phase", "DJ Pierre", genre="Acid House", bpm=126, key="F Minor")
+        ]
+        result = merge_search_results([], beatport)
+        assert len(result) == 1
+        r = result[0]
+        assert r.genre == "Acid House"
+        assert r.bpm == 126
+        assert r.key == "F Minor"
+
+    def test_spotify_results_have_no_metadata(self):
+        """Spotify results have null genre/bpm/key (Spotify doesn't provide them)."""
+        spotify = [_spotify("Strobe", "deadmau5")]
+        result = merge_search_results(spotify, [])
+        r = result[0]
+        assert r.genre is None
+        assert r.bpm is None
+        assert r.key is None
+
+    def test_beatport_metadata_none_when_not_set(self):
+        """Beatport results without metadata have null genre/bpm/key."""
+        beatport = [_beatport("Unknown Track", "Unknown Artist")]
+        result = merge_search_results([], beatport)
+        r = result[0]
+        assert r.genre is None
+        assert r.bpm is None
+        assert r.key is None

@@ -10,6 +10,7 @@ Track search, catalog access, and playlist CRUD are supported.
 
 import json
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlparse
 
@@ -209,6 +210,104 @@ def disconnect_beatport(db: Session, user: User) -> None:
     user.beatport_token_expires_at = None
     user.beatport_subscription = None
     db.commit()
+
+
+@dataclass
+class BeatportPlaylistInfo:
+    """Beatport playlist metadata."""
+
+    id: str
+    name: str
+    num_tracks: int
+    description: str | None = None
+    cover_url: str | None = None
+    source: str = "beatport"
+
+
+def list_user_playlists(db: Session, user: User) -> list[BeatportPlaylistInfo]:
+    """List user's Beatport playlists."""
+    if not _refresh_token_if_needed(db, user):
+        return []
+
+    try:
+        with httpx.Client(timeout=HTTP_TIMEOUT) as client:
+            response = client.get(
+                f"{BEATPORT_API_BASE}/my/playlists/",
+                headers={"Authorization": f"Bearer {user.beatport_access_token}"},
+            )
+            response.raise_for_status()
+            data = response.json()
+    except httpx.HTTPError as e:
+        logger.error("Beatport playlist listing failed: %s", type(e).__name__)
+        return []
+
+    results = []
+    for p in data.get("results", []):
+        cover_url = None
+        if p.get("image"):
+            cover_url = p["image"].get("uri")
+        results.append(
+            BeatportPlaylistInfo(
+                id=str(p.get("id", "")),
+                name=p.get("name", ""),
+                num_tracks=p.get("track_count", 0),
+                description=p.get("description"),
+                cover_url=cover_url,
+            )
+        )
+    return results
+
+
+def get_playlist_tracks(db: Session, user: User, playlist_id: str) -> list[BeatportSearchResult]:
+    """Get all tracks from a Beatport playlist as BeatportSearchResult objects."""
+    if not _refresh_token_if_needed(db, user):
+        return []
+
+    try:
+        with httpx.Client(timeout=HTTP_TIMEOUT) as client:
+            response = client.get(
+                f"{BEATPORT_API_BASE}/my/playlists/{playlist_id}/tracks/",
+                headers={"Authorization": f"Bearer {user.beatport_access_token}"},
+            )
+            response.raise_for_status()
+            data = response.json()
+    except httpx.HTTPError as e:
+        logger.error("Beatport playlist tracks fetch failed: %s", type(e).__name__)
+        return []
+
+    results = []
+    for entry in data.get("results", []):
+        track = entry.get("track", entry)
+        artists = ", ".join(a.get("name", "") for a in track.get("artists", []))
+        genre_name = None
+        if track.get("genre"):
+            genre_name = track["genre"].get("name")
+
+        track_id = str(track.get("id", ""))
+        slug = track.get("slug", "untitled")
+        beatport_url = BEATPORT_TRACK_URL.format(slug=slug, track_id=track_id)
+
+        cover_url = None
+        if track.get("image"):
+            cover_url = track["image"].get("uri")
+
+        results.append(
+            BeatportSearchResult(
+                track_id=track_id,
+                title=track.get("name", ""),
+                artist=artists,
+                mix_name=track.get("mix_name"),
+                label=track.get("label", {}).get("name") if track.get("label") else None,
+                genre=genre_name,
+                bpm=track.get("bpm"),
+                key=track.get("key", {}).get("name") if track.get("key") else None,
+                duration_seconds=_parse_duration(track.get("length")),
+                cover_url=cover_url,
+                beatport_url=beatport_url,
+                release_date=track.get("new_release_date") or track.get("publish_date"),
+            )
+        )
+    return results
 
 
 def search_beatport_tracks(

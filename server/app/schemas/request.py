@@ -17,6 +17,10 @@ class RequestCreate(BaseModel):
     source_url: str | None = Field(default=None, max_length=500)
     artwork_url: str | None = Field(default=None, max_length=500)
     raw_search_query: str | None = Field(default=None, max_length=200)
+    # Track metadata from search sources
+    genre: str | None = Field(default=None, max_length=100)
+    bpm: float | None = Field(default=None, ge=1, le=999)
+    musical_key: str | None = Field(default=None, max_length=20)
 
     @field_validator("artist", "title")
     @classmethod
@@ -65,6 +69,10 @@ class RequestOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     is_duplicate: bool = False
+    # Track metadata
+    genre: str | None = None
+    bpm: float | None = None
+    musical_key: str | None = None
     # Search intent
     raw_search_query: str | None = None
     # Tidal sync status

@@ -20,6 +20,8 @@ from sqlalchemy.orm import Session
 
 from app.models.request import Request, TidalSyncStatus
 from app.services.intent_parser import parse_intent
+from app.services.musicbrainz import lookup_artist_genre
+from app.services.request import normalize_key
 from app.services.sync.base import SyncResult, SyncStatus, TrackMatch, sanitize_sync_error
 from app.services.sync.registry import get_connected_adapters
 from app.services.track_normalizer import normalize_track
@@ -223,6 +225,84 @@ def _is_already_synced(request: Request, service_name: str) -> bool:
             pass
 
     return False
+
+
+def enrich_request_metadata(db: Session, request_id: int) -> None:
+    """Background task: fill missing genre/BPM/key on a request.
+
+    Sources (in priority order):
+    1. MusicBrainz artist lookup (genre — artist-level, 1 req/sec rate limit)
+    2. Beatport search (BPM + key, backfill genre if MusicBrainz missed)
+    3. Tidal search (BPM + key backup when Beatport unavailable)
+
+    Only queries sources for missing fields. Skips if all fields present.
+    """
+    # Re-fetch request in this background task's context
+    request = db.query(Request).filter(Request.id == request_id).first()
+    if not request:
+        return
+
+    if request.genre and request.bpm and request.musical_key:
+        return  # Already complete
+
+    user = request.event.created_by
+    search_query = f"{request.artist} {request.song_title}"
+
+    # 1. MusicBrainz for genre (artist-level, free, rate-limited)
+    if not request.genre and request.artist:
+        try:
+            genre = lookup_artist_genre(request.artist)
+            if genre:
+                request.genre = genre
+        except Exception:
+            logger.warning("MusicBrainz enrichment failed for request %d", request_id)
+
+    # 2. Beatport for BPM + key (and genre backfill if MusicBrainz missed)
+    if not request.bpm or not request.musical_key or not request.genre:
+        if user and user.beatport_access_token:
+            try:
+                from app.services.beatport import search_beatport_tracks
+
+                results = search_beatport_tracks(db, user, search_query, limit=3)
+                if results:
+                    best = results[0]
+                    if not request.genre and best.genre:
+                        request.genre = best.genre
+                    if not request.bpm and best.bpm:
+                        request.bpm = float(best.bpm)
+                    if not request.musical_key and best.key:
+                        request.musical_key = normalize_key(best.key)
+            except Exception:
+                logger.warning("Beatport enrichment failed for request %d", request_id)
+
+    # 3. Tidal for BPM + key (backup when Beatport didn't find them)
+    if not request.bpm or not request.musical_key:
+        if user and user.tidal_access_token:
+            try:
+                from app.services.tidal import search_tidal_tracks
+
+                results = search_tidal_tracks(db, user, search_query, limit=3)
+                if results:
+                    best = results[0]
+                    if not request.bpm and best.bpm:
+                        request.bpm = float(best.bpm)
+                    if not request.musical_key and best.key:
+                        request.musical_key = normalize_key(best.key)
+            except Exception:
+                logger.warning("Tidal enrichment failed for request %d", request_id)
+
+    # Normalize key if we got one from enrichment
+    if request.musical_key:
+        request.musical_key = normalize_key(request.musical_key)
+
+    db.commit()
+    logger.info(
+        "Enriched request %d: genre=%s, bpm=%s, key=%s",
+        request_id,
+        request.genre,
+        request.bpm,
+        request.musical_key,
+    )
 
 
 def _persist_sync_result(request: Request, result: SyncResult) -> None:

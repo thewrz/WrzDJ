@@ -13,9 +13,11 @@ import type {
   IntegrationHealthResponse,
   IntegrationToggleResponse,
   KioskDisplay,
+  LLMRecommendationResponse,
   NowPlayingInfo,
   PaginatedResponse,
   PlayHistoryResponse,
+  PlaylistListResponse,
   RecommendationResponse,
   SearchResult,
   SongRequest,
@@ -47,6 +49,8 @@ export type {
   IntegrationServiceStatus,
   IntegrationToggleResponse,
   KioskDisplay,
+  LLMQueryInfo,
+  LLMRecommendationResponse,
   NowPlayingInfo,
   PaginatedResponse,
   PlayHistoryItem,
@@ -298,7 +302,8 @@ class ApiClient {
     note?: string,
     sourceUrl?: string,
     artworkUrl?: string,
-    rawSearchQuery?: string
+    rawSearchQuery?: string,
+    metadata?: { source?: string; genre?: string; bpm?: number; musical_key?: string }
   ): Promise<SongRequest> {
     return this.fetch(`/api/events/${code}/requests`, {
       method: 'POST',
@@ -306,10 +311,13 @@ class ApiClient {
         artist,
         title,
         note,
-        source: 'spotify',
+        source: metadata?.source ?? 'spotify',
         source_url: sourceUrl,
         artwork_url: artworkUrl,
         raw_search_query: rawSearchQuery,
+        genre: metadata?.genre,
+        bpm: metadata?.bpm,
+        musical_key: metadata?.musical_key,
       }),
     });
   }
@@ -562,6 +570,27 @@ class ApiClient {
   async generateRecommendations(code: string): Promise<RecommendationResponse> {
     return this.fetch(`/api/events/${code}/recommendations`, {
       method: 'POST',
+    });
+  }
+
+  async getEventPlaylists(code: string): Promise<PlaylistListResponse> {
+    return this.fetch(`/api/events/${code}/playlists`);
+  }
+
+  async generateLLMRecommendations(code: string, prompt: string): Promise<LLMRecommendationResponse> {
+    return this.fetch(`/api/events/${code}/recommendations/llm`, {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
+    });
+  }
+
+  async generateRecommendationsFromTemplate(
+    code: string, source: string, playlistId: string
+  ): Promise<RecommendationResponse> {
+    return this.fetch(`/api/events/${code}/recommendations/from-template`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, playlist_id: playlistId }),
     });
   }
 

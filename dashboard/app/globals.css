@@ -28,6 +28,7 @@ a {
   border-radius: 8px;
   padding: 1.5rem;
   margin-bottom: 1rem;
+  overflow: hidden;
 }
 
 .btn {
@@ -172,16 +173,24 @@ a {
 
 .request-info {
   flex: 1;
+  min-width: 0;
 }
 
 .request-info h3 {
   font-size: 1.125rem;
   margin-bottom: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .request-info p {
   color: #9ca3af;
   font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .request-info .note {
@@ -419,6 +428,24 @@ a {
 @keyframes btn-glow {
   0%, 100% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.4), 0 0 30px rgba(59, 130, 246, 0.2); }
   50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.7), 0 0 40px rgba(59, 130, 246, 0.35); }
+}
+
+@keyframes generate-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.5), 0 0 16px rgba(59, 130, 246, 0.25); opacity: 0.9; }
+  50% { box-shadow: 0 0 14px rgba(59, 130, 246, 0.8), 0 0 28px rgba(59, 130, 246, 0.4); opacity: 1; }
+}
+
+.btn-generating {
+  animation: generate-pulse 1.2s ease-in-out infinite;
+}
+
+.btn-complete {
+  background: #10b981 !important;
+  transition: background 1.5s ease, box-shadow 1.5s ease;
+}
+
+.btn-complete-fade {
+  transition: background 1.5s ease, box-shadow 1.5s ease;
 }
 
 .sticky-bottom-button .btn {

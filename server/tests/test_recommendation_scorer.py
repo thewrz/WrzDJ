@@ -3,9 +3,13 @@
 import pytest
 
 from app.services.recommendation.scorer import (
+    FAMILY_AFFINITY,
+    GENRE_FAMILIES,
     EventProfile,
     ScoredTrack,
     TrackProfile,
+    _score_bpm,
+    _score_genre,
     build_event_profile,
     rank_candidates,
     score_candidate,
@@ -141,6 +145,38 @@ class TestScoreCandidate:
         scored = score_candidate(candidate, profile)
         assert scored.bpm_score == 0.5
 
+    def test_bpm_half_time_compatible(self):
+        """140 BPM DnB event + 70 BPM hip-hop candidate = half-time match."""
+        profile = self._make_profile(avg_bpm=140.0)
+        candidate = TrackProfile(title="T", artist="A", bpm=70.0)
+        scored = score_candidate(candidate, profile)
+        # Half-time exact match: base=1.0 * 0.7 = 0.7
+        assert scored.bpm_score == 0.7
+
+    def test_bpm_double_time_compatible(self):
+        """70 BPM hip-hop event + 140 BPM DnB candidate = double-time match."""
+        profile = self._make_profile(avg_bpm=70.0)
+        candidate = TrackProfile(title="T", artist="A", bpm=140.0)
+        scored = score_candidate(candidate, profile)
+        assert scored.bpm_score == 0.7
+
+    def test_bpm_half_time_near_match(self):
+        """Half-time within +/-2 BPM should still score well."""
+        profile = self._make_profile(avg_bpm=140.0)
+        candidate = TrackProfile(title="T", artist="A", bpm=71.0)
+        scored = score_candidate(candidate, profile)
+        # diff from half = |71 - 70| = 1.0 (within 2), base=1.0 * 0.7 = 0.7
+        assert scored.bpm_score == 0.7
+
+    def test_bpm_direct_match_preferred_over_half(self):
+        """Direct BPM match should score higher than half-time match."""
+        profile = self._make_profile(avg_bpm=128.0)
+        direct = TrackProfile(title="T", artist="A", bpm=128.0)
+        half = TrackProfile(title="T", artist="A", bpm=64.0)
+        direct_scored = score_candidate(direct, profile)
+        half_scored = score_candidate(half, profile)
+        assert direct_scored.bpm_score > half_scored.bpm_score
+
     def test_key_compatible(self):
         profile = self._make_profile(dominant_keys=["8A"])
         candidate = TrackProfile(title="T", artist="A", key="9A")  # Adjacent
@@ -171,9 +207,10 @@ class TestScoreCandidate:
         scored = score_candidate(candidate, profile)
         assert scored.genre_score == 0.5
 
-    def test_genre_mismatch(self):
-        profile = self._make_profile(dominant_genres=["Techno"])
-        candidate = TrackProfile(title="T", artist="A", genre="Hip Hop")
+    def test_genre_mismatch_unrelated(self):
+        """Completely unrelated genres with no family mapping should score 0.0."""
+        profile = self._make_profile(dominant_genres=["Country"])
+        candidate = TrackProfile(title="T", artist="A", genre="Techno")
         scored = score_candidate(candidate, profile)
         assert scored.genre_score == 0.0
 
@@ -182,6 +219,42 @@ class TestScoreCandidate:
         candidate = TrackProfile(title="T", artist="A", genre=None)
         scored = score_candidate(candidate, profile)
         assert scored.genre_score == 0.25
+
+    def test_genre_same_family(self):
+        """Deep House vs Tech House should score 0.4 (same house family)."""
+        profile = self._make_profile(dominant_genres=["Deep House"])
+        candidate = TrackProfile(title="T", artist="A", genre="Tech House")
+        scored = score_candidate(candidate, profile)
+        assert scored.genre_score == 0.4
+
+    def test_genre_family_affinity(self):
+        """House vs Techno should score 0.4 (cross-family affinity)."""
+        profile = self._make_profile(dominant_genres=["House"])
+        candidate = TrackProfile(title="T", artist="A", genre="Techno")
+        scored = score_candidate(candidate, profile)
+        assert scored.genre_score == 0.4
+
+    def test_genre_hip_hop_pop_affinity(self):
+        """Hip Hop vs Pop should score 0.3 (cross-family affinity)."""
+        profile = self._make_profile(dominant_genres=["Hip Hop"])
+        candidate = TrackProfile(title="T", artist="A", genre="Pop")
+        scored = score_candidate(candidate, profile)
+        assert scored.genre_score == 0.3
+
+    def test_genre_progressive_house_vs_techno(self):
+        """Progressive House vs Techno: different families but house-techno affinity."""
+        profile = self._make_profile(dominant_genres=["Progressive House"])
+        candidate = TrackProfile(title="T", artist="A", genre="Melodic Techno")
+        scored = score_candidate(candidate, profile)
+        # Both are in known families (house, techno), affinity = 0.4
+        assert scored.genre_score == 0.4
+
+    def test_genre_substring_takes_priority_over_family(self):
+        """Substring match (0.5) should beat family match (0.4)."""
+        profile = self._make_profile(dominant_genres=["Progressive House"])
+        candidate = TrackProfile(title="T", artist="A", genre="House")
+        scored = score_candidate(candidate, profile)
+        assert scored.genre_score == 0.5  # substring, not family
 
     def test_no_genre_data_weights_redistribute(self):
         """When event has no genre data, weights should be BPM 0.5, key 0.5."""
@@ -231,3 +304,83 @@ class TestRankCandidates:
         assert len(ranked) == 1
         assert isinstance(ranked[0], ScoredTrack)
         assert ranked[0].profile.title == "T"
+
+
+class TestScoreBpmFunction:
+    """Direct tests for _score_bpm half/double-time behavior."""
+
+    def test_exact_match(self):
+        assert _score_bpm(128.0, 128.0) == 1.0
+
+    def test_none_candidate(self):
+        assert _score_bpm(None, 128.0) == 0.5
+
+    def test_none_avg(self):
+        assert _score_bpm(128.0, None) == 0.5
+
+    def test_half_time_exact(self):
+        # 64 is exactly half of 128
+        assert _score_bpm(64.0, 128.0) == 0.7
+
+    def test_double_time_exact(self):
+        # 256 is exactly double of 128
+        assert _score_bpm(256.0, 128.0) == 0.7
+
+    def test_half_time_near(self):
+        # 65 is 1 away from half (64), within tolerance
+        result = _score_bpm(65.0, 128.0)
+        assert result == 0.7
+
+    def test_half_time_far(self):
+        # 50 is 14 away from half (64), should get reduced score
+        result = _score_bpm(50.0, 128.0)
+        # effective_diff = 14, base = 1 - (14-2)/18 = 0.333, * 0.7 = 0.233
+        assert 0.2 < result < 0.3
+
+    def test_neither_half_nor_double_nor_direct(self):
+        # 100 vs avg 128: diff=28, half_diff=|100-64|=36, double_diff=|100-256|=156
+        # Direct diff is best but >20, so score = 0.0
+        assert _score_bpm(100.0, 128.0) == 0.0
+
+
+class TestScoreGenreFunction:
+    """Direct tests for _score_genre with family hierarchy."""
+
+    def test_exact_match(self):
+        assert _score_genre("House", ["House"]) == 1.0
+
+    def test_case_insensitive_exact(self):
+        assert _score_genre("house", ["House"]) == 1.0
+
+    def test_substring_match(self):
+        assert _score_genre("House", ["Deep House"]) == 0.5
+
+    def test_same_family(self):
+        assert _score_genre("Deep House", ["Tech House"]) == 0.4
+
+    def test_cross_family_affinity(self):
+        assert _score_genre("Techno", ["House"]) == 0.4
+
+    def test_no_relation(self):
+        assert _score_genre("Country", ["Techno"]) == 0.0
+
+    def test_missing_candidate(self):
+        assert _score_genre(None, ["House"]) == 0.25
+
+    def test_missing_dominant(self):
+        assert _score_genre("House", []) == 0.25
+
+    def test_unknown_genre_not_in_families(self):
+        assert _score_genre("Polka", ["Jazz"]) == 0.0
+
+    def test_genre_families_dict_has_expected_families(self):
+        families = set(GENRE_FAMILIES.values())
+        assert "house" in families
+        assert "techno" in families
+        assert "hip-hop" in families
+        assert "country" in families
+
+    def test_family_affinity_symmetric(self):
+        """Affinity pairs should be sorted tuples, so lookup works both ways."""
+        for pair in FAMILY_AFFINITY:
+            assert pair == tuple(sorted(pair)), f"Pair {pair} is not sorted"

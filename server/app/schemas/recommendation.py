@@ -1,6 +1,6 @@
 """Pydantic schemas for the song recommendation system."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RecommendedTrack(BaseModel):
@@ -18,6 +18,7 @@ class RecommendedTrack(BaseModel):
     url: str | None = None
     cover_url: str | None = None
     duration_seconds: int | None = None
+    mb_verified: bool = False
 
 
 class EventMusicProfile(BaseModel):
@@ -36,3 +37,43 @@ class RecommendationResponse(BaseModel):
     services_used: list[str] = []
     total_candidates_searched: int = 0
     llm_available: bool = False
+
+
+class LLMPromptRequest(BaseModel):
+    prompt: str = Field(..., min_length=3, max_length=500)
+
+
+class LLMQueryInfo(BaseModel):
+    search_query: str
+    target_bpm: float | None = None
+    target_key: str | None = None
+    target_genre: str | None = None
+    reasoning: str = ""
+
+
+class LLMRecommendationResponse(BaseModel):
+    suggestions: list[RecommendedTrack] = []
+    profile: EventMusicProfile
+    services_used: list[str] = []
+    total_candidates_searched: int = 0
+    llm_queries: list[LLMQueryInfo] = []
+    llm_available: bool = True
+    llm_model: str = ""
+
+
+class PlaylistInfo(BaseModel):
+    id: str
+    name: str
+    num_tracks: int
+    description: str | None = None
+    cover_url: str | None = None
+    source: str
+
+
+class PlaylistListResponse(BaseModel):
+    playlists: list[PlaylistInfo] = []
+
+
+class TemplatePlaylistRequest(BaseModel):
+    source: str = Field(..., pattern=r"^(tidal|beatport)$")
+    playlist_id: str = Field(..., min_length=1, max_length=200)

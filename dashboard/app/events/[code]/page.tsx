@@ -871,7 +871,8 @@ export default function EventQueuePage() {
         <RecommendationsCard
           code={code}
           hasAcceptedRequests={requests.some((r) => r.status === 'accepted' || r.status === 'played')}
-          hasConnectedServices={!!(tidalStatus?.linked || beatportStatus?.linked)}
+          tidalLinked={!!tidalStatus?.linked}
+          beatportLinked={!!beatportStatus?.linked}
           onAcceptTrack={handleAcceptRecommendedTrack}
         />
       )}
