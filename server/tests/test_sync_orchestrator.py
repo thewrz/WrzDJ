@@ -878,3 +878,75 @@ class TestEnrichRequestMetadata:
 
         db.refresh(request)
         assert request.genre is None  # Gracefully degraded
+
+    def test_beatport_enrichment_skips_non_matching_results(self, db, tidal_event, tidal_user):
+        """Beatport results that don't match the requested song are skipped."""
+        tidal_user.beatport_access_token = "fake_bp_token"
+        db.commit()
+
+        request = _make_accepted_request(
+            db, tidal_event, "Feel The Beat", "Darude", "enrich_no_match"
+        )
+        db.commit()
+
+        from app.schemas.beatport import BeatportSearchResult
+
+        # Beatport returns a totally different track first
+        mock_results = [
+            BeatportSearchResult(
+                track_id="999",
+                title="Wrong Song",
+                artist="Wrong Artist",
+                genre="Techno",
+                bpm=72,
+                key="A Minor",
+            )
+        ]
+
+        with patch(
+            "app.services.sync.orchestrator.lookup_artist_genre",
+            return_value=None,
+        ):
+            with patch(
+                "app.services.beatport.search_beatport_tracks",
+                return_value=mock_results,
+            ):
+                enrich_request_metadata(db, request.id)
+
+        db.refresh(request)
+        assert request.bpm is None  # Should NOT take 72 BPM from wrong track
+        assert request.genre is None
+        assert request.musical_key is None
+
+    def test_tidal_enrichment_skips_non_matching_results(self, db, tidal_event, tidal_user):
+        """Tidal results that don't match the requested song are skipped."""
+        request = _make_accepted_request(
+            db, tidal_event, "Feel The Beat", "Darude", "enrich_tidal_no_match"
+        )
+        db.commit()
+
+        from app.schemas.tidal import TidalSearchResult
+
+        mock_results = [
+            TidalSearchResult(
+                track_id="999",
+                title="Totally Different Track",
+                artist="Some Other Artist",
+                bpm=72.0,
+                key="C Major",
+            )
+        ]
+
+        with patch(
+            "app.services.sync.orchestrator.lookup_artist_genre",
+            return_value=None,
+        ):
+            with patch(
+                "app.services.tidal.search_tidal_tracks",
+                return_value=mock_results,
+            ):
+                enrich_request_metadata(db, request.id)
+
+        db.refresh(request)
+        assert request.bpm is None  # Should NOT take BPM from wrong track
+        assert request.musical_key is None
