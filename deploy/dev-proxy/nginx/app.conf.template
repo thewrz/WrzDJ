@@ -29,7 +29,7 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://api.local https://${LAN_IP}:8443 https://i.scdn.co https://resources.tidal.com https://geo-media.beatport.com; media-src 'self' data:; connect-src 'self' https://api.local https://${LAN_IP}:8443 wss://app.local wss://${LAN_IP}; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://api.local https://${LAN_IP}:8443 https://i.scdn.co https://resources.tidal.com https://geo-media.beatport.com; media-src 'self' data:; connect-src 'self' https://api.local https://${LAN_IP}:8443 wss://app.local wss://${LAN_IP}; frame-src https://challenges.cloudflare.com https://open.spotify.com https://embed.tidal.com; frame-ancestors 'none'" always;
 
     # Strip security headers from upstream (Next.js sets them too — nginx is authoritative)
     proxy_hide_header Strict-Transport-Security;
