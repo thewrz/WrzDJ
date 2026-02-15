@@ -46,6 +46,24 @@ export function CloudProvidersCard({
         </p>
       </div>
 
+      {/* Column headers */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '0.5rem',
+          marginBottom: '0.375rem',
+          paddingRight: '0.75rem',
+        }}
+      >
+        <span style={{ fontSize: '0.7rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', minWidth: '100px', textAlign: 'center' }}>
+          Playlist Sync
+        </span>
+        <span style={{ fontSize: '0.7rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', minWidth: '90px', textAlign: 'center' }}>
+          Account
+        </span>
+      </div>
+
       {/* Tidal - functional */}
       <div
         style={{
@@ -79,7 +97,7 @@ export function CloudProvidersCard({
               </button>
               <button
                 className="btn btn-sm"
-                style={{ background: '#666' }}
+                style={{ background: '#666', minWidth: '90px' }}
                 onClick={onDisconnectTidal}
                 title="Disconnect Tidal account"
               >
@@ -142,7 +160,7 @@ export function CloudProvidersCard({
               </button>
               <button
                 className="btn btn-sm"
-                style={{ background: '#666' }}
+                style={{ background: '#666', minWidth: '90px' }}
                 onClick={onDisconnectBeatport}
                 title="Disconnect Beatport account"
               >

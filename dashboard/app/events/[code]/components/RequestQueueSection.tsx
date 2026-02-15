@@ -12,6 +12,7 @@ interface RequestQueueSectionProps {
   requests: SongRequest[];
   isExpiredOrArchived: boolean;
   connectedServices: string[];
+  bridgeConnected?: boolean;
   updating: number | null;
   acceptingAll: boolean;
   syncingRequest: number | null;
@@ -30,6 +31,7 @@ export function RequestQueueSection({
   requests,
   isExpiredOrArchived,
   connectedServices,
+  bridgeConnected,
   updating,
   acceptingAll,
   syncingRequest,
@@ -258,13 +260,15 @@ export function RequestQueueSection({
                     )}
                     {request.status === 'accepted' && (
                       <>
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => onUpdateStatus(request.id, 'playing')}
-                          disabled={updating !== null}
-                        >
-                          Playing
-                        </button>
+                        {(!bridgeConnected || advancedMode) && (
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => onUpdateStatus(request.id, 'playing')}
+                            disabled={updating !== null}
+                          >
+                            Mark Playing
+                          </button>
+                        )}
                         <button
                           className="btn btn-danger btn-sm"
                           onClick={() => onUpdateStatus(request.id, 'rejected')}

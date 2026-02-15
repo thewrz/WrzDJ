@@ -13,6 +13,7 @@ from app.models.event import Event
 from app.models.request import Request, RequestStatus
 from app.models.user import User
 from app.services.recommendation.enrichment import enrich_event_tracks
+from app.services.recommendation.llm_hooks import LLMSuggestionQuery
 from app.services.recommendation.scorer import (
     EventProfile,
     ScoredTrack,
@@ -30,10 +31,10 @@ MAX_SEARCH_QUERIES = 3
 # Maximum results per search query
 SEARCH_LIMIT = 10
 
-# Penalty multiplier for candidates matching a source artist
-SOURCE_ARTIST_PENALTY = 0.92
+# Penalty multiplier for candidates matching a source artist (already in queue)
+SOURCE_ARTIST_PENALTY = 0.70
 # Base penalty for repeated artists among candidates (compounds per occurrence)
-REPEAT_ARTIST_BASE_PENALTY = 0.90
+REPEAT_ARTIST_BASE_PENALTY = 0.75
 # Fuzzy match threshold for artist matching
 ARTIST_MATCH_THRESHOLD = 0.85
 
@@ -82,6 +83,84 @@ def _is_junk_candidate(title: str, artist: str) -> bool:
     return any(kw in combined for kw in BLOCKED_TITLE_KEYWORDS)
 
 
+# BPM delta threshold for detecting a vibe shift
+VIBE_SHIFT_BPM_DELTA = 15
+
+
+def _build_llm_scoring_profile(
+    queries: list[LLMSuggestionQuery],
+    original_profile: EventProfile,
+) -> EventProfile:
+    """Build a synthetic scoring profile from LLM query targets when a vibe shift is detected.
+
+    If the majority of queries (>=50%) have targets that differ significantly from
+    the original event profile (BPM delta >15 or non-overlapping genres), returns a
+    synthetic EventProfile built from the LLM targets. Otherwise returns the original
+    profile unchanged.
+    """
+    if not queries:
+        return original_profile
+
+    # Collect non-None targets
+    target_bpms = [q.target_bpm for q in queries if q.target_bpm is not None]
+    target_genres = [q.target_genre for q in queries if q.target_genre is not None]
+    target_keys = [q.target_key for q in queries if q.target_key is not None]
+
+    # Count how many queries have any target metadata
+    queries_with_targets = sum(
+        1
+        for q in queries
+        if q.target_bpm is not None or q.target_genre is not None or q.target_key is not None
+    )
+
+    # Need majority of queries to have targets
+    if queries_with_targets < len(queries) / 2:
+        return original_profile
+
+    # Detect vibe shift: significant BPM difference or non-overlapping genres
+    is_shift = False
+
+    if target_bpms and original_profile.avg_bpm is not None:
+        avg_target_bpm = sum(target_bpms) / len(target_bpms)
+        if abs(avg_target_bpm - original_profile.avg_bpm) > VIBE_SHIFT_BPM_DELTA:
+            is_shift = True
+
+    if target_genres and original_profile.dominant_genres:
+        original_genres_lower = {g.lower() for g in original_profile.dominant_genres}
+        target_genres_lower = {g.lower() for g in target_genres}
+        if not original_genres_lower & target_genres_lower:
+            is_shift = True
+
+    # Also shift if original profile is empty (no data to compare against)
+    if original_profile.track_count == 0 and (target_bpms or target_genres):
+        is_shift = True
+
+    if not is_shift:
+        return original_profile
+
+    # Build synthetic profile from LLM targets
+    avg_bpm = sum(target_bpms) / len(target_bpms) if target_bpms else original_profile.avg_bpm
+    bpm_range = (min(target_bpms), max(target_bpms)) if len(target_bpms) >= 2 else None
+
+    # Deduplicate genres/keys preserving order
+    seen_genres: list[str] = []
+    for g in target_genres:
+        if g not in seen_genres:
+            seen_genres.append(g)
+    seen_keys: list[str] = []
+    for k in target_keys:
+        if k not in seen_keys:
+            seen_keys.append(k)
+
+    return EventProfile(
+        avg_bpm=avg_bpm,
+        bpm_range=bpm_range,
+        dominant_keys=seen_keys or list(original_profile.dominant_keys),
+        dominant_genres=seen_genres or list(original_profile.dominant_genres),
+        track_count=original_profile.track_count,
+    )
+
+
 def _apply_artist_diversity(
     scored: list[ScoredTrack],
     source_artists: set[str],
@@ -125,7 +204,7 @@ def _apply_artist_diversity(
                     break
 
             if count > 0:
-                # 1st dup → 0.90, 2nd dup → 0.80, 3rd → 0.70, floor at 0.50
+                # 1st dup → 0.75, 2nd dup → 0.65, 3rd → 0.55, floor at 0.50
                 penalty = max(REPEAT_ARTIST_BASE_PENALTY - 0.10 * (count - 1), 0.50)
                 multiplier *= penalty
 
@@ -513,8 +592,9 @@ async def generate_recommendations_from_llm(
     if enriched:
         candidates = _deduplicate_against_template(candidates, enriched)
 
-    # Step 5: Score and rank
-    ranked = rank_candidates(candidates, profile, max_results)
+    # Step 5: Score and rank (use LLM targets for scoring if vibe shift detected)
+    scoring_profile = _build_llm_scoring_profile(llm_result.queries, profile)
+    ranked = rank_candidates(candidates, scoring_profile, max_results)
 
     # Step 6: Artist diversity
     source_artists = {req.artist.lower() for req in requests if req.artist}

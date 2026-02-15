@@ -1,16 +1,19 @@
 'use client';
 
+import { useState } from 'react';
 import type { SongRequest, PlayHistoryItem, RecommendedTrack } from '@/lib/api-types';
 import { RequestQueueSection } from './RequestQueueSection';
 import { SyncReportPanel } from './SyncReportPanel';
 import { PlayHistorySection } from './PlayHistorySection';
 import { RecommendationsCard } from './RecommendationsCard';
+import { DjSongSearchModal } from './DjSongSearchModal';
 
 interface SongManagementTabProps {
   code: string;
   requests: SongRequest[];
   isExpiredOrArchived: boolean;
   connectedServices: string[];
+  bridgeConnected?: boolean;
   updating: number | null;
   acceptingAll: boolean;
   syncingRequest: number | null;
@@ -31,6 +34,7 @@ interface SongManagementTabProps {
   tidalLinked: boolean;
   beatportLinked: boolean;
   onAcceptTrack: (track: RecommendedTrack) => Promise<void>;
+  onRefreshRequests: () => void;
   onDeleteRequest?: (requestId: number) => Promise<void>;
   onRefreshMetadata?: (requestId: number) => Promise<void>;
   deletingRequest?: number | null;
@@ -38,12 +42,26 @@ interface SongManagementTabProps {
 }
 
 export function SongManagementTab(props: SongManagementTabProps) {
+  const [showSearch, setShowSearch] = useState(false);
+
   return (
     <>
+      {!props.isExpiredOrArchived && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => setShowSearch(true)}
+          >
+            Search For Song
+          </button>
+        </div>
+      )}
+
       <RequestQueueSection
         requests={props.requests}
         isExpiredOrArchived={props.isExpiredOrArchived}
         connectedServices={props.connectedServices}
+        bridgeConnected={props.bridgeConnected}
         updating={props.updating}
         acceptingAll={props.acceptingAll}
         syncingRequest={props.syncingRequest}
@@ -86,6 +104,14 @@ export function SongManagementTab(props: SongManagementTabProps) {
           tidalLinked={props.tidalLinked}
           beatportLinked={props.beatportLinked}
           onAcceptTrack={props.onAcceptTrack}
+        />
+      )}
+
+      {showSearch && (
+        <DjSongSearchModal
+          code={props.code}
+          onSongAdded={props.onRefreshRequests}
+          onClose={() => setShowSearch(false)}
         />
       )}
     </>

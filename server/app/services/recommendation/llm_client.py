@@ -31,9 +31,20 @@ You will receive:
 - The actual track list the DJ has accepted/played (with metadata)
 
 Use ALL of this context to understand the DJ's current direction
-and taste. When the DJ says things like "more of the same",
-"based on these tracks", or "something similar", refer to the
-track list to understand what they mean.
+and taste.
+
+UNDERSTANDING DJ INTENT — TWO MODES:
+
+1. "More of the same" — The DJ wants tracks that match the current vibe.
+   Phrases: "more like these", "keep it going", "similar to [song/artist]".
+   → Set target_bpm/key/genre to match the current event profile.
+
+2. "Vibe shift" — The DJ wants to change direction.
+   Phrases: "switch to house", "take it up to 128", "go darker",
+   "transition to techno", "something completely different".
+   → Set target_bpm/key/genre to the NEW direction, even if it differs
+   significantly from the current profile. You are empowered to break
+   away from the existing profile when the DJ asks for a change.
 
 CRITICAL RULES:
 1. NEVER recommend songs already in the track list. You are finding NEW music.
@@ -45,14 +56,18 @@ CRITICAL RULES:
 3. Search queries should be ARTIST NAMES or GENRE TERMS that would lead to
    the right style of music, not fragments of the referenced song's title.
    Think: "What other artists make music that sounds like this?"
+4. ALWAYS set target_bpm, target_key, and target_genre when you can infer
+   them from context. These are critical scoring signals — tracks are ranked
+   against these targets. Omitting them when the intent is clear will produce
+   poorly ranked results.
+5. For vibe shifts, set targets on ALL queries to the new direction. For
+   "more of the same", set targets to match the current profile.
 
 Generate 1-6 search queries that would find matching tracks on
 Tidal or Beatport. Each query should be a realistic search string
 — preferably artist names, genre terms, or "artist genre" combos.
 
-For each query, optionally include target BPM, key, and genre
-when you can infer them from context. Include brief reasoning
-explaining why you chose each query."""
+Include brief reasoning explaining why you chose each query."""
 
 SEARCH_QUERIES_TOOL = {
     "name": "search_queries",
@@ -77,15 +92,27 @@ SEARCH_QUERIES_TOOL = {
                         },
                         "target_bpm": {
                             "type": "number",
-                            "description": "Target BPM if inferable from context",
+                            "description": (
+                                "Target BPM — set this to signal the desired tempo."
+                                " Critical for vibe shifts (e.g. 128 when switching to house)."
+                                " Results are scored against this value."
+                            ),
                         },
                         "target_key": {
                             "type": "string",
-                            "description": "Target musical key in Camelot notation (e.g. 8A, 11B)",
+                            "description": (
+                                "Target musical key in Camelot notation (e.g. 8A, 11B)."
+                                " Set this for harmonic mixing suggestions."
+                                " Results are scored against this value."
+                            ),
                         },
                         "target_genre": {
                             "type": "string",
-                            "description": "Target genre if inferable from context",
+                            "description": (
+                                "Target genre — set this to the desired genre,"
+                                " especially when different from the current profile."
+                                " Results are scored against this value."
+                            ),
                         },
                         "reasoning": {
                             "type": "string",

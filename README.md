@@ -28,7 +28,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - **Live track detection** -- the bridge connects to DJ equipment via plugins (Denon, Pioneer, Serato, Traktor), so the kiosk and dashboard update in real-time as the DJ plays.
 - **Automatic request matching** -- when the DJ plays a requested song, WrzDJ detects it via fuzzy matching and moves it through the workflow automatically.
 - **Multi-service playlist sync** -- accepted requests are automatically searched and added to your Tidal and Beatport playlists, with smart version filtering that respects remix/acoustic/live intent.
-- **Smart song recommendations** -- three modes (from requests, from a playlist, or AI-powered natural language prompts) suggest tracks that match BPM, key, and genre. MusicBrainz verification badges help DJs spot real artists vs. AI-generated filler.
+- **Smart song recommendations** -- three modes (from requests, from a playlist, or AI-powered natural language prompts) suggest tracks that match BPM, key, and genre. AI Assist handles vibe shifts ("switch to house music") by scoring against the requested direction, not the original set. MusicBrainz verification badges help DJs spot real artists vs. AI-generated filler.
 - **Inline audio previews** -- preview Spotify and Tidal tracks directly in request cards without leaving the dashboard. Collapsed by default, expand with one click.
 - **Color-coded harmonic mixing** -- Camelot key badges and BPM proximity indicators help DJs spot compatible tracks at a glance with outlier detection.
 - **Desktop app for the bridge** -- no terminal needed. Sign in, pick your event, click Start.
@@ -48,7 +48,9 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 ### DJ Dashboard
 - **Tabbed event detail** -- Song Management and Event Management tabs keep the interface focused; expired/archived events show a simplified view
 - **Dashboard landing page** -- events overview, cloud provider connection status, and collapsible activity log in one place
-- Accept, reject, and manage incoming song requests in real-time
+- Accept, reject, delete, and manage incoming song requests in real-time
+- **DJ song search** -- search for songs directly from the Song Management tab and add them to the queue (auto-accepted for immediate playlist sync)
+- **Refresh metadata** -- re-enrich a request's BPM, key, and genre data on demand
 - Bulk accept all pending requests with one click
 - **Inline audio previews** -- expand a Spotify or Tidal embed directly in the request card to listen through the mixer without leaving the dashboard. Beatport requests link out to the track page.
 - **Color-coded Camelot key badges** -- each request shows its musical key as a Camelot code (e.g., 8A) with harmonic mixing wheel colors, making compatible keys visually obvious
@@ -63,7 +65,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Play history with source badges (Live/Manual) and request matching
 - Export requests and play history to CSV
 - Edit event expiry, delete events
-- Cloud Providers card -- connect Tidal and Beatport via OAuth, toggle sync per event, see subscription tier
+- Cloud Providers card -- connect Tidal and Beatport via OAuth, toggle playlist sync per event, see subscription tier, with labeled column headers for at-a-glance status
 - QR code display for easy guest onboarding
 - **Activity log** -- bridge connect/disconnect events and sync errors are logged and surfaced on the dashboard
 
@@ -71,7 +73,8 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - **Three recommendation modes** to help DJs discover tracks that fit the vibe:
   - **From Requests** -- builds a musical profile (BPM, key, genre) from accepted/played requests, then searches Tidal and Beatport for compatible tracks
   - **From Playlist** -- select any Tidal or Beatport playlist as the profile source instead of requests
-  - **AI Assist** -- describe what you want in plain English (e.g., "90s hip hop vibes", "dark techno like Amelie Lens") and Claude Haiku interprets the prompt into structured search queries
+  - **AI Assist** -- describe what you want in plain English (e.g., "90s hip hop vibes", "switch to house music", "dark techno like Amelie Lens") and Claude Haiku interprets the prompt into structured search queries. Vibe shift detection automatically scores results against the requested direction rather than the current set profile.
+- Suggestion cards display Camelot key badges, BPM proximity badges, genre badges, and inline audio previews -- the same visual language as request cards
 - Tracks scored on BPM compatibility, key harmony (Camelot wheel), and genre similarity
 - Half-time BPM matching (e.g., 65 BPM matches 130 BPM tracks) and genre family grouping
 - Artist diversity penalties keep results varied -- repeated and source artists are downranked
