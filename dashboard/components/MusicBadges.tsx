@@ -6,13 +6,15 @@ import { getBpmColor } from '@/lib/bpm-color';
 const BADGE_BASE: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
-  padding: '0.125rem 0.5rem',
+  justifyContent: 'center',
+  padding: '0.2rem 0.5rem',
   borderRadius: '0.25rem',
-  fontSize: '0.75rem',
+  fontSize: '0.8rem',
   fontWeight: 700,
   lineHeight: 1.4,
   letterSpacing: '0.02em',
   whiteSpace: 'nowrap',
+  minHeight: '1.5rem',
 };
 
 export function KeyBadge({ musicalKey }: { musicalKey: string | null }) {

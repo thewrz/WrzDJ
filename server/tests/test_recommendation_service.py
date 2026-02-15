@@ -2,11 +2,13 @@
 
 from unittest.mock import MagicMock, patch
 
+from app.services.recommendation.llm_hooks import LLMSuggestionQuery
 from app.services.recommendation.scorer import EventProfile, TrackProfile
 from app.services.recommendation.service import (
     RecommendationResult,
     _apply_artist_diversity,
     _build_beatport_queries,
+    _build_llm_scoring_profile,
     _build_tidal_queries,
     _deduplicate_against_requests,
     _deduplicate_against_template,
@@ -415,9 +417,9 @@ class TestArtistDiversity:
         # New Artist should rank first (no penalty)
         assert result[0].profile.artist == "New Artist"
         assert result[0].score == 0.90
-        # Luke Bryan gets SOURCE_ARTIST_PENALTY (0.92×)
+        # Luke Bryan gets SOURCE_ARTIST_PENALTY (0.70×)
         assert result[1].profile.artist == "Luke Bryan"
-        assert abs(result[1].score - 0.90 * 0.92) < 1e-9
+        assert abs(result[1].score - 0.90 * 0.70) < 1e-9
 
     def test_repeat_artist_penalized(self):
         """3rd occurrence of same artist ranks below 1st."""
@@ -431,12 +433,12 @@ class TestArtistDiversity:
         # All three are Luke Bryan; 1st keeps score, 2nd/3rd get repetition penalty
         assert result[0].profile.title == "Hit 1"
         assert result[0].score == 0.95  # No penalty for first occurrence
-        # 2nd occurrence: 0.93 * 0.90 = 0.837
+        # 2nd occurrence: 0.93 * 0.75 = 0.6975
         assert result[1].profile.title == "Hit 2"
-        assert abs(result[1].score - 0.93 * 0.90) < 1e-9
-        # 3rd occurrence: 0.91 * 0.80 = 0.728
+        assert abs(result[1].score - 0.93 * 0.75) < 1e-9
+        # 3rd occurrence: 0.91 * 0.65 = 0.5915
         assert result[2].profile.title == "Hit 3"
-        assert abs(result[2].score - 0.91 * 0.80) < 1e-9
+        assert abs(result[2].score - 0.91 * 0.65) < 1e-9
 
     def test_no_penalty_for_unique_artists(self):
         """Candidates with unique artists keep original scores."""
@@ -461,9 +463,9 @@ class TestArtistDiversity:
 
         assert result[0].profile.title == "Song A"
         assert result[0].score == 0.90
-        # 2nd occurrence gets repetition penalty only
+        # 2nd occurrence gets repetition penalty only (0.75×)
         assert result[1].profile.title == "Song B"
-        assert abs(result[1].score - 0.85 * 0.90) < 1e-9
+        assert abs(result[1].score - 0.85 * 0.75) < 1e-9
 
     def test_diversity_reranks_candidates(self):
         """A lower-scoring new artist can outrank a penalized source artist."""
@@ -474,18 +476,165 @@ class TestArtistDiversity:
         # Luke Bryan is in source AND will get source penalty
         result = _apply_artist_diversity(scored, {"luke bryan"})
 
-        # Luke Bryan: 0.95 * 0.92 = 0.874
+        # Luke Bryan: 0.95 * 0.70 = 0.665
         # New Artist: 0.80 (no penalty)
-        # Luke Bryan still ranks higher since 0.874 > 0.80
-        assert result[0].profile.artist == "Luke Bryan"
-        # But if we add a second Luke Bryan, the combined penalty drops it
+        # New Artist now ranks higher since 0.80 > 0.665
+        assert result[0].profile.artist == "New Artist"
+        # With a second Luke Bryan, it's even more penalized
         scored_with_repeat = [
             _make_scored("Known Hit", "Luke Bryan", 0.95),
             _make_scored("Known Hit 2", "Luke Bryan", 0.90),
             _make_scored("Fresh Track", "New Artist", 0.80),
         ]
         result2 = _apply_artist_diversity(scored_with_repeat, {"luke bryan"})
-        # 2nd Luke Bryan: 0.90 * 0.92 (source) * 0.90 (repeat) = 0.7452
-        # New Artist: 0.80 → ranks above 2nd Luke Bryan
+        # 1st Luke Bryan: 0.95 * 0.70 = 0.665
+        # 2nd Luke Bryan: 0.90 * 0.70 (source) * 0.75 (repeat) = 0.4725
+        # New Artist: 0.80 → ranks first
+        assert result2[0].profile.artist == "New Artist"
         assert result2[2].profile.artist == "Luke Bryan"
-        assert result2[1].profile.artist == "New Artist"
+
+
+def _make_query(
+    search_query="test",
+    target_bpm=None,
+    target_key=None,
+    target_genre=None,
+):
+    return LLMSuggestionQuery(
+        search_query=search_query,
+        target_bpm=target_bpm,
+        target_key=target_key,
+        target_genre=target_genre,
+        reasoning="test",
+    )
+
+
+class TestLLMScoringProfile:
+    """Tests for _build_llm_scoring_profile vibe shift detection."""
+
+    def test_vibe_shift_bpm(self):
+        """BPM targets averaging 128 vs original 95 → synthetic profile."""
+        original = EventProfile(avg_bpm=95.0, dominant_genres=["Country"], track_count=10)
+        queries = [
+            _make_query(target_bpm=126.0, target_genre="House"),
+            _make_query(target_bpm=128.0, target_genre="House"),
+            _make_query(target_bpm=130.0, target_genre="House"),
+        ]
+        result = _build_llm_scoring_profile(queries, original)
+
+        # Should return synthetic profile, not original
+        assert result is not original
+        assert abs(result.avg_bpm - 128.0) < 0.1
+        assert "House" in result.dominant_genres
+
+    def test_vibe_shift_genre(self):
+        """Target genres don't overlap with original → synthetic profile."""
+        original = EventProfile(
+            avg_bpm=95.0, dominant_genres=["Country", "Americana"], track_count=10
+        )
+        queries = [
+            _make_query(target_bpm=128.0, target_genre="House"),
+            _make_query(target_bpm=126.0, target_genre="Tech House"),
+        ]
+        result = _build_llm_scoring_profile(queries, original)
+
+        assert result is not original
+        assert "House" in result.dominant_genres
+        assert "Tech House" in result.dominant_genres
+
+    def test_no_shift_similar_bpm(self):
+        """Targets similar to original (BPM delta <15) → original profile kept."""
+        original = EventProfile(avg_bpm=95.0, dominant_genres=["Country"], track_count=10)
+        queries = [
+            _make_query(target_bpm=97.0, target_genre="Country"),
+            _make_query(target_bpm=93.0, target_genre="Country"),
+        ]
+        result = _build_llm_scoring_profile(queries, original)
+
+        assert result is original
+
+    def test_no_targets(self):
+        """All queries have None targets → original profile (backward compat)."""
+        original = EventProfile(avg_bpm=95.0, dominant_genres=["Country"], track_count=10)
+        queries = [
+            _make_query(),
+            _make_query(),
+        ]
+        result = _build_llm_scoring_profile(queries, original)
+
+        assert result is original
+
+    def test_partial_targets_below_threshold(self):
+        """Only minority of queries have targets → original profile kept."""
+        original = EventProfile(avg_bpm=95.0, dominant_genres=["Country"], track_count=10)
+        queries = [
+            _make_query(target_bpm=128.0, target_genre="House"),
+            _make_query(),
+            _make_query(),
+            _make_query(),
+        ]
+        result = _build_llm_scoring_profile(queries, original)
+
+        # Only 1/4 queries have targets — below 50% threshold
+        assert result is original
+
+    def test_partial_targets_above_threshold(self):
+        """Majority of queries have targets with shift → synthetic profile."""
+        original = EventProfile(avg_bpm=95.0, dominant_genres=["Country"], track_count=10)
+        queries = [
+            _make_query(target_bpm=128.0, target_genre="House"),
+            _make_query(target_bpm=126.0, target_genre="House"),
+            _make_query(),
+        ]
+        result = _build_llm_scoring_profile(queries, original)
+
+        # 2/3 queries have targets (above 50%) with significant BPM shift
+        assert result is not original
+        assert abs(result.avg_bpm - 127.0) < 0.1
+
+    def test_empty_queries(self):
+        """Empty query list → original profile."""
+        original = EventProfile(avg_bpm=95.0, dominant_genres=["Country"], track_count=10)
+        result = _build_llm_scoring_profile([], original)
+
+        assert result is original
+
+    def test_synthetic_preserves_track_count(self):
+        """Synthetic profile preserves original track count."""
+        original = EventProfile(avg_bpm=95.0, dominant_genres=["Country"], track_count=15)
+        queries = [
+            _make_query(target_bpm=128.0, target_genre="House"),
+            _make_query(target_bpm=130.0, target_genre="House"),
+        ]
+        result = _build_llm_scoring_profile(queries, original)
+
+        assert result.track_count == 15
+
+    def test_synthetic_falls_back_to_original_keys(self):
+        """When LLM provides no target keys, original keys are preserved."""
+        original = EventProfile(
+            avg_bpm=95.0,
+            dominant_keys=["8A", "11B"],
+            dominant_genres=["Country"],
+            track_count=10,
+        )
+        queries = [
+            _make_query(target_bpm=128.0, target_genre="House"),
+            _make_query(target_bpm=130.0, target_genre="House"),
+        ]
+        result = _build_llm_scoring_profile(queries, original)
+
+        assert list(result.dominant_keys) == ["8A", "11B"]
+
+    def test_genre_shift_with_overlapping_bpm(self):
+        """Genre shift detected even when BPM is similar."""
+        original = EventProfile(avg_bpm=128.0, dominant_genres=["Pop", "Top 40"], track_count=10)
+        queries = [
+            _make_query(target_bpm=128.0, target_genre="Techno"),
+            _make_query(target_bpm=130.0, target_genre="Tech House"),
+        ]
+        result = _build_llm_scoring_profile(queries, original)
+
+        # BPM is similar but genres are completely different
+        assert result is not original
+        assert "Techno" in result.dominant_genres

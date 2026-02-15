@@ -11,6 +11,7 @@ interface SongManagementTabProps {
   requests: SongRequest[];
   isExpiredOrArchived: boolean;
   connectedServices: string[];
+  bridgeConnected?: boolean;
   updating: number | null;
   acceptingAll: boolean;
   syncingRequest: number | null;
@@ -44,6 +45,7 @@ export function SongManagementTab(props: SongManagementTabProps) {
         requests={props.requests}
         isExpiredOrArchived={props.isExpiredOrArchived}
         connectedServices={props.connectedServices}
+        bridgeConnected={props.bridgeConnected}
         updating={props.updating}
         acceptingAll={props.acceptingAll}
         syncingRequest={props.syncingRequest}

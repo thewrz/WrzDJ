@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { KeyBadge, BpmBadge, GenreBadge } from '@/components/MusicBadges';
+import { PreviewPlayer } from '@/components/PreviewPlayer';
 import { computeBpmContext } from '@/lib/bpm-stats';
 import type {
   RecommendedTrack,
@@ -570,6 +571,10 @@ export function RecommendationsCard({
                       </span>
                     )}
                   </div>
+                  <PreviewPlayer data={{
+                    source: track.source,
+                    sourceUrl: track.url,
+                  }} />
                 </div>
                 <button
                   className="btn btn-sm"

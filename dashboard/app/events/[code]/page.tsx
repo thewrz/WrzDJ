@@ -874,6 +874,7 @@ export default function EventQueuePage() {
               requests={requests}
               isExpiredOrArchived={false}
               connectedServices={connectedServices}
+              bridgeConnected={bridgeConnected}
               updating={updating}
               acceptingAll={acceptingAll}
               syncingRequest={syncingRequest}
