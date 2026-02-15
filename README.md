@@ -29,6 +29,8 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - **Automatic request matching** -- when the DJ plays a requested song, WrzDJ detects it via fuzzy matching and moves it through the workflow automatically.
 - **Multi-service playlist sync** -- accepted requests are automatically searched and added to your Tidal and Beatport playlists, with smart version filtering that respects remix/acoustic/live intent.
 - **Smart song recommendations** -- three modes (from requests, from a playlist, or AI-powered natural language prompts) suggest tracks that match BPM, key, and genre. MusicBrainz verification badges help DJs spot real artists vs. AI-generated filler.
+- **Inline audio previews** -- preview Spotify and Tidal tracks directly in request cards without leaving the dashboard. Collapsed by default, expand with one click.
+- **Color-coded harmonic mixing** -- Camelot key badges and BPM proximity indicators help DJs spot compatible tracks at a glance with outlier detection.
 - **Desktop app for the bridge** -- no terminal needed. Sign in, pick your event, click Start.
 
 ---
@@ -48,8 +50,12 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - **Dashboard landing page** -- events overview, cloud provider connection status, and collapsible activity log in one place
 - Accept, reject, and manage incoming song requests in real-time
 - Bulk accept all pending requests with one click
+- **Inline audio previews** -- expand a Spotify or Tidal embed directly in the request card to listen through the mixer without leaving the dashboard. Beatport requests link out to the track page.
+- **Color-coded Camelot key badges** -- each request shows its musical key as a Camelot code (e.g., 8A) with harmonic mixing wheel colors, making compatible keys visually obvious
+- **BPM proximity badges** -- BPM values are color-coded relative to the event's active set (green = close, amber = moderate, red = far), with IQR-based outlier detection for half-time tracks
 - Mark songs as Playing/Played with full status workflow (new -> accepted -> playing -> played)
 - Toggle "Now Playing" visibility on the public kiosk
+- Sticky scroll -- auto-follow new incoming requests at the bottom of the queue
 - Bridge connection status indicator (green/gray dot, polls every 3s)
 - Multi-service playlist sync -- auto-add accepted requests to Tidal and Beatport playlists
 - Smart version filtering -- detects intent (remix, acoustic, sped-up, live) and matches the right version
@@ -71,7 +77,9 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Artist diversity penalties keep results varied -- repeated and source artists are downranked
 - Junk filtering removes backing tracks, drumless versions, karaoke, DJ tools, and cover/tribute versions
 - **MusicBrainz artist verification** -- recommended artists are checked against MusicBrainz's community-curated database, with a green "Verified Artist" badge to distinguish real artists from AI-generated filler. Results cached server-wide for instant subsequent lookups.
-- Background metadata enrichment -- submitted requests are enriched with genre, BPM, and key from MusicBrainz and Beatport
+- **Multi-artist intelligence** -- composite artist strings (e.g., "Darude, Ashley Wallbridge, Foux") are split and matched individually for more accurate scoring and search
+- Background metadata enrichment -- submitted requests are enriched with genre, BPM, and key via a priority cascade: ISRC exact matching, direct Beatport/Tidal fetch, MusicBrainz genre lookup, then fuzzy search
+- Half-time/double-time BPM correction -- detects and normalizes BPM values using event context (e.g., 66 BPM in a 128-132 BPM event corrects to 132)
 - Soundcharts discovery integration -- when configured, uses genre+BPM+key filtered search for higher-quality candidates
 - One-click accept to add a suggestion as a request, or Accept All for the full batch
 - Suggestions persist across mode switches so you don't lose results when exploring different approaches
@@ -92,6 +100,8 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Album art from Spotify enrichment
 - "Requested" badges on play history items that matched guest requests
 - Built-in song request modal with 60-second inactivity timeout
+- **Display-only mode** -- hide the request button on non-touch kiosk screens (mounted displays); QR code stays visible for phone scanning
+- **Requests-closed banner** -- when the DJ closes requests, a prominent banner replaces the QR code and the request button is hidden
 - Auto-hides "Now Playing" after 60 minutes of inactivity
 - Kiosk mode protections (disabled right-click, text selection)
 
@@ -168,10 +178,10 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 [Next.js Frontend] <------> [FastAPI Backend] <--- [PostgreSQL]
                                |          |
                      +---------+----------+---------+
-                     |         |          |         |
-                  [Spotify] [Tidal]  [Beatport]  [MusicBrainz]
-                  (search)  (sync +   (sync +    (genre +
-                            search)   search)    verification)
+                     |         |          |         |          |
+                  [Spotify] [Tidal]  [Beatport]  [MusicBrainz] [Soundcharts]
+                  (search)  (sync +   (sync +    (genre +       (discovery +
+                            search)   search)    verification)   BPM/key)
                                ^
                                | HTTP (API key auth)
                                |
@@ -424,6 +434,7 @@ WrzDJ is built on these excellent open source projects:
 - [python-tidalapi](https://github.com/tamland/python-tidal) -- Python client for the Tidal API (playlist sync + recommendation search)
 - [Beatport API v4](https://api.beatport.com) -- Beatport catalog search, playlist sync, and recommendation candidates
 - [MusicBrainz API](https://musicbrainz.org/doc/MusicBrainz_API) -- community-curated artist genre enrichment and artist verification
+- [Soundcharts API](https://soundcharts.com/) -- structured discovery search for recommendation candidates (BPM, key, genre filters)
 - [Anthropic Claude API](https://docs.anthropic.com/) -- LLM-powered AI Assist mode for natural language recommendation prompts
 
 ### Desktop App
