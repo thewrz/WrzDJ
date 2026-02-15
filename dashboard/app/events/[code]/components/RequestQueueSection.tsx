@@ -155,7 +155,7 @@ export function RequestQueueSection({
                   )}
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
                 <SyncStatusBadges
                   request={request}
                   connectedServices={connectedServices}
