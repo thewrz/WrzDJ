@@ -63,6 +63,13 @@ export function EventManagementTab(props: EventManagementTabProps) {
         onToggleDisplayOnly={props.onToggleDisplayOnly}
       />
 
+      <EventCustomizationCard
+        event={props.event}
+        uploadingBanner={props.uploadingBanner}
+        onBannerSelect={props.onBannerSelect}
+        onDeleteBanner={props.onDeleteBanner}
+      />
+
       <StreamOverlayCard code={props.code} />
 
       <BridgeStatusCard bridgeConnected={props.bridgeConnected} />
@@ -80,13 +87,6 @@ export function EventManagementTab(props: EventManagementTabProps) {
         onToggleBeatportSync={props.onToggleBeatportSync}
         onConnectBeatport={props.onConnectBeatport}
         onDisconnectBeatport={props.onDisconnectBeatport}
-      />
-
-      <EventCustomizationCard
-        event={props.event}
-        uploadingBanner={props.uploadingBanner}
-        onBannerSelect={props.onBannerSelect}
-        onDeleteBanner={props.onDeleteBanner}
       />
     </>
   );

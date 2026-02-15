@@ -18,6 +18,10 @@ vi.mock('../RecommendationsCard', () => ({
   RecommendationsCard: () => <div data-testid="recommendations">Recommendations</div>,
 }));
 
+vi.mock('../DjSongSearchModal', () => ({
+  DjSongSearchModal: () => <div data-testid="dj-search">DjSearch</div>,
+}));
+
 const baseProps = {
   code: 'ABC123',
   requests: [
@@ -45,6 +49,7 @@ const baseProps = {
   tidalLinked: false,
   beatportLinked: false,
   onAcceptTrack: vi.fn(),
+  onRefreshRequests: vi.fn(),
 };
 
 describe('SongManagementTab', () => {

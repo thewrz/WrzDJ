@@ -46,34 +46,52 @@ export function getTidalEmbedUrl(url: string | null): string | null {
 
 /**
  * Determine the preview source type from request/search data.
+ *
+ * URL pattern is the ground truth — if a URL is recognizably Tidal or
+ * Beatport, we use that even when the `source` field says 'spotify'.
+ * Falls back to the field when the URL doesn't match a known pattern.
  */
 export function getPreviewSource(data: PreviewData): PreviewSourceType | null {
-  const src = data.source.toLowerCase();
-  if (src === 'spotify') return 'spotify';
-  if (src === 'tidal') return 'tidal';
-  if (src === 'beatport') return 'beatport';
+  const urlSource = detectSourceFromUrl(data.sourceUrl);
+  if (urlSource) return urlSource;
+  const src = data.source?.toLowerCase();
+  if (src === 'spotify' || src === 'tidal' || src === 'beatport') {
+    return src;
+  }
+  return null;
+}
+
+function detectSourceFromUrl(url: string | null | undefined): PreviewSourceType | null {
+  if (!url) return null;
+  if (SPOTIFY_TRACK_RE.test(url)) return 'spotify';
+  if (TIDAL_TRACK_RE.test(url)) return 'tidal';
+  if (/beatport\.com/.test(url)) return 'beatport';
   return null;
 }
 
 /**
- * Check if a track from the given source can be embedded as an audio preview.
+ * Check if a track can be embedded as an audio preview.
  * Currently supports Spotify and Tidal iframe embeds.
+ *
+ * Uses URL pattern matching as the ground truth — even if the source
+ * field is wrong, we can still embed if the URL is recognized.
  */
 export function canEmbed(data: PreviewData): boolean {
   if (!data.sourceUrl) return false;
-  const source = getPreviewSource(data);
-  if (source === 'spotify') return SPOTIFY_TRACK_RE.test(data.sourceUrl);
-  if (source === 'tidal') return TIDAL_TRACK_RE.test(data.sourceUrl);
+  const urlSource = detectSourceFromUrl(data.sourceUrl);
+  if (urlSource === 'spotify') return true;
+  if (urlSource === 'tidal') return true;
   return false;
 }
 
 /**
- * Get the embed iframe URL for a track, regardless of source.
- * Returns null if the source doesn't support embedding.
+ * Get the embed iframe URL for a track, regardless of source field.
+ * Uses URL pattern matching to determine the correct embed builder.
  */
 export function getEmbedUrl(data: PreviewData): string | null {
-  const source = getPreviewSource(data);
-  if (source === 'spotify') return getSpotifyEmbedUrl(data.sourceUrl);
-  if (source === 'tidal') return getTidalEmbedUrl(data.sourceUrl);
+  if (!data.sourceUrl) return null;
+  const urlSource = detectSourceFromUrl(data.sourceUrl);
+  if (urlSource === 'spotify') return getSpotifyEmbedUrl(data.sourceUrl);
+  if (urlSource === 'tidal') return getTidalEmbedUrl(data.sourceUrl);
   return null;
 }

@@ -656,11 +656,23 @@ export default function EventQueuePage() {
       undefined,
       track.url || undefined,
       track.cover_url || undefined,
+      undefined,
+      {
+        source: track.source,
+        genre: track.genre || undefined,
+        bpm: track.bpm || undefined,
+        musical_key: track.key || undefined,
+      },
     );
     // Refresh request list
     const updatedRequests = await api.getRequests(code);
     setRequests(updatedRequests);
   };
+
+  const handleRefreshRequests = useCallback(async () => {
+    const updatedRequests = await api.getRequests(code);
+    setRequests(updatedRequests);
+  }, [code]);
 
   if (isLoading || !isAuthenticated) {
     return (
@@ -895,6 +907,7 @@ export default function EventQueuePage() {
               tidalLinked={!!tidalStatus?.linked}
               beatportLinked={!!beatportStatus?.linked}
               onAcceptTrack={handleAcceptRecommendedTrack}
+              onRefreshRequests={handleRefreshRequests}
               onDeleteRequest={handleDeleteRequest}
               onRefreshMetadata={handleRefreshMetadata}
               deletingRequest={deletingRequest}
