@@ -5,6 +5,7 @@ import { SongRequest } from '@/lib/api';
 import { StatusFilter } from './types';
 import { SyncStatusBadges } from './SyncStatusBadges';
 import { KeyBadge, BpmBadge, GenreBadge } from '@/components/MusicBadges';
+import { PreviewPlayer } from '@/components/PreviewPlayer';
 import { computeBpmContext } from '@/lib/bpm-stats';
 
 interface RequestQueueSectionProps {
@@ -201,6 +202,10 @@ export function RequestQueueSection({
                   </div>
                 )}
                 {request.note && <div className="note">{request.note}</div>}
+                <PreviewPlayer data={{
+                  source: request.source,
+                  sourceUrl: request.source_url,
+                }} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
                   <p style={{ fontSize: '0.75rem', margin: 0 }}>
                     {new Date(request.created_at).toLocaleTimeString()}
