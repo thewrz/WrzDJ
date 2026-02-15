@@ -4,6 +4,7 @@ import {
   getTidalEmbedUrl,
   getPreviewSource,
   canEmbed,
+  getEmbedUrl,
   type PreviewData,
 } from '../preview-embed';
 
@@ -91,5 +92,35 @@ describe('canEmbed', () => {
 
   it('returns false when sourceUrl is null', () => {
     expect(canEmbed({ source: 'spotify', sourceUrl: null })).toBe(false);
+  });
+});
+
+describe('getEmbedUrl', () => {
+  it('returns Spotify embed URL for Spotify source', () => {
+    expect(
+      getEmbedUrl({ source: 'spotify', sourceUrl: 'https://open.spotify.com/track/abc' })
+    ).toBe('https://open.spotify.com/embed/track/abc');
+  });
+
+  it('returns Tidal embed URL for Tidal source', () => {
+    expect(
+      getEmbedUrl({ source: 'tidal', sourceUrl: 'https://tidal.com/browse/track/123' })
+    ).toBe('https://embed.tidal.com/tracks/123');
+  });
+
+  it('returns null for Beatport source (no embed support)', () => {
+    expect(
+      getEmbedUrl({ source: 'beatport', sourceUrl: 'https://beatport.com/track/x/1' })
+    ).toBeNull();
+  });
+
+  it('returns null when sourceUrl is null', () => {
+    expect(getEmbedUrl({ source: 'spotify', sourceUrl: null })).toBeNull();
+  });
+
+  it('returns null for unknown source', () => {
+    expect(
+      getEmbedUrl({ source: 'shazam', sourceUrl: 'https://shazam.com/track/123' })
+    ).toBeNull();
   });
 });
