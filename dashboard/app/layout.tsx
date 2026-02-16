@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AuthProvider } from '@/lib/auth';
+import { HelpProvider } from '@/lib/help/HelpContext';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -21,7 +22,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <HelpProvider>{children}</HelpProvider>
+        </AuthProvider>
       </body>
     </html>
   );
