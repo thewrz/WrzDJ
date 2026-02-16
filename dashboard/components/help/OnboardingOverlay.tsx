@@ -19,17 +19,29 @@ export function OnboardingOverlay({ page }: OnboardingOverlayProps) {
   useEffect(() => {
     if (!onboardingActive || !currentSpot?.ref?.current) return;
 
+    const el = currentSpot.ref.current;
+    const rect = el.getBoundingClientRect();
+    const vh = window.innerHeight;
+
+    // Scroll element into view if it's off-screen or mostly hidden
+    if (rect.top > vh || rect.bottom < 0 || rect.top > vh * 0.85) {
+      el.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    }
+
     const updateRect = () => {
       if (currentSpot.ref.current) {
         setSpotRect(currentSpot.ref.current.getBoundingClientRect());
       }
     };
 
+    // Small delay after potential scroll to get accurate position
+    const timer = setTimeout(updateRect, 100);
     updateRect();
 
     window.addEventListener('resize', updateRect);
     window.addEventListener('scroll', updateRect, true);
     return () => {
+      clearTimeout(timer);
       window.removeEventListener('resize', updateRect);
       window.removeEventListener('scroll', updateRect, true);
     };
@@ -49,6 +61,13 @@ export function OnboardingOverlay({ page }: OnboardingOverlayProps) {
   if (!onboardingActive || totalSteps === 0 || !currentSpot) return null;
 
   const padding = 8;
+  const cardHeight = 180; // approximate height of the onboarding card
+  const gap = padding + 12;
+
+  // Determine if card should flip above the spotlight
+  const flipAbove = spotRect
+    ? spotRect.bottom + gap + cardHeight > window.innerHeight
+    : false;
 
   return (
     <div data-testid="onboarding-overlay">
@@ -84,9 +103,12 @@ export function OnboardingOverlay({ page }: OnboardingOverlayProps) {
         style={{
           position: 'fixed',
           zIndex: 1060,
-          top: spotRect ? spotRect.bottom + padding + 12 : '50%',
+          ...(spotRect
+            ? flipAbove
+              ? { bottom: window.innerHeight - spotRect.top + gap }
+              : { top: spotRect.bottom + gap }
+            : { top: '50%', transform: 'translate(-50%, -50%)' }),
           left: spotRect ? Math.max(16, Math.min(spotRect.left, window.innerWidth - 340)) : '50%',
-          transform: spotRect ? undefined : 'translate(-50%, -50%)',
         }}
       >
         <div className="onboarding-step-counter">

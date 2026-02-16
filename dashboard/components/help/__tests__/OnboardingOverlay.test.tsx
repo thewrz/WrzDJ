@@ -235,6 +235,72 @@ describe('OnboardingOverlay', () => {
     expect(skipFn).toHaveBeenCalledTimes(1);
   });
 
+  it('positions card above spotlight when target is near viewport bottom', () => {
+    const el = document.createElement('div');
+    // Spot near the bottom of viewport (top: 700 in 768px window)
+    el.getBoundingClientRect = () => ({
+      top: 700, left: 50, width: 200, height: 40, bottom: 740, right: 250, x: 50, y: 700, toJSON: () => '',
+    });
+    const ref = createRef<HTMLElement>() as React.MutableRefObject<HTMLElement>;
+    ref.current = el;
+    const spot: HelpSpotConfig = { id: 'bottom-spot', page: 'p', order: 1, title: 'T', description: 'D', ref };
+
+    mockCtx = makeContext({
+      onboardingActive: true,
+      activeSpotId: 'bottom-spot',
+      currentStep: 0,
+      getSpotsForPage: vi.fn(() => [spot]),
+    });
+    vi.spyOn(HelpContext, 'useHelp').mockReturnValue(mockCtx);
+
+    // jsdom window.innerHeight defaults to 768
+    render(<OnboardingOverlay page="p" />);
+    const card = document.querySelector('.onboarding-card') as HTMLElement;
+    expect(card).toBeTruthy();
+    // Card should be positioned using bottom instead of top (flipped above)
+    expect(card.style.bottom).toBeTruthy();
+    expect(card.style.top).toBeFalsy();
+  });
+
+  it('positions card below spotlight when target is near viewport top', () => {
+    const spot = makeSpot(); // default: top: 100, bottom: 140
+    mockCtx = makeContext({
+      onboardingActive: true,
+      activeSpotId: 'spot-1',
+      currentStep: 0,
+      getSpotsForPage: vi.fn(() => [spot]),
+    });
+    vi.spyOn(HelpContext, 'useHelp').mockReturnValue(mockCtx);
+
+    render(<OnboardingOverlay page="p" />);
+    const card = document.querySelector('.onboarding-card') as HTMLElement;
+    expect(card).toBeTruthy();
+    // Card should be below the spotlight (top style set)
+    expect(card.style.top).toBeTruthy();
+  });
+
+  it('scrolls target element into view when it is off-screen', () => {
+    const el = document.createElement('div');
+    el.getBoundingClientRect = () => ({
+      top: 1200, left: 50, width: 200, height: 40, bottom: 1240, right: 250, x: 50, y: 1200, toJSON: () => '',
+    });
+    el.scrollIntoView = vi.fn();
+    const ref = createRef<HTMLElement>() as React.MutableRefObject<HTMLElement>;
+    ref.current = el;
+    const spot: HelpSpotConfig = { id: 'offscreen', page: 'p', order: 1, title: 'T', description: 'D', ref };
+
+    mockCtx = makeContext({
+      onboardingActive: true,
+      activeSpotId: 'offscreen',
+      currentStep: 0,
+      getSpotsForPage: vi.fn(() => [spot]),
+    });
+    vi.spyOn(HelpContext, 'useHelp').mockReturnValue(mockCtx);
+
+    render(<OnboardingOverlay page="p" />);
+    expect(el.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+  });
+
   it('renders nothing when onboarding active but no spots found', () => {
     mockCtx = makeContext({
       onboardingActive: true,
