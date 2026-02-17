@@ -4,12 +4,22 @@
   margin: 0;
 }
 
+/* Theme defaults — overridden by ThemeProvider at runtime */
+:root {
+  --bg: #0a0a0a;
+  --card: #1a1a1a;
+  --text: #ededed;
+  --text-secondary: #9ca3af;
+  --text-tertiary: #6b7280;
+  --border: #333333;
+}
+
 html,
 body {
   max-width: 100vw;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  background: #0a0a0a;
-  color: #ededed;
+  font-family: var(--font-body, 'DM Sans'), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background: var(--bg);
+  color: var(--text);
 }
 
 a {
@@ -24,7 +34,7 @@ a {
 }
 
 .card {
-  background: #1a1a1a;
+  background: var(--card);
   border-radius: 8px;
   padding: 1.5rem;
   margin-bottom: 1rem;
@@ -87,9 +97,9 @@ a {
   width: 100%;
   padding: 0.75rem;
   border-radius: 6px;
-  border: 1px solid #333;
-  background: #0a0a0a;
-  color: #ededed;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
   font-size: 1rem;
 }
 
@@ -148,7 +158,7 @@ a {
   align-items: center;
   margin-bottom: 2rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--border);
 }
 
 .header h1 {
@@ -166,7 +176,7 @@ a {
   justify-content: space-between;
   align-items: flex-start;
   padding: 1rem;
-  background: #1a1a1a;
+  background: var(--card);
   border-radius: 8px;
   color: inherit;
 }
@@ -186,7 +196,7 @@ a {
 }
 
 .request-info p {
-  color: #9ca3af;
+  color: var(--text-secondary);
   font-size: 0.875rem;
   white-space: nowrap;
   overflow: hidden;
@@ -196,7 +206,7 @@ a {
 .request-info .note {
   margin-top: 0.5rem;
   padding: 0.5rem;
-  background: #0a0a0a;
+  background: var(--bg);
   border-radius: 4px;
   font-style: italic;
 }
@@ -214,7 +224,7 @@ a {
 }
 
 .event-card {
-  background: #1a1a1a;
+  background: var(--card);
   border-radius: 8px;
   padding: 1.5rem;
 }
@@ -250,8 +260,8 @@ a {
   border-radius: 6px;
   cursor: pointer;
   background: transparent;
-  border: 1px solid #333;
-  color: #9ca3af;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
 }
 
 .tab.active {
@@ -265,7 +275,7 @@ a {
   justify-content: center;
   align-items: center;
   height: 200px;
-  color: #9ca3af;
+  color: var(--text-secondary);
 }
 
 /* Scrollable list utility */
@@ -354,7 +364,7 @@ a {
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem;
-  background: #1a1a1a;
+  background: var(--card);
   border-radius: 8px;
 }
 
@@ -379,7 +389,7 @@ a {
 }
 
 .guest-request-item-artist {
-  color: #9ca3af;
+  color: var(--text-secondary);
   font-size: 0.875rem;
   white-space: nowrap;
   overflow: hidden;
@@ -421,7 +431,7 @@ a {
   right: 0;
   padding: 1rem;
   padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(transparent, #0a0a0a 30%);
+  background: linear-gradient(transparent, var(--bg) 30%);
   z-index: 10;
 }
 
@@ -468,7 +478,7 @@ a {
 .admin-sidebar {
   width: 220px;
   background: #111;
-  border-right: 1px solid #333;
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -476,7 +486,7 @@ a {
 
 .admin-sidebar-header {
   padding: 1.5rem;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--border);
 }
 
 .admin-sidebar-header h2 {
@@ -494,25 +504,25 @@ a {
 .admin-sidebar-link {
   display: block;
   padding: 0.75rem 1.5rem;
-  color: #9ca3af;
+  color: var(--text-secondary);
   text-decoration: none;
   transition: background 0.2s, color 0.2s;
 }
 
 .admin-sidebar-link:hover {
-  background: #1a1a1a;
-  color: #ededed;
+  background: #222;
+  color: var(--text);
 }
 
 .admin-sidebar-link.active {
-  background: #1a1a1a;
+  background: var(--card);
   color: #3b82f6;
   border-left: 3px solid #3b82f6;
 }
 
 .admin-sidebar-footer {
   padding: 1rem 1.5rem;
-  border-top: 1px solid #333;
+  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -531,7 +541,7 @@ a {
 }
 
 .stat-card {
-  background: #1a1a1a;
+  background: var(--card);
   border-radius: 8px;
   padding: 1.5rem;
   text-align: center;
@@ -540,12 +550,12 @@ a {
 .stat-value {
   font-size: 2rem;
   font-weight: 700;
-  color: #ededed;
+  color: var(--text);
 }
 
 .stat-label {
   font-size: 0.875rem;
-  color: #9ca3af;
+  color: var(--text-secondary);
   margin-top: 0.25rem;
 }
 
@@ -559,18 +569,18 @@ a {
 .admin-table td {
   padding: 0.75rem 1rem;
   text-align: left;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--border);
 }
 
 .admin-table th {
-  color: #9ca3af;
+  color: var(--text-secondary);
   font-size: 0.875rem;
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .admin-table tbody tr:hover {
-  background: #1a1a1a;
+  background: var(--card);
 }
 
 /* Role badges */
@@ -601,7 +611,7 @@ a {
 }
 
 .modal {
-  background: #1a1a1a;
+  background: var(--card);
   border-radius: 8px;
   padding: 2rem;
   width: 100%;
@@ -687,7 +697,7 @@ a {
 
 .badge-status.not-configured {
   background: #374151;
-  color: #9ca3af;
+  color: var(--text-secondary);
 }
 
 .badge-status.not-implemented {
@@ -705,11 +715,11 @@ a {
 .integration-table td {
   padding: 0.75rem 1rem;
   text-align: center;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--border);
 }
 
 .integration-table th {
-  color: #9ca3af;
+  color: var(--text-secondary);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -722,7 +732,7 @@ a {
 }
 
 .integration-table tbody tr:hover {
-  background: #1a1a1a;
+  background: var(--card);
 }
 
 /* Toggle switch */
@@ -769,14 +779,14 @@ a {
   border-radius: 4px;
   border: 1px solid #444;
   background: transparent;
-  color: #9ca3af;
+  color: var(--text-secondary);
   cursor: pointer;
   transition: background 0.2s, color 0.2s;
 }
 
 .btn-check:hover {
   background: #333;
-  color: #ededed;
+  color: var(--text);
 }
 
 .btn-check:disabled {
@@ -795,9 +805,9 @@ a {
   flex: 1;
   padding: 1rem;
   border-radius: 8px;
-  border: 2px solid #333;
-  background: #1a1a1a;
-  color: #9ca3af;
+  border: 2px solid var(--border);
+  background: var(--card);
+  color: var(--text-secondary);
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
@@ -806,13 +816,13 @@ a {
 
 .event-tab:hover {
   border-color: #555;
-  color: #ededed;
+  color: var(--text);
 }
 
 .event-tab.active {
   border-color: #3b82f6;
   background: #1e3a5f;
-  color: #ededed;
+  color: var(--text);
 }
 
 /* Activity log */
@@ -874,7 +884,7 @@ a {
   font-size: 0.75rem;
   font-weight: 500;
   background: #333;
-  color: #9ca3af;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -886,7 +896,7 @@ a {
   .admin-sidebar {
     width: 100%;
     border-right: none;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border);
   }
 
   .admin-sidebar-nav {
@@ -927,8 +937,8 @@ a {
   height: 36px;
   border-radius: 50%;
   border: 2px solid #444;
-  background: #1a1a1a;
-  color: #9ca3af;
+  background: var(--card);
+  color: var(--text-secondary);
   font-size: 1.125rem;
   font-weight: 700;
   cursor: pointer;
@@ -940,7 +950,7 @@ a {
 
 .help-btn:hover {
   border-color: #3b82f6;
-  color: #ededed;
+  color: var(--text);
 }
 
 .help-btn-active {
@@ -992,7 +1002,7 @@ a {
 .help-tooltip-title {
   font-weight: 600;
   font-size: 0.875rem;
-  color: #ededed;
+  color: var(--text);
   margin-bottom: 0.25rem;
 }
 
@@ -1024,7 +1034,7 @@ a {
 .onboarding-card-title {
   font-size: 1rem;
   font-weight: 600;
-  color: #ededed;
+  color: var(--text);
   margin-bottom: 0.375rem;
 }
 
@@ -1039,4 +1049,91 @@ a {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* Theme toggle */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.theme-toggle:hover {
+  border-color: #3b82f6;
+  color: var(--text);
+}
+
+.theme-toggle-icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  transition: background 0.2s;
+}
+
+.theme-toggle-icon--dark {
+  background: linear-gradient(135deg, currentColor 50%, transparent 50%);
+}
+
+.theme-toggle-icon--high-contrast {
+  background: currentColor;
+}
+
+.theme-toggle-icon--daylight {
+  background: transparent;
+}
+
+/* Display headings (event names, kiosk titles) */
+h1, .display-heading {
+  font-family: var(--font-display, 'Plus Jakarta Sans'), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Monospace text (event codes, technical info) */
+.code, code {
+  font-family: var(--font-mono, 'JetBrains Mono'), 'SF Mono', 'Fira Code', monospace;
+}
+
+/* Compact mode — reduces density for more requests visible */
+.compact .request-list {
+  gap: 0.5rem;
+}
+
+.compact .request-item {
+  padding: 0.5rem 0.75rem;
+}
+
+.compact .request-info h3 {
+  font-size: 0.95rem;
+  margin-bottom: 0.125rem;
+}
+
+.compact .request-info p {
+  font-size: 0.8rem;
+}
+
+.compact .request-actions {
+  gap: 0.25rem;
+}
+
+.compact .btn-sm {
+  padding: 0.375rem 0.625rem;
+  font-size: 0.8rem;
+}
+
+.compact .badge {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.675rem;
+}
+
+.compact .scrollable-list {
+  max-height: 900px;
 }

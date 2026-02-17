@@ -47,6 +47,14 @@ vi.mock('../components/ServiceTrackPickerModal', () => ({
   ServiceTrackPickerModal: () => null,
 }));
 
+vi.mock('@/components/ThemeToggle', () => ({
+  ThemeToggle: () => null,
+}));
+
+vi.mock('@/lib/tab-title', () => ({
+  useTabTitle: () => {},
+}));
+
 vi.mock('../components/RequestQueueSection', () => ({
   RequestQueueSection: () => null,
 }));

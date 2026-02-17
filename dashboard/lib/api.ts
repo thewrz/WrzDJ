@@ -367,6 +367,15 @@ class ApiClient {
     return this.fetch(`/api/requests/${requestId}/vote`, { method: 'DELETE' });
   }
 
+  async publicVoteRequest(requestId: number): Promise<VoteResponse> {
+    const response = await fetch(`${getApiUrl()}/api/requests/${requestId}/vote`, { method: 'POST' });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Vote failed' }));
+      throw new ApiError(error.detail || 'Vote failed', response.status);
+    }
+    return response.json();
+  }
+
   async getArchivedEvents(): Promise<ArchivedEvent[]> {
     return this.fetch('/api/events/archived');
   }

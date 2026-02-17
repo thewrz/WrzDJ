@@ -1,7 +1,27 @@
 import type { Metadata } from 'next';
+import { DM_Sans, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
 import { AuthProvider } from '@/lib/auth';
 import { HelpProvider } from '@/lib/help/HelpContext';
+import { ThemeProvider } from '@/lib/theme';
 import './globals.css';
+
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  variable: '--font-body',
+  display: 'swap',
+});
+
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  variable: '--font-display',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'WrzDJ Dashboard',
@@ -20,11 +40,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${dmSans.variable} ${plusJakarta.variable} ${jetbrainsMono.variable}`}>
       <body>
-        <AuthProvider>
-          <HelpProvider>{children}</HelpProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <HelpProvider>{children}</HelpProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -34,6 +34,8 @@ export default function JoinEventPage() {
   const [fadingOut, setFadingOut] = useState(false);
   const [guestRequests, setGuestRequests] = useState<GuestRequestInfo[]>([]);
   const [pollInterval, setPollInterval] = useState(POLL_INTERVAL_MS);
+  const [votingId, setVotingId] = useState<number | null>(null);
+  const [votedIds, setVotedIds] = useState<Set<number>>(new Set());
 
   const loadEvent = useCallback(async () => {
     try {
@@ -163,6 +165,28 @@ export default function JoinEventPage() {
     }
   };
 
+  const handleVote = async (requestId: number) => {
+    if (votedIds.has(requestId) || votingId !== null) return;
+    setVotingId(requestId);
+    try {
+      const result = await api.publicVoteRequest(requestId);
+      setVotedIds((prev) => new Set([...prev, requestId]));
+      setGuestRequests((prev) =>
+        prev.map((r) => (r.id === requestId ? { ...r, vote_count: result.vote_count } : r))
+      );
+    } catch (err) {
+      // Already voted (idempotent) — mark as voted locally
+      if (err instanceof ApiError && err.status === 429) {
+        // Rate limited — button stays enabled for retry
+      } else {
+        // Treat as already-voted or completed on server
+        setVotedIds((prev) => new Set([...prev, requestId]));
+      }
+    } finally {
+      setVotingId(null);
+    }
+  };
+
   const resetForm = () => {
     setSearchQuery('');
     setSearchResults([]);
@@ -193,7 +217,7 @@ export default function JoinEventPage() {
           <h1 style={{ marginBottom: '1rem' }}>
             {is410 ? 'Event Expired' : is404 ? 'Event Not Found' : 'Oops!'}
           </h1>
-          <p style={{ color: '#9ca3af' }}>
+          <p style={{ color: 'var(--text-secondary)' }}>
             {is410
               ? 'This event has ended and is no longer accepting requests.'
               : is404
@@ -215,7 +239,7 @@ export default function JoinEventPage() {
         )}
         <div className="container" style={{ maxWidth: '500px', flex: 1, position: 'relative', zIndex: 1 }}>
           <h2 style={{ marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{event.name}</h2>
-          <p style={{ color: '#9ca3af', marginBottom: '1rem' }}>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
             {guestRequests.length} {guestRequests.length === 1 ? 'request' : 'requests'}
           </p>
 
@@ -245,17 +269,35 @@ export default function JoinEventPage() {
                     <span className={`badge ${req.status === 'accepted' ? 'badge-accepted-guest' : 'badge-pending'}`}>
                       {req.status === 'accepted' ? 'Accepted' : 'Pending'}
                     </span>
-                    {req.vote_count > 0 && (
-                      <span className="guest-vote-badge">
-                        {req.vote_count} {req.vote_count === 1 ? 'vote' : 'votes'}
-                      </span>
-                    )}
+                    <button
+                      onClick={() => handleVote(req.id)}
+                      disabled={votingId === req.id || votedIds.has(req.id)}
+                      style={{
+                        background: votedIds.has(req.id) ? 'rgba(34, 197, 94, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+                        color: votedIds.has(req.id) ? '#4ade80' : '#60a5fa',
+                        border: 'none',
+                        borderRadius: '1rem',
+                        padding: '0.3rem 0.625rem',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        cursor: votedIds.has(req.id) ? 'default' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        whiteSpace: 'nowrap',
+                        opacity: votingId === req.id ? 0.6 : 1,
+                        transition: 'background 0.2s, color 0.2s',
+                      }}
+                    >
+                      <span>{votedIds.has(req.id) ? '\u2714' : '\u25B2'}</span>
+                      {req.vote_count > 0 ? req.vote_count : ''}
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="card" style={{ textAlign: 'center', color: '#9ca3af' }}>
+            <div className="card" style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
               <p>No requests yet. Be the first!</p>
             </div>
           )}
@@ -270,7 +312,7 @@ export default function JoinEventPage() {
         )}
         {!event.requests_open && (
           <div className="sticky-bottom-button">
-            <div style={{ textAlign: 'center', color: '#9ca3af', padding: '0.75rem' }}>
+            <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '0.75rem' }}>
               Requests are closed for this event
             </div>
           </div>
@@ -289,7 +331,7 @@ export default function JoinEventPage() {
           <p style={{ marginBottom: '1rem' }}>
             <strong>{selectedSong?.title}</strong> by <strong>{selectedSong?.artist}</strong>
           </p>
-          <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
             {submitIsDuplicate
               ? `Someone already requested this song. Your vote has been added! ${submitVoteCount} ${submitVoteCount === 1 ? 'person wants' : 'people want'} this song.`
               : 'The DJ will see your request soon.'}
@@ -314,9 +356,9 @@ export default function JoinEventPage() {
             )}
             <div>
               <h3 style={{ margin: 0 }}>{selectedSong.title}</h3>
-              <p style={{ color: '#9ca3af', margin: '0.25rem 0 0 0' }}>{selectedSong.artist}</p>
+              <p style={{ color: 'var(--text-secondary)', margin: '0.25rem 0 0 0' }}>{selectedSong.artist}</p>
               {selectedSong.album && (
-                <p style={{ color: '#6b7280', margin: '0.25rem 0 0 0', fontSize: '0.875rem' }}>{selectedSong.album}</p>
+                <p style={{ color: 'var(--text-tertiary)', margin: '0.25rem 0 0 0', fontSize: '0.875rem' }}>{selectedSong.album}</p>
               )}
             </div>
           </div>
@@ -368,7 +410,7 @@ export default function JoinEventPage() {
         <div className="container" style={{ maxWidth: '500px', position: 'relative', zIndex: 1 }}>
           <div className="card" style={{ textAlign: 'center' }}>
             <h1 style={{ marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{event.name}</h1>
-            <p style={{ color: '#9ca3af', marginTop: '1rem' }}>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '1rem' }}>
               Requests are closed for this event
             </p>
           </div>
@@ -387,7 +429,7 @@ export default function JoinEventPage() {
       <div className="container" style={{ maxWidth: '500px', position: 'relative', zIndex: 1 }}>
       <div className="card">
         <h1 style={{ marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{event.name}</h1>
-        <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>Request a song</p>
+        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>Request a song</p>
 
         <form onSubmit={handleSearch}>
           <div className="form-group">
@@ -442,7 +484,7 @@ export default function JoinEventPage() {
                   <h3 style={{ fontSize: '1rem', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.title}</h3>
                   <p style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.artist}</p>
                   {result.album && (
-                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.album}</p>
+                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.album}</p>
                   )}
                 </div>
                 {result.source === 'beatport' ? (

@@ -7,6 +7,8 @@ import { SyncStatusBadges } from './SyncStatusBadges';
 import { KeyBadge, BpmBadge, GenreBadge } from '@/components/MusicBadges';
 import { PreviewPlayer } from '@/components/PreviewPlayer';
 import { computeBpmContext } from '@/lib/bpm-stats';
+import { getRequestEmphasisStyle } from '@/lib/request-emphasis';
+import { getVoteHeatStyle } from '@/lib/vote-heat';
 
 interface RequestQueueSectionProps {
   requests: SongRequest[];
@@ -171,7 +173,23 @@ export function RequestQueueSection({
       ) : (
         <div className="request-list scrollable-list" style={{ marginBottom: '1rem' }}>
           {filteredRequests.map((request) => (
-            <div key={request.id} id={`request-${request.id}`} className="request-item">
+            <div
+              key={request.id}
+              id={`request-${request.id}`}
+              className="request-item"
+              style={{
+                ...(() => {
+                  const emphasis = getRequestEmphasisStyle(request.status);
+                  const heat = getVoteHeatStyle(request.vote_count);
+                  return {
+                    ...emphasis,
+                    ...heat,
+                    // Status emphasis background takes priority over vote heat
+                    ...(emphasis.background ? { background: emphasis.background } : {}),
+                  };
+                })(),
+              }}
+            >
               <div className="request-info">
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.375rem' }}>
                   <h3 style={{ margin: 0 }}>
