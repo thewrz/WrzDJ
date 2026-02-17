@@ -102,4 +102,16 @@ describe('HelpButton', () => {
     const container = screen.getByRole('button', { name: 'Toggle help mode' }).parentElement;
     expect(container?.className).toContain('help-btn-container');
   });
+
+  it('renders nothing when wrzdj-help-disabled flag is set', () => {
+    const originalStorage = globalThis.localStorage;
+    const mockStorage = { getItem: vi.fn((key: string) => key === 'wrzdj-help-disabled' ? '1' : null) };
+    Object.defineProperty(globalThis, 'localStorage', { value: mockStorage, writable: true, configurable: true });
+    try {
+      render(<HelpButton page="events" />);
+      expect(screen.queryByRole('button', { name: 'Toggle help mode' })).not.toBeInTheDocument();
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', { value: originalStorage, writable: true, configurable: true });
+    }
+  });
 });

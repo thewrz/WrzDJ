@@ -1,6 +1,7 @@
 'use client';
 
 import { useHelp } from '@/lib/help/HelpContext';
+import { isHelpDisabled } from '@/lib/help/is-help-disabled';
 
 interface HelpButtonProps {
   page: string;
@@ -9,10 +10,14 @@ interface HelpButtonProps {
 export function HelpButton({ page }: HelpButtonProps) {
   const { helpMode, onboardingActive, toggleHelpMode, startOnboarding } = useHelp();
 
+  const isDisabled = isHelpDisabled();
+
   const handleToggle = () => {
     if (onboardingActive) return;
     toggleHelpMode();
   };
+
+  if (isDisabled) return null;
 
   return (
     <div className="help-btn-container">

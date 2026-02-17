@@ -56,10 +56,13 @@ async function setupAuth(page: import('@playwright/test').Page) {
   if (!jwt) throw new Error('beforeAll did not run or login failed — jwt is empty');
   await page.addInitScript((token: string) => {
     localStorage.setItem('token', token);
+    // Suppress help/onboarding for clean screenshots
+    localStorage.setItem('wrzdj-help-disabled', '1');
   }, jwt);
 }
 
-async function dismissOnboarding(page: import('@playwright/test').Page) {
+async function ensureCleanUI(page: import('@playwright/test').Page) {
+  // Dismiss any active overlay (safety net)
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
 }
@@ -89,7 +92,7 @@ test.describe('Authenticated pages', () => {
     await setupAuth(page);
     await page.goto('/dashboard');
     await waitForPage(page);
-    await dismissOnboarding(page);
+    await ensureCleanUI(page);
     await capture(page, 'dj-dashboard');
   });
 
@@ -97,7 +100,7 @@ test.describe('Authenticated pages', () => {
     await setupAuth(page);
     await page.goto('/events');
     await waitForPage(page);
-    await dismissOnboarding(page);
+    await ensureCleanUI(page);
     await capture(page, 'events-list');
   });
 
@@ -105,7 +108,7 @@ test.describe('Authenticated pages', () => {
     await setupAuth(page);
     await page.goto(`/events/${eventCode}`);
     await waitForPage(page);
-    await dismissOnboarding(page);
+    await ensureCleanUI(page);
     await capture(page, 'event-management');
   });
 
@@ -113,7 +116,7 @@ test.describe('Authenticated pages', () => {
     await setupAuth(page);
     await page.goto('/admin');
     await waitForPage(page);
-    await dismissOnboarding(page);
+    await ensureCleanUI(page);
     await capture(page, 'admin-overview');
   });
 
@@ -121,7 +124,7 @@ test.describe('Authenticated pages', () => {
     await setupAuth(page);
     await page.goto('/admin/users');
     await waitForPage(page);
-    await dismissOnboarding(page);
+    await ensureCleanUI(page);
     await capture(page, 'admin-users');
   });
 
@@ -129,7 +132,7 @@ test.describe('Authenticated pages', () => {
     await setupAuth(page);
     await page.goto('/admin/integrations');
     await waitForPage(page);
-    await dismissOnboarding(page);
+    await ensureCleanUI(page);
     await capture(page, 'admin-integrations');
   });
 
@@ -137,7 +140,7 @@ test.describe('Authenticated pages', () => {
     await setupAuth(page);
     await page.goto('/admin/settings');
     await waitForPage(page);
-    await dismissOnboarding(page);
+    await ensureCleanUI(page);
     await capture(page, 'admin-settings');
   });
 });
