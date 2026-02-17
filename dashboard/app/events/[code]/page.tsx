@@ -102,7 +102,7 @@ export default function EventQueuePage() {
   // Tab state
   const [activeTab, setActiveTab] = useState<'songs' | 'manage'>('songs');
   const helpPageId = activeTab === 'songs' ? 'event-songs' : 'event-manage';
-  const { hasSeenPage, startOnboarding } = useHelp();
+  const { hasSeenPage, startOnboarding, onboardingActive } = useHelp();
 
   // Banner upload state
   const [uploadingBanner, setUploadingBanner] = useState(false);
@@ -130,12 +130,13 @@ export default function EventQueuePage() {
   }, [actionError]);
 
   // Auto-trigger onboarding for first-time visitors to this tab
+  const eventLoaded = !isLoading && isAuthenticated && !loading && !!event;
   useEffect(() => {
-    if (!isLoading && isAuthenticated && !loading && event && !hasSeenPage(helpPageId)) {
+    if (eventLoaded && !onboardingActive && !hasSeenPage(helpPageId)) {
       const timer = setTimeout(() => startOnboarding(helpPageId), 500);
       return () => clearTimeout(timer);
     }
-  }, [isLoading, isAuthenticated, loading, event, helpPageId, hasSeenPage, startOnboarding]);
+  }, [eventLoaded, onboardingActive, helpPageId, hasSeenPage, startOnboarding]);
 
   const hasLoadedRef = useRef(false);
 

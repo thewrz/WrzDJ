@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { api, AdminEvent } from '@/lib/api';
+import { useHelp } from '@/lib/help/HelpContext';
+import { HelpSpot } from '@/components/help/HelpSpot';
+import { HelpButton } from '@/components/help/HelpButton';
+import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
+
+const PAGE_ID = 'admin-events';
 
 export default function AdminEventsPage() {
   const [events, setEvents] = useState<AdminEvent[]>([]);
@@ -12,6 +18,7 @@ export default function AdminEventsPage() {
   const [editName, setEditName] = useState('');
   const [error, setError] = useState('');
   const limit = 20;
+  const { hasSeenPage, startOnboarding, onboardingActive } = useHelp();
 
   const loadEvents = async () => {
     setLoading(true);
@@ -29,6 +36,14 @@ export default function AdminEventsPage() {
   useEffect(() => {
     loadEvents();
   }, [page]);
+
+  const dataLoaded = !loading;
+  useEffect(() => {
+    if (dataLoaded && !onboardingActive && !hasSeenPage(PAGE_ID)) {
+      const timer = setTimeout(() => startOnboarding(PAGE_ID), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [dataLoaded, onboardingActive, hasSeenPage, startOnboarding]);
 
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,9 +72,14 @@ export default function AdminEventsPage() {
 
   return (
     <div className="container">
-      <div className="header">
-        <h1>Event Management</h1>
-      </div>
+      <HelpButton page={PAGE_ID} />
+      <OnboardingOverlay page={PAGE_ID} />
+
+      <HelpSpot spotId="admin-events-header" page={PAGE_ID} order={1} title="Event Management" description="View and manage all events across the platform.">
+        <div className="header">
+          <h1>Event Management</h1>
+        </div>
+      </HelpSpot>
 
       {error && (
         <div style={{ color: '#ef4444', marginBottom: '1rem' }}>{error}</div>
@@ -101,58 +121,64 @@ export default function AdminEventsPage() {
         <div className="loading">Loading events...</div>
       ) : (
         <>
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Name</th>
-                <th>Owner</th>
-                <th>Requests</th>
-                <th>Status</th>
-                <th>Created</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((event) => (
-                <tr key={event.id}>
-                  <td style={{ fontFamily: 'monospace', color: '#3b82f6' }}>{event.code}</td>
-                  <td>{event.name}</td>
-                  <td>{event.owner_username}</td>
-                  <td>{event.request_count}</td>
-                  <td>
-                    {event.is_active ? (
-                      new Date(event.expires_at) > new Date() ? (
-                        <span className="badge badge-playing">Active</span>
-                      ) : (
-                        <span className="badge badge-played">Expired</span>
-                      )
-                    ) : (
-                      <span className="badge badge-rejected">Inactive</span>
-                    )}
-                  </td>
-                  <td>{new Date(event.created_at).toLocaleDateString()}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button
-                        className="btn btn-sm btn-primary"
-                        onClick={() => {
-                          setEditEvent(event);
-                          setEditName(event.name);
-                          setError('');
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(event)}>
-                        Delete
-                      </button>
-                    </div>
-                  </td>
+          <HelpSpot spotId="admin-events-table" page={PAGE_ID} order={2} title="Events Table" description="Every event with code, owner, request count, and Active/Expired/Inactive status.">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Owner</th>
+                  <th>Requests</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>
+                    <HelpSpot spotId="admin-events-actions" page={PAGE_ID} order={3} title="Event Actions" description="Rename or delete any event. Deleting removes all requests permanently.">
+                      <span>Actions</span>
+                    </HelpSpot>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {events.map((event) => (
+                  <tr key={event.id}>
+                    <td style={{ fontFamily: 'monospace', color: '#3b82f6' }}>{event.code}</td>
+                    <td>{event.name}</td>
+                    <td>{event.owner_username}</td>
+                    <td>{event.request_count}</td>
+                    <td>
+                      {event.is_active ? (
+                        new Date(event.expires_at) > new Date() ? (
+                          <span className="badge badge-playing">Active</span>
+                        ) : (
+                          <span className="badge badge-played">Expired</span>
+                        )
+                      ) : (
+                        <span className="badge badge-rejected">Inactive</span>
+                      )}
+                    </td>
+                    <td>{new Date(event.created_at).toLocaleDateString()}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          onClick={() => {
+                            setEditEvent(event);
+                            setEditName(event.name);
+                            setError('');
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(event)}>
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </HelpSpot>
 
           {totalPages > 1 && (
             <div className="pagination">

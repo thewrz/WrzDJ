@@ -1,7 +1,9 @@
 'use client';
 
 import { createContext, useCallback, useContext, useRef, useState, ReactNode } from 'react';
+import { api } from '@/lib/api';
 import type { HelpSpotConfig, HelpContextValue } from './types';
+import { isPageSeen, markPageSeen } from './seen-pages';
 
 const HelpContext = createContext<HelpContextValue | null>(null);
 
@@ -45,8 +47,12 @@ export function HelpProvider({ children }: { children: ReactNode }) {
     setOnboardingActive(false);
     setCurrentStep(0);
     setActiveSpotId(null);
-    if (page && typeof localStorage !== 'undefined') {
-      localStorage.setItem(`wrzdj-help-seen-${page}`, '1');
+    if (page) {
+      markPageSeen(page);
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(`wrzdj-help-seen-${page}`, '1');
+      }
+      api.markHelpPageSeen(page).catch(() => {});
     }
     onboardingPageRef.current = null;
   }, []);
@@ -78,6 +84,7 @@ export function HelpProvider({ children }: { children: ReactNode }) {
   }, [completeOnboarding]);
 
   const hasSeenPage = useCallback((page: string): boolean => {
+    if (isPageSeen(page)) return true;
     if (typeof localStorage === 'undefined') return false;
     return localStorage.getItem(`wrzdj-help-seen-${page}`) === '1';
   }, []);

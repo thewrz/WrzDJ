@@ -1,7 +1,8 @@
+import json
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedText
@@ -40,4 +41,18 @@ class User(Base):
     beatport_oauth_code_verifier: Mapped[str | None] = mapped_column(String(128), nullable=True)
     beatport_subscription: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
+    # Help onboarding state (JSON array of page IDs)
+    help_pages_seen: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     events: Mapped[list["Event"]] = relationship("Event", back_populates="created_by")
+
+    def get_help_pages_seen(self) -> list[str]:
+        if not self.help_pages_seen:
+            return []
+        return json.loads(self.help_pages_seen)
+
+    def mark_help_page_seen(self, page: str) -> None:
+        pages = self.get_help_pages_seen()
+        if page not in pages:
+            pages.append(page)
+            self.help_pages_seen = json.dumps(pages)

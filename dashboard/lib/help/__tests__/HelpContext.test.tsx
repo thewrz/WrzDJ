@@ -3,7 +3,15 @@ import { renderHook, act } from '@testing-library/react';
 import { render, screen } from '@testing-library/react';
 import React, { createRef } from 'react';
 import { HelpProvider, useHelp } from '../HelpContext';
+import { initSeenPages, isPageSeen } from '../seen-pages';
 import type { HelpSpotConfig } from '../types';
+
+// Mock the api module so completeOnboarding doesn't make real HTTP calls
+vi.mock('@/lib/api', () => ({
+  api: {
+    markHelpPageSeen: vi.fn().mockResolvedValue(undefined),
+  },
+}));
 
 // jsdom localStorage mock
 const store: Record<string, string> = {};
@@ -36,6 +44,7 @@ function makeSpot(overrides: Partial<HelpSpotConfig> = {}): HelpSpotConfig {
 describe('HelpContext', () => {
   beforeEach(() => {
     localStorageMock.clear();
+    initSeenPages([]);
   });
 
   it('throws when useHelp is called outside provider', () => {
@@ -226,5 +235,51 @@ describe('HelpContext', () => {
 
     act(() => result.current.startOnboarding('empty-page'));
     expect(result.current.onboardingActive).toBe(false);
+  });
+
+  it('hasSeenPage returns true for server-initialized pages', () => {
+    initSeenPages(['admin-overview', 'events']);
+    const { result } = renderHook(() => useHelp(), { wrapper });
+
+    expect(result.current.hasSeenPage('admin-overview')).toBe(true);
+    expect(result.current.hasSeenPage('events')).toBe(true);
+    expect(result.current.hasSeenPage('unknown-page')).toBe(false);
+  });
+
+  it('completeOnboarding updates seen-pages module', async () => {
+    const { api: mockApi } = await import('@/lib/api');
+    const { result } = renderHook(() => useHelp(), { wrapper });
+
+    act(() => {
+      result.current.registerSpot(makeSpot({ id: 's1', page: 'demo', order: 1 }));
+    });
+
+    act(() => result.current.startOnboarding('demo'));
+    act(() => result.current.nextStep()); // completes (single step)
+
+    expect(isPageSeen('demo')).toBe(true);
+    expect(mockApi.markHelpPageSeen).toHaveBeenCalledWith('demo');
+  });
+});
+
+describe('seen-pages module', () => {
+  beforeEach(() => {
+    initSeenPages([]);
+  });
+
+  it('initSeenPages populates the set', () => {
+    initSeenPages(['page-a', 'page-b']);
+    expect(isPageSeen('page-a')).toBe(true);
+    expect(isPageSeen('page-b')).toBe(true);
+    expect(isPageSeen('page-c')).toBe(false);
+  });
+
+  it('initSeenPages replaces previous state', () => {
+    initSeenPages(['old-page']);
+    expect(isPageSeen('old-page')).toBe(true);
+
+    initSeenPages(['new-page']);
+    expect(isPageSeen('old-page')).toBe(false);
+    expect(isPageSeen('new-page')).toBe(true);
   });
 });

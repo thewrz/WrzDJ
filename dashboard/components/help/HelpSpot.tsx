@@ -22,8 +22,7 @@ export function HelpSpot({ spotId, page, order, title, description, children }: 
     return deregister;
   }, [spotId, page, order, title, description, registerSpot]);
 
-  const isActive = activeSpotId === spotId;
-  const showTooltip = helpMode && (isActive || (hovered && !onboardingActive));
+  const showTooltip = helpMode && hovered && !onboardingActive;
   const showHighlight = helpMode;
 
   return (

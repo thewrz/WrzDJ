@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
 import { api } from './api';
+import { initSeenPages } from './help/seen-pages';
 
 export type UserRole = 'admin' | 'dj' | 'pending';
 
@@ -38,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       api.getMe()
         .then((user) => {
+          initSeenPages(user.help_pages_seen ?? []);
           setIsAuthenticated(true);
           setRole(user.role as UserRole);
         })
@@ -60,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.location.href = '/login';
     });
     const user = await api.getMe();
+    initSeenPages(user.help_pages_seen ?? []);
     setRole(user.role as UserRole);
     setIsAuthenticated(true);
   };

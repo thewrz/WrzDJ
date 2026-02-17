@@ -101,7 +101,7 @@ describe('HelpSpot', () => {
     expect(wrapper.className).toContain('help-spot-highlight');
   });
 
-  it('shows tooltip when this spot is activeSpotId (no hover needed)', () => {
+  it('suppresses tooltip during onboarding (overlay handles it)', () => {
     mockCtx = makeContext({ helpMode: true, onboardingActive: true, activeSpotId: 's1' });
     vi.spyOn(HelpContext, 'useHelp').mockReturnValue(mockCtx);
 
@@ -111,11 +111,10 @@ describe('HelpSpot', () => {
       </HelpSpot>
     );
 
-    expect(screen.getByRole('tooltip')).toBeInTheDocument();
-    expect(screen.getByText('Active Title')).toBeInTheDocument();
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
-  it('suppresses hover tooltip for non-active spots during onboarding', () => {
+  it('suppresses hover tooltip for all spots during onboarding', () => {
     mockCtx = makeContext({ helpMode: true, onboardingActive: true, activeSpotId: 'other' });
     vi.spyOn(HelpContext, 'useHelp').mockReturnValue(mockCtx);
 
@@ -131,7 +130,7 @@ describe('HelpSpot', () => {
   });
 
   it('tooltip has role="tooltip" and aria-live="polite"', () => {
-    mockCtx = makeContext({ helpMode: true, onboardingActive: true, activeSpotId: 's1' });
+    mockCtx = makeContext({ helpMode: true });
     vi.spyOn(HelpContext, 'useHelp').mockReturnValue(mockCtx);
 
     render(
@@ -140,6 +139,8 @@ describe('HelpSpot', () => {
       </HelpSpot>
     );
 
+    const wrapper = screen.getByTestId('help-spot-s1');
+    fireEvent.mouseEnter(wrapper);
     const tooltip = screen.getByRole('tooltip');
     expect(tooltip).toHaveAttribute('aria-live', 'polite');
   });

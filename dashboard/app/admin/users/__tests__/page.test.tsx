@@ -2,6 +2,24 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import AdminUsersPage from '../page';
 
+// Mock HelpContext
+vi.mock('@/lib/help/HelpContext', () => ({
+  useHelp: () => ({
+    helpMode: false,
+    onboardingActive: false,
+    currentStep: 0,
+    activeSpotId: null,
+    toggleHelpMode: vi.fn(),
+    registerSpot: vi.fn(() => vi.fn()),
+    getSpotsForPage: vi.fn(() => []),
+    startOnboarding: vi.fn(),
+    nextStep: vi.fn(),
+    prevStep: vi.fn(),
+    skipOnboarding: vi.fn(),
+    hasSeenPage: vi.fn(() => true),
+  }),
+}));
+
 // Mock API
 vi.mock('@/lib/api', () => ({
   api: {
