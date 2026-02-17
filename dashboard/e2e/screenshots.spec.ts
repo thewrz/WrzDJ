@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 const USERNAME = process.env.SCREENSHOT_USERNAME || 'admin';
 const PASSWORD = process.env.SCREENSHOT_PASSWORD || 'admin123';
 const API_PORT = process.env.SCREENSHOT_API_PORT || '8443';
-const SCREENSHOTS_DIR = path.resolve(__dirname, '../../screenshots');
+const SCREENSHOTS_DIR = path.resolve(__dirname, '../../docs/images');
 
 let jwt = '';
 let eventCode = '';
