@@ -65,5 +65,8 @@ server/uploads/*
 server/uploads/banners/*
 !server/uploads/banners/.gitkeep
 
+# Playwright artifacts
+test-results/
+
 # LLM plan files
 llm-plans*.md
