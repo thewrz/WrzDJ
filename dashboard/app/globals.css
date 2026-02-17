@@ -318,6 +318,8 @@ a {
   position: relative;
   min-height: 100vh;
   min-height: 100dvh;
+  max-width: 100vw;
+  overflow-x: clip;
 }
 
 .join-banner-bg {
@@ -325,7 +327,9 @@ a {
   top: 0;
   left: 0;
   width: 100%;
-  height: 200px;
+  height: 30vh;
+  min-height: 150px;
+  max-height: 250px;
   z-index: 0;
   overflow: hidden;
 }
@@ -348,6 +352,8 @@ a {
   min-height: 100dvh;
   padding-bottom: 5rem;
   position: relative;
+  max-width: 100vw;
+  overflow-x: clip;
 }
 
 .guest-request-list {
@@ -989,12 +995,12 @@ a {
   top: calc(100% + 8px);
   left: 0;
   z-index: 1100;
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.75rem 1rem;
   min-width: 200px;
-  max-width: 320px;
+  max-width: min(320px, calc(100vw - 32px));
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   pointer-events: none;
 }
@@ -1008,18 +1014,20 @@ a {
 
 .help-tooltip-desc {
   font-size: 0.8125rem;
-  color: #94a3b8;
+  color: var(--text-secondary);
   line-height: 1.4;
 }
 
 /* Onboarding card */
 .onboarding-card {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1.25rem 1.5rem;
   width: 320px;
   max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
@@ -1040,7 +1048,7 @@ a {
 
 .onboarding-card-desc {
   font-size: 0.875rem;
-  color: #94a3b8;
+  color: var(--text-secondary);
   line-height: 1.5;
   margin-bottom: 1rem;
 }

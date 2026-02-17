@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useRef, useState, ReactNode } f
 import { api } from '@/lib/api';
 import type { HelpSpotConfig, HelpContextValue } from './types';
 import { isPageSeen, markPageSeen } from './seen-pages';
+import { isHelpDisabled } from './is-help-disabled';
 
 const HelpContext = createContext<HelpContextValue | null>(null);
 
@@ -15,9 +16,12 @@ export function HelpProvider({ children }: { children: ReactNode }) {
   const spotsRef = useRef<Map<string, HelpSpotConfig>>(new Map());
   const onboardingPageRef = useRef<string | null>(null);
 
+  const [isDisabled] = useState(isHelpDisabled);
+
   const toggleHelpMode = useCallback(() => {
+    if (isDisabled) return;
     setHelpMode((prev) => !prev);
-  }, []);
+  }, [isDisabled]);
 
   const registerSpot = useCallback((config: HelpSpotConfig): (() => void) => {
     spotsRef.current.set(config.id, config);
@@ -33,6 +37,7 @@ export function HelpProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const startOnboarding = useCallback((page: string) => {
+    if (isDisabled) return;
     const spots = getSpotsForPage(page);
     if (spots.length === 0) return;
     onboardingPageRef.current = page;
@@ -40,7 +45,7 @@ export function HelpProvider({ children }: { children: ReactNode }) {
     setCurrentStep(0);
     setActiveSpotId(spots[0].id);
     setHelpMode(true);
-  }, [getSpotsForPage]);
+  }, [isDisabled, getSpotsForPage]);
 
   const completeOnboarding = useCallback(() => {
     const page = onboardingPageRef.current;
@@ -84,10 +89,11 @@ export function HelpProvider({ children }: { children: ReactNode }) {
   }, [completeOnboarding]);
 
   const hasSeenPage = useCallback((page: string): boolean => {
+    if (isDisabled) return true;
     if (isPageSeen(page)) return true;
     if (typeof localStorage === 'undefined') return false;
     return localStorage.getItem(`wrzdj-help-seen-${page}`) === '1';
-  }, []);
+  }, [isDisabled]);
 
   return (
     <HelpContext.Provider

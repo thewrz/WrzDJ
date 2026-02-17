@@ -269,8 +269,8 @@ export default function KioskDisplayPage() {
     try {
       const results = await api.search(searchQuery);
       setSearchResults(results);
-    } catch (err) {
-      console.error('Search failed:', err);
+    } catch {
+      setSearchResults([]);
     } finally {
       setSearching(false);
     }
@@ -360,7 +360,9 @@ export default function KioskDisplayPage() {
           top: 0;
           left: 0;
           width: 100%;
-          height: 300px;
+          height: 30vh;
+          min-height: 200px;
+          max-height: 350px;
           z-index: 0;
           overflow: hidden;
         }

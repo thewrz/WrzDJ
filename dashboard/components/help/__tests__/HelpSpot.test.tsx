@@ -192,4 +192,20 @@ describe('HelpSpot', () => {
     const wrapper = screen.getByTestId('help-spot-s1');
     expect(wrapper.style.display).toBe('contents');
   });
+
+  it('tooltip uses help-tooltip class for theme-aware styling', () => {
+    mockCtx = makeContext({ helpMode: true });
+    vi.spyOn(HelpContext, 'useHelp').mockReturnValue(mockCtx);
+
+    render(
+      <HelpSpot spotId="s1" page="p" order={1} title="T" description="D">
+        <div>Content</div>
+      </HelpSpot>
+    );
+
+    const wrapper = screen.getByTestId('help-spot-s1');
+    fireEvent.mouseEnter(wrapper);
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip.className).toContain('help-tooltip');
+  });
 });
