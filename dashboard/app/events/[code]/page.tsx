@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
@@ -11,6 +11,8 @@ import { useHelp } from '@/lib/help/HelpContext';
 import { HelpSpot } from '@/components/help/HelpSpot';
 import { HelpButton } from '@/components/help/HelpButton';
 import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { useTabTitle } from '@/lib/tab-title';
 import { DeleteEventModal } from './components/DeleteEventModal';
 import { NowPlayingBadge } from './components/NowPlayingBadge';
 import { TidalLoginModal } from './components/TidalLoginModal';
@@ -107,6 +109,27 @@ export default function EventQueuePage() {
   // Banner upload state
   const [uploadingBanner, setUploadingBanner] = useState(false);
 
+  // Compact mode (persisted in localStorage)
+  const [compactMode, setCompactMode] = useState(() => {
+    try {
+      return localStorage.getItem('wrzdj-compact') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCompactMode = useCallback(() => {
+    setCompactMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('wrzdj-compact', String(next));
+      } catch {
+        // localStorage unavailable
+      }
+      return next;
+    });
+  }, []);
+
   // Tidal device login state
   const [showTidalLogin, setShowTidalLogin] = useState(false);
   const [tidalLoginUrl, setTidalLoginUrl] = useState('');
@@ -115,6 +138,13 @@ export default function EventQueuePage() {
 
   // Beatport login modal state
   const [showBeatportLogin, setShowBeatportLogin] = useState(false);
+
+  // Tab title badge: show "(N) Event - WrzDJ" when backgrounded
+  const newRequestCount = useMemo(
+    () => requests.filter((r) => r.status === 'new').length,
+    [requests]
+  );
+  useTabTitle(event?.name ?? null, newRequestCount);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -715,7 +745,7 @@ export default function EventQueuePage() {
           <h2 style={{ marginBottom: '1rem' }}>
             {is410 ? 'Event Expired' : is404 ? 'Event Not Found' : 'Error'}
           </h2>
-          <p style={{ color: '#9ca3af', marginBottom: '1rem' }}>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
             {is410
               ? 'This event has expired and is no longer accepting requests.'
               : is404
@@ -740,7 +770,19 @@ export default function EventQueuePage() {
   const isExpiredOrArchived = eventStatus === 'expired' || eventStatus === 'archived';
 
   return (
-    <div className="container">
+    <div className={`container${compactMode ? ' compact' : ''}`}>
+      <div style={{ position: 'fixed', top: '1rem', right: '4rem', zIndex: 1200, display: 'flex', gap: '0.5rem' }}>
+        <button
+          className="theme-toggle"
+          onClick={toggleCompactMode}
+          title={compactMode ? 'Switch to normal density' : 'Switch to compact density'}
+          aria-label={compactMode ? 'Compact mode on' : 'Compact mode off'}
+        >
+          <span style={{ fontSize: '0.8rem', lineHeight: 1 }}>{compactMode ? '\u2630' : '\u2637'}</span>
+          <span className="theme-toggle-label">{compactMode ? 'Dense' : 'Normal'}</span>
+        </button>
+        <ThemeToggle />
+      </div>
       <HelpButton page={helpPageId} />
       <OnboardingOverlay page={helpPageId} />
 
@@ -753,7 +795,7 @@ export default function EventQueuePage() {
       {/* 1. Header */}
       <div className="header">
         <div>
-          <Link href="/dashboard" style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+          <Link href="/dashboard" style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
             &larr; Back to Events
           </Link>
           <h1 style={{ marginTop: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{event.name}</h1>
@@ -773,7 +815,7 @@ export default function EventQueuePage() {
                 >
                   {eventStatus}
                 </span>
-                <span style={{ color: '#9ca3af' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>
                   {new Date(event.expires_at).toLocaleString()}
                 </span>
                 <button
@@ -793,7 +835,7 @@ export default function EventQueuePage() {
               </div>
             ) : editingExpiry ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <span style={{ color: '#9ca3af' }}>Expires:</span>
+                <span style={{ color: 'var(--text-secondary)' }}>Expires:</span>
                 <input
                   type="datetime-local"
                   className="input"
@@ -818,7 +860,7 @@ export default function EventQueuePage() {
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ color: '#9ca3af' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>
                   Expires: {new Date(event.expires_at).toLocaleString()}
                 </span>
                 <button
@@ -850,7 +892,7 @@ export default function EventQueuePage() {
               <div className="qr-container">
                 <QRCodeSVG value={joinUrl} size={100} />
               </div>
-              <p style={{ color: '#9ca3af', fontSize: '0.75rem', marginTop: '0.5rem' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginTop: '0.5rem' }}>
                 Scan to join
               </p>
             </>

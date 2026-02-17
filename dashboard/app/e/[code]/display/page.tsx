@@ -381,7 +381,7 @@ export default function KioskDisplayPage() {
           z-index: 1;
         }
         .kiosk-event-name {
-          font-size: 2.5rem;
+          font-size: 3rem;
           font-weight: bold;
           color: #fff;
           margin: 0;
@@ -389,6 +389,7 @@ export default function KioskDisplayPage() {
           text-overflow: ellipsis;
           white-space: nowrap;
           max-width: 100%;
+          font-family: var(--font-display, 'Plus Jakarta Sans'), -apple-system, sans-serif;
         }
         .kiosk-qr {
           background: #fff;
@@ -442,13 +443,14 @@ export default function KioskDisplayPage() {
         }
         .now-playing-label {
           color: #22c55e;
-          font-size: 1rem;
+          font-size: 1.125rem;
           text-transform: uppercase;
           letter-spacing: 0.1em;
           margin-bottom: 1rem;
           display: flex;
           align-items: center;
           gap: 0.5rem;
+          font-weight: 600;
         }
         .live-badge {
           background: #ef4444;
@@ -490,15 +492,16 @@ export default function KioskDisplayPage() {
           font-size: 4rem;
         }
         .now-playing-title {
-          font-size: 1.75rem;
+          font-size: 2rem;
           font-weight: bold;
           color: #fff;
           text-align: center;
           margin: 0 0 0.5rem;
+          font-family: var(--font-display, 'Plus Jakarta Sans'), -apple-system, sans-serif;
         }
         .now-playing-artist {
-          font-size: 1.25rem;
-          color: #9ca3af;
+          font-size: 1.375rem;
+          color: #d1d5db;
           text-align: center;
           margin: 0;
         }
@@ -530,11 +533,12 @@ export default function KioskDisplayPage() {
         }
         .queue-label {
           color: #3b82f6;
-          font-size: 1rem;
+          font-size: 1.125rem;
           text-transform: uppercase;
           letter-spacing: 0.1em;
           margin-bottom: 1rem;
           flex-shrink: 0;
+          font-weight: 600;
         }
         .queue-list {
           display: flex;
@@ -573,14 +577,15 @@ export default function KioskDisplayPage() {
         }
         .queue-item-title {
           color: #fff;
-          font-weight: 500;
+          font-size: 1.0625rem;
+          font-weight: 600;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
         .queue-item-artist {
-          color: #9ca3af;
-          font-size: 0.875rem;
+          color: #d1d5db;
+          font-size: 0.9375rem;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -628,11 +633,12 @@ export default function KioskDisplayPage() {
         }
         .history-label {
           color: #a855f7;
-          font-size: 1rem;
+          font-size: 1.125rem;
           text-transform: uppercase;
           letter-spacing: 0.1em;
           margin-bottom: 1rem;
           flex-shrink: 0;
+          font-weight: 600;
         }
         .history-list {
           display: flex;
@@ -677,14 +683,14 @@ export default function KioskDisplayPage() {
         }
         .history-item-title {
           color: #d1d5db;
-          font-size: 0.875rem;
+          font-size: 0.9375rem;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
         .history-item-artist {
-          color: #6b7280;
-          font-size: 0.75rem;
+          color: #9ca3af;
+          font-size: 0.8125rem;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
