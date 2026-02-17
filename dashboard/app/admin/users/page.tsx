@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { api, AdminUser } from '@/lib/api';
+import { useHelp } from '@/lib/help/HelpContext';
+import { HelpSpot } from '@/components/help/HelpSpot';
+import { HelpButton } from '@/components/help/HelpButton';
+import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
+
+const PAGE_ID = 'admin-users';
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -15,6 +21,7 @@ export default function AdminUsersPage() {
   const [editData, setEditData] = useState({ role: '', is_active: true, password: '' });
   const [error, setError] = useState('');
   const limit = 20;
+  const { hasSeenPage, startOnboarding, onboardingActive } = useHelp();
 
   const loadUsers = async () => {
     setLoading(true);
@@ -32,6 +39,14 @@ export default function AdminUsersPage() {
   useEffect(() => {
     loadUsers();
   }, [page, roleFilter]);
+
+  const dataLoaded = !loading;
+  useEffect(() => {
+    if (dataLoaded && !onboardingActive && !hasSeenPage(PAGE_ID)) {
+      const timer = setTimeout(() => startOnboarding(PAGE_ID), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [dataLoaded, onboardingActive, hasSeenPage, startOnboarding]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,28 +105,35 @@ export default function AdminUsersPage() {
 
   return (
     <div className="container">
+      <HelpButton page={PAGE_ID} />
+      <OnboardingOverlay page={PAGE_ID} />
+
       <div className="header">
         <h1>User Management</h1>
-        <button className="btn btn-primary" onClick={() => { setShowCreate(true); setError(''); }}>
-          Create User
-        </button>
+        <HelpSpot spotId="admin-create-user" page={PAGE_ID} order={1} title="Create User" description="Add a new DJ or admin account. DJs can create events immediately.">
+          <button className="btn btn-primary" onClick={() => { setShowCreate(true); setError(''); }}>
+            Create User
+          </button>
+        </HelpSpot>
       </div>
 
       {error && (
         <div style={{ color: '#ef4444', marginBottom: '1rem' }}>{error}</div>
       )}
 
-      <div className="tabs" style={{ marginBottom: '1rem' }}>
-        {roleFilters.map((f) => (
-          <button
-            key={f.label}
-            className={`tab${roleFilter === f.value ? ' active' : ''}`}
-            onClick={() => { setRoleFilter(f.value); setPage(1); }}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+      <HelpSpot spotId="admin-role-filters" page={PAGE_ID} order={2} title="Role Filters" description="Filter by role: All, Admins, DJs, or Pending.">
+        <div className="tabs" style={{ marginBottom: '1rem' }}>
+          {roleFilters.map((f) => (
+            <button
+              key={f.label}
+              className={`tab${roleFilter === f.value ? ' active' : ''}`}
+              onClick={() => { setRoleFilter(f.value); setPage(1); }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </HelpSpot>
 
       {/* Create Modal */}
       {showCreate && (
@@ -220,43 +242,49 @@ export default function AdminUsersPage() {
         <div className="loading">Loading users...</div>
       ) : (
         <>
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Username</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Events</th>
-                <th>Created</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id}>
-                  <td>{user.username}</td>
-                  <td>
-                    <span className={`badge badge-role-${user.role}`}>
-                      {user.role}
-                    </span>
-                  </td>
-                  <td>{user.is_active ? 'Active' : 'Inactive'}</td>
-                  <td>{user.event_count}</td>
-                  <td>{new Date(user.created_at).toLocaleDateString()}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button className="btn btn-sm btn-primary" onClick={() => openEdit(user)}>
-                        Edit
-                      </button>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(user)}>
-                        Delete
-                      </button>
-                    </div>
-                  </td>
+          <HelpSpot spotId="admin-user-table" page={PAGE_ID} order={3} title="User Table" description="All accounts with role, status, event count, and creation date.">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Events</th>
+                  <th>Created</th>
+                  <th>
+                    <HelpSpot spotId="admin-user-actions" page={PAGE_ID} order={4} title="User Actions" description="Edit roles, toggle active status, reset passwords, or delete accounts.">
+                      <span>Actions</span>
+                    </HelpSpot>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id}>
+                    <td>{user.username}</td>
+                    <td>
+                      <span className={`badge badge-role-${user.role}`}>
+                        {user.role}
+                      </span>
+                    </td>
+                    <td>{user.is_active ? 'Active' : 'Inactive'}</td>
+                    <td>{user.event_count}</td>
+                    <td>{new Date(user.created_at).toLocaleDateString()}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button className="btn btn-sm btn-primary" onClick={() => openEdit(user)}>
+                          Edit
+                        </button>
+                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(user)}>
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </HelpSpot>
 
           {totalPages > 1 && (
             <div className="pagination">

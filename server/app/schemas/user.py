@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import datetime
 from typing import Any
@@ -11,6 +12,16 @@ class UserOut(BaseModel):
     is_active: bool
     role: str
     created_at: datetime
+    help_pages_seen: list[str] = []
+
+    @field_validator("help_pages_seen", mode="before")
+    @classmethod
+    def parse_help_pages(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
 
     class Config:
         from_attributes = True
@@ -98,3 +109,7 @@ class RegisterRequest(BaseModel):
 class PublicSettings(BaseModel):
     registration_enabled: bool
     turnstile_site_key: str
+
+
+class HelpPageSeenRequest(BaseModel):
+    page: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-z0-9-]+$")

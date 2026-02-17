@@ -9,7 +9,7 @@ from app.core.rate_limit import get_client_ip, limiter
 from app.models.user import User, UserRole
 from app.schemas.auth import Token
 from app.schemas.common import StatusMessageResponse
-from app.schemas.user import PublicSettings, RegisterRequest, UserOut
+from app.schemas.user import HelpPageSeenRequest, PublicSettings, RegisterRequest, UserOut
 from app.services.auth import (
     authenticate_user,
     create_access_token,
@@ -74,6 +74,20 @@ def login(
 @limiter.limit("60/minute")
 def get_me(request: Request, current_user: User = Depends(get_current_user)) -> User:
     return current_user
+
+
+@router.post("/help-seen", response_model=StatusMessageResponse)
+@limiter.limit("30/minute")
+def mark_help_page_seen(
+    request: Request,
+    body: HelpPageSeenRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StatusMessageResponse:
+    """Mark a help page as seen for the current user."""
+    current_user.mark_help_page_seen(body.page)
+    db.commit()
+    return StatusMessageResponse(status="ok", message="OK")
 
 
 @router.get("/settings", response_model=PublicSettings)

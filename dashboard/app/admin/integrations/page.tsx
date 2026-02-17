@@ -6,6 +6,12 @@ import type {
   CapabilityStatus,
 } from '@/lib/api';
 import { api } from '@/lib/api';
+import { useHelp } from '@/lib/help/HelpContext';
+import { HelpSpot } from '@/components/help/HelpSpot';
+import { HelpButton } from '@/components/help/HelpButton';
+import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
+
+const PAGE_ID = 'admin-integrations';
 
 const BADGE_LABELS: Record<CapabilityStatus, string> = {
   yes: 'YES',
@@ -33,6 +39,7 @@ export default function AdminIntegrationsPage() {
   const [error, setError] = useState('');
   const [checking, setChecking] = useState<Record<string, boolean>>({});
   const [toggling, setToggling] = useState<Record<string, boolean>>({});
+  const { hasSeenPage, startOnboarding, onboardingActive } = useHelp();
 
   const loadIntegrations = useCallback(async () => {
     try {
@@ -49,6 +56,14 @@ export default function AdminIntegrationsPage() {
   useEffect(() => {
     loadIntegrations();
   }, [loadIntegrations]);
+
+  const dataLoaded = !loading;
+  useEffect(() => {
+    if (dataLoaded && !onboardingActive && !hasSeenPage(PAGE_ID)) {
+      const timer = setTimeout(() => startOnboarding(PAGE_ID), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [dataLoaded, onboardingActive, hasSeenPage, startOnboarding]);
 
   const handleToggle = async (service: string, currentEnabled: boolean) => {
     setToggling((prev) => ({ ...prev, [service]: true }));
@@ -98,6 +113,8 @@ export default function AdminIntegrationsPage() {
 
   return (
     <div className="container">
+      <HelpButton page={PAGE_ID} />
+      <OnboardingOverlay page={PAGE_ID} />
       <h1 style={{ marginBottom: '0.5rem' }}>Integrations</h1>
       <p style={{ color: '#9ca3af', marginBottom: '2rem' }}>
         Monitor and control external service integrations. Disabled services
@@ -118,100 +135,108 @@ export default function AdminIntegrationsPage() {
         </div>
       )}
 
-      <div className="card" style={{ overflow: 'auto' }}>
-        <table className="integration-table">
-          <thead>
-            <tr>
-              <th>Service</th>
-              <th>Enabled</th>
-              <th>Auth / Login</th>
-              <th>Catalog Search</th>
-              <th>Playlist Sync</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {services.map((svc) => (
-              <tr key={svc.service}>
-                <td>
-                  <div style={{ fontWeight: 500 }}>{svc.display_name}</div>
-                  {svc.last_check_error && (
-                    <div
-                      style={{
-                        color: '#ef4444',
-                        fontSize: '0.75rem',
-                        marginTop: '0.25rem',
-                      }}
-                    >
-                      {svc.last_check_error}
-                    </div>
-                  )}
-                </td>
-                <td>
-                  <button
-                    className={`toggle-switch${svc.enabled ? ' active' : ''}`}
-                    onClick={() => handleToggle(svc.service, svc.enabled)}
-                    disabled={toggling[svc.service]}
-                    aria-label={`${svc.enabled ? 'Disable' : 'Enable'} ${svc.display_name}`}
-                  />
-                </td>
-                <td>
-                  <CapabilityBadge status={svc.capabilities.auth} />
-                </td>
-                <td>
-                  <CapabilityBadge status={svc.capabilities.catalog_search} />
-                </td>
-                <td>
-                  <CapabilityBadge status={svc.capabilities.playlist_sync} />
-                </td>
-                <td>
-                  <button
-                    className="btn-check"
-                    onClick={() => handleCheck(svc.service)}
-                    disabled={checking[svc.service]}
-                  >
-                    {checking[svc.service] ? 'Checking...' : 'Check Health'}
-                  </button>
-                </td>
+      <HelpSpot spotId="admin-service-table" page={PAGE_ID} order={1} title="Service Status" description="Monitor Spotify, Tidal, Beatport, and Bridge integrations.">
+        <div className="card" style={{ overflow: 'auto' }}>
+          <table className="integration-table">
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>
+                  <HelpSpot spotId="admin-service-toggles" page={PAGE_ID} order={2} title="Enable/Disable" description="Toggle services on/off. Disabled services show &quot;unavailable&quot; to DJs.">
+                    <span>Enabled</span>
+                  </HelpSpot>
+                </th>
+                <th>Auth / Login</th>
+                <th>Catalog Search</th>
+                <th>Playlist Sync</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div
-        className="card"
-        style={{ marginTop: '1rem', color: '#9ca3af', fontSize: '0.875rem' }}
-      >
-        <strong style={{ color: '#ededed' }}>Badge Legend</strong>
-        <div
-          style={{
-            display: 'flex',
-            gap: '1rem',
-            flexWrap: 'wrap',
-            marginTop: '0.75rem',
-          }}
-        >
-          <span>
-            <span className="badge-status yes">YES</span> Working
-          </span>
-          <span>
-            <span className="badge-status configured">CONFIGURED</span>{' '}
-            Credentials set, untested
-          </span>
-          <span>
-            <span className="badge-status no">NO</span> Check failed
-          </span>
-          <span>
-            <span className="badge-status not-configured">NOT CONFIGURED</span>{' '}
-            No credentials
-          </span>
-          <span>
-            <span className="badge-status not-implemented">N/A</span> Not
-            supported
-          </span>
+            </thead>
+            <tbody>
+              {services.map((svc) => (
+                <tr key={svc.service}>
+                  <td>
+                    <div style={{ fontWeight: 500 }}>{svc.display_name}</div>
+                    {svc.last_check_error && (
+                      <div
+                        style={{
+                          color: '#ef4444',
+                          fontSize: '0.75rem',
+                          marginTop: '0.25rem',
+                        }}
+                      >
+                        {svc.last_check_error}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    <button
+                      className={`toggle-switch${svc.enabled ? ' active' : ''}`}
+                      onClick={() => handleToggle(svc.service, svc.enabled)}
+                      disabled={toggling[svc.service]}
+                      aria-label={`${svc.enabled ? 'Disable' : 'Enable'} ${svc.display_name}`}
+                    />
+                  </td>
+                  <td>
+                    <CapabilityBadge status={svc.capabilities.auth} />
+                  </td>
+                  <td>
+                    <CapabilityBadge status={svc.capabilities.catalog_search} />
+                  </td>
+                  <td>
+                    <CapabilityBadge status={svc.capabilities.playlist_sync} />
+                  </td>
+                  <td>
+                    <button
+                      className="btn-check"
+                      onClick={() => handleCheck(svc.service)}
+                      disabled={checking[svc.service]}
+                    >
+                      {checking[svc.service] ? 'Checking...' : 'Check Health'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
+      </HelpSpot>
+
+      <HelpSpot spotId="admin-badge-legend" page={PAGE_ID} order={3} title="Badge Legend" description="What each badge means: YES, CONFIGURED, NO, NOT CONFIGURED, N/A.">
+        <div
+          className="card"
+          style={{ marginTop: '1rem', color: '#9ca3af', fontSize: '0.875rem' }}
+        >
+          <strong style={{ color: '#ededed' }}>Badge Legend</strong>
+          <div
+            style={{
+              display: 'flex',
+              gap: '1rem',
+              flexWrap: 'wrap',
+              marginTop: '0.75rem',
+            }}
+          >
+            <span>
+              <span className="badge-status yes">YES</span> Working
+            </span>
+            <span>
+              <span className="badge-status configured">CONFIGURED</span>{' '}
+              Credentials set, untested
+            </span>
+            <span>
+              <span className="badge-status no">NO</span> Check failed
+            </span>
+            <span>
+              <span className="badge-status not-configured">NOT CONFIGURED</span>{' '}
+              No credentials
+            </span>
+            <span>
+              <span className="badge-status not-implemented">N/A</span> Not
+              supported
+            </span>
+          </div>
+        </div>
+      </HelpSpot>
     </div>
   );
 }

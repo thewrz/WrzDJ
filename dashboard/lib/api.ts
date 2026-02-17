@@ -222,8 +222,15 @@ class ApiClient {
     return response.json();
   }
 
-  async getMe(): Promise<{ id: number; username: string; role: string }> {
+  async getMe(): Promise<{ id: number; username: string; role: string; help_pages_seen: string[] }> {
     return this.fetch('/api/auth/me');
+  }
+
+  async markHelpPageSeen(page: string): Promise<void> {
+    await this.fetch('/api/auth/help-seen', {
+      method: 'POST',
+      body: JSON.stringify({ page }),
+    });
   }
 
   async getPublicSettings(): Promise<{ registration_enabled: boolean; turnstile_site_key: string }> {

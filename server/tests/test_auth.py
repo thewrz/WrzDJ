@@ -89,3 +89,67 @@ class TestAuthMe:
             headers={"Authorization": "NotBearer token"},
         )
         assert response.status_code == 401
+
+    def test_me_returns_help_pages_seen(self, client: TestClient, auth_headers: dict):
+        """Test /me includes help_pages_seen as empty array by default."""
+        response = client.get("/api/auth/me", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["help_pages_seen"] == []
+
+
+class TestHelpPageSeen:
+    """Tests for /api/auth/help-seen endpoint."""
+
+    def test_mark_help_page_seen(self, client: TestClient, auth_headers: dict):
+        """Test marking a help page as seen returns 200."""
+        response = client.post(
+            "/api/auth/help-seen",
+            json={"page": "admin-overview"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+
+    def test_mark_help_page_seen_persists(self, client: TestClient, auth_headers: dict):
+        """Test marked page appears in /me response."""
+        client.post(
+            "/api/auth/help-seen",
+            json={"page": "admin-overview"},
+            headers=auth_headers,
+        )
+        response = client.get("/api/auth/me", headers=auth_headers)
+        assert "admin-overview" in response.json()["help_pages_seen"]
+
+    def test_mark_help_page_seen_idempotent(self, client: TestClient, auth_headers: dict):
+        """Test marking same page twice doesn't duplicate."""
+        client.post(
+            "/api/auth/help-seen",
+            json={"page": "events"},
+            headers=auth_headers,
+        )
+        client.post(
+            "/api/auth/help-seen",
+            json={"page": "events"},
+            headers=auth_headers,
+        )
+        response = client.get("/api/auth/me", headers=auth_headers)
+        pages = response.json()["help_pages_seen"]
+        assert pages.count("events") == 1
+
+    def test_mark_help_page_seen_invalid(self, client: TestClient, auth_headers: dict):
+        """Test invalid page ID returns 422."""
+        response = client.post(
+            "/api/auth/help-seen",
+            json={"page": "INVALID PAGE!"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 422
+
+    def test_mark_help_page_seen_no_auth(self, client: TestClient):
+        """Test endpoint requires authentication."""
+        response = client.post(
+            "/api/auth/help-seen",
+            json={"page": "admin-overview"},
+        )
+        assert response.status_code == 401

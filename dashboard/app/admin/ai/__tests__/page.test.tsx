@@ -12,6 +12,23 @@ vi.mock('@/lib/auth', () => ({
   }),
 }));
 
+vi.mock('@/lib/help/HelpContext', () => ({
+  useHelp: () => ({
+    helpMode: false,
+    onboardingActive: false,
+    currentStep: 0,
+    activeSpotId: null,
+    toggleHelpMode: vi.fn(),
+    registerSpot: vi.fn(() => vi.fn()),
+    getSpotsForPage: vi.fn(() => []),
+    startOnboarding: vi.fn(),
+    nextStep: vi.fn(),
+    prevStep: vi.fn(),
+    skipOnboarding: vi.fn(),
+    hasSeenPage: vi.fn(() => true),
+  }),
+}));
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
   usePathname: () => '/admin/ai',

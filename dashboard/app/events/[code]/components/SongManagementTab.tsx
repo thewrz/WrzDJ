@@ -7,6 +7,7 @@ import { SyncReportPanel } from './SyncReportPanel';
 import { PlayHistorySection } from './PlayHistorySection';
 import { RecommendationsCard } from './RecommendationsCard';
 import { DjSongSearchModal } from './DjSongSearchModal';
+import { HelpSpot } from '@/components/help/HelpSpot';
 
 interface SongManagementTabProps {
   code: string;
@@ -47,16 +48,19 @@ export function SongManagementTab(props: SongManagementTabProps) {
   return (
     <>
       {!props.isExpiredOrArchived && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => setShowSearch(true)}
-          >
-            Search For Song
-          </button>
-        </div>
+        <HelpSpot spotId="event-search-btn" page="event-songs" order={2} title="DJ Song Search" description="Search for songs to add directly to the queue.">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => setShowSearch(true)}
+            >
+              Search For Song
+            </button>
+          </div>
+        </HelpSpot>
       )}
 
+      <HelpSpot spotId="event-request-queue" page="event-songs" order={3} title="Request Queue" description="Incoming song requests from guests. Filter by status, accept/reject/play.">
       <RequestQueueSection
         requests={props.requests}
         isExpiredOrArchived={props.isExpiredOrArchived}
@@ -75,7 +79,9 @@ export function SongManagementTab(props: SongManagementTabProps) {
         deletingRequest={props.deletingRequest}
         refreshingRequest={props.refreshingRequest}
       />
+      </HelpSpot>
 
+      <HelpSpot spotId="event-sync-report" page="event-songs" order={4} title="Sync Report" description="Shows which requests synced to playlists. Fix failures by picking the correct track.">
       <SyncReportPanel
         requests={props.requests}
         connectedServices={props.connectedServices}
@@ -87,15 +93,19 @@ export function SongManagementTab(props: SongManagementTabProps) {
         onOpenTidalPicker={props.onOpenTidalPicker}
         onOpenBeatportPicker={props.onOpenBeatportPicker}
       />
+      </HelpSpot>
 
+      <HelpSpot spotId="event-play-history" page="event-songs" order={5} title="Play History" description="Tracks detected from your DJ software via the Bridge App.">
       <PlayHistorySection
         items={props.playHistory}
         total={props.playHistoryTotal}
         exporting={props.exportingHistory}
         onExport={props.onExportPlayHistory}
       />
+      </HelpSpot>
 
       {!props.isExpiredOrArchived && (
+        <HelpSpot spotId="event-recommendations" page="event-songs" order={6} title="Recommendations" description="Get song suggestions based on requests, a playlist template, or AI.">
         <RecommendationsCard
           code={props.code}
           hasAcceptedRequests={props.requests.some(
@@ -105,6 +115,7 @@ export function SongManagementTab(props: SongManagementTabProps) {
           beatportLinked={props.beatportLinked}
           onAcceptTrack={props.onAcceptTrack}
         />
+        </HelpSpot>
       )}
 
       {showSearch && (

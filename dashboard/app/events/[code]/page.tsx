@@ -7,6 +7,10 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/auth';
 import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem, TidalStatus, TidalSearchResult, BeatportStatus } from '@/lib/api';
 import type { BeatportSearchResult, NowPlayingInfo } from '@/lib/api-types';
+import { useHelp } from '@/lib/help/HelpContext';
+import { HelpSpot } from '@/components/help/HelpSpot';
+import { HelpButton } from '@/components/help/HelpButton';
+import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
 import { DeleteEventModal } from './components/DeleteEventModal';
 import { NowPlayingBadge } from './components/NowPlayingBadge';
 import { TidalLoginModal } from './components/TidalLoginModal';
@@ -97,6 +101,8 @@ export default function EventQueuePage() {
 
   // Tab state
   const [activeTab, setActiveTab] = useState<'songs' | 'manage'>('songs');
+  const helpPageId = activeTab === 'songs' ? 'event-songs' : 'event-manage';
+  const { hasSeenPage, startOnboarding, onboardingActive } = useHelp();
 
   // Banner upload state
   const [uploadingBanner, setUploadingBanner] = useState(false);
@@ -122,6 +128,15 @@ export default function EventQueuePage() {
     const timer = setTimeout(() => setActionError(null), 5000);
     return () => clearTimeout(timer);
   }, [actionError]);
+
+  // Auto-trigger onboarding for first-time visitors to this tab
+  const eventLoaded = !isLoading && isAuthenticated && !loading && !!event;
+  useEffect(() => {
+    if (eventLoaded && !onboardingActive && !hasSeenPage(helpPageId)) {
+      const timer = setTimeout(() => startOnboarding(helpPageId), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [eventLoaded, onboardingActive, helpPageId, hasSeenPage, startOnboarding]);
 
   const hasLoadedRef = useRef(false);
 
@@ -726,6 +741,9 @@ export default function EventQueuePage() {
 
   return (
     <div className="container">
+      <HelpButton page={helpPageId} />
+      <OnboardingOverlay page={helpPageId} />
+
       {actionError && (
         <div style={{ background: '#7f1d1d', color: '#fca5a5', padding: '0.75rem 1rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
           {actionError}
@@ -865,20 +883,22 @@ export default function EventQueuePage() {
         </>
       ) : (
         <>
-          <div className="event-tabs">
-            <button
-              className={`event-tab${activeTab === 'songs' ? ' active' : ''}`}
-              onClick={() => setActiveTab('songs')}
-            >
-              Song Management
-            </button>
-            <button
-              className={`event-tab${activeTab === 'manage' ? ' active' : ''}`}
-              onClick={() => setActiveTab('manage')}
-            >
-              Event Management
-            </button>
-          </div>
+          <HelpSpot spotId="event-tabs" page={helpPageId} order={1} title="Tab Navigation" description="Switch between Song Management (requests, search, recommendations) and Event Management (kiosk, cloud providers, bridge).">
+            <div className="event-tabs">
+              <button
+                className={`event-tab${activeTab === 'songs' ? ' active' : ''}`}
+                onClick={() => setActiveTab('songs')}
+              >
+                Song Management
+              </button>
+              <button
+                className={`event-tab${activeTab === 'manage' ? ' active' : ''}`}
+                onClick={() => setActiveTab('manage')}
+              >
+                Event Management
+              </button>
+            </div>
+          </HelpSpot>
 
           <div style={{ display: activeTab === 'songs' ? undefined : 'none' }}>
             <SongManagementTab

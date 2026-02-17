@@ -5,9 +5,16 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { api, Event } from '@/lib/api';
+import { useHelp } from '@/lib/help/HelpContext';
+import { HelpSpot } from '@/components/help/HelpSpot';
+import { HelpButton } from '@/components/help/HelpButton';
+import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
+
+const PAGE_ID = 'events';
 
 export default function EventsPage() {
   const { isAuthenticated, isLoading, role, logout } = useAuth();
+  const { hasSeenPage, startOnboarding } = useHelp();
   const router = useRouter();
   const [events, setEvents] = useState<Event[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
@@ -29,6 +36,14 @@ export default function EventsPage() {
       loadEvents();
     }
   }, [isAuthenticated]);
+
+  // Auto-trigger onboarding for first-time visitors
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && !loadingEvents && !hasSeenPage(PAGE_ID)) {
+      const timer = setTimeout(() => startOnboarding(PAGE_ID), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, isAuthenticated, loadingEvents, hasSeenPage, startOnboarding]);
 
   const loadEvents = async () => {
     try {
@@ -68,36 +83,45 @@ export default function EventsPage() {
 
   return (
     <div className="container">
+      <HelpButton page={PAGE_ID} />
+      <OnboardingOverlay page={PAGE_ID} />
+
       {errorMsg && (
         <div style={{ background: '#7f1d1d', color: '#fca5a5', padding: '0.75rem 1rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
           {errorMsg}
         </div>
       )}
-      <div className="header">
-        <h1>My Events</h1>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {role === 'admin' && (
-            <Link href="/admin">
-              <button className="btn" style={{ background: '#6b21a8' }}>Admin</button>
-            </Link>
-          )}
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-            Create Event
-          </button>
-          <a
-            href="https://github.com/thewrz/WrzDJ/releases/latest"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-sm"
-            style={{ background: '#333', textDecoration: 'none', color: '#ededed' }}
-          >
-            Bridge App
-          </a>
-          <button className="btn" style={{ background: '#333' }} onClick={logout}>
-            Logout
-          </button>
+      <HelpSpot spotId="events-header" page={PAGE_ID} order={1} title="Your Events" description="This is your events dashboard. All your DJ events appear here.">
+        <div className="header">
+          <h1>My Events</h1>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            {role === 'admin' && (
+              <HelpSpot spotId="events-admin" page={PAGE_ID} order={3} title="Admin Panel" description="Access the admin panel to manage users, view all events, and configure integrations.">
+                <Link href="/admin">
+                  <button className="btn" style={{ background: '#6b21a8' }}>Admin</button>
+                </Link>
+              </HelpSpot>
+            )}
+            <HelpSpot spotId="events-create" page={PAGE_ID} order={2} title="Create Event" description="Click to create a new event. Each event gets a unique code and QR that guests scan to submit requests.">
+              <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+                Create Event
+              </button>
+            </HelpSpot>
+            <a
+              href="https://github.com/thewrz/WrzDJ/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-sm"
+              style={{ background: '#333', textDecoration: 'none', color: '#ededed' }}
+            >
+              Bridge App
+            </a>
+            <button className="btn" style={{ background: '#333' }} onClick={logout}>
+              Logout
+            </button>
+          </div>
         </div>
-      </div>
+      </HelpSpot>
 
       {showCreate && (
         <div className="card" style={{ marginBottom: '2rem' }}>
@@ -140,24 +164,26 @@ export default function EventsPage() {
           <p style={{ color: '#9ca3af' }}>No events yet. Create your first event!</p>
         </div>
       ) : (
-        <div className="event-grid">
-          {events.map((event) => (
-            <Link key={event.id} href={`/events/${event.code}`}>
-              <div className="event-card" style={{ cursor: 'pointer' }}>
-                <h3>{event.name}</h3>
-                <div className="code">{event.code}</div>
-                <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
-                  Expires: {new Date(event.expires_at).toLocaleString()}
-                </p>
-                {!event.is_active && (
-                  <span className="badge badge-rejected" style={{ marginTop: '0.5rem' }}>
-                    Inactive
-                  </span>
-                )}
-              </div>
-            </Link>
-          ))}
-        </div>
+        <HelpSpot spotId="events-grid" page={PAGE_ID} order={4} title="Event Cards" description="Your events appear as cards. Click any card to manage its request queue, sync settings, and kiosk controls.">
+          <div className="event-grid">
+            {events.map((event) => (
+              <Link key={event.id} href={`/events/${event.code}`}>
+                <div className="event-card" style={{ cursor: 'pointer' }}>
+                  <h3>{event.name}</h3>
+                  <div className="code">{event.code}</div>
+                  <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+                    Expires: {new Date(event.expires_at).toLocaleString()}
+                  </p>
+                  {!event.is_active && (
+                    <span className="badge badge-rejected" style={{ marginTop: '0.5rem' }}>
+                      Inactive
+                    </span>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </HelpSpot>
       )}
     </div>
   );
