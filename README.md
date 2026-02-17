@@ -9,13 +9,13 @@
 A modern, real-time song request system for DJs. Guests scan a QR code to submit requests -- no app install, no login. DJs manage everything from a live dashboard with automatic track detection from DJ equipment via a plugin system supporting Denon StageLinQ, Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast, and more.
 
 <p align="center">
-  <img src="docs/images/screenshot-dashboard.png" alt="WrzDJ DJ Dashboard" width="800">
+  <img src="docs/images/event-management.png" alt="WrzDJ DJ Dashboard" width="800">
   <br>
   <em>DJ dashboard -- manage requests, QR code for guests, live Now Playing detection, and kiosk controls</em>
 </p>
 
 <p align="center">
-  <img src="docs/images/screenshot-join-web-page-mobile.png" alt="WrzDJ Guest Join Page (Mobile)" width="300">
+  <img src="docs/images/guest-join-mobile.png" alt="WrzDJ Guest Join Page (Mobile)" width="300">
   <br>
   <em>Guest join page -- scan a QR code, browse the queue, and request a song (no app, no login)</em>
 </p>
