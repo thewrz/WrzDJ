@@ -186,7 +186,7 @@ jobs:
           Write-Host "Tag $tag -> semver $version"
           $url = "https://github.com/thewrz/WrzDJ/releases/download/${{ github.ref_name }}/WrzDJ-Bridge.exe"
           .\wingetcreate.exe update WrzDJ.WrzDJ-Bridge `
-            --urls $url `
+            --urls "$url|x64" `
             --version $version `
             --token ${{ secrets.WINGET_PAT }} `
             --submit
