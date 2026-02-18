@@ -30,7 +30,7 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -87,7 +87,7 @@ jobs:
         working-directory: dashboard
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -119,7 +119,7 @@ jobs:
         working-directory: bridge
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -145,7 +145,7 @@ jobs:
         working-directory: bridge-app
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -175,7 +175,7 @@ jobs:
     name: Docker Build Smoke Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build backend image
         run: docker build -t wrzdj-api-test server/
