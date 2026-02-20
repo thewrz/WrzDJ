@@ -218,9 +218,18 @@ This section exists because a previous OAuth token implementation stored tokens 
   - `spotify_enabled`, `tidal_enabled`, `beatport_enabled`, `bridge_enabled` (all default `True`)
 - Service: `server/app/services/system_settings.py` — lazy-creates with defaults if missing
 
+### Kiosk Pairing
+- Model: `server/app/models/kiosk.py` — `Kiosk` table with `pair_code` (6-char alphanumeric, safe alphabet excluding O/0/I/1), `session_token` (64-char hex), `status` ("pairing"/"active"), `pair_expires_at` (5-min TTL)
+- Service: `server/app/services/kiosk.py` — create pairing, complete pairing, assignment polling, expiry cleanup
+- **Pairing flow**: kiosk device creates pair code via `POST /api/public/kiosk/pair` → displays QR → DJ scans QR → authenticates → selects event via `/kiosk-link/{code}` → `POST /api/kiosk/pair/{code}/complete` → kiosk polls status → auto-redirects to `/e/{event_code}/display`
+- Frontend pages: `dashboard/app/kiosk-pair/page.tsx` (device-side), `dashboard/app/kiosk-link/[code]/page.tsx` (DJ-side event picker with auth gate)
+- Session persistence: kiosk stores `session_token` in localStorage, survives power cycles via `/api/public/kiosk/session/{token}/assignment` polling
+- DJ management: `PairedKiosksCard` component on event page — list, rename, reassign, unpair kiosks
+
 ### API Structure
 - Admin endpoints: `server/app/api/admin.py` — endpoints under `/api/admin/` (includes integration health/toggle)
 - Authenticated endpoints: `server/app/api/events.py`, `requests.py`, `search.py`, `beatport.py`, `tidal.py`
+- Kiosk management: `server/app/api/kiosk.py` — authenticated DJ endpoints under `/api/kiosk/` + public pairing endpoints under `/api/public/kiosk/`
 - Public endpoints (no auth): `server/app/api/public.py`, `votes.py`, `bridge.py`, auth settings/register
 - Rate limiting via slowapi: `@limiter.limit("N/minute")`
 - Client fingerprinting: IP-based via `X-Forwarded-For` header fallback to `request.client.host`
@@ -237,8 +246,12 @@ This section exists because a previous OAuth token implementation stored tokens 
 ```
 NEW → ACCEPTED → PLAYING → PLAYED
 NEW → REJECTED
+REJECTED → NEW (re-open)
 ```
 - State machine enforced: invalid transitions (e.g., NEW → PLAYED) are rejected with 400
+- **Single-active playing**: only one request per event can be PLAYING at a time — marking a new request PLAYING auto-transitions the previous one to PLAYED (`clear_other_playing_requests()` in `request.py`)
+- Manual "Mark Playing" also upserts the `NowPlaying` table (`set_manual_now_playing()` in `now_playing.py`) so kiosk displays show manually-played tracks, not just bridge-detected ones
+- Bridge auto-detection overrides all playing requests (both bridge-matched and manual)
 
 ### Banner / Image Upload
 - DJs upload banner images per event via `POST /api/events/{code}/banner` (multipart)
@@ -255,9 +268,11 @@ NEW → REJECTED
 - Migration: `server/alembic/versions/009_add_event_banner.py`
 
 ### Key Services
-- `server/app/services/request.py` — CRUD, deduplication, bulk accept
+- `server/app/services/request.py` — CRUD, deduplication, bulk accept, single-active playing constraint
 - `server/app/services/vote.py` — idempotent voting with atomic increments
 - `server/app/services/event.py` — event lifecycle, status computation
+- `server/app/services/now_playing.py` — NowPlaying table management, manual/bridge sync, auto-hide logic, play history archival
+- `server/app/services/kiosk.py` — kiosk pairing (pair code generation, session tokens, expiry cleanup)
 - `server/app/services/tidal.py` — Tidal OAuth + playlist sync (background tasks)
 - `server/app/services/beatport.py` — Beatport OAuth2 + PKCE, search, playlist sync, subscription detection
 - `server/app/services/admin.py` — user/event CRUD for admins, system stats, last-admin protection
