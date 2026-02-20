@@ -22,6 +22,7 @@ from app.core.rate_limit import get_client_fingerprint, limiter
 from app.models.event import Event
 from app.models.request import RequestStatus
 from app.models.user import User
+from app.schemas.activity_log import ActivityLogEntry
 from app.schemas.common import AcceptAllResponse
 from app.schemas.event import (
     DisplaySettingsResponse,
@@ -30,7 +31,13 @@ from app.schemas.event import (
     EventOut,
     EventUpdate,
 )
-from app.schemas.recommendation import LLMPromptRequest, TemplatePlaylistRequest
+from app.schemas.recommendation import (
+    EventMusicProfile,
+    LLMPromptRequest,
+    RecommendationResponse,
+    RecommendedTrack,
+    TemplatePlaylistRequest,
+)
 from app.schemas.request import RequestCreate, RequestOut
 from app.schemas.search import SearchResult
 from app.services.event import (
@@ -64,7 +71,7 @@ from app.services.sync.registry import get_connected_adapters
 router = APIRouter()
 settings = get_settings()
 
-# Cached LLM rate limit (refreshed when admin changes it)
+# FIXME: per-process cache — value drifts in multi-worker deployments until next request
 _llm_rate_limit_cache: dict[str, int] = {"value": 3}
 
 # Maximum number of requests to export in a single CSV
@@ -110,6 +117,78 @@ def _get_banner_urls(event, request: Request | None) -> tuple[str | None, str | 
     stem = event.banner_filename.rsplit(".", 1)[0]
     kiosk_url = f"{api_base}/uploads/{stem}_kiosk.webp"
     return banner_url, kiosk_url
+
+
+def _request_to_out(r) -> RequestOut:
+    """Convert a Request model to RequestOut schema."""
+    return RequestOut(
+        id=r.id,
+        event_id=r.event_id,
+        song_title=r.song_title,
+        artist=r.artist,
+        source=r.source,
+        source_url=r.source_url,
+        artwork_url=r.artwork_url,
+        note=r.note,
+        status=r.status,
+        created_at=r.created_at,
+        updated_at=r.updated_at,
+        tidal_track_id=r.tidal_track_id,
+        tidal_sync_status=r.tidal_sync_status,
+        raw_search_query=r.raw_search_query,
+        sync_results_json=r.sync_results_json,
+        vote_count=r.vote_count,
+        genre=r.genre,
+        bpm=r.bpm,
+        musical_key=r.musical_key,
+    )
+
+
+def _build_recommendation_response(result, db) -> RecommendationResponse:
+    """Build a RecommendationResponse from a recommendation engine result."""
+    from app.services.recommendation.camelot import parse_key
+    from app.services.recommendation.llm_hooks import is_llm_available
+
+    profile = EventMusicProfile(
+        avg_bpm=result.event_profile.avg_bpm,
+        bpm_range_low=result.event_profile.bpm_range[0] if result.event_profile.bpm_range else None,
+        bpm_range_high=result.event_profile.bpm_range[1]
+        if result.event_profile.bpm_range
+        else None,
+        dominant_keys=[str(p) for k in result.event_profile.dominant_keys if (p := parse_key(k))],
+        dominant_genres=list(result.event_profile.dominant_genres),
+        track_count=result.event_profile.track_count,
+        enriched_count=result.enriched_count,
+    )
+
+    suggestions = [
+        RecommendedTrack(
+            title=s.profile.title,
+            artist=s.profile.artist,
+            bpm=s.profile.bpm,
+            key=str(p) if (p := parse_key(s.profile.key)) else s.profile.key,
+            genre=s.profile.genre,
+            score=s.score,
+            bpm_score=s.bpm_score,
+            key_score=s.key_score,
+            genre_score=s.genre_score,
+            source=s.profile.source,
+            track_id=s.profile.track_id,
+            url=s.profile.url,
+            cover_url=s.profile.cover_url,
+            duration_seconds=s.profile.duration_seconds,
+            mb_verified=result.mb_verified.get(s.profile.artist, False),
+        )
+        for s in result.suggestions
+    ]
+
+    return RecommendationResponse(
+        suggestions=suggestions,
+        profile=profile,
+        services_used=result.services_used,
+        total_candidates_searched=result.total_candidates_searched,
+        llm_available=is_llm_available(db),
+    )
 
 
 def _event_to_out(
@@ -194,7 +273,7 @@ def list_archived_events(
     return result
 
 
-@router.get("/activity", response_model=list)
+@router.get("/activity", response_model=list[ActivityLogEntry])
 @limiter.limit("60/minute")
 def get_activity_log(
     request: Request,
@@ -204,7 +283,6 @@ def get_activity_log(
     current_user: User = Depends(get_current_active_user),
 ):
     """Get recent activity log entries for the current user's events."""
-    from app.schemas.activity_log import ActivityLogEntry
     from app.services.activity_log import get_recent_activity
 
     entries = get_recent_activity(db, limit=limit, event_code=event_code, user_id=current_user.id)
@@ -477,24 +555,7 @@ def submit_request(
     if not is_duplicate and not has_full_metadata:
         background_tasks.add_task(enrich_request_metadata, db, song_request.id)
 
-    return RequestOut(
-        id=song_request.id,
-        event_id=song_request.event_id,
-        song_title=song_request.song_title,
-        artist=song_request.artist,
-        source=song_request.source,
-        source_url=song_request.source_url,
-        artwork_url=song_request.artwork_url,
-        note=song_request.note,
-        status=song_request.status,
-        created_at=song_request.created_at,
-        updated_at=song_request.updated_at,
-        is_duplicate=is_duplicate,
-        vote_count=song_request.vote_count,
-        genre=song_request.genre,
-        bpm=song_request.bpm,
-        musical_key=song_request.musical_key,
-    )
+    return _request_to_out(song_request).model_copy(update={"is_duplicate": is_duplicate})
 
 
 @router.post("/{code}/requests/accept-all", response_model=AcceptAllResponse)
@@ -528,47 +589,17 @@ def get_event_requests(
 ) -> list[RequestOut]:
     # Owner can view requests regardless of event status
     requests = get_requests_for_event(db, event, status, since, limit)
-    return [
-        RequestOut(
-            id=r.id,
-            event_id=r.event_id,
-            song_title=r.song_title,
-            artist=r.artist,
-            source=r.source,
-            source_url=r.source_url,
-            artwork_url=r.artwork_url,
-            note=r.note,
-            status=r.status,
-            created_at=r.created_at,
-            updated_at=r.updated_at,
-            tidal_track_id=r.tidal_track_id,
-            tidal_sync_status=r.tidal_sync_status,
-            raw_search_query=r.raw_search_query,
-            sync_results_json=r.sync_results_json,
-            vote_count=r.vote_count,
-            genre=r.genre,
-            bpm=r.bpm,
-            musical_key=r.musical_key,
-        )
-        for r in requests
-    ]
+    return [_request_to_out(r) for r in requests]
 
 
-@router.post("/{code}/recommendations")
+@router.post("/{code}/recommendations", response_model=RecommendationResponse)
 @limiter.limit("5/minute")
 def get_recommendations(
     request: Request,
     event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-):
+) -> RecommendationResponse:
     """Generate song recommendations based on the event's musical profile."""
-    from app.schemas.recommendation import (
-        EventMusicProfile,
-        RecommendationResponse,
-        RecommendedTrack,
-    )
-    from app.services.recommendation.camelot import parse_key
-    from app.services.recommendation.llm_hooks import is_llm_available
     from app.services.recommendation.service import generate_recommendations
 
     user = event.created_by
@@ -582,47 +613,7 @@ def get_recommendations(
         )
 
     result = generate_recommendations(db, user, event)
-
-    profile = EventMusicProfile(
-        avg_bpm=result.event_profile.avg_bpm,
-        bpm_range_low=result.event_profile.bpm_range[0] if result.event_profile.bpm_range else None,
-        bpm_range_high=result.event_profile.bpm_range[1]
-        if result.event_profile.bpm_range
-        else None,
-        dominant_keys=[str(p) for k in result.event_profile.dominant_keys if (p := parse_key(k))],
-        dominant_genres=list(result.event_profile.dominant_genres),
-        track_count=result.event_profile.track_count,
-        enriched_count=result.enriched_count,
-    )
-
-    suggestions = [
-        RecommendedTrack(
-            title=s.profile.title,
-            artist=s.profile.artist,
-            bpm=s.profile.bpm,
-            key=str(p) if (p := parse_key(s.profile.key)) else s.profile.key,
-            genre=s.profile.genre,
-            score=s.score,
-            bpm_score=s.bpm_score,
-            key_score=s.key_score,
-            genre_score=s.genre_score,
-            source=s.profile.source,
-            track_id=s.profile.track_id,
-            url=s.profile.url,
-            cover_url=s.profile.cover_url,
-            duration_seconds=s.profile.duration_seconds,
-            mb_verified=result.mb_verified.get(s.profile.artist, False),
-        )
-        for s in result.suggestions
-    ]
-
-    return RecommendationResponse(
-        suggestions=suggestions,
-        profile=profile,
-        services_used=result.services_used,
-        total_candidates_searched=result.total_candidates_searched,
-        llm_available=is_llm_available(db),
-    )
+    return _build_recommendation_response(result, db)
 
 
 @router.get("/{code}/playlists")
@@ -671,22 +662,15 @@ def get_playlists(
     return PlaylistListResponse(playlists=playlists)
 
 
-@router.post("/{code}/recommendations/from-template")
+@router.post("/{code}/recommendations/from-template", response_model=RecommendationResponse)
 @limiter.limit("5/minute")
 def get_recommendations_from_template(
     request: Request,
     template_request: TemplatePlaylistRequest,
     event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
-):
+) -> RecommendationResponse:
     """Generate recommendations using a template playlist."""
-    from app.schemas.recommendation import (
-        EventMusicProfile,
-        RecommendationResponse,
-        RecommendedTrack,
-    )
-    from app.services.recommendation.camelot import parse_key
-    from app.services.recommendation.llm_hooks import is_llm_available
     from app.services.recommendation.service import generate_recommendations_from_template
 
     user = event.created_by
@@ -706,47 +690,7 @@ def get_recommendations_from_template(
         template_source=template_request.source,
         template_id=template_request.playlist_id,
     )
-
-    profile = EventMusicProfile(
-        avg_bpm=result.event_profile.avg_bpm,
-        bpm_range_low=result.event_profile.bpm_range[0] if result.event_profile.bpm_range else None,
-        bpm_range_high=result.event_profile.bpm_range[1]
-        if result.event_profile.bpm_range
-        else None,
-        dominant_keys=[str(p) for k in result.event_profile.dominant_keys if (p := parse_key(k))],
-        dominant_genres=list(result.event_profile.dominant_genres),
-        track_count=result.event_profile.track_count,
-        enriched_count=result.enriched_count,
-    )
-
-    suggestions = [
-        RecommendedTrack(
-            title=s.profile.title,
-            artist=s.profile.artist,
-            bpm=s.profile.bpm,
-            key=str(p) if (p := parse_key(s.profile.key)) else s.profile.key,
-            genre=s.profile.genre,
-            score=s.score,
-            bpm_score=s.bpm_score,
-            key_score=s.key_score,
-            genre_score=s.genre_score,
-            source=s.profile.source,
-            track_id=s.profile.track_id,
-            url=s.profile.url,
-            cover_url=s.profile.cover_url,
-            duration_seconds=s.profile.duration_seconds,
-            mb_verified=result.mb_verified.get(s.profile.artist, False),
-        )
-        for s in result.suggestions
-    ]
-
-    return RecommendationResponse(
-        suggestions=suggestions,
-        profile=profile,
-        services_used=result.services_used,
-        total_candidates_searched=result.total_candidates_searched,
-        llm_available=is_llm_available(db),
-    )
+    return _build_recommendation_response(result, db)
 
 
 @router.post("/{code}/recommendations/llm")
@@ -758,13 +702,7 @@ async def get_llm_recommendations(
     db: Session = Depends(get_db),
 ):
     """Generate song recommendations from an LLM-interpreted DJ prompt."""
-    from app.schemas.recommendation import (
-        EventMusicProfile,
-        LLMQueryInfo,
-        LLMRecommendationResponse,
-        RecommendedTrack,
-    )
-    from app.services.recommendation.camelot import parse_key
+    from app.schemas.recommendation import LLMQueryInfo, LLMRecommendationResponse
     from app.services.recommendation.llm_hooks import is_llm_available
     from app.services.recommendation.service import generate_recommendations_from_llm
     from app.services.system_settings import get_system_settings
@@ -799,38 +737,7 @@ async def get_llm_recommendations(
             detail="LLM service error. Try again or use algorithmic recommendations.",
         )
 
-    profile = EventMusicProfile(
-        avg_bpm=result.event_profile.avg_bpm,
-        bpm_range_low=result.event_profile.bpm_range[0] if result.event_profile.bpm_range else None,
-        bpm_range_high=result.event_profile.bpm_range[1]
-        if result.event_profile.bpm_range
-        else None,
-        dominant_keys=[str(p) for k in result.event_profile.dominant_keys if (p := parse_key(k))],
-        dominant_genres=list(result.event_profile.dominant_genres),
-        track_count=result.event_profile.track_count,
-        enriched_count=result.enriched_count,
-    )
-
-    suggestions = [
-        RecommendedTrack(
-            title=s.profile.title,
-            artist=s.profile.artist,
-            bpm=s.profile.bpm,
-            key=str(p) if (p := parse_key(s.profile.key)) else s.profile.key,
-            genre=s.profile.genre,
-            score=s.score,
-            bpm_score=s.bpm_score,
-            key_score=s.key_score,
-            genre_score=s.genre_score,
-            source=s.profile.source,
-            track_id=s.profile.track_id,
-            url=s.profile.url,
-            cover_url=s.profile.cover_url,
-            duration_seconds=s.profile.duration_seconds,
-            mb_verified=result.mb_verified.get(s.profile.artist, False),
-        )
-        for s in result.suggestions
-    ]
+    base = _build_recommendation_response(result, db)
 
     llm_queries = [
         LLMQueryInfo(
@@ -843,13 +750,11 @@ async def get_llm_recommendations(
         for q in result.llm_queries
     ]
 
-    from app.core.config import get_settings
-
     return LLMRecommendationResponse(
-        suggestions=suggestions,
-        profile=profile,
-        services_used=result.services_used,
-        total_candidates_searched=result.total_candidates_searched,
+        suggestions=base.suggestions,
+        profile=base.profile,
+        services_used=base.services_used,
+        total_candidates_searched=base.total_candidates_searched,
         llm_queries=llm_queries,
         llm_model=get_settings().anthropic_model,
     )
