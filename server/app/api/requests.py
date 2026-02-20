@@ -6,9 +6,14 @@ from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.request import RequestOut, RequestUpdate
 from app.services.event import set_now_playing
-from app.services.now_playing import add_manual_play
+from app.services.now_playing import (
+    add_manual_play,
+    clear_manual_now_playing,
+    set_manual_now_playing,
+)
 from app.services.request import (
     InvalidStatusTransitionError,
+    clear_other_playing_requests,
     clear_request_metadata,
     delete_request,
     get_request_by_id,
@@ -72,11 +77,14 @@ def update_request(
 
     # Auto-set now_playing when a request is set to "playing"
     if update_data.status == RequestStatus.PLAYING:
+        clear_other_playing_requests(db, request.event_id, request.id)
         set_now_playing(db, request.event, request.id)
+        set_manual_now_playing(db, request.event_id, request)
     # Clear now_playing when the current song is marked as "played" and add to history
     elif update_data.status == RequestStatus.PLAYED:
         if request.event.now_playing_request_id == request.id:
             set_now_playing(db, request.event, None)
+        clear_manual_now_playing(db, request.event_id, request.id)
         add_manual_play(db, request.event, request)
 
     return _request_to_out(updated)

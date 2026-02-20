@@ -140,6 +140,12 @@ a {
 .badge-playing {
   background: #22c55e;
   color: white;
+  animation: badge-pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes badge-pulse-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(34, 197, 94, 0.4); }
+  50% { box-shadow: 0 0 14px rgba(34, 197, 94, 0.8); }
 }
 
 .badge-played {

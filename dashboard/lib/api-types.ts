@@ -353,6 +353,38 @@ export interface IntegrationCheckResponse {
   error: string | null;
 }
 
+/** Kiosk pairing session creation response */
+export interface KioskPairResponse {
+  pair_code: string;
+  session_token: string;
+  expires_at: string;
+}
+
+/** Kiosk pairing status polling response */
+export interface KioskPairStatusResponse {
+  status: 'pairing' | 'active' | 'expired';
+  event_code: string | null;
+  event_name: string | null;
+}
+
+/** Kiosk session assignment polling response */
+export interface KioskSessionResponse {
+  status: string;
+  event_code: string | null;
+  event_name: string | null;
+}
+
+/** Kiosk info for DJ dashboard (never includes session_token) */
+export interface KioskInfo {
+  id: number;
+  name: string | null;
+  event_code: string | null;
+  event_name: string | null;
+  status: string;
+  paired_at: string | null;
+  last_seen_at: string | null;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;

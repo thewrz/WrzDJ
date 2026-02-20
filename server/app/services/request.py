@@ -140,6 +140,32 @@ def update_request_status(db: Session, request: Request, status: RequestStatus) 
     return request
 
 
+def clear_other_playing_requests(db: Session, event_id: int, current_request_id: int) -> list[int]:
+    """Transition all other PLAYING requests for the event to PLAYED.
+
+    Ensures only one request is in PLAYING status at a time.
+    Returns list of request IDs that were transitioned.
+    """
+    playing_requests = (
+        db.query(Request)
+        .filter(
+            Request.event_id == event_id,
+            Request.status == RequestStatus.PLAYING.value,
+            Request.id != current_request_id,
+        )
+        .all()
+    )
+    now = utcnow()
+    cleared_ids = []
+    for req in playing_requests:
+        req.status = RequestStatus.PLAYED.value
+        req.updated_at = now
+        cleared_ids.append(req.id)
+    if cleared_ids:
+        db.commit()
+    return cleared_ids
+
+
 def accept_all_new_requests(db: Session, event: Event) -> list[Request]:
     """Accept all NEW requests for an event in a single transaction."""
     new_requests = (
