@@ -71,10 +71,17 @@ export function RequestQueueSection({
     return computeBpmContext(activeBpms);
   }, [requests]);
 
-  const filteredRequests = useMemo(
-    () => requests.filter((r) => (filter === 'all' ? true : r.status === filter)),
-    [requests, filter]
-  );
+  const filteredRequests = useMemo(() => {
+    const filtered = requests.filter((r) => (filter === 'all' ? true : r.status === filter));
+    if (filter === 'all') {
+      return [...filtered].sort((a, b) => {
+        const aBottom = a.status === 'played' ? 1 : 0;
+        const bBottom = b.status === 'played' ? 1 : 0;
+        return aBottom - bBottom;
+      });
+    }
+    return filtered;
+  }, [requests, filter]);
 
   const handleDeleteAll = async () => {
     const count = filteredRequests.length;
