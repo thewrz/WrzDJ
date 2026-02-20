@@ -1,6 +1,7 @@
 from app.models.activity_log import ActivityLog
 from app.models.base import Base
 from app.models.event import Event
+from app.models.kiosk import Kiosk
 from app.models.mb_artist_cache import MbArtistCache
 from app.models.now_playing import NowPlaying
 from app.models.play_history import PlayHistory
@@ -15,6 +16,7 @@ __all__ = [
     "Base",
     "User",
     "Event",
+    "Kiosk",
     "Request",
     "RequestVote",
     "SearchCache",

@@ -17,6 +17,10 @@ import type {
   IntegrationHealthResponse,
   IntegrationToggleResponse,
   KioskDisplay,
+  KioskInfo,
+  KioskPairResponse,
+  KioskPairStatusResponse,
+  KioskSessionResponse,
   LLMRecommendationResponse,
   NowPlayingInfo,
   PaginatedResponse,
@@ -58,6 +62,10 @@ export type {
   IntegrationServiceStatus,
   IntegrationToggleResponse,
   KioskDisplay,
+  KioskInfo,
+  KioskPairResponse,
+  KioskPairStatusResponse,
+  KioskSessionResponse,
   LLMQueryInfo,
   LLMRecommendationResponse,
   NowPlayingInfo,
@@ -769,6 +777,61 @@ class ApiClient {
       method: 'PUT',
       body: JSON.stringify(data),
     });
+  }
+
+  // ========== Kiosk Pairing ==========
+
+  async createKioskPairing(): Promise<KioskPairResponse> {
+    const response = await fetch(`${getApiUrl()}/api/public/kiosk/pair`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Pairing failed' }));
+      throw new ApiError(error.detail || 'Pairing failed', response.status);
+    }
+    return response.json();
+  }
+
+  async getKioskPairStatus(pairCode: string): Promise<KioskPairStatusResponse> {
+    return this.publicFetch(`${getApiUrl()}/api/public/kiosk/pair/${pairCode}/status`);
+  }
+
+  async getKioskAssignment(sessionToken: string): Promise<KioskSessionResponse> {
+    return this.publicFetch(
+      `${getApiUrl()}/api/public/kiosk/session/${sessionToken}/assignment`
+    );
+  }
+
+  async completeKioskPairing(
+    pairCode: string,
+    eventCode: string
+  ): Promise<KioskInfo> {
+    return this.fetch(`/api/kiosk/pair/${pairCode}/complete`, {
+      method: 'POST',
+      body: JSON.stringify({ event_code: eventCode }),
+    });
+  }
+
+  async getMyKiosks(): Promise<KioskInfo[]> {
+    return this.fetch('/api/kiosk/mine');
+  }
+
+  async assignKiosk(kioskId: number, eventCode: string): Promise<KioskInfo> {
+    return this.fetch(`/api/kiosk/${kioskId}/assign`, {
+      method: 'PATCH',
+      body: JSON.stringify({ event_code: eventCode }),
+    });
+  }
+
+  async renameKiosk(kioskId: number, name: string | null): Promise<KioskInfo> {
+    return this.fetch(`/api/kiosk/${kioskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async deleteKiosk(kioskId: number): Promise<void> {
+    return this.fetch(`/api/kiosk/${kioskId}`, { method: 'DELETE' });
   }
 
   // ========== Activity Log ==========

@@ -2,6 +2,7 @@
 
 import type { Event, ArchivedEvent, TidalStatus, BeatportStatus } from '@/lib/api-types';
 import { KioskControlsCard } from './KioskControlsCard';
+import { PairedKiosksCard } from './PairedKiosksCard';
 import { StreamOverlayCard } from './StreamOverlayCard';
 import { BridgeStatusCard } from './BridgeStatusCard';
 import { CloudProvidersCard } from './CloudProvidersCard';
@@ -62,6 +63,8 @@ export function EventManagementTab(props: EventManagementTabProps) {
         togglingDisplayOnly={props.togglingDisplayOnly}
         onToggleDisplayOnly={props.onToggleDisplayOnly}
       />
+
+      <PairedKiosksCard eventCode={props.code} />
 
       <EventCustomizationCard
         event={props.event}

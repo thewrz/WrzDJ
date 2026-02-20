@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
@@ -14,6 +14,8 @@ export default function LoginPage() {
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '/dashboard';
 
   useEffect(() => {
     api.getPublicSettings()
@@ -28,7 +30,7 @@ export default function LoginPage() {
 
     try {
       await login(username, password);
-      router.push('/dashboard');
+      router.push(redirectTo);
     } catch (_err) {
       setError('Invalid username or password');
     } finally {

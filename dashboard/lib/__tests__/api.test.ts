@@ -683,4 +683,149 @@ describe('ApiClient', () => {
       expect(JSON.parse(options.body)).toEqual({ beatport_track_id: 'bp-track-99' });
     });
   });
+
+  describe('Kiosk Pairing API', () => {
+    it('creates a kiosk pairing session', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          pair_code: 'ABC234',
+          session_token: 'a'.repeat(64),
+          expires_at: '2026-02-20T12:05:00Z',
+        }),
+      });
+
+      const result = await api.createKioskPairing();
+      expect(result.pair_code).toBe('ABC234');
+      expect(result.session_token).toHaveLength(64);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/public/kiosk/pair');
+      expect(options.method).toBe('POST');
+    });
+
+    it('polls pairing status', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: 'pairing',
+          event_code: null,
+          event_name: null,
+        }),
+      });
+
+      const result = await api.getKioskPairStatus('ABC234');
+      expect(result.status).toBe('pairing');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/public/kiosk/pair/ABC234/status');
+    });
+
+    it('polls kiosk session assignment', async () => {
+      const token = 'b'.repeat(64);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: 'active',
+          event_code: 'EVT001',
+          event_name: 'Friday Night',
+        }),
+      });
+
+      const result = await api.getKioskAssignment(token);
+      expect(result.status).toBe('active');
+      expect(result.event_code).toBe('EVT001');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain(`/api/public/kiosk/session/${token}/assignment`);
+    });
+
+    it('completes kiosk pairing', async () => {
+      api.setToken('dj-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 1,
+          name: null,
+          event_code: 'EVT001',
+          event_name: 'Friday Night',
+          status: 'active',
+          paired_at: '2026-02-20T12:01:00Z',
+          last_seen_at: null,
+        }),
+      });
+
+      const result = await api.completeKioskPairing('ABC234', 'EVT001');
+      expect(result.status).toBe('active');
+      expect(result.event_code).toBe('EVT001');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/kiosk/pair/ABC234/complete');
+      expect(options.method).toBe('POST');
+      expect(JSON.parse(options.body)).toEqual({ event_code: 'EVT001' });
+    });
+
+    it('lists my kiosks', async () => {
+      api.setToken('dj-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: 1, name: 'Bar Kiosk', event_code: 'EVT001', status: 'active' },
+        ],
+      });
+
+      const result = await api.getMyKiosks();
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('Bar Kiosk');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/kiosk/mine');
+    });
+
+    it('assigns kiosk to event', async () => {
+      api.setToken('dj-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 1, event_code: 'EVT002', status: 'active' }),
+      });
+
+      const result = await api.assignKiosk(1, 'EVT002');
+      expect(result.event_code).toBe('EVT002');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/kiosk/1/assign');
+      expect(options.method).toBe('PATCH');
+    });
+
+    it('renames a kiosk', async () => {
+      api.setToken('dj-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 1, name: 'Stage Left' }),
+      });
+
+      const result = await api.renameKiosk(1, 'Stage Left');
+      expect(result.name).toBe('Stage Left');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/kiosk/1');
+      expect(options.method).toBe('PATCH');
+      expect(JSON.parse(options.body)).toEqual({ name: 'Stage Left' });
+    });
+
+    it('deletes a kiosk', async () => {
+      api.setToken('dj-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        json: async () => undefined,
+      });
+
+      await api.deleteKiosk(1);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/kiosk/1');
+      expect(options.method).toBe('DELETE');
+    });
+  });
 });
