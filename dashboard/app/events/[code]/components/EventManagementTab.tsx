@@ -2,6 +2,7 @@
 
 import type { Event, ArchivedEvent, TidalStatus, BeatportStatus } from '@/lib/api-types';
 import { KioskControlsCard } from './KioskControlsCard';
+import { PairedKiosksCard } from './PairedKiosksCard';
 import { StreamOverlayCard } from './StreamOverlayCard';
 import { BridgeStatusCard } from './BridgeStatusCard';
 import { CloudProvidersCard } from './CloudProvidersCard';
@@ -65,6 +66,8 @@ export function EventManagementTab(props: EventManagementTabProps) {
           onToggleDisplayOnly={props.onToggleDisplayOnly}
         />
       </HelpSpot>
+
+      <PairedKiosksCard eventCode={props.code} />
 
       <HelpSpot spotId="event-customization" page="event-manage" order={2} title="Event Customization" description="Upload a banner image to brand your event's kiosk and join pages.">
         <EventCustomizationCard

@@ -4,8 +4,10 @@ import LoginPage from '../page';
 
 // Mock next/navigation
 const mockPush = vi.fn();
+let mockSearchParams = new URLSearchParams();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => mockSearchParams,
 }));
 
 // Mock auth hook
@@ -31,6 +33,7 @@ import { api } from '@/lib/api';
 describe('LoginPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSearchParams = new URLSearchParams();
   });
 
   it('renders login form with username and password fields', () => {
@@ -85,6 +88,35 @@ describe('LoginPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Create Account')).toBeInTheDocument();
+    });
+  });
+
+  it('redirects to redirect param after login', async () => {
+    mockSearchParams = new URLSearchParams('redirect=/kiosk-link/ABC234');
+    mockLogin.mockResolvedValue(undefined);
+
+    render(<LoginPage />);
+
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'testuser' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/kiosk-link/ABC234');
+    });
+  });
+
+  it('defaults to /dashboard when no redirect param', async () => {
+    mockLogin.mockResolvedValue(undefined);
+
+    render(<LoginPage />);
+
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'testuser' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/dashboard');
     });
   });
 
