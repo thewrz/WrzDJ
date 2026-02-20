@@ -7,7 +7,7 @@ doesn't have access to playlist creation scopes.
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db
+from app.api.deps import get_current_active_user, get_db, get_owned_event_by_id, get_owned_request
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.models.event import Event
@@ -146,18 +146,10 @@ def search(
 
 @router.get("/events/{event_id}/settings", response_model=TidalEventSettings)
 def get_event_settings(
-    event_id: int,
-    current_user: User = Depends(get_current_active_user),
+    event: Event = Depends(get_owned_event_by_id),
     db: Session = Depends(get_db),
 ) -> TidalEventSettings:
     """Get Tidal sync settings for an event."""
-    event = db.query(Event).filter(Event.id == event_id).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
-    if event.created_by_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     return TidalEventSettings(
         tidal_sync_enabled=event.tidal_sync_enabled,
         tidal_playlist_id=event.tidal_playlist_id,
@@ -166,19 +158,12 @@ def get_event_settings(
 
 @router.put("/events/{event_id}/settings", response_model=TidalEventSettings)
 def update_event_settings(
-    event_id: int,
     settings_update: TidalEventSettingsUpdate,
+    event: Event = Depends(get_owned_event_by_id),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> TidalEventSettings:
     """Update Tidal sync settings for an event."""
-    event = db.query(Event).filter(Event.id == event_id).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
-    if event.created_by_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     # Check if user has Tidal linked before enabling sync
     if settings_update.tidal_sync_enabled and not current_user.tidal_access_token:
         raise HTTPException(
@@ -198,9 +183,8 @@ def update_event_settings(
 
 @router.post("/requests/{request_id}/sync", response_model=TidalSyncResult)
 def sync_request(
-    request_id: int,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_active_user),
+    song_request: SongRequest = Depends(get_owned_request),
     db: Session = Depends(get_db),
 ) -> TidalSyncResult:
     """Manually trigger Tidal sync for a request."""
@@ -210,22 +194,13 @@ def sync_request(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Tidal integration is currently unavailable",
         )
-    song_request = db.query(SongRequest).filter(SongRequest.id == request_id).first()
-    if not song_request:
-        raise HTTPException(status_code=404, detail="Request not found")
-
-    event = song_request.event
-    if event.created_by_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     return sync_request_to_tidal(db, song_request)
 
 
 @router.post("/requests/{request_id}/link", response_model=TidalSyncResult)
 def link_track(
-    request_id: int,
     link_data: TidalManualLink,
-    current_user: User = Depends(get_current_active_user),
+    song_request: SongRequest = Depends(get_owned_request),
     db: Session = Depends(get_db),
 ) -> TidalSyncResult:
     """Manually link a Tidal track to a request."""
@@ -235,12 +210,4 @@ def link_track(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Tidal integration is currently unavailable",
         )
-    song_request = db.query(SongRequest).filter(SongRequest.id == request_id).first()
-    if not song_request:
-        raise HTTPException(status_code=404, detail="Request not found")
-
-    event = song_request.event
-    if event.created_by_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     return manual_link_track(db, song_request, link_data.tidal_track_id)
