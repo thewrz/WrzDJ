@@ -237,7 +237,7 @@ export function RequestQueueSection({
                   onOpenTidalPicker={onOpenTidalPicker}
                   onScrollToSyncReport={onScrollToSyncReport}
                 />
-                <span className={`badge badge-${request.status}`}>{request.status}</span>
+                <span className={`badge badge-${request.status}`}>{request.status === 'playing' ? 'manually playing' : request.status}</span>
                 {!isExpiredOrArchived && (
                   <div className="request-actions">
                     {request.status === 'new' && (

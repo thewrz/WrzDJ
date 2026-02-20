@@ -283,13 +283,25 @@ def handle_now_playing_update(
     if existing and existing.title:
         archive_to_history(db, existing)
 
-        # Step 2: Transition matched request from "playing" → "played"
-        if existing.matched_request_id:
-            request = db.query(Request).filter(Request.id == existing.matched_request_id).first()
-            if request and request.status == RequestStatus.PLAYING.value:
-                request.status = RequestStatus.PLAYED.value
-                request.updated_at = utcnow()
-                logger.info(f"Marked request {request.id} as played")
+    # Step 2: Transition ALL playing requests for this event to played
+    # (handles both bridge-matched and manually-playing requests)
+    playing_requests = (
+        db.query(Request)
+        .filter(
+            Request.event_id == event.id,
+            Request.status == RequestStatus.PLAYING.value,
+        )
+        .all()
+    )
+    for req in playing_requests:
+        req.status = RequestStatus.PLAYED.value
+        req.updated_at = utcnow()
+        logger.info(f"Marked request {req.id} as played (bridge override)")
+
+    # Clear System A pointer so it doesn't conflict
+    if event.now_playing_request_id is not None:
+        event.now_playing_request_id = None
+        event.now_playing_updated_at = utcnow()
 
     # Step 3: Upsert now_playing
     if existing:
@@ -474,3 +486,76 @@ def add_manual_play(db: Session, event: Event, request: Request) -> PlayHistory:
     db.commit()
     db.refresh(history_entry)
     return history_entry
+
+
+def set_manual_now_playing(db: Session, event_id: int, request: Request) -> NowPlaying:
+    """Upsert NowPlaying when a DJ manually marks a request as PLAYING.
+
+    This bridges the gap between System A (Event.now_playing_request_id) and
+    System B (NowPlaying table) so the kiosk display shows manually-played tracks.
+    """
+    existing = get_now_playing(db, event_id)
+
+    if existing:
+        # Archive previous track to history if it has content
+        if existing.title:
+            archive_to_history(db, existing)
+
+        # Upsert track data — preserve bridge status fields
+        existing.title = request.song_title
+        existing.artist = request.artist
+        existing.album = None
+        existing.deck = None
+        existing.spotify_track_id = None
+        existing.album_art_url = request.artwork_url
+        existing.spotify_uri = None
+        existing.matched_request_id = request.id
+        existing.source = "manual"
+        existing.started_at = utcnow()
+        existing.manual_hide_now_playing = False
+        now_playing = existing
+    else:
+        now_playing = NowPlaying(
+            event_id=event_id,
+            title=request.song_title,
+            artist=request.artist,
+            album_art_url=request.artwork_url,
+            matched_request_id=request.id,
+            source="manual",
+            started_at=utcnow(),
+            manual_hide_now_playing=False,
+        )
+        db.add(now_playing)
+
+    db.commit()
+    db.refresh(now_playing)
+    return now_playing
+
+
+def clear_manual_now_playing(db: Session, event_id: int, request_id: int) -> None:
+    """Clear NowPlaying track data when a manually-playing request is marked PLAYED.
+
+    Only clears if source is 'manual' and matched_request_id matches — avoids
+    interfering with bridge-owned NowPlaying state.
+    """
+    existing = get_now_playing(db, event_id)
+    if not existing:
+        return
+    if existing.source != "manual" or existing.matched_request_id != request_id:
+        return
+
+    # Archive to history before clearing
+    if existing.title:
+        archive_to_history(db, existing)
+
+    # Clear track data but preserve bridge status
+    existing.title = ""
+    existing.artist = ""
+    existing.album = None
+    existing.deck = None
+    existing.spotify_track_id = None
+    existing.album_art_url = None
+    existing.spotify_uri = None
+    existing.matched_request_id = None
+    existing.started_at = utcnow()
+    db.commit()
