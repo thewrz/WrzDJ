@@ -12,8 +12,17 @@ from sqlalchemy.orm import Session
 from app.models.event import Event
 from app.models.request import Request, RequestStatus
 from app.models.user import User
+from app.services.recommendation.deduplication import (
+    deduplicate_against_requests,
+    deduplicate_against_template,
+    deduplicate_candidates,
+)
 from app.services.recommendation.enrichment import enrich_event_tracks
 from app.services.recommendation.llm_hooks import LLMSuggestionQuery
+from app.services.recommendation.query_builder import (
+    build_beatport_queries,
+    build_tidal_queries,
+)
 from app.services.recommendation.scorer import (
     EventProfile,
     ScoredTrack,
@@ -21,13 +30,18 @@ from app.services.recommendation.scorer import (
     build_event_profile,
     rank_candidates,
 )
-from app.services.track_normalizer import artist_match_score, fuzzy_match_score, split_artists
+from app.services.track_normalizer import artist_match_score
 from app.services.version_filter import is_unwanted_version
 
 logger = logging.getLogger(__name__)
 
-# Maximum number of search queries per source
-MAX_SEARCH_QUERIES = 3
+# Re-export for backward compatibility (tests import these from service.py)
+_deduplicate_against_requests = deduplicate_against_requests  # noqa: F841
+_deduplicate_against_template = deduplicate_against_template  # noqa: F841
+_deduplicate_candidates = deduplicate_candidates  # noqa: F841
+_build_beatport_queries = build_beatport_queries  # noqa: F841
+_build_tidal_queries = build_tidal_queries  # noqa: F841
+
 # Maximum results per search query
 SEARCH_LIMIT = 10
 
@@ -204,7 +218,7 @@ def _apply_artist_diversity(
                     break
 
             if count > 0:
-                # 1st dup → 0.75, 2nd dup → 0.65, 3rd → 0.55, floor at 0.50
+                # 1st dup -> 0.75, 2nd dup -> 0.65, 3rd -> 0.55, floor at 0.50
                 penalty = max(REPEAT_ARTIST_BASE_PENALTY - 0.10 * (count - 1), 0.50)
                 multiplier *= penalty
 
@@ -252,81 +266,6 @@ def _get_accepted_played_requests(db: Session, event: Event) -> list[Request]:
         .order_by(Request.created_at.desc())
         .all()
     )
-
-
-def _build_beatport_queries(
-    profile: EventProfile,
-    template_tracks: list[TrackProfile] | None = None,
-) -> list[str]:
-    """Generate search queries for Beatport from an event profile.
-
-    Genre-based text queries work well for Beatport (genre catalog).
-    Falls back to artist names from template tracks when genres are
-    unavailable (e.g., Tidal playlists).
-    """
-    queries = []
-
-    # Genre-based queries (best signal)
-    for genre in profile.dominant_genres[:MAX_SEARCH_QUERIES]:
-        queries.append(genre)
-
-    # If we have no genres but have template tracks, use top artists
-    if not queries and template_tracks:
-        artist_counts: dict[str, int] = {}
-        for t in template_tracks:
-            if t.artist and t.artist.lower() not in ("unknown", "various artists"):
-                artist_counts[t.artist] = artist_counts.get(t.artist, 0) + 1
-        # Sort by frequency, take top artists as search queries
-        top_artists = sorted(artist_counts, key=artist_counts.get, reverse=True)  # type: ignore[arg-type]
-        for artist in top_artists[:MAX_SEARCH_QUERIES]:
-            queries.append(artist)
-
-    # If we have BPM info and still have room, add a BPM-targeted query
-    if profile.avg_bpm and len(queries) < MAX_SEARCH_QUERIES:
-        bpm_str = str(int(profile.avg_bpm))
-        if profile.dominant_genres:
-            queries.append(f"{profile.dominant_genres[0]} {bpm_str} bpm")
-
-    return queries[:MAX_SEARCH_QUERIES]
-
-
-def _build_tidal_queries(
-    profile: EventProfile,
-    requests: list | None = None,
-    template_tracks: list[TrackProfile] | None = None,
-) -> list[str]:
-    """Generate artist-based search queries for Tidal text search.
-
-    Tidal's search API is a general text search — genre strings like
-    "Country" produce irrelevant results.  Use artist names instead.
-    """
-    artist_counts: dict[str, int] = {}
-
-    # Collect artists from accepted requests (split multi-artist strings)
-    if requests:
-        for req in requests:
-            artist = getattr(req, "artist", None)
-            if artist:
-                for individual in split_artists(artist):
-                    key = individual.strip().lower()
-                    if key not in ("unknown", "various artists", ""):
-                        artist_counts[individual.strip()] = (
-                            artist_counts.get(individual.strip(), 0) + 1
-                        )
-
-    # Collect artists from template tracks (split multi-artist strings)
-    if template_tracks:
-        for t in template_tracks:
-            if t.artist:
-                for individual in split_artists(t.artist):
-                    key = individual.strip().lower()
-                    if key not in ("unknown", "various artists", ""):
-                        artist_counts[individual.strip()] = (
-                            artist_counts.get(individual.strip(), 0) + 1
-                        )
-
-    top_artists = sorted(artist_counts, key=artist_counts.get, reverse=True)  # type: ignore[arg-type]
-    return top_artists[:MAX_SEARCH_QUERIES]
 
 
 def _search_candidates(
@@ -451,79 +390,6 @@ def _search_candidates(
     return candidates, sorted(services_used), total_searched
 
 
-def _deduplicate_against_requests(
-    candidates: list[TrackProfile],
-    existing_requests: list[Request],
-) -> list[TrackProfile]:
-    """Remove candidates that are already requested or are likely covers.
-
-    Catches both exact duplicates (same title + artist) and cover/tribute
-    versions where the title matches but the artist is different (e.g.,
-    "Big" performing "Save A Horse" when "Big & Rich" already has it).
-    """
-    if not existing_requests:
-        return candidates
-
-    deduped = []
-    for candidate in candidates:
-        is_dupe = False
-        is_cover = False
-        for req in existing_requests:
-            title_score = fuzzy_match_score(candidate.title, req.song_title)
-            artist_score = artist_match_score(candidate.artist, req.artist)
-            combined = title_score * 0.6 + artist_score * 0.4
-            if combined >= 0.8:
-                is_dupe = True
-                break
-            # Cover detection: same title but different artist
-            if title_score >= 0.85 and artist_score < 0.6:
-                is_cover = True
-                break
-        if not is_dupe and not is_cover:
-            deduped.append(candidate)
-    return deduped
-
-
-def _deduplicate_against_template(
-    candidates: list[TrackProfile],
-    template_tracks: list[TrackProfile],
-) -> list[TrackProfile]:
-    """Remove candidates that already appear in the template playlist."""
-    if not template_tracks:
-        return candidates
-
-    deduped = []
-    for candidate in candidates:
-        is_dupe = False
-        for tmpl in template_tracks:
-            title_score = fuzzy_match_score(candidate.title, tmpl.title)
-            artist_score = artist_match_score(candidate.artist, tmpl.artist)
-            combined = title_score * 0.6 + artist_score * 0.4
-            if combined >= 0.8:
-                is_dupe = True
-                break
-        if not is_dupe:
-            deduped.append(candidate)
-    return deduped
-
-
-def _deduplicate_candidates(candidates: list[TrackProfile]) -> list[TrackProfile]:
-    """Remove duplicate candidates (same track from different queries)."""
-    seen: list[TrackProfile] = []
-    for candidate in candidates:
-        is_dupe = False
-        for existing in seen:
-            title_score = fuzzy_match_score(candidate.title, existing.title)
-            artist_score = artist_match_score(candidate.artist, existing.artist)
-            combined = title_score * 0.6 + artist_score * 0.4
-            if combined >= 0.8:
-                is_dupe = True
-                break
-        if not is_dupe:
-            seen.append(candidate)
-    return seen
-
-
 @dataclass
 class LLMRecommendationResult:
     """Result of LLM-powered recommendations."""
@@ -552,7 +418,7 @@ async def generate_recommendations_from_llm(
 
     Pipeline:
     1. Build EventProfile from accepted/played requests
-    2. Call LLM with profile + DJ prompt → structured search queries
+    2. Call LLM with profile + DJ prompt -> structured search queries
     3. Search Tidal/Beatport with LLM query strings
     4. Deduplicate, score, rank, apply artist diversity
     """
@@ -584,13 +450,13 @@ async def generate_recommendations_from_llm(
     )
 
     # Step 4: Deduplicate
-    candidates = _deduplicate_candidates(candidates)
+    candidates = deduplicate_candidates(candidates)
     all_requests = db.query(Request).filter(Request.event_id == event.id).all()
-    candidates = _deduplicate_against_requests(candidates, all_requests)
+    candidates = deduplicate_against_requests(candidates, all_requests)
     # Also deduplicate against enriched tracks (catches songs referenced in
     # the prompt that are already in the set, even if stored slightly differently)
     if enriched:
-        candidates = _deduplicate_against_template(candidates, enriched)
+        candidates = deduplicate_against_template(candidates, enriched)
 
     # Step 5: Score and rank (use LLM targets for scoring if vibe shift detected)
     scoring_profile = _build_llm_scoring_profile(llm_result.queries, profile)
@@ -664,12 +530,12 @@ def generate_recommendations_from_template(
     profile = build_event_profile(template_tracks)
 
     # Generate search queries from profile (pass template tracks for artist fallback)
-    search_queries = _build_beatport_queries(profile, template_tracks=template_tracks)
+    search_queries = build_beatport_queries(profile, template_tracks=template_tracks)
     if not search_queries:
         search_queries = ["top tracks", "popular tracks"]
 
     # Build artist-based queries for Tidal text search (genre strings don't work)
-    tidal_queries = _build_tidal_queries(profile, template_tracks=template_tracks)
+    tidal_queries = build_tidal_queries(profile, template_tracks=template_tracks)
 
     # Search for candidates
     candidates, services_used, total_searched = _search_candidates(
@@ -677,14 +543,14 @@ def generate_recommendations_from_template(
     )
 
     # Deduplicate candidates among themselves
-    candidates = _deduplicate_candidates(candidates)
+    candidates = deduplicate_candidates(candidates)
 
     # Deduplicate against event's existing requests (not the template)
     all_requests = db.query(Request).filter(Request.event_id == event.id).all()
-    candidates = _deduplicate_against_requests(candidates, all_requests)
+    candidates = deduplicate_against_requests(candidates, all_requests)
 
     # Also deduplicate against the template tracks themselves
-    candidates = _deduplicate_against_template(candidates, template_tracks)
+    candidates = deduplicate_against_template(candidates, template_tracks)
 
     # Score and rank
     ranked = rank_candidates(candidates, profile, max_results)
@@ -762,14 +628,14 @@ def generate_recommendations(
     profile = build_event_profile(enriched)
 
     # Step 4: Generate search queries (for Beatport)
-    search_queries = _build_beatport_queries(profile)
+    search_queries = build_beatport_queries(profile)
 
     # If no queries can be generated (no genre, no BPM), use generic queries
     if not search_queries:
         search_queries = ["top tracks", "popular tracks"]
 
     # Build artist-based queries for Tidal text search (genre strings don't work)
-    tidal_queries = _build_tidal_queries(profile, requests=requests)
+    tidal_queries = build_tidal_queries(profile, requests=requests)
 
     # Step 5: Search for candidates
     candidates, services_used, total_searched = _search_candidates(
@@ -777,11 +643,11 @@ def generate_recommendations(
     )
 
     # Step 6a: Deduplicate candidates among themselves
-    candidates = _deduplicate_candidates(candidates)
+    candidates = deduplicate_candidates(candidates)
 
     # Step 6b: Deduplicate against existing requests
     all_requests = db.query(Request).filter(Request.event_id == event.id).all()
-    candidates = _deduplicate_against_requests(candidates, all_requests)
+    candidates = deduplicate_against_requests(candidates, all_requests)
 
     # Step 7: Score and rank
     ranked = rank_candidates(candidates, profile, max_results)

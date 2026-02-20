@@ -679,7 +679,7 @@ class TestEnrichRequestMetadata:
         db.commit()
 
         with patch(
-            "app.services.sync.orchestrator.lookup_artist_genre",
+            "app.services.sync.enrichment_pipeline.lookup_artist_genre",
             return_value="alternative rock",
         ):
             enrich_request_metadata(db, request.id)
@@ -693,7 +693,7 @@ class TestEnrichRequestMetadata:
         request.genre = "country"
         db.commit()
 
-        with patch("app.services.sync.orchestrator.lookup_artist_genre") as mock_mb:
+        with patch("app.services.sync.enrichment_pipeline.lookup_artist_genre") as mock_mb:
             enrich_request_metadata(db, request.id)
             mock_mb.assert_not_called()
 
@@ -719,7 +719,7 @@ class TestEnrichRequestMetadata:
         ]
 
         with patch(
-            "app.services.sync.orchestrator.lookup_artist_genre",
+            "app.services.sync.enrichment_pipeline.lookup_artist_genre",
             return_value=None,
         ):
             with patch(
@@ -755,7 +755,7 @@ class TestEnrichRequestMetadata:
         ]
 
         with patch(
-            "app.services.sync.orchestrator.lookup_artist_genre",
+            "app.services.sync.enrichment_pipeline.lookup_artist_genre",
             return_value="electronic",
         ):
             with patch(
@@ -790,7 +790,7 @@ class TestEnrichRequestMetadata:
         ]
 
         with patch(
-            "app.services.sync.orchestrator.lookup_artist_genre",
+            "app.services.sync.enrichment_pipeline.lookup_artist_genre",
             return_value="pop",
         ):
             with patch(
@@ -826,7 +826,7 @@ class TestEnrichRequestMetadata:
         ]
 
         with patch(
-            "app.services.sync.orchestrator.lookup_artist_genre",
+            "app.services.sync.enrichment_pipeline.lookup_artist_genre",
             return_value=None,
         ):
             with patch(
@@ -845,7 +845,7 @@ class TestEnrichRequestMetadata:
         db.commit()
 
         with patch(
-            "app.services.sync.orchestrator.lookup_artist_genre",
+            "app.services.sync.enrichment_pipeline.lookup_artist_genre",
             return_value=None,
         ):
             with patch(
@@ -874,7 +874,7 @@ class TestEnrichRequestMetadata:
         db.commit()
 
         with patch(
-            "app.services.sync.orchestrator.lookup_artist_genre",
+            "app.services.sync.enrichment_pipeline.lookup_artist_genre",
             side_effect=RuntimeError("Network error"),
         ):
             enrich_request_metadata(db, request.id)  # Should not raise
@@ -907,7 +907,7 @@ class TestEnrichRequestMetadata:
         ]
 
         with patch(
-            "app.services.sync.orchestrator.lookup_artist_genre",
+            "app.services.sync.enrichment_pipeline.lookup_artist_genre",
             return_value=None,
         ):
             with patch(
@@ -941,7 +941,7 @@ class TestEnrichRequestMetadata:
         ]
 
         with patch(
-            "app.services.sync.orchestrator.lookup_artist_genre",
+            "app.services.sync.enrichment_pipeline.lookup_artist_genre",
             return_value=None,
         ):
             with patch(
@@ -991,7 +991,7 @@ class TestEnrichRequestMetadata:
         ]
 
         with patch(
-            "app.services.sync.orchestrator.lookup_artist_genre",
+            "app.services.sync.enrichment_pipeline.lookup_artist_genre",
             return_value=None,
         ):
             with patch(
@@ -1234,7 +1234,7 @@ class TestDirectFetchEnrichment:
 
         with (
             patch(
-                "app.services.sync.orchestrator.lookup_artist_genre",
+                "app.services.sync.enrichment_pipeline.lookup_artist_genre",
                 return_value=None,
             ),
             patch(
@@ -1274,7 +1274,7 @@ class TestDirectFetchEnrichment:
 
         with (
             patch(
-                "app.services.sync.orchestrator._get_isrc_from_spotify",
+                "app.services.sync.enrichment_pipeline._get_isrc_from_spotify",
                 return_value="NLRD19800001",
             ),
             patch(
@@ -1282,7 +1282,7 @@ class TestDirectFetchEnrichment:
                 return_value=isrc_match,
             ) as mock_isrc,
             patch(
-                "app.services.sync.orchestrator.lookup_artist_genre",
+                "app.services.sync.enrichment_pipeline.lookup_artist_genre",
                 return_value="trance",
             ),
             patch(
@@ -1317,7 +1317,7 @@ class TestDirectFetchEnrichment:
 
         with (
             patch(
-                "app.services.sync.orchestrator._get_isrc_from_spotify",
+                "app.services.sync.enrichment_pipeline._get_isrc_from_spotify",
                 return_value="TEST12345678",
             ),
             patch(
@@ -1325,7 +1325,7 @@ class TestDirectFetchEnrichment:
                 return_value=None,
             ),
             patch(
-                "app.services.sync.orchestrator.lookup_artist_genre",
+                "app.services.sync.enrichment_pipeline.lookup_artist_genre",
                 return_value=None,
             ),
             patch(
@@ -1363,7 +1363,7 @@ class TestDirectFetchEnrichment:
                 return_value=direct_track,
             ) as mock_direct,
             patch(
-                "app.services.sync.orchestrator.lookup_artist_genre",
+                "app.services.sync.enrichment_pipeline.lookup_artist_genre",
                 return_value=None,
             ),
             patch(
