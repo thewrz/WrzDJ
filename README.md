@@ -55,7 +55,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - **Inline audio previews** -- expand a Spotify or Tidal embed directly in the request card to listen through the mixer without leaving the dashboard. Beatport requests link out to the track page.
 - **Color-coded Camelot key badges** -- each request shows its musical key as a Camelot code (e.g., 8A) with harmonic mixing wheel colors, making compatible keys visually obvious
 - **BPM proximity badges** -- BPM values are color-coded relative to the event's active set (green = close, amber = moderate, red = far), with IQR-based outlier detection for half-time tracks
-- Mark songs as Playing/Played with full status workflow (new -> accepted -> playing -> played)
+- Mark songs as Playing/Played with full status workflow (new -> accepted -> playing -> played); **single-active playing** ensures only one request is PLAYING at a time -- marking a new one auto-transitions the previous to PLAYED
 - Toggle "Now Playing" visibility on the public kiosk
 - Sticky scroll -- auto-follow new incoming requests at the bottom of the queue
 - Bridge connection status indicator (green/gray dot, polls every 3s)
@@ -67,6 +67,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Edit event expiry, delete events
 - Cloud Providers card -- connect Tidal and Beatport via OAuth, toggle playlist sync per event, see subscription tier, with labeled column headers for at-a-glance status
 - QR code display for easy guest onboarding
+- **Kiosk management** -- pair, rename, reassign, and unpair kiosk displays directly from the event page
 - **Activity log** -- bridge connect/disconnect events and sync errors are logged and surfaced on the dashboard
 
 ### Song Recommendations
@@ -103,6 +104,7 @@ A modern, real-time song request system for DJs. Guests scan a QR code to submit
 - Album art from Spotify enrichment
 - "Requested" badges on play history items that matched guest requests
 - Built-in song request modal with 60-second inactivity timeout
+- **QR pairing** -- kiosk devices visit `/kiosk-pair` to generate a 6-character pairing code + QR. DJ scans the QR, selects an event, and the kiosk auto-navigates to the display. Pairing survives power cycles via session token persistence.
 - **Display-only mode** -- hide the request button on non-touch kiosk screens (mounted displays); QR code stays visible for phone scanning
 - **Requests-closed banner** -- when the DJ closes requests, a prominent banner replaces the QR code and the request button is hidden
 - Auto-hides "Now Playing" after 60 minutes of inactivity
@@ -398,6 +400,17 @@ PUBLIC_URL=https://app.yourdomain.com
 | `GET /api/events/{code}/playlists` | List DJ's playlists from connected services |
 | `GET /api/bridge/apikey` | Get bridge API key (JWT auth) |
 
+### Kiosk Pairing Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/public/kiosk/pair` | Generate kiosk pairing code + session token (public) |
+| `GET /api/public/kiosk/pair/{code}/status` | Poll pairing status (public, kiosk polls this) |
+| `POST /api/kiosk/pair/{code}/complete` | Complete pairing by selecting event (DJ auth) |
+| `GET /api/kiosk/mine` | List kiosks paired by current DJ |
+| `PATCH /api/kiosk/{id}/assign` | Reassign kiosk to different event |
+| `DELETE /api/kiosk/{id}` | Unpair and delete kiosk |
+
 ### Bridge Endpoints (API Key Auth)
 
 | Endpoint | Description |
@@ -473,6 +486,8 @@ WrzDJ/
     Dockerfile
   dashboard/           # Next.js frontend
     app/               # App router pages (dashboard, kiosk, join, admin)
+      kiosk-pair/      # Device-side pairing page (generates QR code)
+      kiosk-link/[code]/ # DJ-side pairing completion (event picker)
     lib/               # API client, auth, utilities
     Dockerfile
   bridge/              # DJ equipment bridge (Node.js)
