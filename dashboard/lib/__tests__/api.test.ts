@@ -684,6 +684,131 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('deleteEvent', () => {
+    it('sends DELETE request with auth header', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({ ok: true });
+
+      await api.deleteEvent('ABC123');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123');
+      expect(options.method).toBe('DELETE');
+      expect(options.headers.get('Authorization')).toBe('Bearer test-token');
+    });
+
+    it('throws on failure with detail message', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ detail: 'Event not found' }),
+      });
+
+      await expect(api.deleteEvent('INVALID')).rejects.toThrow('Event not found');
+    });
+
+    it('throws generic message when json parsing fails', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => { throw new Error('not json'); },
+      });
+
+      await expect(api.deleteEvent('INVALID')).rejects.toThrow('Request failed');
+    });
+  });
+
+  describe('getNowPlaying', () => {
+    it('fetches now playing info for an event', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          title: 'Strobe',
+          artist: 'deadmau5',
+          album: 'For Lack of a Better Name',
+          album_art_url: 'https://example.com/art.jpg',
+        }),
+      });
+
+      const result = await api.getNowPlaying('ABC123');
+
+      expect(result).not.toBeNull();
+      expect(result!.title).toBe('Strobe');
+      expect(result!.artist).toBe('deadmau5');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/public/e/ABC123/nowplaying');
+    });
+
+    it('returns null when no track is playing', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => null,
+      });
+
+      const result = await api.getNowPlaying('ABC123');
+      expect(result).toBeNull();
+    });
+
+    it('throws ApiError for 404', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
+
+      await expect(api.getNowPlaying('INVALID')).rejects.toThrow('Event not found');
+    });
+
+    it('throws ApiError for 410', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 410 });
+
+      await expect(api.getNowPlaying('GONE')).rejects.toThrow('Event not found');
+    });
+
+    it('returns null for other errors', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
+
+      const result = await api.getNowPlaying('ABC123');
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('exportEventCsv', () => {
+    it('downloads event CSV with correct URL', async () => {
+      api.setToken('test-token');
+
+      const mockBlob = new Blob(['csv,content'], { type: 'text/csv' });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        blob: async () => mockBlob,
+        headers: new Headers({
+          'Content-Disposition': 'attachment; filename="ABC123.csv"',
+        }),
+      });
+
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      vi.spyOn(document, 'createElement').mockReturnValue({
+        href: '',
+        download: '',
+        click: vi.fn(),
+      } as unknown as HTMLElement);
+
+      await api.exportEventCsv('ABC123');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123/export/csv');
+    });
+
+    it('throws ApiError on failure', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: async () => ({ detail: 'Forbidden' }),
+      });
+
+      await expect(api.exportEventCsv('ABC123')).rejects.toThrow('Forbidden');
+    });
+  });
+
   describe('Kiosk Pairing API', () => {
     it('creates a kiosk pairing session', async () => {
       mockFetch.mockResolvedValueOnce({

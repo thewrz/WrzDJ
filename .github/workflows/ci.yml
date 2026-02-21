@@ -138,6 +138,10 @@ jobs:
       - name: Run tests with coverage
         run: npm test -- --run --coverage
 
+      - name: Security audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
   bridge-app:
     name: Bridge App Tests
     runs-on: ubuntu-latest
