@@ -162,6 +162,30 @@ class ApiClient {
   }
 
   /**
+   * Make an authenticated raw fetch (no JSON content-type, no JSON parsing).
+   * Returns the raw Response. Handles 401 → onUnauthorized.
+   */
+  private async rawFetch(path: string, init: RequestInit = {}): Promise<Response> {
+    const headers = new Headers(init.headers);
+    if (this.token) {
+      headers.set('Authorization', `Bearer ${this.token}`);
+    }
+
+    const url = path.startsWith('http') ? path : `${getApiUrl()}${path}`;
+    const response = await fetch(url, { ...init, headers });
+
+    if (!response.ok) {
+      if (response.status === 401 && this.onUnauthorized) {
+        this.onUnauthorized();
+      }
+      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+      throw new ApiError(error.detail || 'Request failed', response.status);
+    }
+
+    return response;
+  }
+
+  /**
    * Fetch a public (no-auth) endpoint and parse JSON response.
    * Throws ApiError on non-OK responses.
    */
@@ -179,21 +203,7 @@ class ApiClient {
    * Parses filename from Content-Disposition header, falling back to the provided default.
    */
   private async downloadCsvBlob(url: string, defaultFilename: string): Promise<void> {
-    const headers = new Headers();
-    if (this.token) {
-      headers.set('Authorization', `Bearer ${this.token}`);
-    }
-
-    const response = await fetch(url, { headers });
-
-    if (!response.ok) {
-      if (response.status === 401 && this.onUnauthorized) {
-        this.onUnauthorized();
-      }
-      const error = await response.json().catch(() => ({ detail: 'Export failed' }));
-      throw new ApiError(error.detail || 'Export failed', response.status);
-    }
-
+    const response = await this.rawFetch(url);
     const blob = await response.blob();
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -287,18 +297,7 @@ class ApiClient {
   }
 
   async deleteEvent(code: string): Promise<void> {
-    const headers = new Headers();
-    if (this.token) {
-      headers.set('Authorization', `Bearer ${this.token}`);
-    }
-    const response = await fetch(`${getApiUrl()}/api/events/${code}`, {
-      method: 'DELETE',
-      headers,
-    });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Delete failed' }));
-      throw new Error(error.detail || 'Delete failed');
-    }
+    await this.rawFetch(`/api/events/${code}`, { method: 'DELETE' });
   }
 
   async getRequests(code: string, status?: string): Promise<SongRequest[]> {
@@ -653,27 +652,11 @@ class ApiClient {
   async uploadEventBanner(code: string, file: File): Promise<Event> {
     const formData = new FormData();
     formData.append('file', file);
-
-    const headers = new Headers();
-    if (this.token) {
-      headers.set('Authorization', `Bearer ${this.token}`);
-    }
     // Do NOT set Content-Type — browser sets it with multipart boundary
-
-    const response = await fetch(`${getApiUrl()}/api/events/${code}/banner`, {
+    const response = await this.rawFetch(`/api/events/${code}/banner`, {
       method: 'POST',
-      headers,
       body: formData,
     });
-
-    if (!response.ok) {
-      if (response.status === 401 && this.onUnauthorized) {
-        this.onUnauthorized();
-      }
-      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
-      throw new ApiError(error.detail || 'Upload failed', response.status);
-    }
-
     return response.json();
   }
 
