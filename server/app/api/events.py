@@ -150,6 +150,7 @@ def _event_to_out(
 
 
 @router.post("", response_model=EventOut, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 def create_new_event(
     event_data: EventCreate,
     request: Request,
@@ -289,6 +290,7 @@ def event_search(
 
 
 @router.patch("/{code}", response_model=EventOut)
+@limiter.limit("20/minute")
 def update_event_endpoint(
     event_data: EventUpdate,
     request: Request,
@@ -305,7 +307,9 @@ def update_event_endpoint(
 
 
 @router.delete("/{code}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/minute")
 def delete_event_endpoint(
+    request: Request,
     event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
 ) -> None:
@@ -314,6 +318,7 @@ def delete_event_endpoint(
 
 
 @router.post("/{code}/archive", response_model=EventOut)
+@limiter.limit("10/minute")
 def archive_event_endpoint(
     request: Request,
     event: Event = Depends(get_owned_event),
@@ -328,6 +333,7 @@ def archive_event_endpoint(
 
 
 @router.post("/{code}/unarchive", response_model=EventOut)
+@limiter.limit("10/minute")
 def unarchive_event_endpoint(
     request: Request,
     event: Event = Depends(get_owned_event),
@@ -884,6 +890,7 @@ def upload_banner(
 
 
 @router.delete("/{code}/banner", response_model=EventOut)
+@limiter.limit("10/minute")
 def delete_banner(
     request: Request,
     event: Event = Depends(get_owned_event),
