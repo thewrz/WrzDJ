@@ -1,4 +1,17 @@
 /** @type {import('next').NextConfig} */
+
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+const csp = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  `connect-src 'self' ${apiUrl}`,
+  "font-src 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
 const nextConfig = {
   output: 'standalone',
   allowedDevOrigins: ['192.168.*.*'],
@@ -15,6 +28,7 @@ const nextConfig = {
             key: 'Strict-Transport-Security',
             value: 'max-age=31536000; includeSubDomains',
           },
+          { key: 'Content-Security-Policy', value: csp },
         ],
       },
       {
