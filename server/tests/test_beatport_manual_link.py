@@ -109,7 +109,7 @@ def test_link_endpoint_request_not_found(client, auth_headers, db):
 
 
 def test_link_endpoint_not_authorized(client, auth_headers, test_event, test_request, db):
-    """Link endpoint returns 403 for requests not owned by user."""
+    """Link endpoint returns 404 for requests not owned by user (avoids leaking existence)."""
     # Create another user
     from app.models.user import User
 
@@ -130,7 +130,7 @@ def test_link_endpoint_not_authorized(client, auth_headers, test_event, test_req
         json={"beatport_track_id": "12345"},
         headers=auth_headers,
     )
-    assert response.status_code == 403
+    assert response.status_code == 404
 
 
 def test_link_endpoint_no_beatport_account(client, auth_headers, test_request):

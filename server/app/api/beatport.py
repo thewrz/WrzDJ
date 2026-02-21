@@ -11,7 +11,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db
+from app.api.deps import get_current_active_user, get_db, get_owned_event_by_id, get_owned_request
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.models.event import Event
@@ -163,36 +163,21 @@ def search(
 
 @router.get("/events/{event_id}/settings", response_model=BeatportEventSettings)
 def get_event_settings(
-    event_id: int,
-    current_user: User = Depends(get_current_active_user),
+    event: Event = Depends(get_owned_event_by_id),
     db: Session = Depends(get_db),
 ) -> BeatportEventSettings:
     """Get Beatport sync settings for an event."""
-    event = db.query(Event).filter(Event.id == event_id).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
-    if event.created_by_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     return BeatportEventSettings(beatport_sync_enabled=event.beatport_sync_enabled)
 
 
 @router.put("/events/{event_id}/settings", response_model=BeatportEventSettings)
 def update_event_settings(
-    event_id: int,
     settings_update: BeatportEventSettingsUpdate,
+    event: Event = Depends(get_owned_event_by_id),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> BeatportEventSettings:
     """Update Beatport sync settings for an event."""
-    event = db.query(Event).filter(Event.id == event_id).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
-    if event.created_by_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     if settings_update.beatport_sync_enabled and not current_user.beatport_access_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -210,8 +195,8 @@ def update_event_settings(
 @limiter.limit("10/minute")
 def link_track(
     request: Request,
-    request_id: int,
     link_data: BeatportManualLink,
+    song_request: SongRequest = Depends(get_owned_request),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> StatusMessageResponse:
@@ -226,13 +211,6 @@ def link_track(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Beatport integration is currently unavailable",
         )
-    song_request = db.query(SongRequest).filter(SongRequest.id == request_id).first()
-    if not song_request:
-        raise HTTPException(status_code=404, detail="Request not found")
-
-    event = song_request.event
-    if event.created_by_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     if not current_user.beatport_access_token:
         raise HTTPException(

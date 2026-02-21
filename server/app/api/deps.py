@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.event import Event
+from app.models.request import Request as SongRequest
 from app.models.user import User, UserRole
 from app.services.auth import decode_token, get_user_by_username
 from app.services.event import get_event_by_code_for_owner
@@ -68,3 +69,39 @@ def get_owned_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     return event
+
+
+def get_owned_event_by_id(
+    event_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> Event:
+    """Get an event by ID owned by the current user, or raise 404.
+
+    Returns 404 (not 403) to avoid leaking event existence.
+    """
+    event = (
+        db.query(Event)
+        .filter(Event.id == event_id, Event.created_by_user_id == current_user.id)
+        .first()
+    )
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return event
+
+
+def get_owned_request(
+    request_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> SongRequest:
+    """Get a song request whose event is owned by the current user, or raise 404.
+
+    Returns 404 (not 403) to avoid leaking request/event existence.
+    """
+    song_request = db.query(SongRequest).filter(SongRequest.id == request_id).first()
+    if not song_request:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if song_request.event.created_by_user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return song_request
