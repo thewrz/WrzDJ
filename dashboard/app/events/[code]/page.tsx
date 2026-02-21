@@ -13,6 +13,7 @@ import { HelpButton } from '@/components/help/HelpButton';
 import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useTabTitle } from '@/lib/tab-title';
+import { EventErrorCard } from '@/components/EventErrorCard';
 import { DeleteEventModal } from './components/DeleteEventModal';
 import { NowPlayingBadge } from './components/NowPlayingBadge';
 import { TidalLoginModal } from './components/TidalLoginModal';
@@ -158,6 +159,37 @@ export default function EventQueuePage() {
     const timer = setTimeout(() => setActionError(null), 5000);
     return () => clearTimeout(timer);
   }, [actionError]);
+
+  // Tidal auth polling — driven by tidalLoginPolling state with proper cleanup
+  useEffect(() => {
+    if (!tidalLoginPolling) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const result = await api.checkTidalAuth();
+        if (result.complete) {
+          setTidalLoginPolling(false);
+          setShowTidalLogin(false);
+          setTidalStatus({ linked: true, user_id: result.user_id || null, expires_at: null, integration_enabled: true });
+        } else if (result.error) {
+          setTidalLoginPolling(false);
+          setActionError(`Tidal login failed: ${result.error}`);
+        }
+      } catch {
+        // Transient error — keep polling
+      }
+    }, 2000);
+
+    // Stop polling after 10 minutes
+    const timeout = setTimeout(() => {
+      setTidalLoginPolling(false);
+    }, 10 * 60 * 1000);
+
+    return () => {
+      clearInterval(pollInterval);
+      clearTimeout(timeout);
+    };
+  }, [tidalLoginPolling]);
 
   // Auto-trigger onboarding for first-time visitors to this tab
   const eventLoaded = !isLoading && isAuthenticated && !loading && !!event;
@@ -425,7 +457,7 @@ export default function EventQueuePage() {
       await api.updateTidalEventSettings(event.id, { tidal_sync_enabled: newEnabled });
       setTidalSyncEnabled(newEnabled);
     } catch (err) {
-      console.error('Failed to toggle Tidal sync:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to toggle Tidal sync');
     } finally {
       setTogglingTidalSync(false);
     }
@@ -438,33 +470,8 @@ export default function EventQueuePage() {
       setTidalLoginCode(user_code);
       setShowTidalLogin(true);
       setTidalLoginPolling(true);
-
-      // Start polling for completion
-      const pollInterval = setInterval(async () => {
-        try {
-          const result = await api.checkTidalAuth();
-          if (result.complete) {
-            clearInterval(pollInterval);
-            setTidalLoginPolling(false);
-            setShowTidalLogin(false);
-            setTidalStatus({ linked: true, user_id: result.user_id || null, expires_at: null, integration_enabled: true });
-          } else if (result.error) {
-            clearInterval(pollInterval);
-            setTidalLoginPolling(false);
-            setActionError(`Tidal login failed: ${result.error}`);
-          }
-        } catch (err) {
-          console.error('Failed to check Tidal auth:', err);
-        }
-      }, 2000);
-
-      // Stop polling after 10 minutes
-      setTimeout(() => {
-        clearInterval(pollInterval);
-        setTidalLoginPolling(false);
-      }, 10 * 60 * 1000);
     } catch (err) {
-      console.error('Failed to start Tidal auth:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to start Tidal auth');
     }
   };
 
@@ -472,7 +479,7 @@ export default function EventQueuePage() {
     try {
       await api.cancelTidalAuth();
     } catch (err) {
-      console.error('Failed to cancel Tidal auth:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to cancel Tidal auth');
     }
     setShowTidalLogin(false);
     setTidalLoginPolling(false);
@@ -484,7 +491,7 @@ export default function EventQueuePage() {
       setTidalStatus({ linked: false, user_id: null, expires_at: null, integration_enabled: true });
       setTidalSyncEnabled(false);
     } catch (err) {
-      console.error('Failed to disconnect Tidal:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to disconnect Tidal');
     }
   };
 
@@ -500,7 +507,7 @@ export default function EventQueuePage() {
         )
       );
     } catch (err) {
-      console.error('Failed to sync to Tidal:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to sync to Tidal');
     } finally {
       setSyncingRequest(null);
     }
@@ -522,7 +529,7 @@ export default function EventQueuePage() {
       const results = await api.searchTidal(tidalSearchQuery);
       setTidalSearchResults(results);
     } catch (err) {
-      console.error('Failed to search Tidal:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to search Tidal');
     } finally {
       setSearchingTidal(false);
     }
@@ -541,7 +548,7 @@ export default function EventQueuePage() {
       );
       setShowTidalPicker(null);
     } catch (err) {
-      console.error('Failed to link Tidal track:', err);
+      setActionError(err instanceof ApiError ? err.message : 'Failed to link Tidal track');
     } finally {
       setLinkingTrack(false);
     }
@@ -736,26 +743,13 @@ export default function EventQueuePage() {
   }
 
   if (error || !event) {
-    const is410 = error?.status === 410;
-    const is404 = error?.status === 404;
-
     return (
       <div className="container">
-        <div className="card" style={{ textAlign: 'center' }}>
-          <h2 style={{ marginBottom: '1rem' }}>
-            {is410 ? 'Event Expired' : is404 ? 'Event Not Found' : 'Error'}
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-            {is410
-              ? 'This event has expired and is no longer accepting requests.'
-              : is404
-                ? 'This event does not exist.'
-                : error?.message || 'Event not found or expired.'}
-          </p>
-          <Link href="/dashboard" className="btn btn-primary" style={{ marginTop: '1rem' }}>
-            Back to Events
-          </Link>
-        </div>
+        <EventErrorCard
+          error={error}
+          fallbackMessage="Event not found or expired."
+          backLink={{ href: '/dashboard', label: 'Back to Events' }}
+        />
       </div>
     );
   }
