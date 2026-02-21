@@ -37,8 +37,9 @@ class User(Base):
     beatport_access_token: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
     beatport_refresh_token: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
     beatport_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    beatport_oauth_state: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    beatport_oauth_code_verifier: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Transient PKCE values (encrypted at rest, NULLed after token exchange)
+    beatport_oauth_state: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
+    beatport_oauth_code_verifier: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
     beatport_subscription: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # Help onboarding state (JSON array of page IDs)
