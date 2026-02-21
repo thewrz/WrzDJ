@@ -353,4 +353,155 @@ describe('BridgeRunner', () => {
     const status = runner.getStatus();
     expect(status.backendReachable).toBe(true);
   });
+
+  it('posts now playing when deckLive event fires', async () => {
+    await runner.start(TEST_CONFIG);
+    mockFetch.mockClear();
+
+    const pluginBridge = (runner as unknown as Record<string, unknown>).pluginBridge as {
+      emit: (event: string, ...args: unknown[]) => boolean;
+    };
+    pluginBridge.emit('deckLive', {
+      deckId: '1',
+      track: { title: 'Strobe', artist: 'deadmau5', album: 'For Lack of a Better Name' },
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    const nowPlayingCall = mockFetch.mock.calls.find(
+      (call) => typeof call[0] === 'string' && call[0].includes('/bridge/nowplaying') && call[1]?.method !== 'DELETE',
+    );
+    expect(nowPlayingCall).toBeDefined();
+    const body = JSON.parse(nowPlayingCall![1].body as string);
+    expect(body.title).toBe('Strobe');
+    expect(body.artist).toBe('deadmau5');
+    expect(body.event_code).toBe('ABC123');
+  });
+
+  it('skips duplicate track (deduplication)', async () => {
+    await runner.start(TEST_CONFIG);
+
+    const pluginBridge = (runner as unknown as Record<string, unknown>).pluginBridge as {
+      emit: (event: string, ...args: unknown[]) => boolean;
+    };
+
+    // First track
+    pluginBridge.emit('deckLive', {
+      deckId: '1',
+      track: { title: 'Strobe', artist: 'deadmau5' },
+    });
+    await vi.advanceTimersByTimeAsync(100);
+
+    mockFetch.mockClear();
+
+    // Same track again — should be skipped
+    pluginBridge.emit('deckLive', {
+      deckId: '1',
+      track: { title: 'Strobe', artist: 'deadmau5' },
+    });
+    await vi.advanceTimersByTimeAsync(100);
+
+    const nowPlayingCalls = mockFetch.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && call[0].includes('/bridge/nowplaying') && call[1]?.method !== 'DELETE',
+    );
+    expect(nowPlayingCalls).toHaveLength(0);
+  });
+
+  it('skips track with empty title', async () => {
+    await runner.start(TEST_CONFIG);
+    mockFetch.mockClear();
+
+    const pluginBridge = (runner as unknown as Record<string, unknown>).pluginBridge as {
+      emit: (event: string, ...args: unknown[]) => boolean;
+    };
+    pluginBridge.emit('deckLive', {
+      deckId: '1',
+      track: { title: '', artist: 'deadmau5' },
+    });
+    await vi.advanceTimersByTimeAsync(100);
+
+    const nowPlayingCalls = mockFetch.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && call[0].includes('/bridge/nowplaying') && call[1]?.method !== 'DELETE',
+    );
+    expect(nowPlayingCalls).toHaveLength(0);
+  });
+
+  it('track posting continues when network fails (retries)', async () => {
+    await runner.start(TEST_CONFIG);
+
+    // Make fetch fail temporarily
+    mockFetch.mockRejectedValueOnce(new Error('Network error'))
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValue({ ok: true, text: () => Promise.resolve('') });
+
+    const pluginBridge = (runner as unknown as Record<string, unknown>).pluginBridge as {
+      emit: (event: string, ...args: unknown[]) => boolean;
+    };
+    pluginBridge.emit('deckLive', {
+      deckId: '1',
+      track: { title: 'Test Track', artist: 'Test Artist' },
+    });
+
+    // Let retries execute (2s + 4s)
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    // After retries succeed, backendReachable should still be true
+    expect(runner.getStatus().backendReachable).toBe(true);
+  });
+
+  it('clears currentTrack on clearNowPlaying event', async () => {
+    await runner.start(TEST_CONFIG);
+
+    const pluginBridge = (runner as unknown as Record<string, unknown>).pluginBridge as {
+      emit: (event: string, ...args: unknown[]) => boolean;
+    };
+
+    // First set a track
+    pluginBridge.emit('deckLive', {
+      deckId: '1',
+      track: { title: 'Strobe', artist: 'deadmau5' },
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(runner.getStatus().currentTrack).not.toBeNull();
+
+    mockFetch.mockClear();
+
+    // Clear now playing
+    pluginBridge.emit('clearNowPlaying');
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(runner.getStatus().currentTrack).toBeNull();
+  });
+
+  it('cascade: transient error → continues → expired → stops', async () => {
+    await runner.start(TEST_CONFIG);
+    expect(runner.isRunning).toBe(true);
+
+    // First health check: transient error — should continue
+    mockedCheckEventHealth.mockResolvedValue('error');
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(runner.isRunning).toBe(true);
+    expect(runner.getStatus().stopReason).toBeNull();
+
+    // Second health check: expired — should stop
+    mockedCheckEventHealth.mockResolvedValue('expired');
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(runner.isRunning).toBe(false);
+    expect(runner.getStatus().stopReason).toBe('Event expired or archived');
+  });
+
+  it('throws when starting while already running', async () => {
+    await runner.start(TEST_CONFIG);
+    await expect(runner.start(TEST_CONFIG)).rejects.toThrow('already running');
+  });
+
+  it('emits log events', async () => {
+    const logs: string[] = [];
+    runner.on('log', (msg: string) => logs.push(msg));
+
+    await runner.start(TEST_CONFIG);
+
+    expect(logs.some((l) => l.includes('Starting bridge'))).toBe(true);
+    expect(logs.some((l) => l.includes('ABC123'))).toBe(true);
+  });
 });

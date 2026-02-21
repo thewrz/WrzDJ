@@ -4,14 +4,17 @@ import DashboardPage from '../page';
 import { api } from '@/lib/api';
 
 const mockPush = vi.fn();
+const mockLogout = vi.fn();
+
+let mockAuth = {
+  isAuthenticated: true,
+  isLoading: false,
+  role: 'dj',
+  logout: mockLogout,
+};
 
 vi.mock('@/lib/auth', () => ({
-  useAuth: () => ({
-    isAuthenticated: true,
-    isLoading: false,
-    role: 'dj',
-    logout: vi.fn(),
-  }),
+  useAuth: () => mockAuth,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -24,10 +27,24 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+function setupDefaultMocks() {
+  vi.spyOn(api, 'getEvents').mockResolvedValue([]);
+  vi.spyOn(api, 'getTidalStatus').mockResolvedValue({ linked: false, user_id: null, expires_at: null, integration_enabled: true });
+  vi.spyOn(api, 'getBeatportStatus').mockResolvedValue({ linked: false, expires_at: null, configured: false, subscription: null, integration_enabled: true });
+  vi.spyOn(api, 'getActivityLog').mockResolvedValue([]);
+}
+
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     mockPush.mockClear();
+    mockLogout.mockClear();
+    mockAuth = {
+      isAuthenticated: true,
+      isLoading: false,
+      role: 'dj',
+      logout: mockLogout,
+    };
   });
 
   it('renders events list', async () => {
@@ -62,10 +79,7 @@ describe('DashboardPage', () => {
   });
 
   it('renders activity log panel', async () => {
-    vi.spyOn(api, 'getEvents').mockResolvedValue([]);
-    vi.spyOn(api, 'getTidalStatus').mockResolvedValue({ linked: false, user_id: null, expires_at: null, integration_enabled: true });
-    vi.spyOn(api, 'getBeatportStatus').mockResolvedValue({ linked: false, expires_at: null, configured: false, subscription: null, integration_enabled: true });
-    vi.spyOn(api, 'getActivityLog').mockResolvedValue([]);
+    setupDefaultMocks();
 
     render(<DashboardPage />);
 
@@ -75,10 +89,7 @@ describe('DashboardPage', () => {
   });
 
   it('renders create event form', async () => {
-    vi.spyOn(api, 'getEvents').mockResolvedValue([]);
-    vi.spyOn(api, 'getTidalStatus').mockResolvedValue({ linked: false, user_id: null, expires_at: null, integration_enabled: true });
-    vi.spyOn(api, 'getBeatportStatus').mockResolvedValue({ linked: false, expires_at: null, configured: false, subscription: null, integration_enabled: true });
-    vi.spyOn(api, 'getActivityLog').mockResolvedValue([]);
+    setupDefaultMocks();
 
     render(<DashboardPage />);
 
@@ -89,5 +100,140 @@ describe('DashboardPage', () => {
     fireEvent.click(screen.getByText('Create Event'));
 
     expect(screen.getByText('Create New Event')).toBeTruthy();
+  });
+
+  it('shows empty state when no events', async () => {
+    setupDefaultMocks();
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('No events yet. Create your first event!')).toBeTruthy();
+    });
+  });
+
+  it('creates event and adds it to the list', async () => {
+    setupDefaultMocks();
+    vi.spyOn(api, 'createEvent').mockResolvedValue({
+      id: 99,
+      name: 'New Party',
+      code: 'NP0001',
+      is_active: true,
+      expires_at: '2026-03-01T00:00:00Z',
+      created_at: '2026-01-01',
+      requests_open: true,
+      now_playing_hidden: false,
+      auto_hide_minutes: 10,
+    } as never);
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Dashboard')).toBeTruthy();
+    });
+
+    // Open create form
+    fireEvent.click(screen.getByText('Create Event'));
+    expect(screen.getByText('Create New Event')).toBeTruthy();
+
+    // Fill and submit
+    fireEvent.change(screen.getByLabelText('Event Name'), {
+      target: { value: 'New Party' },
+    });
+    fireEvent.submit(screen.getByText('Create'));
+
+    await waitFor(() => {
+      expect(screen.getByText('New Party')).toBeTruthy();
+    });
+    // Form should be hidden after creation
+    expect(screen.queryByText('Create New Event')).not.toBeTruthy();
+  });
+
+  it('shows error when create event fails', async () => {
+    setupDefaultMocks();
+    vi.spyOn(api, 'createEvent').mockRejectedValue(new Error('Server error'));
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Dashboard')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText('Create Event'));
+    fireEvent.change(screen.getByLabelText('Event Name'), {
+      target: { value: 'Bad Event' },
+    });
+    fireEvent.submit(screen.getByText('Create'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Server error')).toBeTruthy();
+    });
+  });
+
+  it('calls logout on logout button click', async () => {
+    setupDefaultMocks();
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Dashboard')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText('Logout'));
+    expect(mockLogout).toHaveBeenCalledOnce();
+  });
+
+  it('shows admin link for admin users', async () => {
+    mockAuth = { ...mockAuth, role: 'admin' };
+    setupDefaultMocks();
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Admin')).toBeTruthy();
+    });
+  });
+
+  it('does not show admin link for DJ users', async () => {
+    setupDefaultMocks();
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Dashboard')).toBeTruthy();
+    });
+
+    expect(screen.queryByText('Admin')).not.toBeTruthy();
+  });
+
+  it('shows inactive badge for expired events', async () => {
+    vi.spyOn(api, 'getEvents').mockResolvedValue([
+      { id: 1, name: 'Old Event', code: 'OLD123', is_active: false, expires_at: '2025-01-01T00:00:00Z', created_at: '2024-12-01', requests_open: false, now_playing_hidden: false, auto_hide_minutes: 10 },
+    ] as never[]);
+    vi.spyOn(api, 'getTidalStatus').mockResolvedValue({ linked: false, user_id: null, expires_at: null, integration_enabled: true });
+    vi.spyOn(api, 'getBeatportStatus').mockResolvedValue({ linked: false, expires_at: null, configured: false, subscription: null, integration_enabled: true });
+    vi.spyOn(api, 'getActivityLog').mockResolvedValue([]);
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Inactive')).toBeTruthy();
+    });
+  });
+
+  it('cancels create event form', async () => {
+    setupDefaultMocks();
+
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Dashboard')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText('Create Event'));
+    expect(screen.getByText('Create New Event')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(screen.queryByText('Create New Event')).not.toBeTruthy();
   });
 });
