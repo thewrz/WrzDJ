@@ -12,8 +12,11 @@ from app.models.request import Request, RequestStatus, TidalSyncStatus
 from app.models.user import User
 from app.schemas.tidal import TidalSearchResult
 from app.services.tidal import (
+    _track_to_result,
     cancel_device_login,
+    check_device_login,
     disconnect_tidal,
+    get_tidal_session,
     manual_link_track,
     search_tidal_tracks,
     search_track,
@@ -508,3 +511,218 @@ class TestTidalSearch:
         results = search_tidal_tracks(db, tidal_user, "test")
 
         assert results == []
+
+
+class TestCheckDeviceLogin:
+    """Tests for check_device_login."""
+
+    def test_no_pending_login(self, db, tidal_user):
+        """Returns error when no pending login for user."""
+        result = check_device_login(db, tidal_user)
+        assert result["complete"] is False
+        assert "No pending" in result.get("error", "")
+
+    @patch("app.services.tidal._device_logins", {})
+    def test_pending_future_not_done(self, db, tidal_user):
+        """Returns pending status when future is not done."""
+        from app.services.tidal import _device_logins
+
+        mock_state = MagicMock()
+        mock_state.future.done.return_value = False
+        mock_state.login_info.verification_uri_complete = "https://link.tidal.com/ABCDE"
+        mock_state.login_info.user_code = "ABCDE"
+        _device_logins[tidal_user.id] = mock_state
+
+        result = check_device_login(db, tidal_user)
+        assert result["complete"] is False
+        assert result["pending"] is True
+        assert result["user_code"] == "ABCDE"
+
+    @patch("app.services.tidal._device_logins", {})
+    def test_completed_successfully(self, db, tidal_user):
+        """Saves tokens and returns complete=True."""
+        from app.services.tidal import _device_logins
+
+        mock_state = MagicMock()
+        mock_state.future.done.return_value = True
+        mock_state.future.result.return_value = None
+        mock_state.session.access_token = "new_access"
+        mock_state.session.refresh_token = "new_refresh"
+        mock_state.session.expiry_time = datetime.now(UTC) + timedelta(hours=1)
+        mock_state.session.user = MagicMock()
+        mock_state.session.user.id = 99999
+        _device_logins[tidal_user.id] = mock_state
+
+        result = check_device_login(db, tidal_user)
+        assert result["complete"] is True
+        assert result["user_id"] == "99999"
+
+    @patch("app.services.tidal._device_logins", {})
+    def test_completed_with_failure(self, db, tidal_user):
+        """Returns error when future raises exception."""
+        from app.services.tidal import _device_logins
+
+        mock_state = MagicMock()
+        mock_state.future.done.return_value = True
+        mock_state.future.result.side_effect = Exception("Auth failed")
+        _device_logins[tidal_user.id] = mock_state
+
+        result = check_device_login(db, tidal_user)
+        assert result["complete"] is False
+        assert "error" in result
+
+
+class TestGetTidalSession:
+    """Tests for get_tidal_session."""
+
+    def test_no_access_token(self, db, tidal_user):
+        """Returns None when user has no access token."""
+        tidal_user.tidal_access_token = None
+        db.commit()
+        result = get_tidal_session(db, tidal_user)
+        assert result is None
+
+    @patch("tidalapi.Session")
+    def test_successful_load(self, mock_session_cls, db, tidal_user):
+        """Returns session when login is valid."""
+        mock_session = MagicMock()
+        mock_session.check_login.return_value = True
+        mock_session_cls.return_value = mock_session
+
+        result = get_tidal_session(db, tidal_user)
+        assert result is not None
+        mock_session.load_oauth_session.assert_called_once()
+
+    @patch("tidalapi.Session")
+    def test_token_refresh_success(self, mock_session_cls, db, tidal_user):
+        """Refreshes expired token and saves new tokens."""
+        mock_session = MagicMock()
+        mock_session.check_login.return_value = False
+        mock_session.token_refresh.return_value = True
+        mock_session.access_token = "refreshed_access"
+        mock_session.refresh_token = "refreshed_refresh"
+        mock_session.expiry_time = datetime.now(UTC) + timedelta(hours=1)
+        mock_session_cls.return_value = mock_session
+
+        result = get_tidal_session(db, tidal_user)
+        assert result is not None
+        assert tidal_user.tidal_access_token == "refreshed_access"
+
+    @patch("tidalapi.Session")
+    def test_token_refresh_failure(self, mock_session_cls, db, tidal_user):
+        """Returns None when refresh fails."""
+        mock_session = MagicMock()
+        mock_session.check_login.return_value = False
+        mock_session.token_refresh.return_value = False
+        mock_session_cls.return_value = mock_session
+
+        result = get_tidal_session(db, tidal_user)
+        assert result is None
+
+    @patch("tidalapi.Session")
+    def test_load_exception(self, mock_session_cls, db, tidal_user):
+        """Returns None when session load throws."""
+        mock_session = MagicMock()
+        mock_session.load_oauth_session.side_effect = Exception("Parse error")
+        mock_session_cls.return_value = mock_session
+
+        result = get_tidal_session(db, tidal_user)
+        assert result is None
+
+
+class TestTrackToResult:
+    """Tests for _track_to_result conversion."""
+
+    def test_full_conversion(self):
+        """Converts track with all fields."""
+        track = MagicMock()
+        track.id = 12345
+        track.name = "Strobe"
+        track.duration = 630
+        track.bpm = 128.0
+        track.key = "F Minor"
+        track.artist = MagicMock()
+        track.artist.name = "deadmau5"
+        track.artists = []
+        track.album = MagicMock()
+        track.album.name = "For Lack of a Better Name"
+        track.album.image.return_value = "https://example.com/art.jpg"
+
+        result = _track_to_result(track)
+        assert result.track_id == "12345"
+        assert result.title == "Strobe"
+        assert result.artist == "deadmau5"
+        assert result.bpm == 128.0
+        assert result.key == "F Minor"
+        assert result.cover_url == "https://example.com/art.jpg"
+
+    def test_cover_art_failure(self):
+        """Returns None cover_url on image exception."""
+        track = MagicMock()
+        track.id = 1
+        track.name = "Test"
+        track.duration = 100
+        track.bpm = None
+        track.key = None
+        track.artist = MagicMock()
+        track.artist.name = "Artist"
+        track.artists = []
+        track.album = MagicMock()
+        track.album.name = "Album"
+        track.album.image.side_effect = Exception("Image not found")
+
+        result = _track_to_result(track)
+        assert result.cover_url is None
+
+    def test_bpm_edge_cases(self):
+        """Handles non-numeric BPM gracefully."""
+        track = MagicMock()
+        track.id = 2
+        track.name = "Test"
+        track.duration = 100
+        track.bpm = "not_a_number"
+        track.key = None
+        track.artist = MagicMock()
+        track.artist.name = "Artist"
+        track.artists = []
+        track.album = None
+
+        result = _track_to_result(track)
+        assert result.bpm is None
+        assert result.album is None
+
+    def test_multi_artist_track(self):
+        """Joins multiple artist names."""
+        track = MagicMock()
+        track.id = 3
+        track.name = "Collab"
+        track.duration = 200
+        track.bpm = 120
+        track.key = None
+        artist1 = MagicMock()
+        artist1.name = "Artist A"
+        artist2 = MagicMock()
+        artist2.name = "Artist B"
+        track.artists = [artist1, artist2]
+        track.album = None
+
+        result = _track_to_result(track)
+        assert result.artist == "Artist A, Artist B"
+
+
+class TestCascadeTidalFlow:
+    """Cascade tests: end-to-end flows through multiple service functions."""
+
+    @patch("app.services.tidal.get_tidal_session")
+    def test_session_failure_search_returns_empty(self, mock_session_fn, db, tidal_user):
+        """get_tidal_session fails → search_tidal_tracks returns empty."""
+        mock_session_fn.return_value = None
+        results = search_tidal_tracks(db, tidal_user, "strobe")
+        assert results == []
+
+    @patch("app.services.tidal.get_tidal_session")
+    def test_session_failure_search_track_returns_none(self, mock_session_fn, db, tidal_user):
+        """get_tidal_session fails → search_track returns None."""
+        mock_session_fn.return_value = None
+        result = search_track(db, tidal_user, "deadmau5", "Strobe")
+        assert result is None

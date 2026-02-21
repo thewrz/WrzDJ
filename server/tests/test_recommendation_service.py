@@ -14,6 +14,8 @@ from app.services.recommendation.service import (
     _deduplicate_against_template,
     _deduplicate_candidates,
     _is_blocked_genre,
+    _is_junk_candidate,
+    _search_candidates,
     generate_recommendations,
 )
 
@@ -638,3 +640,300 @@ class TestLLMScoringProfile:
         # BPM is similar but genres are completely different
         assert result is not original
         assert "Techno" in result.dominant_genres
+
+
+class TestIsJunkCandidate:
+    """Tests for _is_junk_candidate utility."""
+
+    def test_backing_track_in_title(self):
+        assert _is_junk_candidate("Save A Horse (Backing Track)", "Big & Rich") is True
+
+    def test_drumless_in_title(self):
+        assert _is_junk_candidate("Strobe - Drumless", "deadmau5") is True
+
+    def test_jam_track_in_title(self):
+        assert _is_junk_candidate("Blues Jam Track in A", "Guitar Backing") is True
+
+    def test_click_track_in_title(self):
+        assert _is_junk_candidate("Song - Click Track", "Artist") is True
+
+    def test_practice_track_in_title(self):
+        assert _is_junk_candidate("Practice Track - Tempo 120", "Music Coach") is True
+
+    def test_minus_one_in_title(self):
+        assert _is_junk_candidate("Bohemian Rhapsody Minus One", "Cover Band") is True
+
+    def test_keyword_in_artist(self):
+        assert _is_junk_candidate("Some Song", "Backing Track Masters") is True
+
+    def test_normal_track_passes(self):
+        assert _is_junk_candidate("Strobe", "deadmau5") is False
+
+    def test_case_insensitive(self):
+        assert _is_junk_candidate("BACKING TRACK version", "Artist") is True
+
+    def test_drum_track_in_title(self):
+        assert _is_junk_candidate("Funk Drum Track 120 BPM", "Drummer") is True
+
+
+class TestSearchCandidates:
+    """Tests for _search_candidates including cascade behavior."""
+
+    def test_beatport_only(self):
+        """Beatport connected, Tidal not → only Beatport results."""
+        user = _make_user(tidal=False, beatport=True)
+        db = MagicMock()
+
+        from app.schemas.beatport import BeatportSearchResult
+
+        mock_result = BeatportSearchResult(
+            track_id="1",
+            title="Strobe",
+            artist="deadmau5",
+            bpm=128,
+            key="A min",
+            genre="Progressive House",
+            beatport_url="https://beatport.com/track/strobe/1",
+        )
+
+        with patch("app.services.beatport.search_beatport_tracks", return_value=[mock_result]):
+            candidates, services, total = _search_candidates(db, user, ["Progressive House"])
+
+        assert len(candidates) == 1
+        assert candidates[0].source == "beatport"
+        assert "beatport" in services
+        assert "tidal" not in services
+
+    @patch("app.services.tidal.search_tidal_tracks")
+    def test_tidal_text_fallback_when_no_soundcharts(self, mock_tidal_search):
+        """Tidal connected, no Soundcharts → falls back to text search."""
+        user = _make_user(tidal=True, beatport=False)
+        db = MagicMock()
+
+        mock_tidal_result = MagicMock()
+        mock_tidal_result.title = "Strobe"
+        mock_tidal_result.artist = "deadmau5"
+        mock_tidal_result.bpm = 128.0
+        mock_tidal_result.key = "A min"
+        mock_tidal_result.track_id = "t1"
+        mock_tidal_result.tidal_url = "https://tidal.com/track/t1"
+        mock_tidal_result.cover_url = None
+        mock_tidal_result.duration_seconds = 600
+        mock_tidal_search.return_value = [mock_tidal_result]
+
+        profile = EventProfile(dominant_genres=["House"], track_count=5)
+
+        with patch("app.core.config.get_settings") as mock_settings:
+            mock_settings.return_value.soundcharts_app_id = ""
+            mock_settings.return_value.soundcharts_api_key = ""
+            candidates, services, total = _search_candidates(
+                db, user, ["House"], profile=profile, tidal_queries=["deadmau5"]
+            )
+
+        assert len(candidates) == 1
+        assert candidates[0].source == "tidal"
+        assert "tidal" in services
+        mock_tidal_search.assert_called_once_with(db, user, "deadmau5", limit=10)
+
+    def test_beatport_failures_trigger_early_exit(self):
+        """2+ Beatport failures → stops trying remaining queries."""
+        user = _make_user(tidal=False, beatport=True)
+        db = MagicMock()
+
+        call_count = 0
+
+        def failing_search(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return []
+
+        with patch("app.services.beatport.search_beatport_tracks", side_effect=failing_search):
+            candidates, services, total = _search_candidates(
+                db, user, ["Query A", "Query B", "Query C"]
+            )
+
+        # Should stop after 2 failures, not try all 3
+        assert call_count == 2
+        assert candidates == []
+
+    def test_filters_unwanted_versions(self):
+        """Karaoke/unwanted versions are filtered out."""
+        user = _make_user(tidal=False, beatport=True)
+        db = MagicMock()
+
+        from app.schemas.beatport import BeatportSearchResult
+
+        results = [
+            BeatportSearchResult(
+                track_id="1",
+                title="Song (Karaoke Version)",
+                artist="Artist",
+                beatport_url="https://beatport.com/track/song/1",
+            ),
+            BeatportSearchResult(
+                track_id="2",
+                title="Song (Original Mix)",
+                artist="Artist",
+                genre="House",
+                beatport_url="https://beatport.com/track/song/2",
+            ),
+        ]
+
+        with patch("app.services.beatport.search_beatport_tracks", return_value=results):
+            candidates, services, total = _search_candidates(db, user, ["House"])
+
+        assert len(candidates) == 1
+        assert candidates[0].title == "Song (Original Mix)"
+
+    def test_filters_blocked_genres(self):
+        """DJ Tools and other blocked genres are filtered."""
+        user = _make_user(tidal=False, beatport=True)
+        db = MagicMock()
+
+        from app.schemas.beatport import BeatportSearchResult
+
+        results = [
+            BeatportSearchResult(
+                track_id="1",
+                title="Some Track",
+                artist="Artist",
+                genre="DJ Tools",
+                beatport_url="https://beatport.com/track/some/1",
+            ),
+            BeatportSearchResult(
+                track_id="2",
+                title="Real Track",
+                artist="Artist",
+                genre="Tech House",
+                beatport_url="https://beatport.com/track/real/2",
+            ),
+        ]
+
+        with patch("app.services.beatport.search_beatport_tracks", return_value=results):
+            candidates, services, total = _search_candidates(db, user, ["Tech House"])
+
+        assert len(candidates) == 1
+        assert candidates[0].genre == "Tech House"
+
+    def test_filters_junk_candidates(self):
+        """Backing tracks and other junk are filtered."""
+        user = _make_user(tidal=False, beatport=True)
+        db = MagicMock()
+
+        from app.schemas.beatport import BeatportSearchResult
+
+        results = [
+            BeatportSearchResult(
+                track_id="1",
+                title="Song (Backing Track)",
+                artist="Cover Band",
+                genre="House",
+                beatport_url="https://beatport.com/track/song/1",
+            ),
+            BeatportSearchResult(
+                track_id="2",
+                title="Actual Song",
+                artist="Real Artist",
+                genre="House",
+                beatport_url="https://beatport.com/track/actual/2",
+            ),
+        ]
+
+        with patch("app.services.beatport.search_beatport_tracks", return_value=results):
+            candidates, services, total = _search_candidates(db, user, ["House"])
+
+        assert len(candidates) == 1
+        assert candidates[0].title == "Actual Song"
+
+    def test_no_services_connected(self):
+        """No services → empty result."""
+        user = _make_user(tidal=False, beatport=False)
+        db = MagicMock()
+
+        candidates, services, total = _search_candidates(db, user, ["House"])
+
+        assert candidates == []
+        assert services == []
+        assert total == 0
+
+    @patch("app.services.tidal.search_tidal_tracks")
+    def test_all_services_fail_returns_empty(self, mock_tidal_search):
+        """Beatport fails + Tidal returns empty → empty candidates, no crash."""
+        user = _make_user(tidal=True, beatport=True)
+        db = MagicMock()
+
+        mock_tidal_search.return_value = []
+
+        with patch("app.services.beatport.search_beatport_tracks", return_value=[]):
+            with patch("app.core.config.get_settings") as mock_settings:
+                mock_settings.return_value.soundcharts_app_id = ""
+                mock_settings.return_value.soundcharts_api_key = ""
+                candidates, services, total = _search_candidates(
+                    db,
+                    user,
+                    ["House"],
+                    profile=EventProfile(dominant_genres=["House"], track_count=5),
+                    tidal_queries=["deadmau5"],
+                )
+
+        assert candidates == []
+
+    @patch("app.services.recommendation.soundcharts_candidates.search_candidates_via_soundcharts")
+    @patch("app.services.tidal.search_tidal_tracks")
+    def test_soundcharts_empty_falls_back_to_tidal_text(self, mock_tidal_search, mock_soundcharts):
+        """Soundcharts returns empty → falls back to Tidal text search."""
+        user = _make_user(tidal=True, beatport=False)
+        db = MagicMock()
+
+        mock_soundcharts.return_value = ([], 0)
+
+        mock_tidal_result = MagicMock()
+        mock_tidal_result.title = "Strobe"
+        mock_tidal_result.artist = "deadmau5"
+        mock_tidal_result.bpm = 128.0
+        mock_tidal_result.key = "A min"
+        mock_tidal_result.track_id = "t1"
+        mock_tidal_result.tidal_url = "https://tidal.com/track/t1"
+        mock_tidal_result.cover_url = None
+        mock_tidal_result.duration_seconds = 600
+        mock_tidal_search.return_value = [mock_tidal_result]
+
+        profile = EventProfile(dominant_genres=["House"], track_count=5)
+
+        with patch("app.core.config.get_settings") as mock_settings:
+            mock_settings.return_value.soundcharts_app_id = "app_id"
+            mock_settings.return_value.soundcharts_api_key = "api_key"
+            candidates, services, total = _search_candidates(
+                db, user, ["House"], profile=profile, tidal_queries=["deadmau5"]
+            )
+
+        # Soundcharts returned empty, so it should fall back to text search
+        assert len(candidates) == 1
+        assert candidates[0].source == "tidal"
+        mock_tidal_search.assert_called_once()
+
+
+class TestCascadeGenerateRecommendations:
+    """Cascade tests for generate_recommendations end-to-end."""
+
+    @patch("app.services.recommendation.service._search_candidates")
+    @patch("app.services.recommendation.service.enrich_event_tracks")
+    @patch("app.services.recommendation.service._get_accepted_played_requests")
+    def test_all_search_services_fail_returns_empty(self, mock_requests, mock_enrich, mock_search):
+        """All search services fail → suggestions=[] with no crash."""
+        mock_requests.return_value = [
+            MagicMock(song_title="Song", artist="Artist", status="accepted"),
+        ]
+        mock_enrich.return_value = [
+            TrackProfile(title="Song", artist="Artist", bpm=128.0),
+        ]
+        mock_search.return_value = ([], [], 0)
+
+        db = MagicMock()
+        db.query.return_value.filter.return_value.all.return_value = []
+        user = _make_user()
+        event = _make_event()
+
+        result = generate_recommendations(db, user, event)
+        assert result.suggestions == []
+        assert result.total_candidates_searched == 0

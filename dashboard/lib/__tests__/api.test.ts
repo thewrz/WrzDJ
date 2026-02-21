@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -951,6 +951,1101 @@ describe('ApiClient', () => {
       const [url, options] = mockFetch.mock.calls[0];
       expect(url).toContain('/api/kiosk/1');
       expect(options.method).toBe('DELETE');
+    });
+  });
+
+  // ========== Phase 1: Auth & User endpoints ==========
+
+  describe('getPublicSettings', () => {
+    it('fetches registration settings without auth', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ registration_enabled: true, turnstile_site_key: 'key123' }),
+      });
+
+      const settings = await api.getPublicSettings();
+      expect(settings.registration_enabled).toBe(true);
+      expect(settings.turnstile_site_key).toBe('key123');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/auth/settings');
+    });
+  });
+
+  describe('register', () => {
+    it('sends registration data', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'ok', message: 'Registration successful' }),
+      });
+
+      const result = await api.register({
+        username: 'newuser',
+        email: 'new@test.com',
+        password: 'pass123',
+        confirm_password: 'pass123',
+        turnstile_token: 'token-abc',
+      });
+      expect(result.status).toBe('ok');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/auth/register');
+      expect(options.method).toBe('POST');
+      const body = JSON.parse(options.body);
+      expect(body.username).toBe('newuser');
+      expect(body.turnstile_token).toBe('token-abc');
+    });
+
+    it('throws ApiError on 409 conflict', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({ detail: 'Username already taken' }),
+      });
+
+      try {
+        await api.register({
+          username: 'existing',
+          email: 'e@test.com',
+          password: 'pass',
+          confirm_password: 'pass',
+          turnstile_token: 'tok',
+        });
+        expect.fail('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ApiError);
+        expect((e as ApiError).message).toBe('Username already taken');
+        expect((e as ApiError).status).toBe(409);
+      }
+    });
+
+    it('throws generic error when json parsing fails', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => { throw new Error('not json'); },
+      });
+
+      await expect(api.register({
+        username: 'x',
+        email: 'x@test.com',
+        password: 'p',
+        confirm_password: 'p',
+        turnstile_token: 't',
+      })).rejects.toThrow('Registration failed');
+    });
+  });
+
+  describe('markHelpPageSeen', () => {
+    it('sends help page POST request', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        json: async () => undefined,
+      });
+
+      await api.markHelpPageSeen('dashboard');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/auth/help-seen');
+      expect(options.method).toBe('POST');
+      expect(JSON.parse(options.body)).toEqual({ page: 'dashboard' });
+    });
+  });
+
+  // ========== Events CRUD ==========
+
+  describe('createEvent', () => {
+    it('creates event with name and default expiry', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 1, code: 'NEW123', name: 'Party Night' }),
+      });
+
+      const event = await api.createEvent('Party Night');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events');
+      expect(options.method).toBe('POST');
+      const body = JSON.parse(options.body);
+      expect(body.name).toBe('Party Night');
+      expect(body.expires_hours).toBe(6);
+      expect(event.code).toBe('NEW123');
+    });
+
+    it('creates event with custom expiry', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 2, code: 'ABC456', name: 'All-Nighter' }),
+      });
+
+      await api.createEvent('All-Nighter', 12);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.expires_hours).toBe(12);
+    });
+  });
+
+  describe('updateEvent', () => {
+    it('patches event with new name', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 1, code: 'ABC123', name: 'New Name' }),
+      });
+
+      const result = await api.updateEvent('ABC123', { name: 'New Name' });
+      expect(result.name).toBe('New Name');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123');
+      expect(options.method).toBe('PATCH');
+    });
+  });
+
+  describe('getArchivedEvents', () => {
+    it('fetches archived events', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { code: 'OLD123', name: 'Old Event', request_count: 42, created_at: '2026-01-01' },
+        ],
+      });
+
+      const events = await api.getArchivedEvents();
+      expect(events).toHaveLength(1);
+      expect(events[0].request_count).toBe(42);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/archived');
+    });
+  });
+
+  describe('refreshRequestMetadata', () => {
+    it('triggers metadata refresh for a request', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 5, artist: 'Artist', song_title: 'Song', bpm: 128 }),
+      });
+
+      const result = await api.refreshRequestMetadata(5);
+      expect(result.bpm).toBe(128);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/requests/5/refresh-metadata');
+      expect(options.method).toBe('POST');
+    });
+  });
+
+  // ========== Request Management ==========
+
+  describe('getRequests', () => {
+    it('fetches all requests for an event', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: 1, artist: 'A', song_title: 'S', status: 'new' },
+          { id: 2, artist: 'B', song_title: 'T', status: 'accepted' },
+        ],
+      });
+
+      const requests = await api.getRequests('ABC123');
+      expect(requests).toHaveLength(2);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123/requests');
+      expect(url).not.toContain('status=');
+    });
+
+    it('filters requests by status', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 1, status: 'new' }],
+      });
+
+      await api.getRequests('ABC123', 'new');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('status=new');
+    });
+  });
+
+  describe('acceptAllRequests', () => {
+    it('accepts all pending requests', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'ok', accepted_count: 5 }),
+      });
+
+      const result = await api.acceptAllRequests('ABC123');
+      expect(result.accepted_count).toBe(5);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123/requests/accept-all');
+      expect(options.method).toBe('POST');
+    });
+  });
+
+  describe('updateRequestStatus', () => {
+    it('updates request status', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 1, status: 'accepted' }),
+      });
+
+      const result = await api.updateRequestStatus(1, 'accepted');
+      expect(result.status).toBe('accepted');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/requests/1');
+      expect(options.method).toBe('PATCH');
+      expect(JSON.parse(options.body)).toEqual({ status: 'accepted' });
+    });
+  });
+
+  describe('deleteRequest', () => {
+    it('deletes a request', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        json: async () => undefined,
+      });
+
+      await api.deleteRequest(42);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/requests/42');
+      expect(options.method).toBe('DELETE');
+    });
+  });
+
+  // ========== Public endpoints ==========
+
+  describe('eventSearch', () => {
+    it('searches via public endpoint without auth', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ title: 'Found Song', artist: 'Found Artist' }],
+      });
+
+      const results = await api.eventSearch('EVT001', 'query here');
+      expect(results).toHaveLength(1);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/EVT001/search');
+      expect(url).toContain('q=query%20here');
+    });
+  });
+
+  describe('checkHasRequested', () => {
+    it('checks if client has already requested', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ has_requested: true, request_id: 7 }),
+      });
+
+      const result = await api.checkHasRequested('ABC123');
+      expect(result.has_requested).toBe(true);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/public/events/ABC123/has-requested');
+    });
+  });
+
+  describe('getPublicRequests', () => {
+    it('fetches public request list', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          requests: [{ id: 1, artist: 'A', title: 'S', vote_count: 3 }],
+          event_name: 'Party',
+          requests_open: true,
+        }),
+      });
+
+      const result = await api.getPublicRequests('ABC123');
+      expect(result.requests).toHaveLength(1);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/public/events/ABC123/requests');
+    });
+  });
+
+  describe('getKioskDisplay', () => {
+    it('fetches kiosk display data', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          event: { code: 'FRI001', name: 'Friday Night' },
+          qr_join_url: 'https://example.com/join/FRI001',
+          accepted_queue: [],
+          now_playing: null,
+          now_playing_hidden: false,
+          requests_open: true,
+          kiosk_display_only: false,
+          updated_at: '2026-01-01T00:00:00Z',
+          banner_url: null,
+          banner_kiosk_url: null,
+          banner_colors: null,
+        }),
+      });
+
+      const result = await api.getKioskDisplay('FRI001');
+      expect(result.event.name).toBe('Friday Night');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/public/events/FRI001/display');
+    });
+  });
+
+  // ========== Voting ==========
+
+  describe('voteRequest', () => {
+    it('sends authenticated vote', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ vote_count: 5, has_voted: true, status: 'voted' }),
+      });
+
+      const result = await api.voteRequest(10);
+      expect(result.vote_count).toBe(5);
+      expect(result.has_voted).toBe(true);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/requests/10/vote');
+      expect(options.method).toBe('POST');
+    });
+  });
+
+  describe('unvoteRequest', () => {
+    it('removes authenticated vote', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ vote_count: 4, has_voted: false, status: 'unvoted' }),
+      });
+
+      const result = await api.unvoteRequest(10);
+      expect(result.vote_count).toBe(4);
+      expect(result.has_voted).toBe(false);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/requests/10/vote');
+      expect(options.method).toBe('DELETE');
+    });
+  });
+
+  describe('publicVoteRequest', () => {
+    it('sends public vote without auth', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ vote_count: 6, has_voted: true, status: 'voted' }),
+      });
+
+      const result = await api.publicVoteRequest(10);
+      expect(result.vote_count).toBe(6);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/requests/10/vote');
+      expect(options.method).toBe('POST');
+    });
+
+    it('throws ApiError on failure', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        json: async () => ({ detail: 'Rate limit exceeded' }),
+      });
+
+      await expect(api.publicVoteRequest(10)).rejects.toThrow('Rate limit exceeded');
+    });
+  });
+
+  // ========== Display Settings ==========
+
+  describe('setNowPlayingVisibility', () => {
+    it('sets now playing hidden', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ now_playing_hidden: true, now_playing_auto_hide_minutes: 30 }),
+      });
+
+      const result = await api.setNowPlayingVisibility('ABC123', true);
+      expect(result.now_playing_hidden).toBe(true);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123/display-settings');
+      expect(options.method).toBe('PATCH');
+      expect(JSON.parse(options.body)).toEqual({ now_playing_hidden: true });
+    });
+
+    it('sets visibility with auto-hide minutes', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ now_playing_hidden: false, now_playing_auto_hide_minutes: 15 }),
+      });
+
+      await api.setNowPlayingVisibility('ABC123', false, 15);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.now_playing_hidden).toBe(false);
+      expect(body.now_playing_auto_hide_minutes).toBe(15);
+    });
+  });
+
+  describe('setAutoHideMinutes', () => {
+    it('updates auto-hide timeout', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ now_playing_auto_hide_minutes: 45 }),
+      });
+
+      const result = await api.setAutoHideMinutes('ABC123', 45);
+      expect(result.now_playing_auto_hide_minutes).toBe(45);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body).toEqual({ now_playing_auto_hide_minutes: 45 });
+    });
+  });
+
+  describe('getDisplaySettings', () => {
+    it('fetches display settings', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          now_playing_hidden: false,
+          now_playing_auto_hide_minutes: 30,
+          requests_open: true,
+          kiosk_display_only: false,
+        }),
+      });
+
+      const result = await api.getDisplaySettings('ABC123');
+      expect(result.requests_open).toBe(true);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123/display-settings');
+    });
+  });
+
+  describe('setRequestsOpen', () => {
+    it('closes requests', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ requests_open: false }),
+      });
+
+      const result = await api.setRequestsOpen('ABC123', false);
+      expect(result.requests_open).toBe(false);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body).toEqual({ requests_open: false });
+    });
+  });
+
+  describe('setKioskDisplayOnly', () => {
+    it('enables kiosk display-only mode', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ kiosk_display_only: true }),
+      });
+
+      const result = await api.setKioskDisplayOnly('ABC123', true);
+      expect(result.kiosk_display_only).toBe(true);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body).toEqual({ kiosk_display_only: true });
+    });
+  });
+
+  // ========== Tidal Integration ==========
+
+  describe('Tidal API', () => {
+    beforeEach(() => {
+      api.setToken('test-token');
+    });
+
+    it('fetches Tidal status', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ linked: true, user_id: '12345', quality: 'HI_RES' }),
+      });
+
+      const status = await api.getTidalStatus();
+      expect(status.linked).toBe(true);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/tidal/status');
+    });
+
+    it('starts Tidal auth flow', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          verification_url: 'https://link.tidal.com/ABCDE',
+          user_code: 'ABCDE',
+          message: 'Visit link',
+        }),
+      });
+
+      const result = await api.startTidalAuth();
+      expect(result.verification_url).toContain('tidal.com');
+      expect(result.user_code).toBe('ABCDE');
+
+      const [, options] = mockFetch.mock.calls[0];
+      expect(options.method).toBe('POST');
+    });
+
+    it('checks Tidal auth status - pending', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ complete: false, pending: true }),
+      });
+
+      const result = await api.checkTidalAuth();
+      expect(result.complete).toBe(false);
+      expect(result.pending).toBe(true);
+    });
+
+    it('checks Tidal auth status - complete', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ complete: true, user_id: '12345' }),
+      });
+
+      const result = await api.checkTidalAuth();
+      expect(result.complete).toBe(true);
+      expect(result.user_id).toBe('12345');
+    });
+
+    it('cancels Tidal auth', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'ok', message: 'Auth cancelled' }),
+      });
+
+      const result = await api.cancelTidalAuth();
+      expect(result.status).toBe('ok');
+
+      const [, options] = mockFetch.mock.calls[0];
+      expect(options.method).toBe('POST');
+    });
+
+    it('disconnects Tidal', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'ok', message: 'Tidal disconnected' }),
+      });
+
+      const result = await api.disconnectTidal();
+      expect(result.status).toBe('ok');
+    });
+
+    it('fetches Tidal event settings', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ tidal_sync_enabled: true }),
+      });
+
+      const settings = await api.getTidalEventSettings(42);
+      expect(settings.tidal_sync_enabled).toBe(true);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/tidal/events/42/settings');
+    });
+
+    it('updates Tidal event settings', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ tidal_sync_enabled: false }),
+      });
+
+      const settings = await api.updateTidalEventSettings(42, { tidal_sync_enabled: false });
+      expect(settings.tidal_sync_enabled).toBe(false);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/tidal/events/42/settings');
+      expect(options.method).toBe('PUT');
+    });
+
+    it('searches Tidal tracks', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ title: 'Tidal Track', artist: 'Tidal Artist', tidal_id: '99' }],
+      });
+
+      const results = await api.searchTidal('tidal query', 5);
+      expect(results).toHaveLength(1);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/tidal/search');
+      expect(url).toContain('q=tidal%20query');
+      expect(url).toContain('limit=5');
+    });
+
+    it('syncs request to Tidal', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'synced', tidal_track_id: '123' }),
+      });
+
+      const result = await api.syncRequestToTidal(7);
+      expect(result.status).toBe('synced');
+    });
+
+    it('links Tidal track to request', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'linked', tidal_track_id: '456' }),
+      });
+
+      const result = await api.linkTidalTrack(7, '456');
+      expect(result.tidal_track_id).toBe('456');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/tidal/requests/7/link');
+      expect(options.method).toBe('POST');
+      expect(JSON.parse(options.body)).toEqual({ tidal_track_id: '456' });
+    });
+  });
+
+  // ========== Recommendations ==========
+
+  describe('Recommendations API', () => {
+    beforeEach(() => {
+      api.setToken('test-token');
+    });
+
+    it('generates recommendations', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          suggestions: [{ title: 'Rec Song', artist: 'Rec Artist', score: 0.95 }],
+          profile: { avg_bpm: 128 },
+        }),
+      });
+
+      const result = await api.generateRecommendations('ABC123');
+      expect(result.suggestions).toHaveLength(1);
+      expect(result.suggestions[0].score).toBe(0.95);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123/recommendations');
+      expect(options.method).toBe('POST');
+    });
+
+    it('fetches event playlists', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          playlists: [{ id: 'pl1', name: 'My Playlist', source: 'tidal', track_count: 20 }],
+        }),
+      });
+
+      const result = await api.getEventPlaylists('ABC123');
+      expect(result.playlists).toHaveLength(1);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123/playlists');
+    });
+
+    it('generates LLM recommendations', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          suggestions: [{ title: 'AI Pick', artist: 'AI Artist' }],
+          query_info: { model: 'claude-haiku-4-5-20251001', prompt_tokens: 100 },
+        }),
+      });
+
+      const result = await api.generateLLMRecommendations('ABC123', 'something upbeat');
+      expect(result.suggestions).toHaveLength(1);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.prompt).toBe('something upbeat');
+    });
+
+    it('generates recommendations from template playlist', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          suggestions: [{ title: 'Template Pick', artist: 'Template Artist' }],
+        }),
+      });
+
+      const result = await api.generateRecommendationsFromTemplate('ABC123', 'tidal', 'pl-123');
+      expect(result.suggestions).toHaveLength(1);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123/recommendations/from-template');
+      expect(options.method).toBe('POST');
+      const body = JSON.parse(options.body);
+      expect(body.source).toBe('tidal');
+      expect(body.playlist_id).toBe('pl-123');
+    });
+  });
+
+  // ========== Banner ==========
+
+  describe('Banner API', () => {
+    beforeEach(() => {
+      api.setToken('test-token');
+    });
+
+    it('uploads event banner with FormData (no Content-Type header)', async () => {
+      const mockResponse = {
+        ok: true,
+        json: async () => ({
+          id: 1, code: 'ABC123', name: 'Test Event', created_at: '2026-01-01T00:00:00Z',
+          expires_at: '2026-12-31T00:00:00Z', is_active: true, join_url: null,
+          tidal_sync_enabled: false, tidal_playlist_id: null,
+          beatport_sync_enabled: false, beatport_playlist_id: null,
+          banner_url: '/uploads/banners/banner.webp', banner_kiosk_url: '/uploads/banners/banner_kiosk.webp',
+          banner_colors: null, requests_open: true,
+        }),
+        status: 200,
+      };
+      mockFetch.mockResolvedValueOnce(mockResponse);
+
+      const file = new File(['fake-image-data'], 'banner.png', { type: 'image/png' });
+      const result = await api.uploadEventBanner('ABC123', file);
+      expect(result.banner_url).toBe('/uploads/banners/banner.webp');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123/banner');
+      expect(options.method).toBe('POST');
+      expect(options.body).toBeInstanceOf(FormData);
+      // rawFetch does NOT set Content-Type — browser sets multipart boundary
+      const headers = new Headers(options.headers);
+      expect(headers.get('Content-Type')).toBeNull();
+    });
+
+    it('propagates error on upload failure', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 413,
+        json: async () => ({ detail: 'File too large' }),
+      });
+
+      await expect(api.uploadEventBanner('ABC123', new File(['x'], 'big.png'))).rejects.toThrow(
+        'File too large'
+      );
+    });
+
+    it('deletes event banner', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 1, code: 'ABC123', name: 'Test Event', created_at: '2026-01-01T00:00:00Z',
+          expires_at: '2026-12-31T00:00:00Z', is_active: true, join_url: null,
+          tidal_sync_enabled: false, tidal_playlist_id: null,
+          beatport_sync_enabled: false, beatport_playlist_id: null,
+          banner_url: null, banner_kiosk_url: null,
+          banner_colors: null, requests_open: true,
+        }),
+      });
+
+      const result = await api.deleteEventBanner('ABC123');
+      expect(result.banner_url).toBeNull();
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123/banner');
+      expect(options.method).toBe('DELETE');
+    });
+  });
+
+  // ========== Admin extended ==========
+
+  describe('admin users extended', () => {
+    beforeEach(() => {
+      api.setToken('admin-token');
+    });
+
+    it('updates admin user role', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 5, username: 'user5', role: 'admin' }),
+      });
+
+      const result = await api.updateAdminUser(5, { role: 'admin' });
+      expect(result.role).toBe('admin');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/admin/users/5');
+      expect(options.method).toBe('PATCH');
+    });
+
+    it('deletes admin user', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        json: async () => undefined,
+      });
+
+      await api.deleteAdminUser(5);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/admin/users/5');
+      expect(options.method).toBe('DELETE');
+    });
+  });
+
+  describe('admin events', () => {
+    beforeEach(() => {
+      api.setToken('admin-token');
+    });
+
+    it('fetches admin events with pagination', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{ code: 'E1', name: 'Event 1', owner_username: 'dj1' }],
+          total: 1,
+          page: 2,
+          limit: 10,
+        }),
+      });
+
+      const result = await api.getAdminEvents(2, 10);
+      expect(result.items).toHaveLength(1);
+      expect(result.page).toBe(2);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('page=2');
+      expect(url).toContain('limit=10');
+    });
+
+    it('updates admin event', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ code: 'E1', name: 'Updated Name' }),
+      });
+
+      const result = await api.updateAdminEvent('E1', { name: 'Updated Name' });
+      expect(result.name).toBe('Updated Name');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/admin/events/E1');
+      expect(options.method).toBe('PATCH');
+    });
+
+    it('deletes admin event', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        json: async () => undefined,
+      });
+
+      await api.deleteAdminEvent('E1');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/admin/events/E1');
+      expect(options.method).toBe('DELETE');
+    });
+  });
+
+  describe('admin settings (GET)', () => {
+    it('fetches admin settings', async () => {
+      api.setToken('admin-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          registration_enabled: true,
+          search_rate_limit_per_minute: 30,
+          spotify_enabled: true,
+          tidal_enabled: false,
+        }),
+      });
+
+      const result = await api.getAdminSettings();
+      expect(result.registration_enabled).toBe(true);
+      expect(result.search_rate_limit_per_minute).toBe(30);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/admin/settings');
+    });
+  });
+
+  // ========== Admin Integrations ==========
+
+  describe('admin integrations', () => {
+    beforeEach(() => {
+      api.setToken('admin-token');
+    });
+
+    it('fetches all integration statuses', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          services: [
+            { service: 'spotify', enabled: true, healthy: true },
+            { service: 'tidal', enabled: false, healthy: false },
+          ],
+        }),
+      });
+
+      const result = await api.getIntegrations();
+      expect(result.services).toHaveLength(2);
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/admin/integrations');
+    });
+
+    it('toggles integration on/off', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ service: 'spotify', enabled: false }),
+      });
+
+      const result = await api.toggleIntegration('spotify', false);
+      expect(result.enabled).toBe(false);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/admin/integrations/spotify');
+      expect(options.method).toBe('PATCH');
+      expect(JSON.parse(options.body)).toEqual({ enabled: false });
+    });
+
+    it('checks integration health', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          service: 'spotify',
+          healthy: true,
+          message: 'All checks passed',
+        }),
+      });
+
+      const result = await api.checkIntegrationHealth('spotify');
+      expect(result.healthy).toBe(true);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/admin/integrations/spotify/check');
+      expect(options.method).toBe('POST');
+    });
+  });
+
+  // ========== Cascade / boundary tests ==========
+
+  describe('cascade: 401 on any authenticated method triggers handler', () => {
+    it('triggers onUnauthorized for getRequests 401', async () => {
+      const handler = vi.fn();
+      api.setToken('expired-token');
+      api.setUnauthorizedHandler(handler);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ detail: 'Token expired' }),
+      });
+
+      await expect(api.getRequests('ABC123')).rejects.toThrow('Token expired');
+      expect(handler).toHaveBeenCalledOnce();
+
+      api.setUnauthorizedHandler(null);
+    });
+
+    it('triggers onUnauthorized for generateRecommendations 401', async () => {
+      const handler = vi.fn();
+      api.setToken('expired-token');
+      api.setUnauthorizedHandler(handler);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ detail: 'Not authenticated' }),
+      });
+
+      await expect(api.generateRecommendations('ABC123')).rejects.toThrow();
+      expect(handler).toHaveBeenCalledOnce();
+
+      api.setUnauthorizedHandler(null);
+    });
+
+    it('triggers onUnauthorized for uploadEventBanner 401 (rawFetch)', async () => {
+      const handler = vi.fn();
+      api.setToken('expired-token');
+      api.setUnauthorizedHandler(handler);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ detail: 'Not authenticated' }),
+      });
+
+      await expect(
+        api.uploadEventBanner('ABC123', new File(['x'], 'test.png'))
+      ).rejects.toThrow('Not authenticated');
+      expect(handler).toHaveBeenCalledOnce();
+
+      api.setUnauthorizedHandler(null);
+    });
+  });
+
+  describe('cascade: register error differentiation', () => {
+    it('409 error has different message than 500 error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({ detail: 'Username already taken' }),
+      });
+
+      const err409 = await api.register({
+        username: 'dup', email: 'd@t.com', password: 'p', confirm_password: 'p', turnstile_token: 't',
+      }).catch((e: ApiError) => e);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({ detail: 'Internal server error' }),
+      });
+
+      const err500 = await api.register({
+        username: 'x', email: 'x@t.com', password: 'p', confirm_password: 'p', turnstile_token: 't',
+      }).catch((e: ApiError) => e);
+
+      expect(err409.message).toBe('Username already taken');
+      expect(err500.message).toBe('Internal server error');
+      expect(err409.message).not.toBe(err500.message);
+    });
+  });
+
+  describe('cascade: publicFetch error path', () => {
+    it('throws ApiError with detail from public endpoint', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: async () => ({ detail: 'Event not found' }),
+      });
+
+      await expect(api.getPublicRequests('INVALID')).rejects.toThrow('Event not found');
+    });
+
+    it('throws generic error when json fails on public endpoint', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => { throw new Error('not json'); },
+      });
+
+      await expect(api.getKioskDisplay('BAD')).rejects.toThrow('Request failed');
     });
   });
 });

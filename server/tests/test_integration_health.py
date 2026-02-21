@@ -166,3 +166,126 @@ class TestCheckIntegrationHealth:
         assert "beatport" in VALID_SERVICES
         assert "bridge" in VALID_SERVICES
         assert len(VALID_SERVICES) == 4
+
+
+class TestCheckSpotifyCapabilities:
+    """Direct unit tests for _check_spotify_capabilities."""
+
+    @patch("app.services.integration_health.get_settings")
+    def test_unconfigured_returns_not_configured(self, mock_settings):
+        mock_obj = MagicMock()
+        mock_obj.spotify_client_id = ""
+        mock_obj.spotify_client_secret = ""
+        mock_settings.return_value = mock_obj
+
+        from app.services.integration_health import _check_spotify_capabilities
+
+        caps = _check_spotify_capabilities()
+        assert caps.auth == CapabilityStatus.NOT_CONFIGURED
+        assert caps.catalog_search == CapabilityStatus.NOT_CONFIGURED
+
+    @patch("app.services.integration_health.get_settings")
+    @patch("app.services.spotify._get_spotify_client")
+    def test_configured_and_search_success(self, mock_sp, mock_settings):
+        mock_obj = MagicMock()
+        mock_obj.spotify_client_id = "test_id"
+        mock_obj.spotify_client_secret = "test_secret"
+        mock_settings.return_value = mock_obj
+        mock_sp.return_value.search.return_value = {"tracks": {"items": []}}
+
+        from app.services.integration_health import _check_spotify_capabilities
+
+        caps = _check_spotify_capabilities()
+        assert caps.auth == CapabilityStatus.YES
+        assert caps.catalog_search == CapabilityStatus.YES
+
+    @patch("app.services.integration_health.get_settings")
+    @patch("app.services.spotify._get_spotify_client")
+    def test_configured_but_search_exception(self, mock_sp, mock_settings):
+        mock_obj = MagicMock()
+        mock_obj.spotify_client_id = "test_id"
+        mock_obj.spotify_client_secret = "test_secret"
+        mock_settings.return_value = mock_obj
+        mock_sp.side_effect = Exception("Connection refused")
+
+        from app.services.integration_health import _check_spotify_capabilities
+
+        caps = _check_spotify_capabilities()
+        assert caps.auth == CapabilityStatus.NO
+        assert caps.catalog_search == CapabilityStatus.NO
+
+
+class TestCheckBeatportCapabilities:
+    """Direct unit tests for _check_beatport_capabilities."""
+
+    @patch("app.services.integration_health.get_settings")
+    def test_unconfigured_returns_not_configured(self, mock_settings):
+        mock_obj = MagicMock()
+        mock_obj.beatport_client_id = ""
+        mock_settings.return_value = mock_obj
+
+        from app.services.integration_health import _check_beatport_capabilities
+
+        caps = _check_beatport_capabilities()
+        assert caps.auth == CapabilityStatus.NOT_CONFIGURED
+
+    @patch("app.services.integration_health.get_settings")
+    @patch("httpx.Client")
+    def test_configured_api_reachable(self, mock_client_cls, mock_settings):
+        mock_obj = MagicMock()
+        mock_obj.beatport_client_id = "test_id"
+        mock_settings.return_value = mock_obj
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        from app.services.integration_health import _check_beatport_capabilities
+
+        caps = _check_beatport_capabilities()
+        assert caps.auth == CapabilityStatus.CONFIGURED
+
+    @patch("app.services.integration_health.get_settings")
+    @patch("httpx.Client")
+    def test_configured_api_unreachable(self, mock_client_cls, mock_settings):
+        mock_obj = MagicMock()
+        mock_obj.beatport_client_id = "test_id"
+        mock_settings.return_value = mock_obj
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.side_effect = Exception("Connection timeout")
+        mock_client_cls.return_value = mock_client
+
+        from app.services.integration_health import _check_beatport_capabilities
+
+        caps = _check_beatport_capabilities()
+        assert caps.auth == CapabilityStatus.NO
+
+
+class TestCascadeIntegrationStatuses:
+    """Cascade test: mixed service states."""
+
+    @patch("app.services.integration_health.get_settings")
+    def test_mixed_configured_and_unconfigured(self, mock_settings, db: Session):
+        """Spotify unconfigured + Bridge configured → mixed results."""
+        mock_obj = MagicMock()
+        mock_obj.spotify_client_id = ""
+        mock_obj.spotify_client_secret = ""
+        mock_obj.beatport_client_id = ""
+        mock_obj.bridge_api_key = "valid-key"
+        mock_settings.return_value = mock_obj
+
+        statuses = get_all_integration_statuses(db)
+        spotify = next(s for s in statuses if s.service == "spotify")
+        bridge = next(s for s in statuses if s.service == "bridge")
+
+        assert spotify.configured is False
+        assert bridge.configured is True
+        assert spotify.capabilities.auth == CapabilityStatus.NOT_CONFIGURED
+        assert bridge.capabilities.auth == CapabilityStatus.CONFIGURED

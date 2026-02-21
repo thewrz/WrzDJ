@@ -21,7 +21,11 @@ from app.services.beatport import (
     create_beatport_playlist,
     disconnect_beatport,
     fetch_subscription_type,
+    get_beatport_track,
+    get_playlist_tracks,
+    list_user_playlists,
     login_and_get_tokens,
+    manual_link_beatport_track,
     save_tokens,
     search_beatport_tracks,
 )
@@ -769,3 +773,288 @@ class TestFetchSubscriptionType:
 
         result = fetch_subscription_type(db, beatport_user)
         assert result is None
+
+
+class TestListUserPlaylists:
+    @patch("app.services.beatport.httpx.Client")
+    def test_list_playlists_success(self, mock_client_cls, db: Session, beatport_user: User):
+        """Returns parsed playlist info from API response."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "id": 42,
+                    "name": "My Playlist",
+                    "track_count": 10,
+                    "description": "Best tracks",
+                    "image": {"uri": "https://geo-media.beatport.com/cover.jpg"},
+                },
+                {
+                    "id": 43,
+                    "name": "Empty Playlist",
+                    "track_count": 0,
+                },
+            ]
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        results = list_user_playlists(db, beatport_user)
+
+        assert len(results) == 2
+        assert results[0].id == "42"
+        assert results[0].name == "My Playlist"
+        assert results[0].num_tracks == 10
+        assert results[0].cover_url == "https://geo-media.beatport.com/cover.jpg"
+        assert results[0].source == "beatport"
+        assert results[1].cover_url is None
+
+    @patch("app.services.beatport.httpx.Client")
+    def test_list_playlists_error_returns_empty(
+        self, mock_client_cls, db: Session, beatport_user: User
+    ):
+        """HTTP error returns empty list."""
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.side_effect = httpx.ConnectError("Connection refused")
+        mock_client_cls.return_value = mock_client
+
+        results = list_user_playlists(db, beatport_user)
+        assert results == []
+
+    def test_list_playlists_no_token(self, db: Session, beatport_user_no_token: User):
+        """No token returns empty list."""
+        results = list_user_playlists(db, beatport_user_no_token)
+        assert results == []
+
+
+class TestGetPlaylistTracks:
+    @patch("app.services.beatport.httpx.Client")
+    def test_get_tracks_success(self, mock_client_cls, db: Session, beatport_user: User):
+        """Returns parsed tracks from playlist."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "track": {
+                        "id": 12345,
+                        "name": "Strobe",
+                        "slug": "strobe",
+                        "mix_name": "Original Mix",
+                        "artists": [{"name": "deadmau5"}],
+                        "genre": {"name": "Progressive House"},
+                        "bpm": 128,
+                        "key": {"name": "A min"},
+                        "length": "10:33",
+                        "image": {"uri": "https://geo-media.beatport.com/art.jpg"},
+                    }
+                }
+            ]
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        results = get_playlist_tracks(db, beatport_user, "42")
+
+        assert len(results) == 1
+        assert results[0].track_id == "12345"
+        assert results[0].title == "Strobe"
+        assert results[0].artist == "deadmau5"
+        assert results[0].genre == "Progressive House"
+
+    @patch("app.services.beatport.httpx.Client")
+    def test_get_tracks_error_returns_empty(
+        self, mock_client_cls, db: Session, beatport_user: User
+    ):
+        """HTTP error returns empty list."""
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.side_effect = httpx.ConnectError("Connection refused")
+        mock_client_cls.return_value = mock_client
+
+        results = get_playlist_tracks(db, beatport_user, "42")
+        assert results == []
+
+
+class TestGetBeatportTrack:
+    @patch("app.services.beatport.httpx.Client")
+    def test_get_track_success(self, mock_client_cls, db: Session, beatport_user: User):
+        """Returns parsed single track."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "id": 12345,
+            "name": "Strobe",
+            "slug": "strobe",
+            "mix_name": "Original Mix",
+            "artists": [{"name": "deadmau5"}],
+            "genre": {"name": "Progressive House"},
+            "bpm": 128,
+            "key": {"name": "A min"},
+            "length": "10:33",
+            "image": {"uri": "https://geo-media.beatport.com/art.jpg"},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        result = get_beatport_track(db, beatport_user, "12345")
+
+        assert result is not None
+        assert result.track_id == "12345"
+        assert result.title == "Strobe"
+        assert result.artist == "deadmau5"
+        assert result.genre == "Progressive House"
+        assert "beatport.com/track/strobe/12345" in result.beatport_url
+
+    @patch("app.services.beatport.httpx.Client")
+    def test_get_track_error_returns_none(self, mock_client_cls, db: Session, beatport_user: User):
+        """HTTP error returns None."""
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.side_effect = httpx.ConnectError("Connection refused")
+        mock_client_cls.return_value = mock_client
+
+        result = get_beatport_track(db, beatport_user, "12345")
+        assert result is None
+
+    def test_get_track_no_token(self, db: Session, beatport_user_no_token: User):
+        """No token returns None."""
+        result = get_beatport_track(db, beatport_user_no_token, "12345")
+        assert result is None
+
+
+class TestManualLinkBeatportTrack:
+    def test_link_new_track(self):
+        """Links a Beatport track to a request with no existing sync results."""
+        import json
+
+        from app.schemas.beatport import BeatportSearchResult
+
+        mock_db = MagicMock()
+        request = MagicMock()
+        request.sync_results_json = None
+
+        track = BeatportSearchResult(
+            track_id="12345",
+            title="Strobe",
+            artist="deadmau5",
+            beatport_url="https://beatport.com/track/strobe/12345",
+            duration_seconds=633,
+        )
+
+        manual_link_beatport_track(mock_db, request, track)
+
+        result = json.loads(request.sync_results_json)
+        assert len(result) == 1
+        assert result[0]["service"] == "beatport"
+        assert result[0]["status"] == "matched"
+        assert result[0]["track_id"] == "12345"
+        assert result[0]["confidence"] == 1.0
+        mock_db.commit.assert_called_once()
+
+    def test_link_replaces_existing_beatport_entry(self):
+        """Replaces existing Beatport entry, preserves other services."""
+        import json
+
+        from app.schemas.beatport import BeatportSearchResult
+
+        mock_db = MagicMock()
+        request = MagicMock()
+        request.sync_results_json = json.dumps(
+            [
+                {"service": "tidal", "status": "matched", "track_id": "t1"},
+                {"service": "beatport", "status": "matched", "track_id": "old"},
+            ]
+        )
+
+        track = BeatportSearchResult(
+            track_id="new123",
+            title="New Track",
+            artist="New Artist",
+            beatport_url="https://beatport.com/track/new/new123",
+        )
+
+        manual_link_beatport_track(mock_db, request, track)
+
+        result = json.loads(request.sync_results_json)
+        assert len(result) == 2
+        services = [r["service"] for r in result]
+        assert "tidal" in services
+        assert "beatport" in services
+        bp_entry = next(r for r in result if r["service"] == "beatport")
+        assert bp_entry["track_id"] == "new123"
+
+
+class TestSearchWithExpiredTokenAutoRefresh:
+    @patch("app.services.beatport.httpx.Client")
+    def test_search_with_expired_token_refreshes_and_succeeds(
+        self, mock_client_cls, db: Session, beatport_user_expired: User
+    ):
+        """Expired token → refresh → search succeeds in one call."""
+        # First client instance: refresh
+        refresh_response = MagicMock()
+        refresh_response.json.return_value = {
+            "access_token": "new_token",
+            "refresh_token": "new_refresh",
+            "expires_in": 600,
+        }
+        refresh_response.raise_for_status = MagicMock()
+
+        # Second client instance: search
+        search_response = MagicMock()
+        search_response.json.return_value = MOCK_SEARCH_RESPONSE
+        search_response.raise_for_status = MagicMock()
+
+        class FakeClient:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def post(self, *args, **kwargs):
+                return refresh_response
+
+            def get(self, *args, **kwargs):
+                return search_response
+
+        mock_client_cls.return_value = FakeClient()
+
+        results = search_beatport_tracks(db, beatport_user_expired, "deadmau5")
+
+        assert len(results) == 1
+        assert results[0].title == "Strobe"
+        # Verify token was refreshed
+        db.refresh(beatport_user_expired)
+        assert beatport_user_expired.beatport_access_token == "new_token"
+
+    @patch("app.services.beatport.httpx.Client")
+    def test_refresh_failure_returns_empty(
+        self, mock_client_cls, db: Session, beatport_user_expired: User
+    ):
+        """Expired token + refresh failure → empty results."""
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.side_effect = httpx.ConnectError("Connection refused")
+        mock_client_cls.return_value = mock_client
+
+        results = search_beatport_tracks(db, beatport_user_expired, "deadmau5")
+        assert results == []
