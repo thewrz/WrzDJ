@@ -25,6 +25,11 @@ from app.models.event import Event
 from app.models.now_playing import NowPlaying
 from app.models.play_history import PlayHistory
 from app.models.request import Request, RequestStatus
+from app.services.play_history_service import (  # noqa: F401
+    archive_to_history,
+    get_next_play_order,
+    get_play_history,
+)
 from app.services.spotify import _call_spotify_api
 
 # Default auto-hide timeout: 10 minutes of no activity
@@ -139,38 +144,6 @@ def set_now_playing_visibility(db: Session, event_id: int, hidden: bool) -> bool
     return True
 
 
-def get_next_play_order(db: Session, event_id: int) -> int:
-    """Get the next play_order value for an event's play history."""
-    max_order = (
-        db.query(PlayHistory.play_order)
-        .filter(PlayHistory.event_id == event_id)
-        .order_by(PlayHistory.play_order.desc())
-        .first()
-    )
-    return (max_order[0] + 1) if max_order else 1
-
-
-def archive_to_history(db: Session, now_playing: NowPlaying) -> PlayHistory:
-    """Archive current now_playing to play_history."""
-    history_entry = PlayHistory(
-        event_id=now_playing.event_id,
-        title=now_playing.title,
-        artist=now_playing.artist,
-        album=now_playing.album,
-        deck=now_playing.deck,
-        spotify_track_id=now_playing.spotify_track_id,
-        album_art_url=now_playing.album_art_url,
-        spotify_uri=now_playing.spotify_uri,
-        matched_request_id=now_playing.matched_request_id,
-        source=now_playing.source,
-        started_at=now_playing.started_at,
-        ended_at=utcnow(),
-        play_order=get_next_play_order(db, now_playing.event_id),
-    )
-    db.add(history_entry)
-    return history_entry
-
-
 def fuzzy_match_pending_request(
     db: Session, event_id: int, title: str, artist: str, threshold: float = 0.8
 ) -> Request | None:
@@ -253,199 +226,6 @@ def lookup_spotify_album_art(title: str, artist: str) -> dict | None:
     except Exception as e:
         logger.warning(f"Spotify lookup failed for '{title}' by '{artist}': {e}")
     return None
-
-
-def handle_now_playing_update(
-    db: Session,
-    event_code: str,
-    title: str,
-    artist: str,
-    album: str | None = None,
-    deck: str | None = None,
-) -> NowPlaying | None:
-    """
-    Handle a new track from the bridge.
-
-    Flow:
-    1. Archive previous track to play_history (if exists)
-    2. Transition matched request from "playing" → "played"
-    3. Upsert now_playing with new track
-    4. Spotify album art lookup
-    5. Fuzzy match against accepted requests → set to "playing"
-    """
-    event = get_event_by_code_for_bridge(db, event_code)
-    if not event:
-        logger.warning(f"Event not found for code: {event_code}")
-        return None
-
-    # Step 1: Archive previous track if exists
-    existing = get_now_playing(db, event.id)
-    if existing and existing.title:
-        archive_to_history(db, existing)
-
-    # Step 2: Transition ALL playing requests for this event to played
-    # (handles both bridge-matched and manually-playing requests)
-    playing_requests = (
-        db.query(Request)
-        .filter(
-            Request.event_id == event.id,
-            Request.status == RequestStatus.PLAYING.value,
-        )
-        .all()
-    )
-    for req in playing_requests:
-        req.status = RequestStatus.PLAYED.value
-        req.updated_at = utcnow()
-        logger.info(f"Marked request {req.id} as played (bridge override)")
-
-    # Clear System A pointer so it doesn't conflict
-    if event.now_playing_request_id is not None:
-        event.now_playing_request_id = None
-        event.now_playing_updated_at = utcnow()
-
-    # Step 3: Upsert now_playing
-    if existing:
-        existing.title = title
-        existing.artist = artist
-        existing.album = album
-        existing.deck = deck
-        existing.source = "stagelinq"
-        existing.started_at = utcnow()
-        existing.spotify_track_id = None
-        existing.album_art_url = None
-        existing.spotify_uri = None
-        existing.matched_request_id = None
-        now_playing = existing
-    else:
-        now_playing = NowPlaying(
-            event_id=event.id,
-            title=title,
-            artist=artist,
-            album=album,
-            deck=deck,
-            source="stagelinq",
-            started_at=utcnow(),
-        )
-        db.add(now_playing)
-
-    # Step 4: Spotify album art lookup
-    spotify_data = lookup_spotify_album_art(title, artist)
-    if spotify_data:
-        now_playing.spotify_track_id = spotify_data["spotify_track_id"]
-        now_playing.album_art_url = spotify_data["album_art_url"]
-        now_playing.spotify_uri = spotify_data["spotify_uri"]
-
-    # Step 5: Fuzzy match against new/accepted requests
-    matched_request = fuzzy_match_pending_request(db, event.id, title, artist)
-    if matched_request:
-        matched_request.status = RequestStatus.PLAYING.value
-        matched_request.updated_at = utcnow()
-        now_playing.matched_request_id = matched_request.id
-        logger.info(f"Auto-matched request {matched_request.id} as playing")
-
-    db.commit()
-    db.refresh(now_playing)
-    return now_playing
-
-
-def update_bridge_status(
-    db: Session,
-    event_code: str,
-    connected: bool,
-    device_name: str | None = None,
-) -> bool:
-    """Update bridge connection status for an event."""
-    event = get_event_by_code_for_bridge(db, event_code)
-    if not event:
-        return False
-
-    now_playing = get_now_playing(db, event.id)
-    if now_playing:
-        now_playing.bridge_connected = connected
-        now_playing.bridge_device_name = device_name
-        now_playing.bridge_last_seen = utcnow() if connected else now_playing.bridge_last_seen
-    else:
-        # Create a placeholder now_playing for status tracking
-        now_playing = NowPlaying(
-            event_id=event.id,
-            title="",
-            artist="",
-            bridge_connected=connected,
-            bridge_device_name=device_name,
-            bridge_last_seen=utcnow() if connected else None,
-        )
-        db.add(now_playing)
-
-    # Log bridge connection/disconnection
-    try:
-        from app.services.activity_log import log_activity
-
-        if connected:
-            device_info = f" ({device_name})" if device_name else ""
-            log_activity(
-                db,
-                "info",
-                "bridge",
-                f"Bridge connected{device_info}",
-                event_code=event_code,
-                user_id=event.created_by_user_id,
-            )
-        else:
-            log_activity(
-                db,
-                "warning",
-                "bridge",
-                "Bridge disconnected",
-                event_code=event_code,
-                user_id=event.created_by_user_id,
-            )
-    except Exception:
-        pass  # nosec B110
-
-    db.commit()
-    return True
-
-
-def clear_now_playing(db: Session, event_code: str) -> bool:
-    """Clear now_playing for an event (bridge disconnect or deck cleared)."""
-    event = get_event_by_code_for_bridge(db, event_code)
-    if not event:
-        return False
-
-    existing = get_now_playing(db, event.id)
-    if existing and existing.title:
-        archive_to_history(db, existing)
-
-        # Mark matched request as played if exists
-        if existing.matched_request_id:
-            request = db.query(Request).filter(Request.id == existing.matched_request_id).first()
-            if request and request.status == RequestStatus.PLAYING.value:
-                request.status = RequestStatus.PLAYED.value
-                request.updated_at = utcnow()
-
-        # Clear the now_playing fields but keep connection status
-        existing.title = ""
-        existing.artist = ""
-        existing.album = None
-        existing.deck = None
-        existing.spotify_track_id = None
-        existing.album_art_url = None
-        existing.spotify_uri = None
-        existing.matched_request_id = None
-        existing.started_at = utcnow()
-
-        db.commit()
-    return True
-
-
-def get_play_history(
-    db: Session, event_id: int, limit: int = 20, offset: int = 0
-) -> tuple[list[PlayHistory], int]:
-    """Get play history for an event, newest first."""
-    query = db.query(PlayHistory).filter(PlayHistory.event_id == event_id)
-    total = query.count()
-    items = query.order_by(PlayHistory.play_order.desc()).offset(offset).limit(limit).all()
-    return items, total
 
 
 def add_manual_play(db: Session, event: Event, request: Request) -> PlayHistory:
@@ -559,3 +339,11 @@ def clear_manual_now_playing(db: Session, event_id: int, request_id: int) -> Non
     existing.matched_request_id = None
     existing.started_at = utcnow()
     db.commit()
+
+
+# Re-export bridge integration functions for backward compatibility
+from app.services.bridge_integration import (  # noqa: E402, F401
+    clear_now_playing,
+    handle_now_playing_update,
+    update_bridge_status,
+)
