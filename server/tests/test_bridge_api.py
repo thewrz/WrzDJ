@@ -424,10 +424,13 @@ class TestGetPublicHistory:
         assert len(data["items"]) == 3
 
     def test_limit_capped(self, client: TestClient, test_event: Event):
-        """Limit is capped at 100."""
+        """Limit is capped at 100 via Query validation."""
         response = client.get("/api/public/e/TEST01/history?limit=200")
+        assert response.status_code == 422  # FastAPI rejects limit > 100
+
+        # Valid limit at the boundary works
+        response = client.get("/api/public/e/TEST01/history?limit=100")
         assert response.status_code == 200
-        # Just verify it doesn't error - the cap is internal
 
     def test_event_not_found(self, client: TestClient):
         """Returns 404 for non-existent event."""

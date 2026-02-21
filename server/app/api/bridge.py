@@ -1,6 +1,6 @@
 """Bridge API endpoints for StageLinQ integration."""
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin, get_db
@@ -162,8 +162,8 @@ def get_public_now_playing(
 def get_public_history(
     request: Request,
     code: str,
-    limit: int = 20,
-    offset: int = 0,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> PlayHistoryResponse:
     """
@@ -177,10 +177,6 @@ def get_public_history(
         raise HTTPException(status_code=404, detail="Event not found")
     if lookup_result in (EventLookupResult.EXPIRED, EventLookupResult.ARCHIVED):
         raise HTTPException(status_code=410, detail="Event has expired")
-
-    # Clamp limit to prevent abuse
-    limit = min(max(1, limit), 100)
-    offset = max(0, offset)
 
     items, total = get_play_history(db, event.id, limit=limit, offset=offset)
     return PlayHistoryResponse(
