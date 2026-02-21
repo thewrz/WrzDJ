@@ -1,4 +1,11 @@
-"""Login lockout logic with escalating cooldowns."""
+"""Login lockout logic with escalating cooldowns.
+
+NOTE: LockoutManager uses an in-memory dict protected by threading.Lock.
+In a multi-worker deployment (e.g. gunicorn with multiple workers) each
+process holds its own independent lockout state, so an attacker can
+theoretically bypass lockouts by hitting different workers.  A shared
+store (Redis / DB) would be needed for strict cross-worker enforcement.
+"""
 
 import time
 from dataclasses import dataclass
