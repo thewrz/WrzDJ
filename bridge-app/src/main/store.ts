@@ -18,6 +18,10 @@ const store = new Store<StoreSchema>({
   },
 });
 
+// In-memory fallback when OS keychain encryption is unavailable.
+// Token is lost on app restart — user must re-authenticate.
+let sessionToken: string | null = null;
+
 export function getApiUrl(): string {
   return store.get('apiUrl');
 }
@@ -28,12 +32,14 @@ export function setApiUrl(url: string): void {
 
 export function getToken(): string | null {
   const encrypted = store.get('encryptedToken');
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    return sessionToken;
+  }
+
   if (!encrypted) return null;
 
   try {
-    if (!safeStorage.isEncryptionAvailable()) {
-      return encrypted;
-    }
     const buffer = Buffer.from(encrypted, 'base64');
     return safeStorage.decryptString(buffer);
   } catch {
@@ -43,20 +49,24 @@ export function getToken(): string | null {
 }
 
 export function setToken(token: string): void {
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.warn('[Store] OS keychain encryption unavailable — token stored in memory only');
+    sessionToken = token;
+    return;
+  }
+
   try {
-    if (safeStorage.isEncryptionAvailable()) {
-      const encrypted = safeStorage.encryptString(token);
-      store.set('encryptedToken', encrypted.toString('base64'));
-    } else {
-      store.set('encryptedToken', token);
-    }
+    const encrypted = safeStorage.encryptString(token);
+    store.set('encryptedToken', encrypted.toString('base64'));
   } catch {
-    store.set('encryptedToken', token);
+    console.warn('[Store] Token encryption failed — storing in memory only');
+    sessionToken = token;
   }
 }
 
 export function clearToken(): void {
   store.set('encryptedToken', '');
+  sessionToken = null;
 }
 
 export function getLastEventCode(): string {
