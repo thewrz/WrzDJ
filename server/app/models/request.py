@@ -22,6 +22,7 @@ class RequestSource(str, Enum):
     SPOTIFY = "spotify"
     SHARE_LINK = "share_link"
     TIDAL = "tidal"
+    BEATPORT = "beatport"
 
 
 class TidalSyncStatus(str, Enum):

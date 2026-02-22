@@ -236,3 +236,59 @@ class TestDiscoverSongs:
         result = discover_songs(genres=["Pop"])
         assert len(result) == 1
         assert result[0].title == "Good Song"
+
+    @patch("app.services.soundcharts.httpx.post")
+    @patch("app.services.soundcharts.get_settings")
+    def test_credit_name_object_extracts_name(self, mock_settings, mock_post):
+        """Regression: creditName can be a dict like {"name": "Artist", "type": "main"}."""
+        mock_settings.return_value = MagicMock(
+            soundcharts_app_id="test-id",
+            soundcharts_api_key="test-key",
+        )
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "items": [
+                {
+                    "song": {
+                        "uuid": "abc-123",
+                        "name": "Some Song",
+                        "creditName": {"name": "Object Artist", "type": "main"},
+                    }
+                },
+            ],
+            "page": {"total": 1},
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        result = discover_songs(genres=["Pop"])
+        assert len(result) == 1
+        assert result[0].artist == "Object Artist"
+        assert isinstance(result[0].artist, str)
+
+    @patch("app.services.soundcharts.httpx.post")
+    @patch("app.services.soundcharts.get_settings")
+    def test_credit_name_object_without_name_skipped(self, mock_settings, mock_post):
+        """creditName dict with no 'name' key should be skipped (empty string)."""
+        mock_settings.return_value = MagicMock(
+            soundcharts_app_id="test-id",
+            soundcharts_api_key="test-key",
+        )
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "items": [
+                {
+                    "song": {
+                        "uuid": "abc-123",
+                        "name": "Some Song",
+                        "creditName": {"type": "main"},
+                    }
+                },
+            ],
+            "page": {"total": 1},
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        result = discover_songs(genres=["Pop"])
+        assert len(result) == 0  # Skipped because artist is empty
