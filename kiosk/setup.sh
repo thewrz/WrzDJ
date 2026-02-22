@@ -118,11 +118,13 @@ install_packages() {
     info "Updating package lists..."
     apt-get update -qq
 
-    info "Installing cage, chromium-browser, and dnsmasq..."
+    info "Installing cage, chromium-browser, dnsmasq, curl, and emoji fonts..."
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
         cage \
         chromium-browser \
+        curl \
         dnsmasq \
+        fonts-noto-color-emoji \
         > /dev/null
 
     info "Packages installed"
@@ -153,8 +155,24 @@ create_kiosk_user() {
 # ---------- WiFi ----------
 
 configure_wifi() {
+    # Set WiFi regulatory domain — required for the radio to activate on
+    # many Pi models. Without this, wlan0 may refuse to connect.
+    info "Setting WiFi regulatory domain: ${WIFI_COUNTRY}"
+    if [ -d /etc/default ]; then
+        printf 'REGDOMAIN=%s\n' "$WIFI_COUNTRY" > /etc/default/crda
+    fi
+    mkdir -p /etc/modprobe.d
+    printf 'options cfg80211 ieee80211_regdom=%s\n' "$WIFI_COUNTRY" \
+        > /etc/modprobe.d/wifi-regdom.conf
+
+    # Enable NM-wait-online so services that depend on network (like the
+    # WiFi portal) don't start before WiFi is connected
+    if systemctl list-unit-files NetworkManager-wait-online.service &>/dev/null; then
+        systemctl enable NetworkManager-wait-online.service 2>/dev/null || true
+    fi
+
     if [ -z "$WIFI_SSID" ]; then
-        info "No WIFI_SSID set — skipping WiFi configuration"
+        info "No WIFI_SSID set — skipping WiFi connection setup"
         return
     fi
 
@@ -235,7 +253,8 @@ configure_rotation() {
 install_services() {
     info "Installing systemd services..."
 
-    # Main kiosk service
+    # Kiosk service file (reference only — Cage launches from .bash_profile
+    # because it needs logind seat access that system services don't provide)
     cp "${SCRIPT_DIR}/systemd/wrzdj-kiosk.service" \
         /etc/systemd/system/wrzdj-kiosk.service
 
@@ -250,10 +269,75 @@ install_services() {
         /usr/local/bin/wrzdj-kiosk-watchdog.sh
 
     systemctl daemon-reload
-    systemctl enable wrzdj-kiosk.service
+    # NOTE: wrzdj-kiosk.service is NOT enabled — Cage is launched from
+    # the kiosk user's .bash_profile (see install_kiosk_launcher).
+    # The service file is installed for reference and potential manual use.
     systemctl enable wrzdj-kiosk-watchdog.timer
 
     info "Services installed and enabled"
+}
+
+# ---------- kiosk launcher (login shell) ----------
+
+install_kiosk_launcher() {
+    info "Installing kiosk launcher (.bash_profile)..."
+
+    # Cage needs logind seat access (DRM/input devices). System services
+    # don't get this — the process must run inside the user's login session.
+    # Auto-login on tty1 creates the session; .bash_profile launches Cage.
+    # When Cage exits, the login session ends, getty restarts auto-login,
+    # and .bash_profile re-launches Cage — self-healing by design.
+
+    local profile="/home/${KIOSK_USER}/.bash_profile"
+
+    cat > "$profile" <<'LAUNCHER'
+# WrzDJ Kiosk Launcher
+# Launches Cage + Chromium on tty1 (skipped for SSH sessions).
+# Config: /etc/wrzdj-kiosk.conf
+
+if [ "$(tty)" = "/dev/tty1" ]; then
+    # Source kiosk config for EXTRA_CHROMIUM_FLAGS
+    set -a
+    . /etc/wrzdj-kiosk.conf 2>/dev/null || true
+    set +a
+
+    # Wait for WiFi portal to be ready (serves redirect or setup page)
+    printf 'Waiting for WiFi portal...\n'
+    while ! curl -s -o /dev/null http://localhost 2>/dev/null; do
+        sleep 1
+    done
+
+    # Cage needs these for Wayland
+    export WLR_NO_HARDWARE_CURSORS=1
+    export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+    exec cage -- /usr/bin/chromium-browser \
+        --kiosk \
+        --noerrdialogs \
+        --disable-infobars \
+        --no-first-run \
+        --disable-translate \
+        --disable-session-crashed-bubble \
+        --disable-component-update \
+        --disable-pinch \
+        --touch-events=enabled \
+        --ozone-platform=wayland \
+        --disable-dev-shm-usage \
+        --disable-background-networking \
+        --disable-sync \
+        --metrics-recording-only \
+        --disable-default-apps \
+        --no-default-browser-check \
+        --autoplay-policy=no-user-gesture-required \
+        ${EXTRA_CHROMIUM_FLAGS:-} \
+        http://localhost
+fi
+LAUNCHER
+
+    chown "${KIOSK_USER}:${KIOSK_USER}" "$profile"
+    chmod 644 "$profile"
+
+    info "Kiosk launcher installed at ${profile}"
 }
 
 # ---------- WiFi portal ----------
@@ -293,7 +377,7 @@ write_config() {
 
     cat > "$CONF_FILE" <<CONF
 # WrzDJ Kiosk Configuration
-# Edit and restart: sudo systemctl restart wrzdj-kiosk
+# Edit and restart: sudo systemctl restart getty@tty1
 
 KIOSK_URL="${KIOSK_URL}"
 KIOSK_ROTATION="${KIOSK_ROTATION}"
@@ -302,9 +386,9 @@ HOTSPOT_SSID="${HOTSPOT_SSID}"
 HOTSPOT_PASSWORD="${HOTSPOT_PASSWORD}"
 CONF
 
-    # Readable by root and kiosk service only (no WiFi password stored here,
-    # but EXTRA_CHROMIUM_FLAGS could grant browser control)
-    chmod 600 "$CONF_FILE"
+    # 644: kiosk user's .bash_profile sources this file (set -a) to pick up
+    # EXTRA_CHROMIUM_FLAGS. No WiFi passwords are stored here.
+    chmod 644 "$CONF_FILE"
 }
 
 # ---------- screen blanking ----------
@@ -398,13 +482,13 @@ print_summary() {
     printf '  Hotspot:   %s (password: %s)\n' "$HOTSPOT_SSID" "$HOTSPOT_PASSWORD"
     printf '\n'
     printf '  Config:    %s\n' "$CONF_FILE"
-    printf '  Service:   wrzdj-kiosk.service\n'
+    printf '  Launcher:  /home/%s/.bash_profile\n' "$KIOSK_USER"
     printf '  Portal:    wrzdj-wifi-portal.service\n'
     printf '  Watchdog:  wrzdj-kiosk-watchdog.timer\n'
     printf '\n'
     printf '  To change URL later:\n'
     printf '    sudo nano %s\n' "$CONF_FILE"
-    printf '    sudo systemctl restart wrzdj-kiosk\n'
+    printf '    sudo systemctl restart getty@tty1\n'
     printf '\n'
     printf '  For SD card protection (optional):\n'
     printf '    sudo %s/overlayfs/setup-overlayfs.sh\n' "$SCRIPT_DIR"
@@ -424,6 +508,7 @@ main() {
     configure_wifi
     configure_rotation
     install_services
+    install_kiosk_launcher
     install_wifi_portal
     write_config
     disable_screen_blanking

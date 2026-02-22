@@ -411,14 +411,15 @@ The `kiosk/` directory contains everything needed to turn a Raspberry Pi into a 
 - `kiosk/wrzdj-kiosk.conf` — Configuration template (URL, rotation, WiFi, hotspot, Chromium flags)
 - `kiosk/wifi-portal/portal.py` — WiFi captive portal server (Python stdlib only, port 80)
 - `kiosk/wifi-portal/dnsmasq-captive.conf` — DNS redirect config for hotspot mode
-- `kiosk/systemd/wrzdj-kiosk.service` — Cage + Chromium systemd service (runs as `kiosk` user)
-- `kiosk/systemd/wrzdj-wifi-portal.service` — WiFi portal service (starts before kiosk)
+- `kiosk/systemd/wrzdj-kiosk.service` — Cage + Chromium service definition (reference only — not enabled)
+- `kiosk/systemd/wrzdj-wifi-portal.service` — WiFi portal service (starts on boot, port 80)
 - `kiosk/systemd/wrzdj-kiosk-watchdog.{service,timer,sh}` — Crash recovery (clears Chromium crash flag, restarts failed service)
 - `kiosk/overlayfs/setup-overlayfs.sh` — Optional SD card write protection via overlayfs
 - `kiosk/README.md` — User-facing setup guide
 
 ### WiFi Captive Portal
-- `wrzdj-wifi-portal.service` starts before `wrzdj-kiosk.service`, runs portal.py on port 80
+- `wrzdj-wifi-portal.service` starts on boot, runs portal.py on port 80
+- Cage launches from `/home/kiosk/.bash_profile` on tty1 auto-login (needs logind seat access for DRM/input)
 - Chromium always opens `http://localhost` first — portal handles connectivity detection and redirect
 - **WiFi not configured**: Portal pre-scans networks, starts hotspot (`WrzDJ-Kiosk`), serves setup page on touchscreen + phone captive portal
 - **WiFi already configured**: Portal detects internet → serves JS redirect to `KIOSK_URL` (~0ms overhead)
@@ -434,7 +435,7 @@ The `kiosk/` directory contains everything needed to turn a Raspberry Pi into a 
 5. DJ scans QR from phone, selects event — kiosk shows event display
 
 ### Design Decisions
-- **Cage** (not X11): Wayland compositor locked to single fullscreen app, no VT switching
+- **Cage via .bash_profile** (not systemd service): Cage needs logind seat access; launching from login shell on tty1 provides it. Self-healing: Cage exit → session ends → getty restarts auto-login → .bash_profile re-launches Cage
 - **Dedicated `kiosk` user**: Not `pi` — principle of least privilege, groups: `input`, `video`, `render`
 - **WiFi portal as gateway**: Chromium always loads `http://localhost`; portal handles online/offline routing. One extra localhost hop (~0ms) is worth the single code path.
 - **Python stdlib only for portal**: No pip install needed. Pi OS Lite includes Python 3 + stdlib.

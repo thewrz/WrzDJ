@@ -233,8 +233,8 @@ kiosk/
     portal.py                       # WiFi captive portal (Python stdlib)
     dnsmasq-captive.conf            # DNS redirect config for hotspot mode
   systemd/
-    wrzdj-kiosk.service             # Cage + Chromium kiosk service
-    wrzdj-wifi-portal.service       # WiFi portal service (starts before kiosk)
+    wrzdj-kiosk.service             # Cage + Chromium kiosk service (reference only)
+    wrzdj-wifi-portal.service       # WiFi portal service (starts on boot)
     wrzdj-kiosk-watchdog.service    # Crash recovery (oneshot)
     wrzdj-kiosk-watchdog.timer      # Fires watchdog every 30s
     wrzdj-kiosk-watchdog.sh         # Clears crash flags, restarts if failed
@@ -244,4 +244,6 @@ kiosk/
 
 The kiosk runs [Cage](https://github.com/cage-kiosk/cage), a minimal Wayland compositor that locks the display to a single fullscreen application — Chromium in kiosk mode. There is no desktop environment, no window manager, no way for users to escape to a shell.
 
-On boot, the WiFi portal (`wrzdj-wifi-portal.service`) starts first on port 80. Chromium opens `http://localhost` — if internet is available, the portal redirects to the kiosk pairing URL. If not, it shows a WiFi setup page and creates a hotspot for phone-based configuration.
+Cage requires logind seat access (DRM/input devices), so it launches from the kiosk user's `.bash_profile` on tty1 auto-login — not from a systemd service. When Cage exits, the login session ends, getty restarts auto-login, and `.bash_profile` re-launches Cage (self-healing).
+
+On boot, the WiFi portal (`wrzdj-wifi-portal.service`) starts first on port 80. The kiosk user auto-logs in on tty1, `.bash_profile` waits for the portal to be ready, then launches Cage + Chromium pointing at `http://localhost`. If internet is available, the portal redirects to the kiosk pairing URL. If not, it shows a WiFi setup page and creates a hotspot for phone-based configuration.

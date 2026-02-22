@@ -1,3 +1,7 @@
+# NOTE: This service is installed but NOT enabled. Cage launches from
+# /home/kiosk/.bash_profile instead (needs logind seat access for DRM/input).
+# This file is kept as a reference for Chromium flags and security hardening.
+
 [Unit]
 Description=WrzDJ Kiosk Display
 Documentation=https://github.com/thewrz/WrzDJ/tree/main/kiosk
@@ -56,4 +60,4 @@ RestrictSUIDSGID=true
 ReadWritePaths=/home/kiosk
 
 [Install]
-WantedBy=graphical.target
+WantedBy=multi-user.target

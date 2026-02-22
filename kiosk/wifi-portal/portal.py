@@ -798,13 +798,28 @@ def main():
     PortalHandler.is_online = False
     PortalHandler.hotspot_active = False
 
-    # Check connectivity first
-    log.info("Checking internet connectivity...")
-    if check_internet():
+    # Check connectivity — retry for up to 30s to allow WiFi to connect on boot.
+    # NetworkManager may still be bringing up a saved connection when we start.
+    BOOT_WAIT_RETRIES = 10
+    BOOT_WAIT_INTERVAL = 3  # seconds
+    log.info("Checking internet connectivity (up to %ds)...",
+             BOOT_WAIT_RETRIES * BOOT_WAIT_INTERVAL)
+    online = False
+    for attempt in range(1, BOOT_WAIT_RETRIES + 1):
+        if check_internet():
+            online = True
+            break
+        if attempt < BOOT_WAIT_RETRIES:
+            log.info("  Attempt %d/%d — no internet yet, waiting %ds...",
+                     attempt, BOOT_WAIT_RETRIES, BOOT_WAIT_INTERVAL)
+            time.sleep(BOOT_WAIT_INTERVAL)
+
+    if online:
         log.info("Internet available — portal will redirect to kiosk URL")
         PortalHandler.is_online = True
     else:
-        log.info("No internet — scanning WiFi networks before starting hotspot...")
+        log.info("No internet after %d attempts — scanning WiFi networks before starting hotspot...",
+                 BOOT_WAIT_RETRIES)
         PortalHandler.cached_networks = scan_wifi()
         log.info("Found %d networks", len(PortalHandler.cached_networks))
 
