@@ -222,8 +222,12 @@ export class SeratoPlugin extends EventEmitter implements EquipmentSourcePlugin 
       const message = err instanceof Error ? err.message : String(err);
       this.emit("log", `Error reading session file: ${message}`);
       this.consecutiveReadErrors += 1;
-      if (this.consecutiveReadErrors >= 3) {
-        this.emit("log", `Warning: ${this.consecutiveReadErrors} consecutive read errors on session file`);
+      if (this.consecutiveReadErrors >= 5) {
+        this.emit("log", `Session file unreadable after ${this.consecutiveReadErrors} attempts — rescanning`);
+        this.sessionPath = null;
+        this.fileOffset = 0;
+        this.consecutiveReadErrors = 0;
+        this.emit("connection", { connected: false });
       }
       return;
     }

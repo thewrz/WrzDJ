@@ -823,6 +823,24 @@ describe("PluginBridge", () => {
       expect(logs.some((m) => m.includes("reconnecting in 2s"))).toBe(true);
     });
 
+    it("resets deck state on reconnect", async () => {
+      plugin = createMockPlugin();
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+
+      // Load a track on deck 1
+      plugin.emit("track", { deckId: "1", track: { title: "Old Song", artist: "Old Artist" } });
+      expect(bridge.manager.getDeckState("1").track?.title).toBe("Old Song");
+
+      // Disconnect → reconnect
+      plugin.emit("connection", { connected: true, deviceName: "CDJ" });
+      plugin.emit("connection", { connected: false });
+      await vi.advanceTimersByTimeAsync(2000);
+
+      // After reconnect, deck state should be cleared
+      expect(bridge.manager.getDeckIds()).toHaveLength(0);
+    });
+
     it("cancels reconnect on stop", async () => {
       plugin = createMockPlugin();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

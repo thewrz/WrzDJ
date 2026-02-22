@@ -231,6 +231,9 @@ export class PluginBridge extends EventEmitter {
         // Best effort
       }
 
+      // Clear stale deck state from the old connection
+      this.deckManager.reset();
+
       // Re-wire plugin events (old listeners removed by stop)
       this.plugin.removeAllListeners();
       this.wirePluginEvents();

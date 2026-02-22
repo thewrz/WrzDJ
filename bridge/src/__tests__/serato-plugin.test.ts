@@ -5,7 +5,7 @@
  * Uses temporary directories with hand-crafted binary session files.
  */
 import { describe, it, expect, afterEach, beforeEach } from "vitest";
-import { appendFileSync, mkdtempSync, unlinkSync, writeFileSync, rmSync } from "fs";
+import { appendFileSync, chmodSync, mkdtempSync, unlinkSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { SeratoPlugin } from "../plugins/serato-plugin.js";
@@ -394,6 +394,43 @@ describe("SeratoPlugin", () => {
 
     expect(logs.length).toBeGreaterThan(0);
     expect(logs.some((m) => m.includes("Watching session file"))).toBe(true);
+  });
+
+  it("rescans after 5 consecutive read errors", async () => {
+    const sessionFile = join(tmpDir, "test.session");
+    writeFileSync(sessionFile, Buffer.alloc(0));
+
+    const connections: PluginConnectionEvent[] = [];
+    const logs: string[] = [];
+    plugin.on("connection", (e: PluginConnectionEvent) => connections.push(e));
+    plugin.on("log", (msg: string) => logs.push(msg));
+
+    await plugin.start({ seratoPath: tmpDir, pollInterval: 200 });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Should be connected
+    expect(connections.some((c) => c.connected === true)).toBe(true);
+
+    // Append data so file has new bytes to read
+    const chunk = buildTrackChunk("Track", "Artist", 1);
+    appendFileSync(sessionFile, chunk);
+
+    // Make file unreadable (stat will still work, but readFileSync will throw EACCES)
+    chmodSync(sessionFile, 0o000);
+
+    // Wait for 5+ poll cycles (5 * 200ms = 1s + generous buffer)
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Should have logged the rescan message and emitted connection:false
+    expect(logs.some((m) => m.includes("rescanning"))).toBe(true);
+
+    // A disconnect event should have been emitted during the rescan
+    // (plugin may immediately reconnect if the file is still locatable)
+    const connectionsAfterStart = connections.slice(1); // skip initial connect
+    expect(connectionsAfterStart.some((c) => !c.connected)).toBe(true);
+
+    // Restore permissions for cleanup
+    chmodSync(sessionFile, 0o644);
   });
 
   it("emits connection false when session file is deleted", async () => {
