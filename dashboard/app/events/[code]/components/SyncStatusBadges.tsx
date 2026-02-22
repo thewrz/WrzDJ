@@ -70,8 +70,7 @@ function TidalBadge({
   onSync: () => void;
   onLink: () => void;
 }) {
-  // Use sync_results_json first, fall back to legacy tidal_sync_status
-  const status = syncResult?.status ?? mapLegacyTidalStatus(request.tidal_sync_status);
+  const status = syncResult?.status ?? null;
 
   if (status === 'added') {
     const url = syncResult?.url;
@@ -197,11 +196,3 @@ function BeatportBadge({
   return null;
 }
 
-function mapLegacyTidalStatus(status: string | null): SyncResultEntry['status'] | null {
-  if (!status) return null;
-  if (status === 'synced') return 'added';
-  if (status === 'not_found') return 'not_found';
-  if (status === 'error') return 'error';
-  if (status === 'pending') return null;
-  return null;
-}

@@ -110,14 +110,14 @@ export function PlayHistorySection({ items, total, exporting, onExport }: PlayHi
                   <span
                     className="badge"
                     style={{
-                      background: item.source === 'stagelinq' ? '#8b5cf6' : '#3b82f6',
+                      background: item.source !== 'manual' ? '#8b5cf6' : '#3b82f6',
                       color: '#fff',
                       padding: '0.125rem 0.375rem',
                       borderRadius: '0.25rem',
                       fontSize: '0.65rem',
                     }}
                   >
-                    {item.source === 'stagelinq' ? 'Live' : 'Manual'}
+                    {item.source !== 'manual' ? 'Live' : 'Manual'}
                   </span>
                   {item.matched_request_id && (
                     <span

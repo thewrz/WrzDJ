@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { api, ApiError, Event, GuestRequestInfo, SearchResult } from '@/lib/api';
+import { api, ApiError, Event, GuestNowPlaying, GuestRequestInfo, SearchResult } from '@/lib/api';
+import { useEventStream } from '@/lib/use-event-stream';
 
 const CONFIRMATION_DISPLAY_MS = 3000;
 const FADE_ANIMATION_MS = 500;
@@ -36,6 +37,7 @@ export default function JoinEventPage() {
   const [pollInterval, setPollInterval] = useState(POLL_INTERVAL_MS);
   const [votingId, setVotingId] = useState<number | null>(null);
   const [votedIds, setVotedIds] = useState<Set<number>>(new Set());
+  const [nowPlaying, setNowPlaying] = useState<GuestNowPlaying | null>(null);
 
   const loadEvent = useCallback(async () => {
     try {
@@ -91,6 +93,7 @@ export default function JoinEventPage() {
     try {
       const data = await api.getPublicRequests(code);
       setGuestRequests(data.requests);
+      setNowPlaying(data.now_playing);
       setPollInterval(POLL_INTERVAL_MS);
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
@@ -106,6 +109,16 @@ export default function JoinEventPage() {
     const intervalId = setInterval(loadRequests, pollInterval);
     return () => clearInterval(intervalId);
   }, [showRequestList, loadRequests, pollInterval]);
+
+  // SSE: trigger immediate refresh on relevant events
+  const loadRequestsRef = useRef(loadRequests);
+  loadRequestsRef.current = loadRequests;
+  useEventStream(showRequestList ? code : null, {
+    onRequestCreated: () => { loadRequestsRef.current(); },
+    onRequestStatusChanged: () => { loadRequestsRef.current(); },
+    onNowPlayingChanged: () => { loadRequestsRef.current(); },
+    onRequestsBulkUpdate: () => { loadRequestsRef.current(); },
+  });
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -242,6 +255,78 @@ export default function JoinEventPage() {
           <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
             {guestRequests.length} {guestRequests.length === 1 ? 'request' : 'requests'}
           </p>
+
+          {nowPlaying && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              padding: '0.75rem',
+              background: 'rgba(34, 197, 94, 0.1)',
+              borderRadius: '0.5rem',
+              border: '1px solid rgba(34, 197, 94, 0.2)',
+              marginBottom: '1rem',
+            }}>
+              {nowPlaying.album_art_url ? (
+                <img
+                  src={nowPlaying.album_art_url}
+                  alt=""
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: '0.375rem',
+                    objectFit: 'cover',
+                    flexShrink: 0,
+                  }}
+                />
+              ) : (
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: '0.375rem',
+                  background: '#2a2a2a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  fontSize: '1.25rem',
+                  color: '#555',
+                }}>
+                  ♪
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  color: '#22c55e',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  marginBottom: '0.125rem',
+                }}>
+                  Now Playing
+                </div>
+                <div style={{
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {nowPlaying.title}
+                </div>
+                <div style={{
+                  fontSize: '0.8rem',
+                  color: 'var(--text-secondary)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {nowPlaying.artist}
+                </div>
+              </div>
+            </div>
+          )}
 
           {guestRequests.length > 0 ? (
             <div className="guest-request-list">

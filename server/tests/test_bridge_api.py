@@ -177,7 +177,7 @@ class TestPostNowPlaying:
         assert now_playing.artist == "New Order"
         assert now_playing.album == "Power, Corruption & Lies"
         assert now_playing.deck == "1"
-        assert now_playing.source == "stagelinq"
+        assert now_playing.source == "bridge"
 
     @patch("app.core.bridge_auth.get_settings")
     @patch("app.services.now_playing.lookup_spotify_album_art")
@@ -347,7 +347,7 @@ class TestGetPublicNowPlaying:
         data = response.json()
         assert data["title"] == "Test Track"
         assert data["artist"] == "Test Artist"
-        assert data["source"] == "stagelinq"
+        assert data["source"] == "bridge"
         assert data["album_art_url"] == "https://example.com/art.jpg"
 
     def test_returns_null_when_empty(self, client: TestClient, test_event: Event):

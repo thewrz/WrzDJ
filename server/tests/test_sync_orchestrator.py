@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.models.event import Event
-from app.models.request import Request, RequestStatus, TidalSyncStatus
+from app.models.request import Request, RequestStatus
 from app.models.user import User
 from app.services.sync.base import SyncResult, SyncStatus, TrackMatch
 from app.services.sync.orchestrator import (
@@ -225,16 +225,6 @@ class TestSyncRequestToServices:
         assert data[0]["status"] == "added"
         assert data[0]["track_id"] == "mock_track_123"
 
-    def test_backward_compat_tidal_columns(self, db, accepted_request):
-        adapter = MockAdapter("tidal")
-        register_adapter(adapter)
-
-        sync_request_to_services(db, accepted_request)
-
-        db.refresh(accepted_request)
-        assert accepted_request.tidal_track_id == "mock_track_123"
-        assert accepted_request.tidal_sync_status == TidalSyncStatus.SYNCED.value
-
     def test_no_connected_adapters(self, db, accepted_request):
         # No adapters registered
         result = sync_request_to_services(db, accepted_request)
@@ -250,7 +240,8 @@ class TestSyncRequestToServices:
         sync_request_to_services(db, accepted_request)
 
         db.refresh(accepted_request)
-        assert accepted_request.tidal_sync_status == TidalSyncStatus.NOT_FOUND.value
+        data = json.loads(accepted_request.sync_results_json)
+        assert data[0]["status"] == "not_found"
 
     def test_adapter_error(self, db, accepted_request):
         adapter = MockAdapter(
@@ -266,7 +257,8 @@ class TestSyncRequestToServices:
         sync_request_to_services(db, accepted_request)
 
         db.refresh(accepted_request)
-        assert accepted_request.tidal_sync_status == TidalSyncStatus.ERROR.value
+        data = json.loads(accepted_request.sync_results_json)
+        assert data[0]["status"] == "error"
 
     def test_no_raw_search_query(self, db, accepted_request_no_query):
         """Intent should be None when no raw_search_query is set."""
@@ -355,19 +347,19 @@ class TestSyncRequestToServices:
 
 
 class TestIsAlreadySynced:
-    def test_tidal_legacy_synced(self, db, tidal_event):
+    def test_tidal_synced_via_json(self, db, tidal_event):
         request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "dedup_synced")
-        request.tidal_sync_status = TidalSyncStatus.SYNCED.value
+        request.sync_results_json = json.dumps([{"service": "tidal", "status": "added"}])
         db.commit()
         assert _is_already_synced(request, "tidal") is True
 
-    def test_tidal_legacy_not_synced(self, db, tidal_event):
+    def test_tidal_not_synced(self, db, tidal_event):
         request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "dedup_none")
         assert _is_already_synced(request, "tidal") is False
 
-    def test_tidal_legacy_error_not_synced(self, db, tidal_event):
+    def test_tidal_error_not_synced(self, db, tidal_event):
         request = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "dedup_err")
-        request.tidal_sync_status = TidalSyncStatus.ERROR.value
+        request.sync_results_json = json.dumps([{"service": "tidal", "status": "error"}])
         db.commit()
         assert _is_already_synced(request, "tidal") is False
 
@@ -419,8 +411,6 @@ class TestPersistSyncResult:
         assert data[0]["service"] == "tidal"
         assert data[0]["status"] == "added"
         assert data[0]["track_id"] == "123"
-        assert request.tidal_track_id == "123"
-        assert request.tidal_sync_status == TidalSyncStatus.SYNCED.value
 
     def test_persist_upserts_same_service(self, db, tidal_event):
         """Second result for same service replaces the first."""
@@ -495,7 +485,6 @@ class TestSyncRequestsBatch:
         # Verify all requests have synced status
         for r in [r1, r2, r3]:
             db.refresh(r)
-            assert r.tidal_sync_status == TidalSyncStatus.SYNCED.value
             data = json.loads(r.sync_results_json)
             assert data[0]["status"] == "added"
 
@@ -517,10 +506,12 @@ class TestSyncRequestsBatch:
 
         # r1 synced, r2 not found
         db.refresh(r1)
-        assert r1.tidal_sync_status == TidalSyncStatus.SYNCED.value
+        data1 = json.loads(r1.sync_results_json)
+        assert data1[0]["status"] == "added"
 
         db.refresh(r2)
-        assert r2.tidal_sync_status == TidalSyncStatus.NOT_FOUND.value
+        data2 = json.loads(r2.sync_results_json)
+        assert data2[0]["status"] == "not_found"
 
         # Only 1 track in batch add
         assert len(adapter.batch_add_calls) == 1
@@ -529,7 +520,7 @@ class TestSyncRequestsBatch:
     def test_batch_skips_already_synced(self, db, tidal_event, tidal_user):
         """Requests already synced are skipped entirely."""
         r1 = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "batch_s1")
-        r1.tidal_sync_status = TidalSyncStatus.SYNCED.value
+        r1.sync_results_json = json.dumps([{"service": "tidal", "status": "added"}])
         db.commit()
 
         r2 = _make_accepted_request(db, tidal_event, "Ghosts", "deadmau5", "batch_s2")
@@ -550,7 +541,7 @@ class TestSyncRequestsBatch:
     def test_batch_all_already_synced(self, db, tidal_event, tidal_user):
         """When all requests are already synced, no API calls made."""
         r1 = _make_accepted_request(db, tidal_event, "Strobe", "deadmau5", "batch_a1")
-        r1.tidal_sync_status = TidalSyncStatus.SYNCED.value
+        r1.sync_results_json = json.dumps([{"service": "tidal", "status": "added"}])
         db.commit()
 
         adapter = MockAdapter("tidal")
@@ -578,7 +569,8 @@ class TestSyncRequestsBatch:
 
         for r in [r1, r2]:
             db.refresh(r)
-            assert r.tidal_sync_status == TidalSyncStatus.ERROR.value
+            data = json.loads(r.sync_results_json)
+            assert data[0]["status"] == "error"
 
     def test_batch_playlist_failure(self, db, tidal_event, tidal_user):
         """When playlist creation fails, all found tracks get ERROR."""
@@ -594,7 +586,8 @@ class TestSyncRequestsBatch:
         sync_requests_batch(db, [r1])
 
         db.refresh(r1)
-        assert r1.tidal_sync_status == TidalSyncStatus.ERROR.value
+        data = json.loads(r1.sync_results_json)
+        assert data[0]["status"] == "error"
 
     def test_batch_empty_list(self, db):
         """Empty request list is a no-op."""
@@ -611,7 +604,7 @@ class TestSyncRequestsBatch:
         sync_requests_batch(db, [r1])
 
         db.refresh(r1)
-        assert r1.tidal_sync_status is None
+        assert r1.sync_results_json is None
 
     def test_batch_search_exception(self, db, tidal_event, tidal_user):
         """Search exception for one track doesn't block others."""
@@ -632,10 +625,12 @@ class TestSyncRequestsBatch:
 
         # r1 succeeded, r2 got error
         db.refresh(r1)
-        assert r1.tidal_sync_status == TidalSyncStatus.SYNCED.value
+        data1 = json.loads(r1.sync_results_json)
+        assert data1[0]["status"] == "added"
 
         db.refresh(r2)
-        assert r2.tidal_sync_status == TidalSyncStatus.ERROR.value
+        data2 = json.loads(r2.sync_results_json)
+        assert data2[0]["status"] == "error"
 
     def test_batch_sync_disabled_skipped(self, db, tidal_event, tidal_user):
         """Adapters with sync disabled are skipped in batch mode too."""
@@ -648,7 +643,7 @@ class TestSyncRequestsBatch:
 
         assert len(adapter.search_calls) == 0
         db.refresh(r1)
-        assert r1.tidal_sync_status is None
+        assert r1.sync_results_json is None
 
 
 class TestEnrichRequestMetadata:

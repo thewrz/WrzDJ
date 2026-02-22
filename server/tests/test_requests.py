@@ -60,6 +60,22 @@ class TestSubmitRequest:
         data = response.json()
         assert data["source_url"] == "https://open.spotify.com/track/abc123"
 
+    def test_submit_request_with_beatport_source(self, client: TestClient, test_event: Event):
+        """Regression: beatport source must be accepted (used by recommendation accept-all)."""
+        response = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={
+                "artist": "Beatport Artist",
+                "title": "Beatport Track",
+                "source": "beatport",
+                "source_url": "https://www.beatport.com/track/slug/12345",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["source"] == "beatport"
+        assert data["artist"] == "Beatport Artist"
+
     def test_submit_request_duplicate(self, client: TestClient, test_event: Event):
         """Test submitting a duplicate request."""
         # First request

@@ -68,6 +68,10 @@ export class PluginBridge extends EventEmitter {
     return this.plugin.info;
   }
 
+  get pluginId(): string {
+    return this.plugin.info.id;
+  }
+
   get pluginCapabilities() {
     return this.plugin.capabilities;
   }

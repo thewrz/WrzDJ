@@ -189,7 +189,8 @@ def discover_songs(
     for item in data.get("items", []):
         song = item.get("song", {})
         name = song.get("name")
-        artist = song.get("creditName")
+        artist_raw = song.get("creditName")
+        artist = artist_raw.get("name", "") if isinstance(artist_raw, dict) else artist_raw
         uuid = song.get("uuid")
         if name and artist and uuid:
             tracks.append(

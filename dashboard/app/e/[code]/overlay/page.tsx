@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { api, ApiError, KioskDisplay, NowPlayingInfo } from '@/lib/api';
+import { useEventStream } from '@/lib/use-event-stream';
 
 export default function StreamOverlayPage() {
   const params = useParams();
@@ -76,6 +77,15 @@ export default function StreamOverlayPage() {
     };
   }, [loadData]);
 
+  // SSE: trigger immediate refresh on any real-time event
+  const loadDataRef = useRef(loadData);
+  loadDataRef.current = loadData;
+  useEventStream(code, {
+    onNowPlayingChanged: () => { loadDataRef.current(); },
+    onRequestStatusChanged: () => { loadDataRef.current(); },
+    onRequestsBulkUpdate: () => { loadDataRef.current(); },
+  });
+
   // Sticky now-playing effect
   useEffect(() => {
     if (nowPlaying) {
@@ -119,7 +129,7 @@ export default function StreamOverlayPage() {
     album_art_url: display.now_playing.artwork_url,
     source: 'request',
   } : null));
-  const isLive = stickyNowPlaying?.source === 'stagelinq' || stickyNowPlaying?.source === 'pioneer' || stickyNowPlaying?.source === 'traktor';
+  const isLive = stickyNowPlaying?.source != null && stickyNowPlaying.source !== 'manual';
   const upNext = display.accepted_queue.slice(0, 5);
 
   return (

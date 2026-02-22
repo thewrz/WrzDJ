@@ -5,7 +5,7 @@ from app.api.deps import get_current_active_user, get_db
 from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.request import RequestOut, RequestUpdate
-from app.services.event import set_now_playing
+from app.services.event_bus import publish_event
 from app.services.now_playing import (
     add_manual_play,
     clear_manual_now_playing,
@@ -38,8 +38,6 @@ def _request_to_out(r) -> RequestOut:
         status=r.status,
         created_at=r.created_at,
         updated_at=r.updated_at,
-        tidal_track_id=r.tidal_track_id,
-        tidal_sync_status=r.tidal_sync_status,
         raw_search_query=r.raw_search_query,
         sync_results_json=r.sync_results_json,
         vote_count=r.vote_count,
@@ -78,14 +76,20 @@ def update_request(
     # Auto-set now_playing when a request is set to "playing"
     if update_data.status == RequestStatus.PLAYING:
         clear_other_playing_requests(db, request.event_id, request.id)
-        set_now_playing(db, request.event, request.id)
         set_manual_now_playing(db, request.event_id, request)
     # Clear now_playing when the current song is marked as "played" and add to history
     elif update_data.status == RequestStatus.PLAYED:
-        if request.event.now_playing_request_id == request.id:
-            set_now_playing(db, request.event, None)
         clear_manual_now_playing(db, request.event_id, request.id)
         add_manual_play(db, request.event, request)
+
+    publish_event(
+        request.event.code,
+        "request_status_changed",
+        {
+            "request_id": updated.id,
+            "status": updated.status,
+        },
+    )
 
     return _request_to_out(updated)
 
@@ -103,10 +107,6 @@ def delete_request_endpoint(
 
     if request.event.created_by_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this request")
-
-    # Clear now_playing if this request is currently playing
-    if request.event.now_playing_request_id == request.id:
-        set_now_playing(db, request.event, None)
 
     delete_request(db, request)
 

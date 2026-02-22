@@ -23,7 +23,7 @@ from app.models.event import Event
 from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.activity_log import ActivityLogEntry
-from app.schemas.common import AcceptAllResponse
+from app.schemas.common import AcceptAllResponse, BulkActionResponse
 from app.schemas.event import (
     DisplaySettingsResponse,
     DisplaySettingsUpdate,
@@ -53,6 +53,7 @@ from app.services.event import (
     unarchive_event,
     update_event,
 )
+from app.services.event_bus import publish_event
 from app.services.export import (
     export_play_history_to_csv,
     export_requests_to_csv,
@@ -64,7 +65,13 @@ from app.services.now_playing import (
     get_play_history,
     set_now_playing_visibility,
 )
-from app.services.request import accept_all_new_requests, create_request, get_requests_for_event
+from app.services.request import (
+    accept_all_new_requests,
+    bulk_delete_requests,
+    create_request,
+    get_requests_for_event,
+    reject_all_new_requests,
+)
 from app.services.sync.orchestrator import enrich_request_metadata, sync_requests_batch
 from app.services.sync.registry import get_connected_adapters
 
@@ -133,8 +140,6 @@ def _request_to_out(r) -> RequestOut:
         status=r.status,
         created_at=r.created_at,
         updated_at=r.updated_at,
-        tidal_track_id=r.tidal_track_id,
-        tidal_sync_status=r.tidal_sync_status,
         raw_search_query=r.raw_search_query,
         sync_results_json=r.sync_results_json,
         vote_count=r.vote_count,
@@ -561,6 +566,17 @@ def submit_request(
     if not is_duplicate and not has_full_metadata:
         background_tasks.add_task(enrich_request_metadata, db, song_request.id)
 
+    if not is_duplicate:
+        publish_event(
+            code,
+            "request_created",
+            {
+                "request_id": song_request.id,
+                "title": song_request.song_title,
+                "artist": song_request.artist,
+            },
+        )
+
     return _request_to_out(song_request).model_copy(update={"is_duplicate": is_duplicate})
 
 
@@ -580,7 +596,60 @@ def accept_all_requests_endpoint(
     if accepted and get_connected_adapters(event.created_by):
         background_tasks.add_task(sync_requests_batch, db, accepted)
 
+    if accepted:
+        publish_event(
+            event.code,
+            "requests_bulk_update",
+            {
+                "action": "accepted",
+                "count": len(accepted),
+            },
+        )
+
     return AcceptAllResponse(status="ok", accepted_count=len(accepted))
+
+
+@router.post("/{code}/requests/reject-all", response_model=BulkActionResponse)
+@limiter.limit("10/minute")
+def reject_all_requests_endpoint(
+    request: Request,
+    event: Event = Depends(get_owned_event),
+    db: Session = Depends(get_db),
+) -> BulkActionResponse:
+    """Reject all NEW requests for an event in one operation."""
+    count = reject_all_new_requests(db, event)
+    if count > 0:
+        publish_event(
+            event.code,
+            "requests_bulk_update",
+            {
+                "action": "rejected",
+                "count": count,
+            },
+        )
+    return BulkActionResponse(status="ok", count=count)
+
+
+@router.delete("/{code}/requests/bulk", response_model=BulkActionResponse)
+@limiter.limit("10/minute")
+def bulk_delete_requests_endpoint(
+    request: Request,
+    status: str | None = Query(default=None),
+    event: Event = Depends(get_owned_event),
+    db: Session = Depends(get_db),
+) -> BulkActionResponse:
+    """Bulk delete requests for an event, optionally filtered by status."""
+    count = bulk_delete_requests(db, event, status)
+    if count > 0:
+        publish_event(
+            event.code,
+            "requests_bulk_update",
+            {
+                "action": "deleted",
+                "count": count,
+            },
+        )
+    return BulkActionResponse(status="ok", count=count)
 
 
 @router.get("/{code}/requests", response_model=list[RequestOut])

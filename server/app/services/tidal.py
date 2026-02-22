@@ -15,7 +15,7 @@ import tidalapi
 from sqlalchemy.orm import Session
 
 from app.models.event import Event
-from app.models.request import Request, TidalSyncStatus
+from app.models.request import Request, TidalSyncStatus  # TidalSyncStatus used in TidalSyncResult
 from app.models.user import User
 from app.schemas.tidal import TidalSearchResult, TidalSyncResult
 from app.services.track_normalizer import artist_match_score, primary_artist
@@ -333,9 +333,6 @@ def sync_request_to_tidal(
     event = request.event
     user = event.created_by
 
-    request.tidal_sync_status = TidalSyncStatus.PENDING.value
-    db.commit()
-
     if not event.tidal_sync_enabled:
         return TidalSyncResult(
             request_id=request.id,
@@ -352,8 +349,6 @@ def sync_request_to_tidal(
 
     playlist_id = create_event_playlist(db, user, event)
     if not playlist_id:
-        request.tidal_sync_status = TidalSyncStatus.ERROR.value
-        db.commit()
         return TidalSyncResult(
             request_id=request.id,
             status=TidalSyncStatus.ERROR,
@@ -362,8 +357,6 @@ def sync_request_to_tidal(
 
     track = search_track(db, user, request.artist, request.song_title)
     if not track:
-        request.tidal_sync_status = TidalSyncStatus.NOT_FOUND.value
-        db.commit()
         return TidalSyncResult(
             request_id=request.id,
             status=TidalSyncStatus.NOT_FOUND,
@@ -371,8 +364,6 @@ def sync_request_to_tidal(
         )
 
     if add_track_to_playlist(db, user, playlist_id, track.track_id):
-        request.tidal_track_id = track.track_id
-        request.tidal_sync_status = TidalSyncStatus.SYNCED.value
         db.commit()
         return TidalSyncResult(
             request_id=request.id,
@@ -380,8 +371,6 @@ def sync_request_to_tidal(
             tidal_track_id=track.track_id,
         )
     else:
-        request.tidal_sync_status = TidalSyncStatus.ERROR.value
-        db.commit()
         return TidalSyncResult(
             request_id=request.id,
             status=TidalSyncStatus.ERROR,
@@ -416,8 +405,6 @@ def manual_link_track(
             )
 
     if add_track_to_playlist(db, user, playlist_id, tidal_track_id):
-        request.tidal_track_id = tidal_track_id
-        request.tidal_sync_status = TidalSyncStatus.SYNCED.value
         db.commit()
         return TidalSyncResult(
             request_id=request.id,

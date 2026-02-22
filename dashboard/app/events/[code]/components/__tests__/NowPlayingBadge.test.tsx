@@ -58,6 +58,12 @@ describe('NowPlayingBadge', () => {
     expect(screen.queryByText('LIVE')).toBeNull();
   });
 
+  it('does not show LIVE badge when source is manual', () => {
+    const manual = { ...baseNowPlaying, source: 'manual' };
+    render(<NowPlayingBadge nowPlaying={manual} />);
+    expect(screen.queryByText('LIVE')).toBeNull();
+  });
+
   it('renders spectrum bars', () => {
     render(<NowPlayingBadge nowPlaying={baseNowPlaying} />);
     const bars = screen.getByTestId('spectrum-bars');

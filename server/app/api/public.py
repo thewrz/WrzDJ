@@ -15,7 +15,7 @@ from app.core.time import utcnow
 from app.models.request import Request as SongRequest
 from app.models.request import RequestStatus
 from app.services.event import EventLookupResult, get_event_by_code_with_status
-from app.services.now_playing import is_now_playing_hidden
+from app.services.now_playing import get_now_playing, is_now_playing_hidden
 from app.services.request import get_guest_visible_requests
 
 router = APIRouter()
@@ -39,9 +39,17 @@ class GuestRequestInfo(PublicRequestInfo):
     status: Literal["new", "accepted"]
 
 
+class GuestNowPlaying(BaseModel):
+    title: str
+    artist: str
+    album_art_url: str | None
+    source: str
+
+
 class GuestRequestListResponse(BaseModel):
     event: PublicEventInfo
     requests: list[GuestRequestInfo]
+    now_playing: GuestNowPlaying | None = None
 
 
 class HasRequestedResponse(BaseModel):
@@ -103,15 +111,18 @@ def get_kiosk_display(
         for r in accepted_requests
     ]
 
-    # Get now playing from event
+    # Get now playing from NowPlaying table (single source of truth)
     now_playing = None
-    if event.now_playing:
-        now_playing = PublicRequestInfo(
-            id=event.now_playing.id,
-            title=event.now_playing.song_title,
-            artist=event.now_playing.artist,
-            artwork_url=event.now_playing.artwork_url,
-        )
+    np = get_now_playing(db, event.id)
+    if np and np.matched_request_id:
+        matched_req = db.query(SongRequest).filter(SongRequest.id == np.matched_request_id).first()
+        if matched_req:
+            now_playing = PublicRequestInfo(
+                id=matched_req.id,
+                title=matched_req.song_title,
+                artist=matched_req.artist,
+                artwork_url=matched_req.artwork_url,
+            )
 
     # Check if now playing should be hidden (using per-event timeout)
     now_playing_is_hidden = is_now_playing_hidden(
@@ -168,6 +179,20 @@ def get_public_requests(
 
     requests_list = get_guest_visible_requests(db, event)
 
+    # Include now-playing if not hidden
+    guest_now_playing = None
+    if not is_now_playing_hidden(
+        db, event.id, auto_hide_minutes=event.now_playing_auto_hide_minutes
+    ):
+        np = get_now_playing(db, event.id)
+        if np:
+            guest_now_playing = GuestNowPlaying(
+                title=np.title,
+                artist=np.artist,
+                album_art_url=np.album_art_url,
+                source=np.source,
+            )
+
     return GuestRequestListResponse(
         event=PublicEventInfo(code=event.code, name=event.name),
         requests=[
@@ -181,6 +206,7 @@ def get_public_requests(
             )
             for r in requests_list
         ],
+        now_playing=guest_now_playing,
     )
 
 

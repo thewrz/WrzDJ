@@ -17,8 +17,6 @@ function makeRequest(overrides: Partial<SongRequest> = {}): SongRequest {
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
     raw_search_query: null,
-    tidal_track_id: null,
-    tidal_sync_status: null,
     sync_results_json: null,
     vote_count: 0,
     genre: null,
@@ -125,13 +123,6 @@ describe('SyncStatusBadges', () => {
     render(<SyncStatusBadges {...defaultProps} request={request} />);
     const badge = screen.getByTitle('Sync failed - click to retry');
     expect(badge.textContent).toBe('T!');
-  });
-
-  it('falls back to legacy tidal_sync_status when sync_results_json is null', () => {
-    const request = makeRequest({ tidal_sync_status: 'synced' });
-    render(<SyncStatusBadges {...defaultProps} request={request} />);
-    const badge = screen.getByTitle('Synced to Tidal');
-    expect(badge.textContent).toBe('T');
   });
 
   it('shows sync button when no tidal status yet', () => {

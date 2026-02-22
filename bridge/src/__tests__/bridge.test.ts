@@ -129,6 +129,7 @@ describe("bridge.ts", () => {
         artist: "Artist",
         album: "Album",
         deck: "1",
+        source: null,
       });
     });
 
@@ -158,6 +159,27 @@ describe("bridge.ts", () => {
 
       expect(result).toBe(true);
       expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("includes source in payload when provided", async () => {
+      mockFetch.mockResolvedValue(createMockResponse(200));
+
+      await postNowPlaying("Track", "Artist", "Album", "1", "stagelinq");
+
+      const body = JSON.parse(mockFetch.mock.calls[0]![1].body);
+      expect(body.source).toBe("stagelinq");
+    });
+
+    it("sends correct source for each plugin type", async () => {
+      const plugins = ["stagelinq", "pioneer", "serato", "traktor"];
+      for (const plugin of plugins) {
+        mockFetch.mockResolvedValue(createMockResponse(200));
+        await postNowPlaying("Track", "Artist", undefined, undefined, plugin);
+        const body = JSON.parse(
+          mockFetch.mock.calls[mockFetch.mock.calls.length - 1]![1].body,
+        );
+        expect(body.source).toBe(plugin);
+      }
     });
 
     it("defaults album and deck to null", async () => {

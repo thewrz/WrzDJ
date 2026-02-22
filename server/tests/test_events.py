@@ -184,10 +184,6 @@ class TestDeleteEvent:
         db.add_all([req1, req2])
         db.flush()
 
-        # Set now_playing_request_id (circular FK)
-        event.now_playing_request_id = req1.id
-        db.flush()
-
         # Add votes on requests
         vote = RequestVote(
             request_id=req1.id,

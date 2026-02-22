@@ -944,6 +944,12 @@ a {
   gap: 0.5rem;
 }
 
+.help-btn-container-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .help-btn {
   width: 36px;
   height: 36px;

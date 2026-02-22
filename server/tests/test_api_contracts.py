@@ -72,8 +72,6 @@ REQUEST_OUT_KEYS = {
     "updated_at",
     "is_duplicate",
     "raw_search_query",
-    "tidal_track_id",
-    "tidal_sync_status",
     "sync_results_json",
     "vote_count",
     "genre",

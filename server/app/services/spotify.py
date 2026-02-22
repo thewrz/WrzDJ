@@ -60,7 +60,11 @@ def search_songs(db: Session, query: str) -> list[SearchResult]:
     # Check cache first
     cached = (
         db.query(SearchCache)
-        .filter(SearchCache.query == query, SearchCache.expires_at > utcnow())
+        .filter(
+            SearchCache.query == query,
+            SearchCache.source == "spotify",
+            SearchCache.expires_at > utcnow(),
+        )
         .first()
     )
     if cached:
@@ -75,13 +79,19 @@ def search_songs(db: Session, query: str) -> list[SearchResult]:
     results_json = json.dumps([r.model_dump() for r in results])
 
     # Upsert cache entry
-    existing = db.query(SearchCache).filter(SearchCache.query == query).first()
+    existing = (
+        db.query(SearchCache)
+        .filter(SearchCache.query == query, SearchCache.source == "spotify")
+        .first()
+    )
     if existing:
         existing.results_json = results_json
         existing.expires_at = expires_at
         existing.created_at = utcnow()
     else:
-        cache_entry = SearchCache(query=query, results_json=results_json, expires_at=expires_at)
+        cache_entry = SearchCache(
+            query=query, source="spotify", results_json=results_json, expires_at=expires_at
+        )
         db.add(cache_entry)
     db.commit()
 

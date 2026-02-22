@@ -22,6 +22,7 @@ class RequestSource(str, Enum):
     SPOTIFY = "spotify"
     SHARE_LINK = "share_link"
     TIDAL = "tidal"
+    BEATPORT = "beatport"
 
 
 class TidalSyncStatus(str, Enum):
@@ -47,10 +48,6 @@ class Request(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
     client_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     dedupe_key: Mapped[str] = mapped_column(String(64), index=True)
-
-    # Tidal sync tracking (legacy — kept for backward compat)
-    tidal_track_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    tidal_sync_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Multi-service sync
     raw_search_query: Mapped[str | None] = mapped_column(String(200), nullable=True)

@@ -7,7 +7,7 @@ interface NowPlayingBadgeProps {
 export function NowPlayingBadge({ nowPlaying }: NowPlayingBadgeProps) {
   if (!nowPlaying) return null;
 
-  const isLive = nowPlaying.source !== 'request';
+  const isLive = nowPlaying.source !== 'request' && nowPlaying.source !== 'manual';
 
   return (
     <div

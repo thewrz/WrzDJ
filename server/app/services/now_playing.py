@@ -269,11 +269,7 @@ def add_manual_play(db: Session, event: Event, request: Request) -> PlayHistory:
 
 
 def set_manual_now_playing(db: Session, event_id: int, request: Request) -> NowPlaying:
-    """Upsert NowPlaying when a DJ manually marks a request as PLAYING.
-
-    This bridges the gap between System A (Event.now_playing_request_id) and
-    System B (NowPlaying table) so the kiosk display shows manually-played tracks.
-    """
+    """Upsert NowPlaying when a DJ manually marks a request as PLAYING."""
     existing = get_now_playing(db, event_id)
 
     if existing:

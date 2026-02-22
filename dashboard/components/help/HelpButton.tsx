@@ -5,9 +5,10 @@ import { isHelpDisabled } from '@/lib/help/is-help-disabled';
 
 interface HelpButtonProps {
   page: string;
+  inline?: boolean;
 }
 
-export function HelpButton({ page }: HelpButtonProps) {
+export function HelpButton({ page, inline }: HelpButtonProps) {
   const { helpMode, onboardingActive, toggleHelpMode, startOnboarding } = useHelp();
 
   const isDisabled = isHelpDisabled();
@@ -20,7 +21,7 @@ export function HelpButton({ page }: HelpButtonProps) {
   if (isDisabled) return null;
 
   return (
-    <div className="help-btn-container">
+    <div className={inline ? 'help-btn-container-inline' : 'help-btn-container'}>
       <button
         className={`help-btn${helpMode ? ' help-btn-active' : ''}`}
         onClick={handleToggle}
