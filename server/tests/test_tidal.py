@@ -202,10 +202,6 @@ class TestTidalManualLink:
         assert result.status == TidalSyncStatus.SYNCED
         assert result.tidal_track_id == "manual_track_id"
 
-        db.refresh(tidal_request)
-        assert tidal_request.tidal_track_id == "manual_track_id"
-        assert tidal_request.tidal_sync_status == TidalSyncStatus.SYNCED.value
-
     def test_manual_link_no_tidal_account(
         self,
         db: Session,
@@ -305,9 +301,6 @@ class TestTidalSyncPipeline:
 
         assert result.status == TidalSyncStatus.SYNCED
         assert result.tidal_track_id == "track789"
-        db.refresh(tidal_request)
-        assert tidal_request.tidal_track_id == "track789"
-        assert tidal_request.tidal_sync_status == TidalSyncStatus.SYNCED.value
 
     def test_sync_disabled(self, db: Session, tidal_request: Request):
         """Test sync returns error when sync disabled on event."""
@@ -343,8 +336,6 @@ class TestTidalSyncPipeline:
 
         assert result.status == TidalSyncStatus.ERROR
         assert "playlist" in result.error.lower()
-        db.refresh(tidal_request)
-        assert tidal_request.tidal_sync_status == TidalSyncStatus.ERROR.value
 
     @patch("app.services.tidal.search_track")
     @patch("app.services.tidal.create_event_playlist")
@@ -362,8 +353,6 @@ class TestTidalSyncPipeline:
         result = sync_request_to_tidal(db, tidal_request)
 
         assert result.status == TidalSyncStatus.NOT_FOUND
-        db.refresh(tidal_request)
-        assert tidal_request.tidal_sync_status == TidalSyncStatus.NOT_FOUND.value
 
     @patch("app.services.tidal.add_track_to_playlist")
     @patch("app.services.tidal.search_track")
@@ -389,8 +378,6 @@ class TestTidalSyncPipeline:
 
         assert result.status == TidalSyncStatus.ERROR
         assert "add track" in result.error.lower()
-        db.refresh(tidal_request)
-        assert tidal_request.tidal_sync_status == TidalSyncStatus.ERROR.value
 
 
 class TestTidalSearch:

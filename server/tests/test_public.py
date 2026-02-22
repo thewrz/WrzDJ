@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.event import Event
+from app.models.now_playing import NowPlaying
 from app.models.request import Request, RequestStatus
 
 
@@ -50,7 +51,7 @@ class TestKioskDisplay:
 
     def test_kiosk_display_now_playing(self, client: TestClient, test_event: Event, db: Session):
         """Test that now_playing shows the current song."""
-        # Create a playing request and set as now_playing
+        # Create a playing request
         request = Request(
             event_id=test_event.id,
             song_title="Now Playing Song",
@@ -63,8 +64,15 @@ class TestKioskDisplay:
         db.commit()
         db.refresh(request)
 
-        # Set as now_playing on event
-        test_event.now_playing_request_id = request.id
+        # Set now_playing via NowPlaying table (single source of truth)
+        np = NowPlaying(
+            event_id=test_event.id,
+            title="Now Playing Song",
+            artist="Playing Artist",
+            matched_request_id=request.id,
+            source="manual",
+        )
+        db.add(np)
         db.commit()
 
         response = client.get(f"/api/public/events/{test_event.code}/display")

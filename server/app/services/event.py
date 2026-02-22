@@ -121,9 +121,8 @@ def delete_event(db: Session, event: Event) -> None:
 
     Deletes in FK-safe order to avoid constraint violations:
     1. Clean up banner files
-    2. Clear circular now_playing_request_id FK
-    3. Bulk-delete child records (requests cascade-delete votes at DB level)
-    4. Delete event (DB cascades delete play_history and now_playing)
+    2. Bulk-delete child records (requests cascade-delete votes at DB level)
+    3. Delete event (DB cascades delete play_history and now_playing)
     """
     from app.models.now_playing import NowPlaying
     from app.models.play_history import PlayHistory
@@ -134,10 +133,6 @@ def delete_event(db: Session, event: Event) -> None:
 
     # Clean up banner files before deleting
     delete_banner_files(event.banner_filename)
-
-    # Break circular FK: event -> now_playing_request_id -> request -> event
-    event.now_playing_request_id = None
-    db.flush()
 
     # Delete child records in FK-safe order
     db.query(NowPlaying).filter(NowPlaying.event_id == event_id).delete(synchronize_session=False)
@@ -155,15 +150,6 @@ def delete_event(db: Session, event: Event) -> None:
     db.expunge(event)
     db.query(Event).filter(Event.id == event_id).delete(synchronize_session=False)
     db.commit()
-
-
-def set_now_playing(db: Session, event: Event, request_id: int | None) -> Event:
-    """Set the now playing request for an event."""
-    event.now_playing_request_id = request_id
-    event.now_playing_updated_at = utcnow()
-    db.commit()
-    db.refresh(event)
-    return event
 
 
 def archive_event(db: Session, event: Event) -> Event:

@@ -1,7 +1,6 @@
 """Integration tests for multi-service sync orchestration.
 
-Validates that Tidal + Beatport sync produce correct sync_results_json
-and that legacy Tidal columns remain populated.
+Validates that Tidal + Beatport sync produce correct sync_results_json.
 """
 
 import json
@@ -68,57 +67,6 @@ def test_multi_service_sync_results_structure(test_request, db):
     assert beatport["confidence"] == 0.88
     assert beatport["url"] == "https://beatport.com/track/test-song/456"
     assert beatport["playlist_id"] is None
-
-
-def test_legacy_tidal_columns_still_populated(test_request, db):
-    """Legacy tidal_* columns still populated for backward compatibility."""
-    from app.services.sync.orchestrator import _persist_sync_result
-
-    tidal_result = SyncResult(
-        service="tidal",
-        status=SyncStatus.ADDED,
-        track_match=TrackMatch(
-            service="tidal",
-            track_id="tidal-789",
-            title="Legacy Test",
-            artist="Legacy Artist",
-            match_confidence=0.9,
-        ),
-        playlist_id="playlist-1",
-        error=None,
-    )
-    _persist_sync_result(test_request, tidal_result)
-    db.commit()
-    db.refresh(test_request)
-
-    assert test_request.tidal_track_id == "tidal-789"
-    assert test_request.tidal_sync_status == "synced"
-
-
-def test_beatport_does_not_set_legacy_columns(test_request, db):
-    """Beatport sync does NOT touch legacy tidal_* columns."""
-    from app.services.sync.orchestrator import _persist_sync_result
-
-    beatport_result = SyncResult(
-        service="beatport",
-        status=SyncStatus.MATCHED,
-        track_match=TrackMatch(
-            service="beatport",
-            track_id="bp-111",
-            title="BP Song",
-            artist="BP Artist",
-            match_confidence=0.85,
-        ),
-        playlist_id=None,
-        error=None,
-    )
-    _persist_sync_result(test_request, beatport_result)
-    db.commit()
-    db.refresh(test_request)
-
-    # Legacy Tidal columns should remain null/unchanged
-    assert test_request.tidal_track_id is None
-    assert test_request.tidal_sync_status is None
 
 
 def test_not_found_on_one_service_added_on_another(test_request, db):

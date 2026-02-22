@@ -84,7 +84,7 @@ async function main(): Promise<void> {
     log.info(`Deck ${deckId} LIVE: "${track.title}" by ${track.artist}`);
 
     updateLastTrack(track.artist, track.title);
-    await postNowPlaying(track.title, track.artist, track.album, deckId);
+    await postNowPlaying(track.title, track.artist, track.album, deckId, pluginBridge!.pluginId);
   });
 
   // Handle heartbeat — keep bridge_last_seen fresh on the backend

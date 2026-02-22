@@ -129,6 +129,7 @@ describe("bridge.ts", () => {
         artist: "Artist",
         album: "Album",
         deck: "1",
+        source: null,
       });
     });
 

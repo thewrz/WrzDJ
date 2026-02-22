@@ -15,6 +15,7 @@ class NowPlayingBridgePayload(BaseModel):
     artist: str = Field(..., min_length=1, max_length=255)
     album: str | None = Field(default=None, max_length=255)
     deck: str | None = Field(default=None, max_length=10)
+    source: str | None = Field(default=None, max_length=20)
 
 
 class BridgeStatusPayload(BaseModel):

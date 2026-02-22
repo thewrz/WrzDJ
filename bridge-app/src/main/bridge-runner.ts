@@ -241,7 +241,7 @@ export class BridgeRunner extends EventEmitter {
       };
 
       this.emitStatus();
-      await this.postNowPlaying(track.title, track.artist, track.album, deckId);
+      await this.postNowPlaying(track.title, track.artist, track.album, deckId, this.pluginBridge!.pluginId);
     });
 
     // Handle connection status from plugin
@@ -408,6 +408,7 @@ export class BridgeRunner extends EventEmitter {
     artist: string,
     album?: string,
     deck?: string,
+    source?: string,
   ): Promise<void> {
     if (!this.config) return;
 
@@ -417,6 +418,7 @@ export class BridgeRunner extends EventEmitter {
       artist,
       album: album ?? null,
       deck: deck ?? null,
+      source: source ?? null,
     };
 
     const success = await this.postWithRetry('/api/bridge/nowplaying', payload);

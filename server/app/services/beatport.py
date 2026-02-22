@@ -18,8 +18,10 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.time import utcnow
 from app.models.event import Event
 from app.models.request import Request as SongRequest
+from app.models.search_cache import SearchCache
 from app.models.user import User
 from app.schemas.beatport import BeatportSearchResult
 
@@ -313,7 +315,24 @@ def get_playlist_tracks(db: Session, user: User, playlist_id: str) -> list[Beatp
 def search_beatport_tracks(
     db: Session, user: User, query: str, limit: int = 10
 ) -> list[BeatportSearchResult]:
-    """Search Beatport catalog for tracks."""
+    """Search Beatport catalog for tracks with caching."""
+    settings = get_settings()
+    cache_key = query.strip().lower()
+
+    # Check cache first
+    cached = (
+        db.query(SearchCache)
+        .filter(
+            SearchCache.query == cache_key,
+            SearchCache.source == "beatport",
+            SearchCache.expires_at > utcnow(),
+        )
+        .first()
+    )
+    if cached:
+        results_data = json.loads(cached.results_json)
+        return [BeatportSearchResult(**r) for r in results_data]
+
     if not _refresh_token_if_needed(db, user):
         return []
 
@@ -363,6 +382,30 @@ def search_beatport_tracks(
                 release_date=track.get("new_release_date") or track.get("publish_date"),
             )
         )
+
+    # Cache the results
+    if results:
+        expires_at = utcnow() + timedelta(hours=settings.search_cache_hours)
+        results_json = json.dumps([r.model_dump() for r in results])
+
+        existing = (
+            db.query(SearchCache)
+            .filter(SearchCache.query == cache_key, SearchCache.source == "beatport")
+            .first()
+        )
+        if existing:
+            existing.results_json = results_json
+            existing.expires_at = expires_at
+            existing.created_at = utcnow()
+        else:
+            cache_entry = SearchCache(
+                query=cache_key,
+                source="beatport",
+                results_json=results_json,
+                expires_at=expires_at,
+            )
+            db.add(cache_entry)
+        db.commit()
 
     return results
 

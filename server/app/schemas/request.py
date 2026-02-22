@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_serializer, field_validator
 
 from app.core.validation import normalize_single_line, normalize_text
-from app.models.request import RequestSource, RequestStatus, TidalSyncStatus
+from app.models.request import RequestSource, RequestStatus
 
 ALLOWED_URL_SCHEMES = {"http", "https", "spotify"}
 
@@ -75,9 +75,6 @@ class RequestOut(BaseModel):
     musical_key: str | None = None
     # Search intent
     raw_search_query: str | None = None
-    # Tidal sync status
-    tidal_track_id: str | None = None
-    tidal_sync_status: TidalSyncStatus | None = None
     # Multi-service sync results (JSON array)
     sync_results_json: str | None = None
     # Voting

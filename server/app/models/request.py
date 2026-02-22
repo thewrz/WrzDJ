@@ -48,10 +48,6 @@ class Request(Base):
     client_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     dedupe_key: Mapped[str] = mapped_column(String(64), index=True)
 
-    # Tidal sync tracking (legacy — kept for backward compat)
-    tidal_track_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    tidal_sync_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
-
     # Multi-service sync
     raw_search_query: Mapped[str | None] = mapped_column(String(200), nullable=True)
     sync_results_json: Mapped[str | None] = mapped_column(Text, nullable=True)

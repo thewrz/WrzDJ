@@ -505,7 +505,7 @@ class TestHandleNowPlayingUpdate:
         assert result.artist == "New Artist"
         assert result.album == "Test Album"
         assert result.deck == "1"
-        assert result.source == "stagelinq"
+        assert result.source == "bridge"
 
     @patch("app.services.now_playing.lookup_spotify_album_art")
     def test_archives_previous_track(self, mock_spotify, db: Session, test_event: Event):

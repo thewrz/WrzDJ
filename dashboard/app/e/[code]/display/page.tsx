@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, ApiError, KioskDisplay, NowPlayingInfo, PlayHistoryItem } from '@/lib/api';
+import { useEventStream } from '@/lib/use-event-stream';
 import { RequestModal } from './components/RequestModal';
 const AUTO_SCROLL_INTERVAL = 5000; // 5 seconds between auto-scrolls
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
@@ -111,6 +112,17 @@ export default function KioskDisplayPage() {
       }
     };
   }, [loadDisplay]);
+
+  // SSE: trigger immediate refresh on any real-time event
+  const loadDisplayRef = useRef(loadDisplay);
+  loadDisplayRef.current = loadDisplay;
+  useEventStream(code, {
+    onRequestCreated: () => { loadDisplayRef.current(); },
+    onRequestStatusChanged: () => { loadDisplayRef.current(); },
+    onNowPlayingChanged: () => { loadDisplayRef.current(); },
+    onRequestsBulkUpdate: () => { loadDisplayRef.current(); },
+    onBridgeStatusChanged: () => { loadDisplayRef.current(); },
+  });
 
   // Sticky now-playing effect
   useEffect(() => {
@@ -853,7 +865,7 @@ export default function KioskDisplayPage() {
             album_art_url: display.now_playing.artwork_url,
             source: 'request',
           } : null));
-          const isStageLinQ = stickyNowPlaying?.source === 'stagelinq';
+          const isLive = stickyNowPlaying?.source != null && stickyNowPlaying.source !== 'manual' && stickyNowPlaying.source !== 'request';
 
           return (
             <div className={`kiosk-main ${nowPlaying ? '' : 'kiosk-main-single'}`}>
@@ -861,7 +873,7 @@ export default function KioskDisplayPage() {
                 <div className={`now-playing-section ${nowPlayingFading ? 'fading' : ''}`}>
                   <div className="now-playing-label">
                     Now Playing
-                    {isStageLinQ && <span className="live-badge">LIVE</span>}
+                    {isLive && <span className="live-badge">LIVE</span>}
                   </div>
                   <div className="now-playing-content">
                     {nowPlaying.album_art_url ? (

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/auth';
 import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem, TidalStatus, TidalSearchResult, BeatportStatus } from '@/lib/api';
+import { useEventStream } from '@/lib/use-event-stream';
 import type { BeatportSearchResult, NowPlayingInfo } from '@/lib/api-types';
 import { useHelp } from '@/lib/help/HelpContext';
 import { HelpSpot } from '@/components/help/HelpSpot';
@@ -311,6 +312,15 @@ export default function EventQueuePage() {
     }
   }, [isAuthenticated, loadData]);
 
+  // SSE: trigger immediate refresh on real-time events (new requests, bridge updates)
+  const loadDataRef = useRef(loadData);
+  loadDataRef.current = loadData;
+  useEventStream(isAuthenticated ? code : null, {
+    onRequestCreated: () => { loadDataRef.current(); },
+    onNowPlayingChanged: () => { loadDataRef.current(); },
+    onBridgeStatusChanged: () => { loadDataRef.current(); },
+  });
+
   const updateStatus = async (requestId: number, status: string) => {
     setUpdating(requestId);
     try {
@@ -502,10 +512,13 @@ export default function EventQueuePage() {
       setRequests((prev) =>
         prev.map((r) =>
           r.id === requestId
-            ? { ...r, tidal_track_id: result.tidal_track_id, tidal_sync_status: result.status }
+            ? { ...r }
             : r
         )
       );
+      // Refresh to get updated sync_results_json from server
+      const updatedRequests = await api.getRequests(code);
+      setRequests(updatedRequests);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Failed to sync to Tidal');
     } finally {
@@ -538,14 +551,9 @@ export default function EventQueuePage() {
   const handleLinkTidalTrack = async (requestId: number, tidalTrackId: string) => {
     setLinkingTrack(true);
     try {
-      const result = await api.linkTidalTrack(requestId, tidalTrackId);
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === requestId
-            ? { ...r, tidal_track_id: result.tidal_track_id, tidal_sync_status: result.status }
-            : r
-        )
-      );
+      await api.linkTidalTrack(requestId, tidalTrackId);
+      const updatedRequests = await api.getRequests(code);
+      setRequests(updatedRequests);
       setShowTidalPicker(null);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Failed to link Tidal track');
@@ -675,6 +683,7 @@ export default function EventQueuePage() {
   // Advanced mode state
   const [deletingRequest, setDeletingRequest] = useState<number | null>(null);
   const [refreshingRequest, setRefreshingRequest] = useState<number | null>(null);
+  const [rejectingAll, setRejectingAll] = useState(false);
 
   const handleDeleteRequest = async (requestId: number) => {
     setDeletingRequest(requestId);
@@ -697,6 +706,29 @@ export default function EventQueuePage() {
       setActionError(err instanceof ApiError ? err.message : 'Failed to refresh metadata');
     } finally {
       setRefreshingRequest(null);
+    }
+  };
+
+  const handleRejectAll = async () => {
+    setRejectingAll(true);
+    try {
+      await api.rejectAllRequests(code);
+      const updatedRequests = await api.getRequests(code);
+      setRequests(updatedRequests);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Failed to reject all requests');
+    } finally {
+      setRejectingAll(false);
+    }
+  };
+
+  const handleBulkDelete = async (status?: string) => {
+    try {
+      await api.bulkDeleteRequests(code, status);
+      const updatedRequests = await api.getRequests(code);
+      setRequests(updatedRequests);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Failed to bulk delete requests');
     }
   };
 
@@ -964,8 +996,11 @@ export default function EventQueuePage() {
               beatportLinked={!!beatportStatus?.linked}
               onAcceptTrack={handleAcceptRecommendedTrack}
               onRefreshRequests={handleRefreshRequests}
+              onRejectAll={handleRejectAll}
+              onBulkDelete={handleBulkDelete}
               onDeleteRequest={handleDeleteRequest}
               onRefreshMetadata={handleRefreshMetadata}
+              rejectingAll={rejectingAll}
               deletingRequest={deletingRequest}
               refreshingRequest={refreshingRequest}
             />

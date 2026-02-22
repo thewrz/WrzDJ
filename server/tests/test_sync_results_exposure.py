@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.event import Event
-from app.models.request import Request, RequestStatus, TidalSyncStatus
+from app.models.request import Request, RequestStatus
 
 
 class TestGetEventRequestsIncludesSyncFields:
@@ -44,8 +44,6 @@ class TestGetEventRequestsIncludesSyncFields:
             source="manual",
             status=RequestStatus.ACCEPTED.value,
             dedupe_key="sync_expose_test_1",
-            tidal_track_id="123",
-            tidal_sync_status=TidalSyncStatus.SYNCED.value,
             raw_search_query="deadmau5 Strobe",
             sync_results_json=sync_data,
         )
@@ -62,8 +60,6 @@ class TestGetEventRequestsIncludesSyncFields:
 
         req = data[0]
         assert req["sync_results_json"] == sync_data
-        assert req["tidal_track_id"] == "123"
-        assert req["tidal_sync_status"] == "synced"
         assert req["raw_search_query"] == "deadmau5 Strobe"
 
     def test_null_sync_fields(
@@ -92,8 +88,6 @@ class TestGetEventRequestsIncludesSyncFields:
         assert response.status_code == 200
         req = response.json()[0]
         assert req["sync_results_json"] is None
-        assert req["tidal_track_id"] is None
-        assert req["tidal_sync_status"] is None
         assert req["raw_search_query"] is None
 
 

@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
-from app.models.request import Request, TidalSyncStatus
+from app.models.request import Request
 from app.services.intent_parser import parse_intent
 from app.services.sync.base import SyncResult, SyncStatus, TrackMatch, sanitize_sync_error
 from app.services.sync.enrichment_pipeline import (  # noqa: F401
@@ -58,7 +58,6 @@ def sync_request_to_services(db: Session, request: Request) -> MultiSyncResult:
     3. Get connected adapters for the event's DJ
     4. Fan out: each adapter.sync_track(...)
     5. Persist per-service results as JSON on request
-    6. Backward compat: populate tidal_track_id/tidal_sync_status
     """
     event = request.event
     user = event.created_by
@@ -234,10 +233,6 @@ def sync_requests_batch(db: Session, requests: list[Request]) -> None:
 
 def _is_already_synced(request: Request, service_name: str) -> bool:
     """Check if a request is already successfully synced to a service."""
-    # Check legacy Tidal column
-    if service_name == "tidal" and request.tidal_sync_status == TidalSyncStatus.SYNCED.value:
-        return True
-
     # Check multi-service JSON results
     if request.sync_results_json:
         try:
@@ -253,7 +248,7 @@ def _is_already_synced(request: Request, service_name: str) -> bool:
 
 
 def _persist_sync_result(request: Request, result: SyncResult) -> None:
-    """Persist a sync result to a request's JSON and legacy columns.
+    """Persist a sync result to a request's JSON column.
 
     Replaces any existing result for the same service (upsert semantics).
     """
@@ -283,13 +278,3 @@ def _persist_sync_result(request: Request, result: SyncResult) -> None:
         }
     )
     request.sync_results_json = json.dumps(existing)
-
-    # Backward compat: populate legacy Tidal columns
-    if result.service == "tidal":
-        if result.status == SyncStatus.ADDED and result.track_match:
-            request.tidal_track_id = result.track_match.track_id
-            request.tidal_sync_status = TidalSyncStatus.SYNCED.value
-        elif result.status == SyncStatus.NOT_FOUND:
-            request.tidal_sync_status = TidalSyncStatus.NOT_FOUND.value
-        else:
-            request.tidal_sync_status = TidalSyncStatus.ERROR.value

@@ -17,8 +17,6 @@ function makeRequest(overrides: Partial<SongRequest> = {}): SongRequest {
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
     raw_search_query: null,
-    tidal_track_id: null,
-    tidal_sync_status: null,
     sync_results_json: null,
     vote_count: 0,
     genre: null,

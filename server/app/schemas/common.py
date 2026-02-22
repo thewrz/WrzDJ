@@ -21,6 +21,11 @@ class AcceptAllResponse(BaseModel):
     accepted_count: int
 
 
+class BulkActionResponse(BaseModel):
+    status: str
+    count: int
+
+
 class TidalAuthStartResponse(BaseModel):
     verification_url: str | None
     user_code: str

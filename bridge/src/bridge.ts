@@ -168,6 +168,7 @@ export async function postNowPlaying(
   artist: string,
   album?: string,
   deck?: string,
+  source?: string,
 ): Promise<boolean> {
   const payload: NowPlayingPayload = {
     event_code: config.eventCode,
@@ -175,6 +176,7 @@ export async function postNowPlaying(
     artist,
     album: album ?? null,
     deck: deck ?? null,
+    source: source ?? null,
   };
 
   log.info(`Now Playing: "${title}" by ${artist}`);

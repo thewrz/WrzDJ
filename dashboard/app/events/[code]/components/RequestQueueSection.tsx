@@ -23,8 +23,11 @@ interface RequestQueueSectionProps {
   onSyncToTidal: (requestId: number) => void;
   onOpenTidalPicker: (requestId: number) => void;
   onScrollToSyncReport?: (requestId: number) => void;
+  onRejectAll?: () => Promise<void>;
+  onBulkDelete?: (status?: string) => Promise<void>;
   onDeleteRequest?: (requestId: number) => Promise<void>;
   onRefreshMetadata?: (requestId: number) => Promise<void>;
+  rejectingAll?: boolean;
   deletingRequest?: number | null;
   refreshingRequest?: number | null;
 }
@@ -42,8 +45,11 @@ export function RequestQueueSection({
   onSyncToTidal,
   onOpenTidalPicker,
   onScrollToSyncReport,
+  onRejectAll,
+  onBulkDelete,
   onDeleteRequest,
   onRefreshMetadata,
+  rejectingAll,
   deletingRequest,
   refreshingRequest,
 }: RequestQueueSectionProps) {
@@ -89,10 +95,7 @@ export function RequestQueueSection({
     if (!window.confirm(`Delete all ${count} ${filter === 'all' ? '' : filter + ' '}request${count === 1 ? '' : 's'}? This cannot be undone.`)) return;
     setDeletingAll(true);
     try {
-      const ids = filteredRequests.map((r) => r.id);
-      for (const id of ids) {
-        await onDeleteRequest?.(id);
-      }
+      await onBulkDelete?.(filter === 'all' ? undefined : filter);
     } finally {
       setDeletingAll(false);
     }
@@ -137,13 +140,26 @@ export function RequestQueueSection({
               Advanced
             </label>
             {statusCounts.new > 0 && (
-              <button
-                className="btn btn-success btn-sm"
-                onClick={onAcceptAll}
-                disabled={acceptingAll}
-              >
-                {acceptingAll ? 'Accepting...' : `Accept All (${statusCounts.new})`}
-              </button>
+              <>
+                <button
+                  className="btn btn-success btn-sm"
+                  onClick={onAcceptAll}
+                  disabled={acceptingAll}
+                >
+                  {acceptingAll ? 'Accepting...' : `Accept All (${statusCounts.new})`}
+                </button>
+                <button
+                  className="btn btn-danger btn-sm"
+                  onClick={() => {
+                    if (window.confirm(`Reject all ${statusCounts.new} new request${statusCounts.new === 1 ? '' : 's'}?`)) {
+                      onRejectAll?.();
+                    }
+                  }}
+                  disabled={rejectingAll}
+                >
+                  {rejectingAll ? 'Rejecting...' : `Reject All (${statusCounts.new})`}
+                </button>
+              </>
             )}
             {advancedMode && (
               <>
@@ -197,6 +213,36 @@ export function RequestQueueSection({
                 })(),
               }}
             >
+              {request.artwork_url ? (
+                <img
+                  src={request.artwork_url}
+                  alt=""
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: '0.25rem',
+                    objectFit: 'cover',
+                    flexShrink: 0,
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: '0.25rem',
+                    background: '#2a2a2a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    fontSize: '1rem',
+                    color: '#555',
+                  }}
+                >
+                  ♪
+                </div>
+              )}
               <div className="request-info">
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.375rem' }}>
                   <h3 style={{ margin: 0 }}>

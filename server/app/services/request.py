@@ -223,6 +223,48 @@ def clear_request_metadata(db: Session, request: Request) -> Request:
     return request
 
 
+def reject_all_new_requests(db: Session, event: Event) -> int:
+    """Reject all NEW requests for an event. Returns count of rejected requests."""
+    new_requests = (
+        db.query(Request)
+        .filter(
+            Request.event_id == event.id,
+            Request.status == RequestStatus.NEW.value,
+        )
+        .all()
+    )
+    now = utcnow()
+    for req in new_requests:
+        req.status = RequestStatus.REJECTED.value
+        req.updated_at = now
+    db.commit()
+    return len(new_requests)
+
+
+def bulk_delete_requests(db: Session, event: Event, status: str | None = None) -> int:
+    """Bulk delete requests for an event, optionally filtered by status.
+
+    Returns count of deleted requests.
+    """
+    from app.models.request_vote import RequestVote
+
+    query = db.query(Request).filter(Request.event_id == event.id)
+    if status:
+        query = query.filter(Request.status == status)
+
+    request_ids = [r.id for r in query.all()]
+    if not request_ids:
+        return 0
+
+    # Delete votes first (SQLite doesn't enforce FK cascades)
+    db.query(RequestVote).filter(RequestVote.request_id.in_(request_ids)).delete(
+        synchronize_session=False
+    )
+    count = db.query(Request).filter(Request.id.in_(request_ids)).delete(synchronize_session=False)
+    db.commit()
+    return count
+
+
 def get_request_by_id(db: Session, request_id: int) -> Request | None:
     """Get a request by its ID."""
     return db.query(Request).filter(Request.id == request_id).first()

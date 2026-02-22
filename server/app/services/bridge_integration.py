@@ -26,6 +26,7 @@ def handle_now_playing_update(
     artist: str,
     album: str | None = None,
     deck: str | None = None,
+    source: str | None = None,
 ) -> NowPlaying | None:
     """Handle a new track from the bridge.
 
@@ -68,18 +69,13 @@ def handle_now_playing_update(
         req.updated_at = _utcnow()
         logger.info(f"Marked request {req.id} as played (bridge override)")
 
-    # Clear System A pointer so it doesn't conflict
-    if event.now_playing_request_id is not None:
-        event.now_playing_request_id = None
-        event.now_playing_updated_at = _utcnow()
-
     # Step 3: Upsert now_playing
     if existing:
         existing.title = title
         existing.artist = artist
         existing.album = album
         existing.deck = deck
-        existing.source = "stagelinq"
+        existing.source = source or "bridge"
         existing.started_at = _utcnow()
         existing.spotify_track_id = None
         existing.album_art_url = None
@@ -93,7 +89,7 @@ def handle_now_playing_update(
             artist=artist,
             album=album,
             deck=deck,
-            source="stagelinq",
+            source=source or "bridge",
             started_at=_utcnow(),
         )
         db.add(now_playing)

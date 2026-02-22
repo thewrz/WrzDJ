@@ -17,6 +17,7 @@ from app.schemas.now_playing import (
     PlayHistoryResponse,
 )
 from app.services.event import EventLookupResult, get_event_by_code_with_status
+from app.services.event_bus import publish_event
 from app.services.now_playing import (
     clear_now_playing,
     get_now_playing,
@@ -76,9 +77,19 @@ def post_now_playing(
         payload.artist,
         payload.album,
         payload.deck,
+        payload.source,
     )
     if not result:
         raise HTTPException(status_code=404, detail="Event not found")
+    publish_event(
+        payload.event_code,
+        "now_playing_changed",
+        {
+            "title": payload.title,
+            "artist": payload.artist,
+            "source": payload.source or "bridge",
+        },
+    )
     return StatusResponse(status="ok")
 
 
@@ -102,6 +113,14 @@ def post_bridge_status(
     success = update_bridge_status(db, payload.event_code, payload.connected, payload.device_name)
     if not success:
         raise HTTPException(status_code=404, detail="Event not found")
+    publish_event(
+        payload.event_code,
+        "bridge_status_changed",
+        {
+            "connected": payload.connected,
+            "device_name": payload.device_name,
+        },
+    )
     return StatusResponse(status="ok")
 
 

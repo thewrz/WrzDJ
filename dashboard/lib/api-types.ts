@@ -41,9 +41,6 @@ export interface SongRequest {
   is_duplicate?: boolean;
   // Search intent
   raw_search_query: string | null;
-  // Tidal sync status
-  tidal_track_id: string | null;
-  tidal_sync_status: 'pending' | 'synced' | 'not_found' | 'error' | null;
   // Multi-service sync results (JSON string)
   sync_results_json: string | null;
   // Track metadata
@@ -66,9 +63,17 @@ export interface GuestRequestInfo extends PublicRequestInfo {
   status: 'new' | 'accepted';
 }
 
+export interface GuestNowPlaying {
+  title: string;
+  artist: string;
+  album_art_url: string | null;
+  source: string;
+}
+
 export interface GuestRequestListResponse {
   event: { code: string; name: string };
   requests: GuestRequestInfo[];
+  now_playing: GuestNowPlaying | null;
 }
 
 export interface HasRequestedResponse {

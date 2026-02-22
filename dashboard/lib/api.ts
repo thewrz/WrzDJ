@@ -54,6 +54,7 @@ export type {
   DisplaySettingsResponse,
   Event,
   EventMusicProfile,
+  GuestNowPlaying,
   GuestRequestInfo,
   GuestRequestListResponse,
   HasRequestedResponse,
@@ -308,6 +309,19 @@ class ApiClient {
   async acceptAllRequests(code: string): Promise<{ status: string; accepted_count: number }> {
     return this.fetch(`/api/events/${code}/requests/accept-all`, {
       method: 'POST',
+    });
+  }
+
+  async rejectAllRequests(code: string): Promise<{ status: string; count: number }> {
+    return this.fetch(`/api/events/${code}/requests/reject-all`, {
+      method: 'POST',
+    });
+  }
+
+  async bulkDeleteRequests(code: string, status?: string): Promise<{ status: string; count: number }> {
+    const params = status ? `?status=${status}` : '';
+    return this.fetch(`/api/events/${code}/requests/bulk${params}`, {
+      method: 'DELETE',
     });
   }
 
