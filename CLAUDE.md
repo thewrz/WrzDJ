@@ -2,11 +2,12 @@
 
 ## Project Overview
 
-WrzDJ is a DJ song request management system with four services:
+WrzDJ is a DJ song request management system with five components:
 - **Backend**: Python FastAPI (`server/`) — SQLAlchemy 2.0, PostgreSQL, Alembic migrations
 - **Frontend**: Next.js 16+ with React 19 (`dashboard/`) — TypeScript, vanilla CSS (dark theme)
 - **Bridge**: Node.js DJ equipment integration (`bridge/`) — plugin system for Denon StageLinQ, Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast
 - **Bridge App**: Electron GUI for the bridge (`bridge-app/`) — React + Vite, cross-platform installers
+- **Kiosk**: Raspberry Pi deployment (`kiosk/`) — setup scripts, systemd services, Cage + Chromium kiosk mode
 
 ## Git Workflow
 
@@ -399,6 +400,49 @@ REJECTED → NEW (re-open)
 - Request status transitions are enforced by a state machine — invalid transitions (e.g., NEW → PLAYED) return 400
 - Alembic migrations must stay in sync with models — CI runs `alembic check` to detect drift
 - Services that call only sync APIs (Spotify, Beatport search) should not be `async` — avoids unnecessary `await`
+
+## Kiosk (Raspberry Pi)
+
+### Overview
+The `kiosk/` directory contains everything needed to turn a Raspberry Pi into a dedicated WrzDJ event display. It boots into a locked-down Cage (Wayland compositor) + Chromium kiosk that loads `/kiosk-pair` — no desktop, no escape routes.
+
+### Key Files
+- `kiosk/setup.sh` — Main setup script, transforms fresh Pi OS Lite into a kiosk (idempotent)
+- `kiosk/wrzdj-kiosk.conf` — Configuration template (URL, rotation, WiFi, hotspot, Chromium flags)
+- `kiosk/wifi-portal/portal.py` — WiFi captive portal server (Python stdlib only, port 80)
+- `kiosk/wifi-portal/dnsmasq-captive.conf` — DNS redirect config for hotspot mode
+- `kiosk/systemd/wrzdj-kiosk.service` — Cage + Chromium service definition (reference only — not enabled)
+- `kiosk/systemd/wrzdj-wifi-portal.service` — WiFi portal service (starts on boot, port 80)
+- `kiosk/systemd/wrzdj-kiosk-watchdog.{service,timer,sh}` — Crash recovery (clears Chromium crash flag, restarts failed service)
+- `kiosk/overlayfs/setup-overlayfs.sh` — Optional SD card write protection via overlayfs
+- `kiosk/README.md` — User-facing setup guide
+
+### WiFi Captive Portal
+- `wrzdj-wifi-portal.service` starts on boot, runs portal.py on port 80
+- Cage launches from `/home/kiosk/.bash_profile` on tty1 auto-login (needs logind seat access for DRM/input)
+- Chromium always opens `http://localhost` first — portal handles connectivity detection and redirect
+- **WiFi not configured**: Portal pre-scans networks, starts hotspot (`WrzDJ-Kiosk`), serves setup page on touchscreen + phone captive portal
+- **WiFi already configured**: Portal detects internet → serves JS redirect to `KIOSK_URL` (~0ms overhead)
+- DNS redirect: NM dnsmasq-shared resolves all domains to `10.42.0.1` during hotspot mode (config in `/etc/NetworkManager/dnsmasq-shared.d/`)
+- Phone captive portal detection: Android/iOS/Windows connectivity check URLs all redirect to portal
+- Config: `HOTSPOT_SSID` and `HOTSPOT_PASSWORD` in `/etc/wrzdj-kiosk.conf`
+
+### Setup Flow
+1. DJ flashes Pi OS Lite with Raspberry Pi Imager (SSH only — WiFi optional)
+2. SSH in, run `sudo ./WrzDJ/kiosk/setup.sh`
+3. Reboot — if WiFi pre-configured, boots into kiosk pairing; if not, shows WiFi setup page
+4. DJ configures WiFi via touchscreen or phone captive portal
+5. DJ scans QR from phone, selects event — kiosk shows event display
+
+### Design Decisions
+- **Cage via .bash_profile** (not systemd service): Cage needs logind seat access; launching from login shell on tty1 provides it. Self-healing: Cage exit → session ends → getty restarts auto-login → .bash_profile re-launches Cage
+- **Dedicated `kiosk` user**: Not `pi` — principle of least privilege, groups: `input`, `video`, `render`
+- **WiFi portal as gateway**: Chromium always loads `http://localhost`; portal handles online/offline routing. One extra localhost hop (~0ms) is worth the single code path.
+- **Python stdlib only for portal**: No pip install needed. Pi OS Lite includes Python 3 + stdlib.
+- **Pre-scan before hotspot**: Pi's WiFi chip can't scan in AP mode. Scan first, cache results, show cached list.
+- **OverlayFS opt-in**: Protects SD from corruption but loses localStorage on reboot (kiosk re-pairs in ~30s)
+- **Config at `/etc/wrzdj-kiosk.conf`**: Change URL + restart service, no re-run needed
+- **No backend/frontend changes**: Existing pairing flow works as-is — kiosk is pure deployment infrastructure
 
 ## Upstream Dependency Health Checks
 

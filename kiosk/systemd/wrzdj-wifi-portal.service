@@ -1,0 +1,27 @@
+[Unit]
+Description=WrzDJ WiFi Portal
+Documentation=https://github.com/thewrz/WrzDJ/tree/main/kiosk
+After=NetworkManager-wait-online.service
+Wants=NetworkManager-wait-online.service
+Before=wrzdj-kiosk.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/lib/wrzdj/portal.py
+Restart=on-failure
+RestartSec=3
+
+# Security hardening — runs as root (needs port 80 + nmcli) but
+# restrict filesystem and kernel access where possible
+ProtectHome=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+NoNewPrivileges=true
+ReadOnlyPaths=/usr/local/lib/wrzdj
+
+[Install]
+WantedBy=multi-user.target

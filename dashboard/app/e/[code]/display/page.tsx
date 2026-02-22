@@ -250,6 +250,7 @@ export default function KioskDisplayPage() {
           user-select: none;
           -webkit-user-select: none;
           -webkit-touch-callout: none;
+          cursor: none;
         }
         body {
           overflow: hidden;
@@ -834,7 +835,14 @@ export default function KioskDisplayPage() {
       >
         {display.banner_kiosk_url && (
           <div className="kiosk-banner-bg">
-            <img src={display.banner_kiosk_url} alt="" />
+            <img
+              src={display.banner_kiosk_url}
+              alt=""
+              onError={(e) => {
+                const parent = e.currentTarget.parentElement;
+                if (parent) parent.style.display = 'none';
+              }}
+            />
           </div>
         )}
 
@@ -977,7 +985,7 @@ export default function KioskDisplayPage() {
 
         {!display.kiosk_display_only && display.requests_open && (
           <button className="request-button" onClick={() => setShowRequestModal(true)}>
-            🎵 Request a Song
+            ♪ Request a Song
           </button>
         )}
       </div>

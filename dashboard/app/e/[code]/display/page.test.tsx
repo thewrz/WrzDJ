@@ -715,6 +715,59 @@ describe('KioskDisplayPage', () => {
 
       expect(document.querySelector('.kiosk-banner-bg')).not.toBeInTheDocument();
     });
+
+    it('hides banner container on image load error', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        banner_kiosk_url: '/uploads/banners/missing-kiosk.webp',
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Test Event');
+
+      const bannerImg = document.querySelector('.kiosk-banner-bg img') as HTMLImageElement;
+      expect(bannerImg).toBeInTheDocument();
+
+      // Simulate image load error
+      await act(async () => {
+        bannerImg.dispatchEvent(new Event('error'));
+      });
+
+      // Parent container should be hidden
+      const bannerBg = document.querySelector('.kiosk-banner-bg') as HTMLElement;
+      expect(bannerBg.style.display).toBe('none');
+    });
+  });
+
+  describe('Kiosk-specific styling', () => {
+    it('uses musical note symbol on request button', async () => {
+      setupDefaultMocks();
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Test Event');
+
+      const button = screen.getByRole('button', { name: /request a song/i });
+      expect(button.textContent).toContain('♪');
+    });
+
+    it('applies cursor:none to global styles', async () => {
+      setupDefaultMocks();
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Test Event');
+
+      // Check that the global style tag contains cursor: none
+      const styleTags = document.querySelectorAll('style');
+      const hasNoCursor = Array.from(styleTags).some(
+        (tag) => tag.textContent?.includes('cursor: none') || tag.textContent?.includes('cursor:none')
+      );
+      expect(hasNoCursor).toBe(true);
+    });
   });
 
   describe('Error display', () => {
