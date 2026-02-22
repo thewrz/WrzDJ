@@ -223,6 +223,7 @@ export function RequestQueueSection({
                     borderRadius: '0.25rem',
                     objectFit: 'cover',
                     flexShrink: 0,
+                    marginRight: '0.625rem',
                   }}
                 />
               ) : (
@@ -236,6 +237,7 @@ export function RequestQueueSection({
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
+                    marginRight: '0.625rem',
                     fontSize: '1rem',
                     color: '#555',
                   }}

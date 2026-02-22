@@ -97,10 +97,22 @@ describe('HelpButton', () => {
     expect(startFn).toHaveBeenCalledWith('my-page');
   });
 
-  it('has fixed position class', () => {
+  it('has fixed position class by default', () => {
     render(<HelpButton page="events" />);
     const container = screen.getByRole('button', { name: 'Toggle help mode' }).parentElement;
-    expect(container?.className).toContain('help-btn-container');
+    expect(container?.className).toBe('help-btn-container');
+  });
+
+  it('uses inline class when inline prop is true', () => {
+    render(<HelpButton page="events" inline />);
+    const container = screen.getByRole('button', { name: 'Toggle help mode' }).parentElement;
+    expect(container?.className).toBe('help-btn-container-inline');
+  });
+
+  it('uses fixed class when inline prop is false', () => {
+    render(<HelpButton page="events" inline={false} />);
+    const container = screen.getByRole('button', { name: 'Toggle help mode' }).parentElement;
+    expect(container?.className).toBe('help-btn-container');
   });
 
   it('renders nothing when wrzdj-help-disabled flag is set', () => {

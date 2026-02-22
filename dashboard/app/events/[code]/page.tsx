@@ -797,7 +797,7 @@ export default function EventQueuePage() {
 
   return (
     <div className={`container${compactMode ? ' compact' : ''}`}>
-      <div style={{ position: 'fixed', top: '1rem', right: '4rem', zIndex: 1200, display: 'flex', gap: '0.5rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
         <button
           className="theme-toggle"
           onClick={toggleCompactMode}
@@ -808,8 +808,8 @@ export default function EventQueuePage() {
           <span className="theme-toggle-label">{compactMode ? 'Dense' : 'Normal'}</span>
         </button>
         <ThemeToggle />
+        <HelpButton page={helpPageId} inline />
       </div>
-      <HelpButton page={helpPageId} />
       <OnboardingOverlay page={helpPageId} />
 
       {actionError && (
