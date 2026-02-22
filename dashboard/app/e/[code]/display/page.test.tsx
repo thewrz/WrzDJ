@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import KioskDisplayPage from './page';
 
 // Mock next/navigation
@@ -12,6 +12,16 @@ vi.mock('qrcode.react', () => ({
   QRCodeSVG: ({ value }: { value: string }) => (
     <div data-testid="qr-code" data-value={value}>QR Code</div>
   ),
+}));
+
+// Mock SSE hook
+vi.mock('@/lib/use-event-stream', () => ({
+  useEventStream: () => ({ connected: false }),
+}));
+
+// Mock RequestModal
+vi.mock('./components/RequestModal', () => ({
+  RequestModal: () => <div data-testid="request-modal">Modal</div>,
 }));
 
 // Mock API responses
@@ -70,11 +80,21 @@ vi.mock('@/lib/api', () => ({
   },
 }));
 
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
+
+function setupDefaultMocks() {
+  vi.mocked(api.getKioskDisplay).mockResolvedValue(mockKioskDisplay);
+  vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+  vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+}
 
 describe('KioskDisplayPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('Three-column layout', () => {
@@ -217,6 +237,22 @@ describe('KioskDisplayPage', () => {
       expect(screen.getByText('Requests Closed')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /request a song/i })).not.toBeInTheDocument();
     });
+
+    it('hides request button in display-only mode', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        kiosk_display_only: true,
+        requests_open: true,
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Test Event');
+
+      expect(screen.queryByRole('button', { name: /request a song/i })).not.toBeInTheDocument();
+    });
   });
 
   describe('Transient error resilience', () => {
@@ -270,6 +306,527 @@ describe('KioskDisplayPage', () => {
 
       // History section should still be present (for 3-column layout consistency)
       expect(screen.getByText('Recently Played')).toBeInTheDocument();
+    });
+
+    it('shows empty history message', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue(mockKioskDisplay);
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Test Event');
+
+      expect(screen.getByText('No songs played yet.')).toBeInTheDocument();
+    });
+  });
+
+  describe('3s polling loop', () => {
+    it('calls loadDisplay on mount', async () => {
+      setupDefaultMocks();
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Test Event');
+
+      expect(api.getKioskDisplay).toHaveBeenCalledTimes(1);
+    });
+
+    it('polls every 3 seconds', async () => {
+      vi.useFakeTimers();
+      setupDefaultMocks();
+
+      render(<KioskDisplayPage />);
+      // Flush initial load
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+
+      expect(api.getKioskDisplay).toHaveBeenCalledTimes(1);
+
+      // Advance 3s — second poll
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      expect(api.getKioskDisplay).toHaveBeenCalledTimes(2);
+
+      // Advance 3s more — third poll
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      expect(api.getKioskDisplay).toHaveBeenCalledTimes(3);
+    });
+
+    it('stops polling on 404', async () => {
+      vi.useFakeTimers();
+      vi.mocked(api.getKioskDisplay).mockRejectedValue(new ApiError('Not found', 404));
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+
+      const callCount = vi.mocked(api.getKioskDisplay).mock.calls.length;
+
+      // Advance past several poll intervals — no more calls
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+      expect(api.getKioskDisplay).toHaveBeenCalledTimes(callCount);
+    });
+
+    it('stops polling on 410', async () => {
+      vi.useFakeTimers();
+      vi.mocked(api.getKioskDisplay).mockRejectedValue(new ApiError('Expired', 410));
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+
+      const callCount = vi.mocked(api.getKioskDisplay).mock.calls.length;
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+      expect(api.getKioskDisplay).toHaveBeenCalledTimes(callCount);
+    });
+
+    it('continues polling on transient error', async () => {
+      vi.useFakeTimers();
+      vi.mocked(api.getKioskDisplay)
+        .mockResolvedValueOnce(mockKioskDisplay) // initial
+        .mockRejectedValueOnce(new Error('Transient')) // 1st poll
+        .mockResolvedValue(mockKioskDisplay); // subsequent
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+      expect(api.getKioskDisplay).toHaveBeenCalledTimes(1);
+
+      // Error on second call
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      expect(api.getKioskDisplay).toHaveBeenCalledTimes(2);
+
+      // Should still poll after error
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      expect(api.getKioskDisplay).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('Sticky now-playing (10s grace)', () => {
+    it('shows now-playing immediately', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue(mockKioskDisplay);
+      vi.mocked(api.getNowPlaying).mockResolvedValue(mockNowPlaying);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Currently Playing Song');
+      expect(screen.getByText('Current Artist')).toBeInTheDocument();
+    });
+
+    it('shows LIVE badge for bridge sources', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue(mockKioskDisplay);
+      vi.mocked(api.getNowPlaying).mockResolvedValue(mockNowPlaying);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Currently Playing Song');
+      expect(screen.getByText('LIVE')).toBeInTheDocument();
+    });
+
+    it('does not show LIVE badge for manual source', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue(mockKioskDisplay);
+      vi.mocked(api.getNowPlaying).mockResolvedValue({
+        ...mockNowPlaying,
+        source: 'manual',
+      });
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Currently Playing Song');
+      expect(screen.queryByText('LIVE')).not.toBeInTheDocument();
+    });
+
+    it('keeps track visible during 10s grace period after null', async () => {
+      vi.useFakeTimers();
+      // Initial: has now playing
+      vi.mocked(api.getKioskDisplay).mockResolvedValue(mockKioskDisplay);
+      vi.mocked(api.getNowPlaying).mockResolvedValue(mockNowPlaying);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+      expect(screen.getByText('Currently Playing Song')).toBeInTheDocument();
+
+      // Now playing goes null on next poll
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+
+      // Track should still be visible during grace period
+      expect(screen.getByText('Currently Playing Song')).toBeInTheDocument();
+
+      // Should have fading class
+      const section = screen.getByText('Now Playing').closest('.now-playing-section');
+      expect(section?.classList.contains('fading')).toBe(true);
+    });
+
+    it('clears track after 10s grace period', async () => {
+      vi.useFakeTimers();
+      vi.mocked(api.getKioskDisplay).mockResolvedValue(mockKioskDisplay);
+      vi.mocked(api.getNowPlaying).mockResolvedValue(mockNowPlaying);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+      expect(screen.getByText('Currently Playing Song')).toBeInTheDocument();
+
+      // Now playing goes null
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+
+      // Advance past the 10s grace
+      await act(async () => { await vi.advanceTimersByTimeAsync(11000); });
+
+      expect(screen.queryByText('Currently Playing Song')).not.toBeInTheDocument();
+      expect(screen.queryByText('Now Playing')).not.toBeInTheDocument();
+    });
+
+    it('cancels grace timer when new track arrives', async () => {
+      vi.useFakeTimers();
+      vi.mocked(api.getKioskDisplay).mockResolvedValue(mockKioskDisplay);
+      vi.mocked(api.getNowPlaying).mockResolvedValue(mockNowPlaying);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+
+      // Now playing goes null — starts grace period
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+
+      // New track arrives within grace period
+      const newTrack = { ...mockNowPlaying, title: 'New Track', artist: 'New Artist' };
+      vi.mocked(api.getNowPlaying).mockResolvedValue(newTrack);
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+
+      expect(screen.getByText('New Track')).toBeInTheDocument();
+      expect(screen.getByText('New Artist')).toBeInTheDocument();
+
+      // Should not be fading
+      const section = screen.getByText('Now Playing').closest('.now-playing-section');
+      expect(section?.classList.contains('fading')).toBe(false);
+    });
+  });
+
+  describe('New item animation', () => {
+    it('adds queue-item-new class for new items', async () => {
+      vi.useFakeTimers();
+      // Initial: 1 item
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        accepted_queue: [{ id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, vote_count: 0 }],
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+
+      // Second poll adds a new item
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        accepted_queue: [
+          { id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, vote_count: 0 },
+          { id: 3, title: 'Song 3', artist: 'Artist 3', artwork_url: null, vote_count: 0 },
+        ],
+      });
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+
+      const newItem = screen.getByText('Song 3').closest('.queue-item');
+      expect(newItem?.classList.contains('queue-item-new')).toBe(true);
+    });
+
+    it('removes animation class after 800ms', async () => {
+      vi.useFakeTimers();
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        accepted_queue: [{ id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, vote_count: 0 }],
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+
+      // Add new item
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        accepted_queue: [
+          { id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, vote_count: 0 },
+          { id: 3, title: 'Song 3', artist: 'Artist 3', artwork_url: null, vote_count: 0 },
+        ],
+      });
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+
+      // Verify animation class is present
+      let newItem = screen.getByText('Song 3').closest('.queue-item');
+      expect(newItem?.classList.contains('queue-item-new')).toBe(true);
+
+      // Advance 800ms for animation timeout
+      await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+
+      newItem = screen.getByText('Song 3').closest('.queue-item');
+      expect(newItem?.classList.contains('queue-item-new')).toBe(false);
+    });
+  });
+
+  describe('Vote badges', () => {
+    it('shows vote count badge for items with votes', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        accepted_queue: [
+          { id: 1, title: 'Popular Song', artist: 'Artist', artwork_url: null, vote_count: 5 },
+        ],
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Popular Song');
+      expect(screen.getByText('5 votes')).toBeInTheDocument();
+    });
+
+    it('uses singular "vote" for count of 1', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        accepted_queue: [
+          { id: 1, title: 'Song', artist: 'Artist', artwork_url: null, vote_count: 1 },
+        ],
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Song');
+      expect(screen.getByText('1 vote')).toBeInTheDocument();
+    });
+
+    it('hides badge for zero votes', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        accepted_queue: [
+          { id: 1, title: 'Song', artist: 'Artist', artwork_url: null, vote_count: 0 },
+        ],
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Song');
+      expect(screen.queryByText(/vote/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Kiosk protections', () => {
+    it('prevents context menu', async () => {
+      setupDefaultMocks();
+
+      render(<KioskDisplayPage />);
+      await screen.findByText('Test Event');
+
+      const event = new Event('contextmenu', { cancelable: true });
+      const prevented = !document.dispatchEvent(event);
+      expect(prevented).toBe(true);
+    });
+
+    it('prevents text selection', async () => {
+      setupDefaultMocks();
+
+      render(<KioskDisplayPage />);
+      await screen.findByText('Test Event');
+
+      const event = new Event('selectstart', { cancelable: true });
+      const prevented = !document.dispatchEvent(event);
+      expect(prevented).toBe(true);
+    });
+  });
+
+  describe('Banner', () => {
+    it('applies banner gradient with valid colors', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        banner_colors: ['#1a2b3c', '#4d5e6f', '#7a8b9c'],
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Test Event');
+
+      const container = screen.getByText('Test Event').closest('.kiosk-container') as HTMLElement;
+      const bgStyle = container?.style.getPropertyValue('--kiosk-bg');
+      expect(bgStyle).toContain('#1a2b3c');
+      expect(bgStyle).toContain('#4d5e6f');
+      expect(bgStyle).toContain('#7a8b9c');
+    });
+
+    it('falls back for invalid color values', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        banner_colors: ['bad', '#4d5e6f', 'nope'],
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Test Event');
+
+      const container = screen.getByText('Test Event').closest('.kiosk-container') as HTMLElement;
+      const bgStyle = container?.style.getPropertyValue('--kiosk-bg');
+      // Should use fallback for invalid colors
+      expect(bgStyle).toContain('#1a1a2e'); // fallback for first
+      expect(bgStyle).toContain('#4d5e6f'); // valid
+      expect(bgStyle).toContain('#0f3460'); // fallback for third
+    });
+
+    it('renders banner image when present', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        banner_kiosk_url: '/uploads/banners/test-kiosk.webp',
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Test Event');
+
+      const bannerBg = document.querySelector('.kiosk-banner-bg img') as HTMLImageElement;
+      expect(bannerBg).toBeInTheDocument();
+      expect(bannerBg.src).toContain('/uploads/banners/test-kiosk.webp');
+    });
+
+    it('does not render banner when no banner_kiosk_url', async () => {
+      setupDefaultMocks();
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Test Event');
+
+      expect(document.querySelector('.kiosk-banner-bg')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Error display', () => {
+    it('shows "Event Expired" for 410', async () => {
+      vi.mocked(api.getKioskDisplay).mockRejectedValue(new ApiError('Expired', 410));
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Event Expired');
+      expect(screen.getByText(/no longer accepting requests/i)).toBeInTheDocument();
+    });
+
+    it('shows "Event Not Found" for 404', async () => {
+      vi.mocked(api.getKioskDisplay).mockRejectedValue(new ApiError('Not found', 404));
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Event Not Found');
+      expect(screen.getByText(/does not exist/i)).toBeInTheDocument();
+    });
+
+    it('shows generic error for non-API errors on initial load', async () => {
+      vi.mocked(api.getKioskDisplay).mockRejectedValue(new Error('Network'));
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Error');
+    });
+  });
+
+  describe('Loading state', () => {
+    it('shows Loading while data is being fetched', () => {
+      vi.mocked(api.getKioskDisplay).mockImplementation(
+        () => new Promise(() => {}), // never resolves
+      );
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      expect(screen.getByText('Loading...')).toBeInTheDocument();
+    });
+  });
+
+  describe('Now playing from request fallback', () => {
+    it('shows request-based now_playing when no bridge now-playing', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        now_playing: { id: 1, title: 'Request Song', artist: 'Request Artist', artwork_url: null, vote_count: 0 },
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Request Song');
+      expect(screen.getByText('Request Artist')).toBeInTheDocument();
+      // Should not show LIVE badge for request-based
+      expect(screen.queryByText('LIVE')).not.toBeInTheDocument();
+    });
+
+    it('hides now-playing when now_playing_hidden is true', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue({
+        ...mockKioskDisplay,
+        now_playing: { id: 1, title: 'Hidden Song', artist: 'Hidden Artist', artwork_url: null, vote_count: 0 },
+        now_playing_hidden: true,
+      });
+      vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Test Event');
+
+      expect(screen.queryByText('Hidden Song')).not.toBeInTheDocument();
+      expect(screen.queryByText('Now Playing')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Artwork rendering', () => {
+    it('shows album art image when URL is present', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue(mockKioskDisplay);
+      vi.mocked(api.getNowPlaying).mockResolvedValue(mockNowPlaying);
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Currently Playing Song');
+
+      const img = screen.getByAltText('Currently Playing Song') as HTMLImageElement;
+      expect(img.src).toContain('example.com/art.jpg');
+    });
+
+    it('shows placeholder when no album art', async () => {
+      vi.mocked(api.getKioskDisplay).mockResolvedValue(mockKioskDisplay);
+      vi.mocked(api.getNowPlaying).mockResolvedValue({
+        ...mockNowPlaying,
+        album_art_url: null,
+      });
+      vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
+
+      render(<KioskDisplayPage />);
+
+      await screen.findByText('Currently Playing Song');
+
+      expect(document.querySelector('.now-playing-placeholder')).toBeInTheDocument();
     });
   });
 });
