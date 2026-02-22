@@ -79,12 +79,35 @@ export class DeckStateManager extends EventEmitter {
     let state = this.decks.get(deckId);
     if (!state) {
       if (this.decks.size >= MAX_DECKS) {
-        throw new Error(`Maximum deck limit (${MAX_DECKS}) reached`);
+        // Evict the oldest EMPTY/ENDED deck instead of throwing
+        const evicted = this.evictStaleDeck();
+        if (!evicted) {
+          throw new Error(`Maximum deck limit (${MAX_DECKS}) reached — all decks are active`);
+        }
       }
       state = createEmptyDeckState(deckId);
       this.decks.set(deckId, state);
     }
     return state;
+  }
+
+  /**
+   * Evict the first EMPTY or ENDED deck to make room for a new one.
+   * Returns true if a deck was evicted, false if all decks are active.
+   */
+  private evictStaleDeck(): boolean {
+    // Prefer EMPTY decks first, then ENDED
+    for (const priority of ["EMPTY", "ENDED"] as const) {
+      for (const [id, state] of this.decks) {
+        if (state.state === priority) {
+          this.emitLog(`Deck ${id}: Evicted (${priority}) to make room for new deck`);
+          this.clearTimer(id);
+          this.decks.delete(id);
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**

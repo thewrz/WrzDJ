@@ -32,6 +32,9 @@ import type {
 
 const DEFAULT_PORT = 8123;
 
+/** Maximum ICY metadata block size (1024 * 16 = 16KB — far exceeds any real metadata). */
+const MAX_ICY_META_LENGTH = 16_384;
+
 /** Parse ICY StreamTitle value: "Artist - Title" → { artist, title } */
 export function parseStreamTitle(raw: string): { artist: string; title: string } | null {
   if (!raw || !raw.trim()) return null;
@@ -235,6 +238,11 @@ export class TraktorBroadcastPlugin extends EventEmitter implements EquipmentSou
 
               if (metaLength === 0) {
                 // No metadata this interval
+                byteCount = 0;
+              } else if (metaLength > MAX_ICY_META_LENGTH) {
+                // Malformed stream — skip this metadata block
+                this.emit("log", `ICY metadata length ${metaLength} exceeds maximum (${MAX_ICY_META_LENGTH}), skipping`);
+                metaLength = 0;
                 byteCount = 0;
               } else {
                 readingMeta = true;

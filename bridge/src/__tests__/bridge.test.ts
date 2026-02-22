@@ -1,0 +1,346 @@
+/**
+ * Tests for bridge.ts — HTTP communication layer.
+ *
+ * Covers: postWithRetry, clearNowPlaying, postBridgeStatus, postNowPlaying,
+ * shouldSkipTrack, updateLastTrack, fetch timeout, circuit breaker integration.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// Mock config before importing bridge
+vi.mock("../config.js", () => ({
+  config: {
+    apiUrl: "http://localhost:8000",
+    apiKey: "test-api-key",
+    eventCode: "TEST123",
+    minPlaySeconds: 5,
+  },
+}));
+
+// Mock global fetch
+const mockFetch = vi.fn();
+vi.stubGlobal("fetch", mockFetch);
+
+// Import after mocks are set up
+import {
+  shouldSkipTrack,
+  updateLastTrack,
+  postNowPlaying,
+  clearNowPlaying,
+  postBridgeStatus,
+  getCircuitBreaker,
+} from "../bridge.js";
+
+function createMockResponse(status: number, body = ""): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: () => Promise.resolve(body),
+    headers: new Headers(),
+    redirected: false,
+    statusText: "",
+    type: "basic",
+    url: "",
+    clone: () => ({}) as Response,
+    body: null,
+    bodyUsed: false,
+    arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    blob: () => Promise.resolve(new Blob()),
+    formData: () => Promise.resolve(new FormData()),
+    json: () => Promise.resolve({}),
+    bytes: () => Promise.resolve(new Uint8Array()),
+  } as Response;
+}
+
+describe("bridge.ts", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockFetch.mockReset();
+    // Reset circuit breaker between tests
+    getCircuitBreaker().reset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  describe("shouldSkipTrack", () => {
+    it("skips tracks with no title", () => {
+      expect(shouldSkipTrack("Artist", "")).toBe(true);
+    });
+
+    it("allows first track", () => {
+      // Reset internal state by updating with something unique
+      updateLastTrack("__reset__", "__reset__");
+      // Advance past debounce window
+      vi.advanceTimersByTime(6000);
+
+      expect(shouldSkipTrack("Artist", "Title")).toBe(false);
+    });
+
+    it("skips duplicate tracks", () => {
+      updateLastTrack("Artist", "Title");
+      vi.advanceTimersByTime(6000);
+      expect(shouldSkipTrack("Artist", "Title")).toBe(true);
+    });
+
+    it("skips tracks within debounce window", () => {
+      updateLastTrack("Artist A", "Title A");
+      // Don't advance past the 5s debounce
+      vi.advanceTimersByTime(2000);
+      expect(shouldSkipTrack("Artist B", "Title B")).toBe(true);
+    });
+
+    it("allows tracks after debounce window", () => {
+      updateLastTrack("Artist A", "Title A");
+      vi.advanceTimersByTime(6000);
+      expect(shouldSkipTrack("Artist B", "Title B")).toBe(false);
+    });
+
+    it("is case-insensitive for deduplication", () => {
+      updateLastTrack("Artist", "Title");
+      vi.advanceTimersByTime(6000);
+      expect(shouldSkipTrack("ARTIST", "TITLE")).toBe(true);
+    });
+
+    it("trims whitespace for deduplication", () => {
+      updateLastTrack("Artist", "Title");
+      vi.advanceTimersByTime(6000);
+      expect(shouldSkipTrack("  Artist  ", "  Title  ")).toBe(true);
+    });
+  });
+
+  describe("postNowPlaying", () => {
+    it("posts now-playing update on success", async () => {
+      mockFetch.mockResolvedValue(createMockResponse(200));
+
+      const result = await postNowPlaying("Track", "Artist", "Album", "1");
+
+      expect(result).toBe(true);
+      expect(mockFetch).toHaveBeenCalledOnce();
+      const [url, options] = mockFetch.mock.calls[0]!;
+      expect(url).toBe("http://localhost:8000/api/bridge/nowplaying");
+      expect(options.method).toBe("POST");
+      expect(options.headers["Content-Type"]).toBe("application/json");
+      expect(options.headers["X-Bridge-API-Key"]).toBe("test-api-key");
+      const body = JSON.parse(options.body);
+      expect(body).toEqual({
+        event_code: "TEST123",
+        title: "Track",
+        artist: "Artist",
+        album: "Album",
+        deck: "1",
+      });
+    });
+
+    it("returns false after retry exhaustion", async () => {
+      mockFetch.mockRejectedValue(new Error("Network error"));
+
+      const promise = postNowPlaying("Track", "Artist");
+
+      // Advance through all retry backoffs: 2s, 4s, 8s
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(4000);
+      await vi.advanceTimersByTimeAsync(8000);
+
+      const result = await promise;
+      expect(result).toBe(false);
+      expect(mockFetch).toHaveBeenCalledTimes(4); // 1 initial + 3 retries
+    });
+
+    it("retries on HTTP 500", async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse(500, "Internal Server Error"))
+        .mockResolvedValueOnce(createMockResponse(200));
+
+      const promise = postNowPlaying("Track", "Artist");
+      await vi.advanceTimersByTimeAsync(2000);
+      const result = await promise;
+
+      expect(result).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("defaults album and deck to null", async () => {
+      mockFetch.mockResolvedValue(createMockResponse(200));
+      await postNowPlaying("Track", "Artist");
+
+      const body = JSON.parse(mockFetch.mock.calls[0]![1].body);
+      expect(body.album).toBeNull();
+      expect(body.deck).toBeNull();
+    });
+  });
+
+  describe("clearNowPlaying", () => {
+    it("sends DELETE request", async () => {
+      mockFetch.mockResolvedValue(createMockResponse(200));
+
+      await clearNowPlaying();
+
+      expect(mockFetch).toHaveBeenCalledOnce();
+      const [url, options] = mockFetch.mock.calls[0]!;
+      expect(url).toBe("http://localhost:8000/api/bridge/nowplaying/TEST123");
+      expect(options.method).toBe("DELETE");
+      expect(options.headers["X-Bridge-API-Key"]).toBe("test-api-key");
+    });
+
+    it("retries on failure (up to 2 retries)", async () => {
+      mockFetch
+        .mockRejectedValueOnce(new Error("Network error"))
+        .mockRejectedValueOnce(new Error("Network error"))
+        .mockResolvedValueOnce(createMockResponse(200));
+
+      const promise = clearNowPlaying();
+      await vi.advanceTimersByTimeAsync(1000); // 1st retry backoff
+      await vi.advanceTimersByTimeAsync(2000); // 2nd retry backoff
+      await promise;
+
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    it("handles all retries failing gracefully", async () => {
+      mockFetch.mockRejectedValue(new Error("Network error"));
+
+      const promise = clearNowPlaying();
+      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(2000);
+      // Should not throw
+      await promise;
+
+      expect(mockFetch).toHaveBeenCalledTimes(3); // 1 + 2 retries
+    });
+
+    it("retries on HTTP error response", async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse(503, "Unavailable"))
+        .mockResolvedValueOnce(createMockResponse(200));
+
+      const promise = clearNowPlaying();
+      await vi.advanceTimersByTimeAsync(1000);
+      await promise;
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("postBridgeStatus", () => {
+    it("posts connected status", async () => {
+      mockFetch.mockResolvedValue(createMockResponse(200));
+
+      const result = await postBridgeStatus(true, "CDJ-2000");
+
+      expect(result).toBe(true);
+      const body = JSON.parse(mockFetch.mock.calls[0]![1].body);
+      expect(body).toEqual({
+        event_code: "TEST123",
+        connected: true,
+        device_name: "CDJ-2000",
+      });
+    });
+
+    it("posts disconnected status with null device name", async () => {
+      mockFetch.mockResolvedValue(createMockResponse(200));
+
+      await postBridgeStatus(false);
+
+      const body = JSON.parse(mockFetch.mock.calls[0]![1].body);
+      expect(body.connected).toBe(false);
+      expect(body.device_name).toBeNull();
+    });
+  });
+
+  describe("circuit breaker integration", () => {
+    it("opens circuit after 3 consecutive failures", async () => {
+      mockFetch.mockRejectedValue(new Error("Network error"));
+
+      // 1st full retry sequence (4 attempts)
+      const p1 = postBridgeStatus(true);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await p1;
+
+      // 2nd full retry sequence
+      const p2 = postBridgeStatus(true);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await p2;
+
+      // 3rd full retry sequence
+      const p3 = postBridgeStatus(true);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await p3;
+
+      expect(getCircuitBreaker().getState()).toBe("OPEN");
+
+      // 4th call should be skipped (circuit open)
+      mockFetch.mockClear();
+      const result = await postBridgeStatus(true);
+      expect(result).toBe(false);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("recovers after cooldown", async () => {
+      mockFetch.mockRejectedValue(new Error("Network error"));
+
+      // Trip the circuit breaker
+      for (let i = 0; i < 3; i++) {
+        const p = postBridgeStatus(true);
+        await vi.advanceTimersByTimeAsync(20_000);
+        await p;
+      }
+
+      expect(getCircuitBreaker().getState()).toBe("OPEN");
+
+      // Wait for cooldown (60s)
+      vi.advanceTimersByTime(60_000);
+      mockFetch.mockResolvedValue(createMockResponse(200));
+
+      const result = await postBridgeStatus(true);
+      expect(result).toBe(true);
+      expect(getCircuitBreaker().getState()).toBe("CLOSED");
+    });
+
+    it("returns to OPEN if probe fails in HALF_OPEN", async () => {
+      mockFetch.mockRejectedValue(new Error("Network error"));
+
+      // Trip the circuit breaker
+      for (let i = 0; i < 3; i++) {
+        const p = postBridgeStatus(true);
+        await vi.advanceTimersByTimeAsync(20_000);
+        await p;
+      }
+
+      // Wait for cooldown
+      vi.advanceTimersByTime(60_000);
+
+      // Probe fails
+      const p = postBridgeStatus(true);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await p;
+
+      expect(getCircuitBreaker().getState()).toBe("OPEN");
+    });
+  });
+
+  describe("fetch timeout (AbortController)", () => {
+    it("passes AbortSignal to fetch", async () => {
+      mockFetch.mockResolvedValue(createMockResponse(200));
+
+      await postNowPlaying("Track", "Artist");
+
+      const options = mockFetch.mock.calls[0]![1];
+      expect(options.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it("treats AbortError as a retriable error", async () => {
+      const abortError = new DOMException("The operation was aborted", "AbortError");
+      mockFetch
+        .mockRejectedValueOnce(abortError)
+        .mockResolvedValueOnce(createMockResponse(200));
+
+      const promise = postNowPlaying("Track", "Artist");
+      await vi.advanceTimersByTimeAsync(2000); // Retry backoff
+      const result = await promise;
+
+      expect(result).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+});

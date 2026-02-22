@@ -1,17 +1,45 @@
 /**
  * Bridge logic for communicating with WrzDJ backend.
+ *
+ * Features:
+ *   - Retry with exponential backoff on all API calls
+ *   - AbortController timeouts on all fetch requests
+ *   - Circuit breaker to avoid hammering an unreachable backend
+ *   - Retry logic on DELETE (clearNowPlaying)
  */
 import { config } from "./config.js";
+import { CircuitBreaker } from "./circuit-breaker.js";
 import type { BridgeStatusPayload, NowPlayingPayload } from "./types.js";
 
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 2000;
+const FETCH_TIMEOUT_MS = 10_000;
+const DELETE_MAX_RETRIES = 2;
+const DELETE_BACKOFF_MS = 1000;
 
 /** Track key for deduplication (artist::title, lowercase) */
 let lastTrackKey: string | null = null;
 
 /** Timestamp of last successful POST */
 let lastPostTime = 0;
+
+/** Circuit breaker for backend communication */
+const circuitBreaker = new CircuitBreaker({ failureThreshold: 3, cooldownMs: 60_000 });
+
+circuitBreaker.on("stateChange", ({ from, to }: { from: string; to: string }) => {
+  if (to === "OPEN") {
+    console.error(`[Bridge] Circuit breaker OPEN — backend unreachable, pausing API calls for 60s`);
+  } else if (to === "HALF_OPEN") {
+    console.log(`[Bridge] Circuit breaker HALF_OPEN — probing backend...`);
+  } else if (to === "CLOSED" && from !== "CLOSED") {
+    console.log(`[Bridge] Circuit breaker CLOSED — backend recovered`);
+  }
+});
+
+/** Get the circuit breaker instance (for external monitoring). */
+export function getCircuitBreaker(): CircuitBreaker {
+  return circuitBreaker;
+}
 
 /**
  * Generate a unique key for a track (used for deduplication).
@@ -56,17 +84,41 @@ export function updateLastTrack(artist: string, title: string): void {
 }
 
 /**
- * Make an HTTP POST with retry logic.
+ * Make a fetch request with an AbortController timeout.
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number = FETCH_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Make an HTTP POST with retry logic and circuit breaker.
+ * Returns true if the request succeeded, false if it failed after all retries.
  */
 async function postWithRetry(
   endpoint: string,
-  payload: NowPlayingPayload | BridgeStatusPayload
-): Promise<void> {
+  payload: NowPlayingPayload | BridgeStatusPayload,
+): Promise<boolean> {
+  if (!circuitBreaker.allowRequest()) {
+    console.log(`[Bridge] POST ${endpoint} skipped — circuit breaker OPEN`);
+    return false;
+  }
+
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const response = await fetch(`${config.apiUrl}${endpoint}`, {
+      const response = await fetchWithTimeout(`${config.apiUrl}${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -81,7 +133,8 @@ async function postWithRetry(
       }
 
       console.log(`[Bridge] POST ${endpoint} succeeded`);
-      return;
+      circuitBreaker.recordSuccess();
+      return true;
     } catch (err) {
       lastError = err as Error;
       if (attempt < MAX_RETRIES) {
@@ -94,20 +147,23 @@ async function postWithRetry(
     }
   }
 
+  circuitBreaker.recordFailure();
   console.error(
     `[Bridge] POST ${endpoint} failed after ${MAX_RETRIES + 1} attempts: ${lastError?.message}`
   );
+  return false;
 }
 
 /**
  * Post a now-playing update to the backend.
+ * Returns true if the backend acknowledged the update.
  */
 export async function postNowPlaying(
   title: string,
   artist: string,
   album?: string,
-  deck?: string
-): Promise<void> {
+  deck?: string,
+): Promise<boolean> {
   const payload: NowPlayingPayload = {
     event_code: config.eventCode,
     title,
@@ -117,40 +173,53 @@ export async function postNowPlaying(
   };
 
   console.log(`[Bridge] Now Playing: "${title}" by ${artist}`);
-  await postWithRetry("/api/bridge/nowplaying", payload);
+  return postWithRetry("/api/bridge/nowplaying", payload);
 }
 
 /**
  * Clear now-playing on the backend (authoritative clear on disconnect/shutdown).
+ * Retries up to DELETE_MAX_RETRIES times with backoff.
  */
 export async function clearNowPlaying(): Promise<void> {
   const endpoint = `/api/bridge/nowplaying/${config.eventCode}`;
-  try {
-    const response = await fetch(`${config.apiUrl}${endpoint}`, {
-      method: "DELETE",
-      headers: {
-        "X-Bridge-API-Key": config.apiKey,
-      },
-    });
 
-    if (!response.ok) {
-      const text = await response.text();
-      console.error(`[Bridge] DELETE ${endpoint} failed: HTTP ${response.status}: ${text}`);
-    } else {
+  for (let attempt = 0; attempt <= DELETE_MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetchWithTimeout(`${config.apiUrl}${endpoint}`, {
+        method: "DELETE",
+        headers: {
+          "X-Bridge-API-Key": config.apiKey,
+        },
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`HTTP ${response.status}: ${text}`);
+      }
+
       console.log(`[Bridge] DELETE ${endpoint} succeeded`);
+      return;
+    } catch (err) {
+      const message = (err as Error).message;
+      if (attempt < DELETE_MAX_RETRIES) {
+        const backoff = DELETE_BACKOFF_MS * Math.pow(2, attempt);
+        console.log(`[Bridge] DELETE ${endpoint} retry ${attempt + 1}/${DELETE_MAX_RETRIES} in ${backoff}ms: ${message}`);
+        await new Promise((resolve) => setTimeout(resolve, backoff));
+      } else {
+        console.error(`[Bridge] DELETE ${endpoint} failed after ${DELETE_MAX_RETRIES + 1} attempts: ${message}`);
+      }
     }
-  } catch (err) {
-    console.error(`[Bridge] DELETE ${endpoint} failed: ${(err as Error).message}`);
   }
 }
 
 /**
  * Post bridge connection status to the backend.
+ * Returns true if the backend acknowledged the status update.
  */
 export async function postBridgeStatus(
   connected: boolean,
-  deviceName?: string
-): Promise<void> {
+  deviceName?: string,
+): Promise<boolean> {
   const payload: BridgeStatusPayload = {
     event_code: config.eventCode,
     connected,
@@ -160,5 +229,5 @@ export async function postBridgeStatus(
   console.log(
     `[Bridge] Status: ${connected ? "Connected" : "Disconnected"}${deviceName ? ` (${deviceName})` : ""}`
   );
-  await postWithRetry("/api/bridge/status", payload);
+  return postWithRetry("/api/bridge/status", payload);
 }

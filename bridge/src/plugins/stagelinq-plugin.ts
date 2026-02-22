@@ -32,6 +32,8 @@ export class StageLinqPlugin extends EventEmitter implements EquipmentSourcePlug
 
   readonly configOptions: readonly PluginConfigOption[] = [];
 
+  private static readonly CONNECT_TIMEOUT_MS = 30_000;
+
   private running = false;
   private loggerListener: ((...args: unknown[]) => void) | null = null;
 
@@ -63,7 +65,21 @@ export class StageLinqPlugin extends EventEmitter implements EquipmentSourcePlug
     this.wireEvents();
 
     this.emit("log", "Connecting to StageLinQ network...");
-    await StageLinq.connect();
+
+    const connectPromise = StageLinq.connect();
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      timeoutHandle = setTimeout(
+        () => reject(new Error("No Denon equipment found on network within 30s")),
+        StageLinqPlugin.CONNECT_TIMEOUT_MS,
+      );
+    });
+
+    try {
+      await Promise.race([connectPromise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
     this.emit("log", "Listening for DJ equipment...");
   }
 

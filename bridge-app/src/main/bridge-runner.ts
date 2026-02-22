@@ -1,10 +1,17 @@
 /**
  * BridgeRunner wraps the PluginBridge for GUI lifecycle control.
  * Delegates equipment detection to the configured plugin via the plugin system.
+ *
+ * Features:
+ *   - AbortController timeouts on all fetch requests
+ *   - Circuit breaker to avoid hammering an unreachable backend
+ *   - Retry logic on DELETE (clearNowPlaying)
+ *   - 401 detection: stops bridge on token expiry
  */
 import { EventEmitter } from 'events';
 import { PluginBridge } from '@bridge/plugin-bridge.js';
 import { getPlugin } from '@bridge/plugin-registry.js';
+import { CircuitBreaker } from '@bridge/circuit-breaker.js';
 import type { DeckLiveEvent, DeckState } from '@bridge/deck-state.js';
 import type { NowPlayingPayload, BridgeStatusPayload } from '@bridge/types.js';
 import type { PluginConnectionEvent } from '@bridge/plugin-types.js';
@@ -17,6 +24,9 @@ import '@bridge/plugins/index.js';
 
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 2000;
+const FETCH_TIMEOUT_MS = 10_000;
+const DELETE_MAX_RETRIES = 2;
+const DELETE_BACKOFF_MS = 1000;
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
 
 /**
@@ -38,6 +48,12 @@ export class BridgeRunner extends EventEmitter {
   private stopReason: string | null = null;
   private networkWarnings: string[] = [];
   private backendReachable = true;
+  private circuitBreaker = new CircuitBreaker({ failureThreshold: 3, cooldownMs: 60_000 });
+
+  constructor() {
+    super();
+    this.wireCircuitBreaker();
+  }
 
   get isRunning(): boolean {
     return this.running;
@@ -57,6 +73,7 @@ export class BridgeRunner extends EventEmitter {
     this.stopReason = null;
     this.networkWarnings = [];
     this.backendReachable = true;
+    this.circuitBreaker.reset();
 
     const protocol = config.settings.protocol || 'stagelinq';
 
@@ -177,6 +194,26 @@ export class BridgeRunner extends EventEmitter {
     };
   }
 
+  private wireCircuitBreaker(): void {
+    this.circuitBreaker.on('stateChange', ({ from, to }: { from: string; to: string }) => {
+      if (to === 'OPEN') {
+        this.log('Circuit breaker OPEN — backend unreachable, pausing API calls for 60s');
+        if (this.backendReachable) {
+          this.backendReachable = false;
+          this.emitStatus();
+        }
+      } else if (to === 'HALF_OPEN') {
+        this.log('Circuit breaker HALF_OPEN — probing backend...');
+      } else if (to === 'CLOSED' && from !== 'CLOSED') {
+        this.log('Circuit breaker CLOSED — backend recovered');
+        if (!this.backendReachable) {
+          this.backendReachable = true;
+          this.emitStatus();
+        }
+      }
+    });
+  }
+
   private wireEvents(): void {
     if (!this.pluginBridge) return;
 
@@ -272,17 +309,45 @@ export class BridgeRunner extends EventEmitter {
 
   // --- HTTP communication ---
 
+  /**
+   * Make a fetch request with an AbortController timeout.
+   */
+  private async fetchWithTimeout(
+    url: string,
+    options: RequestInit,
+    timeoutMs: number = FETCH_TIMEOUT_MS,
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  /**
+   * POST with retry logic and circuit breaker.
+   * Returns true if successful, false on failure.
+   * Stops bridge on 401 (token expiry).
+   */
   private async postWithRetry(
     endpoint: string,
     payload: NowPlayingPayload | BridgeStatusPayload,
-  ): Promise<void> {
-    if (!this.config) return;
+  ): Promise<boolean> {
+    if (!this.config) return false;
+
+    if (!this.circuitBreaker.allowRequest()) {
+      this.log(`POST ${endpoint} skipped — circuit breaker OPEN`);
+      return false;
+    }
 
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const response = await fetch(`${this.config.apiUrl}${endpoint}`, {
+        const response = await this.fetchWithTimeout(`${this.config.apiUrl}${endpoint}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -290,6 +355,16 @@ export class BridgeRunner extends EventEmitter {
           },
           body: JSON.stringify(payload),
         });
+
+        if (response.status === 401) {
+          // 401 is an auth problem, not a backend availability issue — don't count as circuit failure
+          this.log(`POST ${endpoint} returned 401 — session expired`);
+          // Stop bridge asynchronously (don't block the retry loop)
+          setTimeout(() => {
+            this.stop('Session expired — please log in again');
+          }, 0);
+          return false;
+        }
 
         if (!response.ok) {
           const text = await response.text();
@@ -300,8 +375,9 @@ export class BridgeRunner extends EventEmitter {
           this.backendReachable = true;
           this.emitStatus();
         }
+        this.circuitBreaker.recordSuccess();
         this.log(`POST ${endpoint} succeeded`);
-        return;
+        return true;
       } catch (err) {
         lastError = err as Error;
         if (attempt < MAX_RETRIES) {
@@ -312,11 +388,13 @@ export class BridgeRunner extends EventEmitter {
       }
     }
 
+    this.circuitBreaker.recordFailure();
     if (this.backendReachable) {
       this.backendReachable = false;
       this.emitStatus();
     }
     this.log(`POST ${endpoint} failed after ${MAX_RETRIES + 1} attempts: ${lastError?.message}`);
+    return false;
   }
 
   private async postNowPlaying(
@@ -350,26 +428,40 @@ export class BridgeRunner extends EventEmitter {
     await this.postWithRetry('/api/bridge/status', payload);
   }
 
+  /**
+   * Clear now-playing on the backend with retry logic.
+   */
   private async clearNowPlaying(): Promise<void> {
     if (!this.config) return;
 
     const endpoint = `/api/bridge/nowplaying/${this.config.eventCode}`;
-    try {
-      const response = await fetch(`${this.config.apiUrl}${endpoint}`, {
-        method: 'DELETE',
-        headers: {
-          'X-Bridge-API-Key': this.config.apiKey,
-        },
-      });
 
-      if (!response.ok) {
-        const text = await response.text();
-        this.log(`DELETE ${endpoint} failed: HTTP ${response.status}: ${text}`);
-      } else {
+    for (let attempt = 0; attempt <= DELETE_MAX_RETRIES; attempt++) {
+      try {
+        const response = await this.fetchWithTimeout(`${this.config.apiUrl}${endpoint}`, {
+          method: 'DELETE',
+          headers: {
+            'X-Bridge-API-Key': this.config.apiKey,
+          },
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`HTTP ${response.status}: ${text}`);
+        }
+
         this.log(`DELETE ${endpoint} succeeded`);
+        return;
+      } catch (err) {
+        const message = (err as Error).message;
+        if (attempt < DELETE_MAX_RETRIES) {
+          const backoff = DELETE_BACKOFF_MS * Math.pow(2, attempt);
+          this.log(`DELETE ${endpoint} retry ${attempt + 1}/${DELETE_MAX_RETRIES} in ${backoff}ms: ${message}`);
+          await new Promise((resolve) => setTimeout(resolve, backoff));
+        } else {
+          this.log(`DELETE ${endpoint} failed after ${DELETE_MAX_RETRIES + 1} attempts: ${message}`);
+        }
       }
-    } catch (err) {
-      this.log(`DELETE ${endpoint} failed: ${(err as Error).message}`);
     }
   }
 

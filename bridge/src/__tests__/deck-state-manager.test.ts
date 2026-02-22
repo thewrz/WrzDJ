@@ -580,15 +580,51 @@ describe("DeckStateManager", () => {
       expect(manager.getDeckState("5").state).toBe("EMPTY");
     });
 
-    it("throws error when maximum deck limit is reached", () => {
+    it("evicts EMPTY deck when maximum deck limit is reached", () => {
       // Create 16 decks from scratch (no pre-init)
       for (let i = 1; i <= 16; i++) {
         expect(() => manager.getDeckState(String(i))).not.toThrow();
       }
 
-      // 17th deck should throw
+      // 17th deck should evict an EMPTY deck (all are EMPTY by default)
+      expect(() => manager.getDeckState("17")).not.toThrow();
+      expect(manager.getDeckState("17").state).toBe("EMPTY");
+    });
+
+    it("evicts ENDED deck when all decks are active except ENDED", () => {
+      // Fill 16 decks, put them all through CUEING → PLAYING
+      for (let i = 1; i <= 16; i++) {
+        const id = String(i);
+        manager.updateTrackInfo(id, testTrack);
+        manager.updateFaderLevel(id, 1.0);
+        manager.setMasterDeck(id);
+        manager.updatePlayState(id, true);
+      }
+
+      // Advance past liveThresholdSeconds to transition CUEING → PLAYING
+      vi.advanceTimersByTime(16_000);
+
+      // Transition deck 5 to ENDED: pause beyond grace period
+      manager.updatePlayState("5", false);
+      vi.advanceTimersByTime(4000); // Grace period (3s) expires → ENDED
+
+      expect(manager.getDeckState("5").state).toBe("ENDED");
+
+      // 17th deck should evict the ENDED deck
+      expect(() => manager.getDeckState("17")).not.toThrow();
+    });
+
+    it("throws when all decks are active and limit reached", () => {
+      // Fill 16 decks, keep them all in PLAYING (no EMPTY/ENDED to evict)
+      for (let i = 1; i <= 16; i++) {
+        const id = String(i);
+        manager.updateTrackInfo(id, testTrack);
+        manager.updatePlayState(id, true);
+      }
+
+      // 17th deck — no evictable decks, should throw
       expect(() => manager.getDeckState("17")).toThrow(
-        "Maximum deck limit (16) reached"
+        "all decks are active"
       );
     });
 
