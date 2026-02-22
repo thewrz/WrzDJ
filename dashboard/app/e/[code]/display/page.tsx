@@ -1,12 +1,15 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, ApiError, KioskDisplay, NowPlayingInfo, PlayHistoryItem } from '@/lib/api';
 import { useEventStream } from '@/lib/use-event-stream';
 import { RequestModal } from './components/RequestModal';
 const AUTO_SCROLL_INTERVAL = 5000; // 5 seconds between auto-scrolls
+const SESSION_CHECK_INTERVAL = 10_000; // 10 seconds between kiosk session checks
+const SESSION_TOKEN_KEY = 'kiosk_session_token';
+const PAIR_CODE_KEY = 'kiosk_pair_code';
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 function safeColor(c: string | undefined, fallback: string): string {
   return c && HEX_COLOR_RE.test(c) ? c : fallback;
@@ -14,6 +17,7 @@ function safeColor(c: string | undefined, fallback: string): string {
 
 export default function KioskDisplayPage() {
   const params = useParams();
+  const router = useRouter();
   const code = params.code as string;
 
   const [display, setDisplay] = useState<KioskDisplay | null>(null);
@@ -123,6 +127,30 @@ export default function KioskDisplayPage() {
     onRequestsBulkUpdate: () => { loadDisplayRef.current(); },
     onBridgeStatusChanged: () => { loadDisplayRef.current(); },
   });
+
+  // Check kiosk session validity — detect unpair
+  useEffect(() => {
+    const token = typeof window !== 'undefined'
+      ? localStorage.getItem(SESSION_TOKEN_KEY)
+      : null;
+    if (!token) return;
+
+    const checkSession = async () => {
+      try {
+        await api.getKioskAssignment(token);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          localStorage.removeItem(SESSION_TOKEN_KEY);
+          localStorage.removeItem(PAIR_CODE_KEY);
+          router.push('/kiosk-pair');
+        }
+        // Other errors (network, 500, etc.) — silently ignore
+      }
+    };
+
+    const intervalId = setInterval(checkSession, SESSION_CHECK_INTERVAL);
+    return () => clearInterval(intervalId);
+  }, [router]);
 
   // Sticky now-playing effect
   useEffect(() => {

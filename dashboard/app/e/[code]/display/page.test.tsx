@@ -3,8 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import KioskDisplayPage from './page';
 
 // Mock next/navigation
+const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
   useParams: () => ({ code: 'TEST123' }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 // Mock qrcode.react
@@ -13,6 +15,16 @@ vi.mock('qrcode.react', () => ({
     <div data-testid="qr-code" data-value={value}>QR Code</div>
   ),
 }));
+
+// Mock localStorage
+const localStorageStore: Record<string, string> = {};
+const localStorageMock = {
+  getItem: (key: string) => localStorageStore[key] ?? null,
+  setItem: (key: string, value: string) => { localStorageStore[key] = value; },
+  removeItem: (key: string) => { delete localStorageStore[key]; },
+  clear: () => { for (const key of Object.keys(localStorageStore)) delete localStorageStore[key]; },
+};
+Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true, configurable: true });
 
 // Mock SSE hook
 vi.mock('@/lib/use-event-stream', () => ({
@@ -68,6 +80,7 @@ vi.mock('@/lib/api', () => ({
     getKioskDisplay: vi.fn(),
     getNowPlaying: vi.fn(),
     getPlayHistory: vi.fn(),
+    getKioskAssignment: vi.fn(),
     search: vi.fn(),
     submitRequest: vi.fn(),
   },
@@ -91,6 +104,7 @@ function setupDefaultMocks() {
 describe('KioskDisplayPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    localStorageMock.clear();
   });
 
   afterEach(() => {
@@ -850,6 +864,77 @@ describe('KioskDisplayPage', () => {
 
       expect(screen.queryByText('Hidden Song')).not.toBeInTheDocument();
       expect(screen.queryByText('Now Playing')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Kiosk session unpair detection', () => {
+    it('redirects to /kiosk-pair on 404 (unpaired)', async () => {
+      vi.useFakeTimers();
+      setupDefaultMocks();
+      localStorageMock.setItem('kiosk_session_token', 'test-session-token');
+      localStorageMock.setItem('kiosk_pair_code', 'ABC123');
+      vi.mocked(api.getKioskAssignment).mockRejectedValue(new ApiError('Not found', 404));
+
+      render(<KioskDisplayPage />);
+      // Flush initial load
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+
+      // Advance past 10s session check interval
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+
+      expect(mockPush).toHaveBeenCalledWith('/kiosk-pair');
+      expect(localStorageMock.getItem('kiosk_session_token')).toBeNull();
+      expect(localStorageMock.getItem('kiosk_pair_code')).toBeNull();
+    });
+
+    it('does NOT redirect when session is valid', async () => {
+      vi.useFakeTimers();
+      setupDefaultMocks();
+      localStorageMock.setItem('kiosk_session_token', 'test-session-token');
+      vi.mocked(api.getKioskAssignment).mockResolvedValue({
+        status: 'active',
+        event_code: 'TEST123',
+        event_name: 'Test Event',
+      });
+
+      render(<KioskDisplayPage />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+
+      // Advance past session check
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('skips session check when no token in localStorage', async () => {
+      vi.useFakeTimers();
+      setupDefaultMocks();
+      // No localStorage token set
+
+      render(<KioskDisplayPage />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+
+      // Advance past several check intervals
+      await act(async () => { await vi.advanceTimersByTimeAsync(30000); });
+
+      expect(api.getKioskAssignment).not.toHaveBeenCalled();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('ignores transient errors (non-404)', async () => {
+      vi.useFakeTimers();
+      setupDefaultMocks();
+      localStorageMock.setItem('kiosk_session_token', 'test-session-token');
+      vi.mocked(api.getKioskAssignment).mockRejectedValue(new ApiError('Server error', 500));
+
+      render(<KioskDisplayPage />);
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+
+      expect(mockPush).not.toHaveBeenCalled();
+      // Token should still be in localStorage
+      expect(localStorageMock.getItem('kiosk_session_token')).toBe('test-session-token');
     });
   });
 
