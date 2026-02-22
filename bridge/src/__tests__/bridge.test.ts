@@ -174,7 +174,7 @@ describe("bridge.ts", () => {
       const plugins = ["stagelinq", "pioneer", "serato", "traktor"];
       for (const plugin of plugins) {
         mockFetch.mockResolvedValue(createMockResponse(200));
-        await postNowPlaying("Track", "Artist", null, null, plugin);
+        await postNowPlaying("Track", "Artist", undefined, undefined, plugin);
         const body = JSON.parse(
           mockFetch.mock.calls[mockFetch.mock.calls.length - 1]![1].body,
         );
