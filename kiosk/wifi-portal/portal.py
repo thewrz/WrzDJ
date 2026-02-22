@@ -172,7 +172,7 @@ def scan_wifi():
 
 def start_hotspot(ssid, password):
     """Start WiFi hotspot via NetworkManager."""
-    log.info("Starting hotspot: SSID=%s", ssid)
+    log.info("Starting hotspot")
     try:
         subprocess.run(
             ["nmcli", "device", "wifi", "hotspot",
@@ -198,8 +198,27 @@ def stop_hotspot():
         log.warning("Hotspot stop: %s", e)
 
 
+def _sanitize_nmcli_arg(value):
+    """Validate a value is safe to pass as an nmcli argument.
+
+    subprocess.run with a list already prevents shell injection, but this
+    adds defense-in-depth by rejecting values with control characters or
+    excessive length.
+    """
+    if not isinstance(value, str):
+        raise ValueError("Expected string argument")
+    if len(value) > 128:
+        raise ValueError("Argument too long")
+    if re.search(r"[\x00-\x1f]", value):
+        raise ValueError("Control characters in argument")
+    return value
+
+
 def connect_wifi(ssid, password):
     """Connect to a WiFi network. Returns (success, message)."""
+    ssid = _sanitize_nmcli_arg(ssid)
+    if password:
+        _sanitize_nmcli_arg(password)
     log.info("Connecting to WiFi: %s", ssid)
     try:
         # Check if a connection profile already exists for this SSID
@@ -789,8 +808,7 @@ class PortalHandler(BaseHTTPRequestHandler):
 
 def main():
     config = load_config()
-    log.info("KIOSK_URL: %s", config.get("KIOSK_URL", DEFAULT_KIOSK_URL))
-    log.info("HOTSPOT_SSID: %s", config.get("HOTSPOT_SSID", DEFAULT_HOTSPOT_SSID))
+    log.info("Portal starting")
 
     # Set shared state on handler class
     PortalHandler.config = config

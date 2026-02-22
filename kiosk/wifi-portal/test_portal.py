@@ -245,7 +245,8 @@ class TestHtmlRedirect:
     def test_contains_redirect_script(self):
         html = portal._html_redirect("https://app.wrzdj.com/kiosk-pair")
         assert "window.location.replace(" in html
-        assert "https://app.wrzdj.com/kiosk-pair" in html
+        # Verify URL appears JSON-encoded in the script tag (quoted)
+        assert '"https://app.wrzdj.com/kiosk-pair"' in html
 
     def test_rejects_javascript_scheme(self):
         html = portal._html_redirect("javascript:alert(1)")
@@ -260,11 +261,13 @@ class TestHtmlRedirect:
 
     def test_allows_http(self):
         html = portal._html_redirect("http://192.168.1.5:3000/kiosk")
-        assert "http://192.168.1.5:3000/kiosk" in html
+        # Verify URL appears JSON-encoded in the script tag (quoted)
+        assert '"http://192.168.1.5:3000/kiosk"' in html
 
     def test_allows_https(self):
         html = portal._html_redirect("https://secure.example.com")
-        assert "https://secure.example.com" in html
+        # Verify URL appears JSON-encoded in the script tag (quoted)
+        assert '"https://secure.example.com"' in html
 
     def test_json_encodes_url(self):
         # URL with special chars should be JSON-encoded for the JS
