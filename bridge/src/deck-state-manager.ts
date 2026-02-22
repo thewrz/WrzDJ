@@ -79,12 +79,38 @@ export class DeckStateManager extends EventEmitter {
     let state = this.decks.get(deckId);
     if (!state) {
       if (this.decks.size >= MAX_DECKS) {
-        throw new Error(`Maximum deck limit (${MAX_DECKS}) reached`);
+        // Evict the oldest EMPTY/ENDED deck instead of throwing
+        const evicted = this.evictStaleDeck();
+        if (!evicted) {
+          throw new Error(`Maximum deck limit (${MAX_DECKS}) reached — all decks are active`);
+        }
       }
       state = createEmptyDeckState(deckId);
       this.decks.set(deckId, state);
     }
     return state;
+  }
+
+  /**
+   * Evict a stale deck to make room for a new one.
+   * Prefers EMPTY, then ENDED, then LOADED, then CUEING as last resort.
+   * Never evicts PLAYING decks. Returns true if a deck was evicted.
+   */
+  private evictStaleDeck(): boolean {
+    for (const priority of ["EMPTY", "ENDED", "LOADED", "CUEING"] as const) {
+      for (const [id, state] of this.decks) {
+        if (state.state === priority) {
+          this.emitLog(`Deck ${id}: Evicted (${priority}) to make room for new deck`);
+          this.clearTimer(id);
+          if (id === this.currentNowPlayingDeckId) {
+            this.currentNowPlayingDeckId = null;
+          }
+          this.decks.delete(id);
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**
@@ -636,6 +662,21 @@ export class DeckStateManager extends EventEmitter {
    * // ... use manager ...
    * manager.destroy(); // Clean up when done
    */
+  /**
+   * Reset all deck state without removing event listeners.
+   * Use on plugin reconnect to clear stale state from the old connection.
+   */
+  reset(): void {
+    for (const timer of this.timers.values()) {
+      clearTimeout(timer);
+    }
+    this.timers.clear();
+    this.clearNowPlayingSwitchTimer();
+    this.decks.clear();
+    this.currentNowPlayingDeckId = null;
+    this.emitLog("All deck state reset (plugin reconnecting)");
+  }
+
   destroy(): void {
     this.destroyed = true;
     for (const timer of this.timers.values()) {

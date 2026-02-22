@@ -31,6 +31,7 @@ import {
   findLatestSessionFile,
   getDefaultSeratoPath,
   parseSessionBytes,
+  type ParseResult,
   type SeratoTrackEntry,
 } from "./serato-session-parser.js";
 
@@ -78,6 +79,7 @@ export class SeratoPlugin extends EventEmitter implements EquipmentSourcePlugin 
   private lastTrackPerDeck: Map<string, string> = new Map();
   private sessionsDir = "";
   private pollInterval = DEFAULT_POLL_INTERVAL;
+  private consecutiveReadErrors = 0;
 
   get isRunning(): boolean {
     return this.running;
@@ -216,15 +218,28 @@ export class SeratoPlugin extends EventEmitter implements EquipmentSourcePlugin 
     try {
       const fd = readFileSync(this.sessionPath);
       newBytes = fd.subarray(this.fileOffset, fileSize);
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.emit("log", `Error reading session file: ${message}`);
+      this.consecutiveReadErrors += 1;
+      if (this.consecutiveReadErrors >= 5) {
+        this.emit("log", `Session file unreadable after ${this.consecutiveReadErrors} attempts — rescanning`);
+        this.sessionPath = null;
+        this.fileOffset = 0;
+        this.consecutiveReadErrors = 0;
+        this.emit("connection", { connected: false });
+      }
       return;
     }
 
-    this.fileOffset = fileSize;
+    this.consecutiveReadErrors = 0;
 
-    // Parse new entries
-    const entries = parseSessionBytes(newBytes);
-    for (const entry of entries) {
+    // Parse new entries — only advance fileOffset by fully consumed bytes
+    // so incomplete chunks (Serato mid-write) are re-read on next poll
+    const result: ParseResult = parseSessionBytes(newBytes);
+    this.fileOffset += result.bytesConsumed;
+
+    for (const entry of result.entries) {
       this.processEntry(entry);
     }
   }

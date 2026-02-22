@@ -286,8 +286,8 @@ describe('BridgeRunner', () => {
   });
 
   it('logs networkWarnings when conflicts detected', async () => {
-    const logs: string[] = [];
-    runner.on('log', (msg: string) => logs.push(msg));
+    const logs: Array<{ message: string; level: string }> = [];
+    runner.on('log', (msg: { message: string; level: string }) => logs.push(msg));
 
     mockedDetectSubnetConflicts.mockReturnValue([
       {
@@ -302,7 +302,7 @@ describe('BridgeRunner', () => {
 
     await runner.start(TEST_CONFIG);
 
-    expect(logs.some((l) => l.includes('WARNING: Conflict warning text'))).toBe(true);
+    expect(logs.some((l) => l.message.includes('Conflict warning text') && l.level === 'warn')).toBe(true);
   });
 
   it('sets backendReachable to false after all retries exhausted', async () => {
@@ -495,13 +495,47 @@ describe('BridgeRunner', () => {
     await expect(runner.start(TEST_CONFIG)).rejects.toThrow('already running');
   });
 
-  it('emits log events', async () => {
-    const logs: string[] = [];
-    runner.on('log', (msg: string) => logs.push(msg));
+  it('buffers failed now-playing tracks for replay', async () => {
+    await runner.start(TEST_CONFIG);
+
+    // Make fetch fail
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    const pluginBridge = (runner as unknown as Record<string, unknown>).pluginBridge as {
+      emit: (event: string, ...args: unknown[]) => boolean;
+    };
+    pluginBridge.emit('deckLive', {
+      deckId: '1',
+      track: { title: 'Lost Track', artist: 'Lost Artist' },
+    });
+
+    // Let retries exhaust (2s + 4s + 8s)
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    // Log should mention buffering
+    const logs: Array<{ message: string; level: string }> = [];
+    runner.on('log', (msg: { message: string; level: string }) => logs.push(msg));
+
+    // Emit another track to trigger more buffer logs
+    pluginBridge.emit('deckLive', {
+      deckId: '2',
+      track: { title: 'Another Lost Track', artist: 'Another Artist' },
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(logs.some((l) => l.message.includes('Buffered track for replay'))).toBe(true);
+
+    // Restore mock before cleanup
+    mockFetch.mockResolvedValue({ ok: true, text: () => Promise.resolve('') });
+  });
+
+  it('emits log events with level', async () => {
+    const logs: Array<{ message: string; level: string }> = [];
+    runner.on('log', (msg: { message: string; level: string }) => logs.push(msg));
 
     await runner.start(TEST_CONFIG);
 
-    expect(logs.some((l) => l.includes('Starting bridge'))).toBe(true);
-    expect(logs.some((l) => l.includes('ABC123'))).toBe(true);
+    expect(logs.some((l) => l.message.includes('Starting bridge') && l.level === 'info')).toBe(true);
+    expect(logs.some((l) => l.message.includes('ABC123'))).toBe(true);
   });
 });

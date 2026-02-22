@@ -580,16 +580,127 @@ describe("DeckStateManager", () => {
       expect(manager.getDeckState("5").state).toBe("EMPTY");
     });
 
-    it("throws error when maximum deck limit is reached", () => {
+    it("evicts EMPTY deck when maximum deck limit is reached", () => {
       // Create 16 decks from scratch (no pre-init)
       for (let i = 1; i <= 16; i++) {
         expect(() => manager.getDeckState(String(i))).not.toThrow();
       }
 
-      // 17th deck should throw
+      // 17th deck should evict an EMPTY deck (all are EMPTY by default)
+      expect(() => manager.getDeckState("17")).not.toThrow();
+      expect(manager.getDeckState("17").state).toBe("EMPTY");
+    });
+
+    it("evicts ENDED deck when all decks are active except ENDED", () => {
+      // Fill 16 decks, put them all through CUEING → PLAYING
+      for (let i = 1; i <= 16; i++) {
+        const id = String(i);
+        manager.updateTrackInfo(id, testTrack);
+        manager.updateFaderLevel(id, 1.0);
+        manager.setMasterDeck(id);
+        manager.updatePlayState(id, true);
+      }
+
+      // Advance past liveThresholdSeconds to transition CUEING → PLAYING
+      vi.advanceTimersByTime(16_000);
+
+      // Transition deck 5 to ENDED: pause beyond grace period
+      manager.updatePlayState("5", false);
+      vi.advanceTimersByTime(4000); // Grace period (3s) expires → ENDED
+
+      expect(manager.getDeckState("5").state).toBe("ENDED");
+
+      // 17th deck should evict the ENDED deck
+      expect(() => manager.getDeckState("17")).not.toThrow();
+    });
+
+    it("evicts LOADED deck when no EMPTY/ENDED decks remain", () => {
+      // Fill 15 decks as PLAYING, 1 as LOADED (track loaded but not playing)
+      for (let i = 1; i <= 15; i++) {
+        const id = String(i);
+        manager.updateTrackInfo(id, testTrack);
+        manager.updateFaderLevel(id, 1.0);
+        manager.setMasterDeck(id);
+        manager.updatePlayState(id, true);
+      }
+      vi.advanceTimersByTime(16_000); // CUEING → PLAYING
+
+      // Deck 16 stays LOADED (track loaded, never played)
+      manager.updateTrackInfo("16", testTrack);
+      expect(manager.getDeckState("16").state).toBe("LOADED");
+
+      // 17th deck should evict the LOADED deck
+      expect(() => manager.getDeckState("17")).not.toThrow();
+    });
+
+    it("evicts CUEING deck as last resort before throwing", () => {
+      // Fill 15 decks as PLAYING, 1 as CUEING
+      for (let i = 1; i <= 16; i++) {
+        const id = String(i);
+        manager.updateTrackInfo(id, testTrack);
+        manager.updateFaderLevel(id, 1.0);
+        manager.setMasterDeck(id);
+        manager.updatePlayState(id, true);
+      }
+      // Only advance 1s — not enough for 15s threshold, so all stay CUEING
+      // Actually we need 15 in PLAYING and 1 in CUEING
+      // Reset: advance to get all to PLAYING first
+      vi.advanceTimersByTime(16_000);
+
+      // Now load a new track on deck 16 (resets to LOADED), then play (→ CUEING)
+      manager.updateTrackInfo("16", { title: "New", artist: "New" });
+      manager.updatePlayState("16", true);
+      expect(manager.getDeckState("16").state).toBe("CUEING");
+
+      // 17th deck should evict the CUEING deck
+      expect(() => manager.getDeckState("17")).not.toThrow();
+    });
+
+    it("throws when all decks are PLAYING and limit reached", () => {
+      // Fill 16 decks, advance past threshold so all reach PLAYING
+      for (let i = 1; i <= 16; i++) {
+        const id = String(i);
+        manager.updateTrackInfo(id, testTrack);
+        manager.updateFaderLevel(id, 1.0);
+        manager.setMasterDeck(id);
+        manager.updatePlayState(id, true);
+      }
+      vi.advanceTimersByTime(16_000); // CUEING → PLAYING
+
+      // 17th deck — no evictable decks (all PLAYING), should throw
       expect(() => manager.getDeckState("17")).toThrow(
-        "Maximum deck limit (16) reached"
+        "all decks are active"
       );
+    });
+
+    it("reset() clears all deck state and timers but keeps listeners", () => {
+      const logHandler = vi.fn();
+      const deckLiveHandler = vi.fn();
+      manager.on("log", logHandler);
+      manager.on("deckLive", deckLiveHandler);
+
+      // Set up some deck state
+      manager.updateTrackInfo("1", testTrack);
+      manager.updatePlayState("1", true);
+      manager.updateTrackInfo("2", testTrack);
+      expect(manager.getDeckIds()).toHaveLength(2);
+
+      // Reset
+      manager.reset();
+
+      // Decks should be cleared
+      expect(manager.getDeckIds()).toHaveLength(0);
+      expect(manager.getCurrentNowPlayingDeckId()).toBeNull();
+
+      // Listeners should still be attached
+      manager.updateTrackInfo("3", testTrack);
+      manager.updatePlayState("3", true);
+      vi.advanceTimersByTime(16_000);
+      expect(deckLiveHandler).toHaveBeenCalled();
+
+      // Log should include reset message
+      const logMessages = logHandler.mock.calls.map((c: unknown[]) => c[0] as string);
+      expect(logMessages.some((m: string) => m.includes("reset"))).toBe(true);
     });
 
     it("handles fader level out of range", () => {

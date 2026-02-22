@@ -47,6 +47,12 @@ export class PioneerProlinkPlugin extends EventEmitter implements EquipmentSourc
   /** Per-deck track ID cache for detecting track changes */
   private deckTrackIds = new Map<string, number>();
 
+  /** Per-deck AbortController for cancelling stale metadata fetches */
+  private deckFetchControllers = new Map<string, AbortController>();
+
+  /** Per-deck retry timers for metadata retry delay */
+  private deckRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
   get isRunning(): boolean {
     return this.running;
   }
@@ -57,6 +63,7 @@ export class PioneerProlinkPlugin extends EventEmitter implements EquipmentSourc
     }
 
     this.deckTrackIds.clear();
+    this.abortAllFetches();
 
     this.emit("log", "Bringing PRO DJ LINK network online...");
     const network = await bringOnline();
@@ -89,6 +96,7 @@ export class PioneerProlinkPlugin extends EventEmitter implements EquipmentSourc
 
     this.running = false;
     this.deckTrackIds.clear();
+    this.abortAllFetches();
 
     if (this.network) {
       try {
@@ -163,8 +171,24 @@ export class PioneerProlinkPlugin extends EventEmitter implements EquipmentSourc
   }
 
   private static readonly METADATA_TIMEOUT_MS = 10_000;
+  private static readonly METADATA_RETRY_DELAY_MS = 3_000;
 
   private fetchTrackMetadata(status: CDJStatus.State, deckId: string): void {
+    // Abort any in-flight metadata fetch for this deck (prevents stale results)
+    this.abortDeckFetch(deckId);
+
+    const controller = new AbortController();
+    this.deckFetchControllers.set(deckId, controller);
+
+    this.attemptMetadataFetch(status, deckId, controller.signal, true);
+  }
+
+  private attemptMetadataFetch(
+    status: CDJStatus.State,
+    deckId: string,
+    signal: AbortSignal,
+    allowRetry: boolean,
+  ): void {
     const db = this.network?.db;
     if (!db) return;
 
@@ -175,8 +199,9 @@ export class PioneerProlinkPlugin extends EventEmitter implements EquipmentSourc
       trackId: status.trackId,
     });
 
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_resolve, reject) => {
-      setTimeout(
+      timeoutHandle = setTimeout(
         () => reject(new Error("Metadata fetch timed out")),
         PioneerProlinkPlugin.METADATA_TIMEOUT_MS,
       );
@@ -184,8 +209,16 @@ export class PioneerProlinkPlugin extends EventEmitter implements EquipmentSourc
 
     Promise.race([metadataPromise, timeoutPromise])
       .then((track) => {
+        clearTimeout(timeoutHandle);
+        if (signal.aborted) return;
+
         if (!track) {
           this.emit("log", `No metadata for track ${status.trackId} on deck ${deckId}`);
+          // Emit partial track so state machine still transitions
+          this.emit("track", {
+            deckId,
+            track: { title: "Unknown Track", artist: "Unknown" },
+          });
           return;
         }
 
@@ -204,8 +237,55 @@ export class PioneerProlinkPlugin extends EventEmitter implements EquipmentSourc
         );
       })
       .catch((err: unknown) => {
+        clearTimeout(timeoutHandle);
+        if (signal.aborted) return;
+
         const message = err instanceof Error ? err.message : String(err);
         this.emit("log", `Failed to fetch metadata for track ${status.trackId}: ${message}`);
+
+        if (allowRetry) {
+          // Retry once after a short delay (tracked so it can be cancelled on stop/abort)
+          this.emit("log", `Retrying metadata fetch for track ${status.trackId} on deck ${deckId}...`);
+          const retryTimer = setTimeout(() => {
+            this.deckRetryTimers.delete(deckId);
+            if (signal.aborted || !this.running) return;
+            // Verify the track hasn't changed during the delay
+            if (this.deckTrackIds.get(deckId) !== status.trackId) return;
+            this.attemptMetadataFetch(status, deckId, signal, false);
+          }, PioneerProlinkPlugin.METADATA_RETRY_DELAY_MS);
+          this.deckRetryTimers.set(deckId, retryTimer);
+        } else {
+          // Retry exhausted — emit partial track so DeckStateManager still transitions
+          this.emit("log", `Metadata unavailable for track ${status.trackId} on deck ${deckId}, emitting partial data`);
+          this.emit("track", {
+            deckId,
+            track: { title: "Unknown Track", artist: "Unknown" },
+          });
+        }
       });
+  }
+
+  private abortDeckFetch(deckId: string): void {
+    const existing = this.deckFetchControllers.get(deckId);
+    if (existing) {
+      existing.abort();
+      this.deckFetchControllers.delete(deckId);
+    }
+    const existingTimer = this.deckRetryTimers.get(deckId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      this.deckRetryTimers.delete(deckId);
+    }
+  }
+
+  private abortAllFetches(): void {
+    for (const controller of this.deckFetchControllers.values()) {
+      controller.abort();
+    }
+    this.deckFetchControllers.clear();
+    for (const timer of this.deckRetryTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.deckRetryTimers.clear();
   }
 }

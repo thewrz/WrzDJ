@@ -97,6 +97,15 @@ export interface BridgeRunnerConfig {
   readonly settings: BridgeSettings;
 }
 
+/** Log severity level (matches bridge Logger levels) */
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+/** Structured log message sent over IPC */
+export interface IpcLogMessage {
+  readonly message: string;
+  readonly level: LogLevel;
+}
+
 /** IPC channel names */
 export const IPC_CHANNELS = {
   AUTH_LOGIN: 'auth:login',
@@ -111,6 +120,7 @@ export const IPC_CHANNELS = {
   BRIDGE_LOG: 'bridge:log',
   SETTINGS_GET: 'settings:get',
   SETTINGS_UPDATE: 'settings:update',
+  BRIDGE_EXPORT_DEBUG_REPORT: 'bridge:exportDebugReport',
 } as const;
 
 /** Default bridge settings (fader off for 3rd-party mixer compat, master deck priority off) */

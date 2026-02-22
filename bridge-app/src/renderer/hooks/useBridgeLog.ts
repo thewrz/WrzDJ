@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api.js';
+import type { LogLevel } from '../../shared/types.js';
 
 export interface LogEntry {
   readonly id: number;
   readonly timestamp: number;
   readonly message: string;
+  readonly level: LogLevel;
 }
 
 const MAX_LOG_ENTRIES = 500;
@@ -15,11 +17,12 @@ export function useBridgeLog() {
   const nextIdRef = useRef(1);
 
   useEffect(() => {
-    const unsubscribe = api.onBridgeLog((message) => {
+    const unsubscribe = api.onBridgeLog((logMessage) => {
       const entry: LogEntry = {
         id: nextIdRef.current++,
         timestamp: Date.now(),
-        message,
+        message: logMessage.message,
+        level: logMessage.level,
       };
 
       const updated = [...entriesRef.current, entry];

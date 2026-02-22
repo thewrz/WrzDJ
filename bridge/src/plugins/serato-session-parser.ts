@@ -153,22 +153,38 @@ export function parseAdatContent(buf: Buffer): SeratoTrackEntry {
   return { title, artist, album, bpm, key, genre, deck, startTime };
 }
 
+/** Result of parsing session bytes, including how many bytes were fully consumed. */
+export interface ParseResult {
+  readonly entries: SeratoTrackEntry[];
+  /** Number of bytes that were fully parsed (complete chunks only). */
+  readonly bytesConsumed: number;
+}
+
 /**
  * Parse a buffer of Serato session bytes into an array of track entries.
  *
  * The session file is a sequence of top-level chunks. We look for OENT
  * chunks, each of which wraps an ADAT chunk containing track metadata.
+ *
+ * Returns both the parsed entries and how many bytes were fully consumed,
+ * so callers can rewind the file offset to re-read incomplete chunks.
  */
-export function parseSessionBytes(buf: Buffer): SeratoTrackEntry[] {
+export function parseSessionBytes(buf: Buffer): ParseResult {
   const entries: SeratoTrackEntry[] = [];
   let pos = 0;
+  let lastCompleteChunkEnd = 0;
 
   while (pos + 8 <= buf.length) {
     const tag = readTag(buf, pos);
     const chunkLen = readU32(buf, pos + 4);
+    const chunkStart = pos;
     pos += 8;
 
-    if (pos + chunkLen > buf.length) break;
+    if (pos + chunkLen > buf.length) {
+      // Incomplete chunk — rewind to the start of this chunk
+      pos = chunkStart;
+      break;
+    }
 
     if (tag === "oent") {
       // OENT wraps an ADAT — look for nested ADAT chunk
@@ -192,9 +208,10 @@ export function parseSessionBytes(buf: Buffer): SeratoTrackEntry[] {
     }
 
     pos += chunkLen;
+    lastCompleteChunkEnd = pos;
   }
 
-  return entries;
+  return { entries, bytesConsumed: lastCompleteChunkEnd };
 }
 
 /**

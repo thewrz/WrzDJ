@@ -441,7 +441,7 @@ describe("PioneerProlinkPlugin", () => {
       expect(tracks[1]).toEqual({ deckId: "1", track: null });
     });
 
-    it("handles metadata fetch failure gracefully", async () => {
+    it("handles metadata fetch failure by retrying and emitting partial track", async () => {
       const tracks: PluginTrackEvent[] = [];
       const logs: string[] = [];
       plugin.on("track", (e: PluginTrackEvent) => tracks.push(e));
@@ -452,12 +452,17 @@ describe("PioneerProlinkPlugin", () => {
       await plugin.start();
       mockStatusEmitter.emit("status", makeStatus({ trackId: 99 }));
 
+      // Wait for initial failure
       await vi.waitFor(() => expect(logs.some((l) => l.includes("Failed to fetch"))).toBe(true));
+      // Wait for retry (3s delay) and final partial emit
+      await vi.waitFor(() => expect(logs.some((l) => l.includes("Metadata unavailable"))).toBe(true), { timeout: 5000 });
 
-      expect(tracks).toHaveLength(0);
+      // Should emit a partial track event with "Unknown Track"
+      expect(tracks).toHaveLength(1);
+      expect(tracks[0]!.track).toEqual({ title: "Unknown Track", artist: "Unknown" });
     });
 
-    it("handles null metadata result", async () => {
+    it("handles null metadata result by emitting partial track", async () => {
       const tracks: PluginTrackEvent[] = [];
       const logs: string[] = [];
       plugin.on("track", (e: PluginTrackEvent) => tracks.push(e));
@@ -470,7 +475,9 @@ describe("PioneerProlinkPlugin", () => {
 
       await vi.waitFor(() => expect(logs.some((l) => l.includes("No metadata"))).toBe(true));
 
-      expect(tracks).toHaveLength(0);
+      // Now emits a partial track (state machine transitions even without metadata)
+      expect(tracks).toHaveLength(1);
+      expect(tracks[0]!.track).toEqual({ title: "Unknown Track", artist: "Unknown" });
     });
 
     it("handles track with no artist or album", async () => {

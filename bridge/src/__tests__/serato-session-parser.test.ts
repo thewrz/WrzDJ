@@ -214,12 +214,13 @@ describe("parseSessionBytes", () => {
       buildU32Field(52, 1),
     ]);
 
-    const entries = parseSessionBytes(chunk);
+    const result = parseSessionBytes(chunk);
 
-    expect(entries).toHaveLength(1);
-    expect(entries[0]!.title).toBe("Strobe");
-    expect(entries[0]!.artist).toBe("Deadmau5");
-    expect(entries[0]!.deck).toBe(1);
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]!.title).toBe("Strobe");
+    expect(result.entries[0]!.artist).toBe("Deadmau5");
+    expect(result.entries[0]!.deck).toBe(1);
+    expect(result.bytesConsumed).toBe(chunk.length);
   });
 
   it("parses multiple OENT entries", () => {
@@ -234,13 +235,15 @@ describe("parseSessionBytes", () => {
       buildU32Field(52, 2),
     ]);
 
-    const entries = parseSessionBytes(Buffer.concat([chunk1, chunk2]));
+    const buf = Buffer.concat([chunk1, chunk2]);
+    const result = parseSessionBytes(buf);
 
-    expect(entries).toHaveLength(2);
-    expect(entries[0]!.title).toBe("Track A");
-    expect(entries[0]!.deck).toBe(1);
-    expect(entries[1]!.title).toBe("Track B");
-    expect(entries[1]!.deck).toBe(2);
+    expect(result.entries).toHaveLength(2);
+    expect(result.entries[0]!.title).toBe("Track A");
+    expect(result.entries[0]!.deck).toBe(1);
+    expect(result.entries[1]!.title).toBe("Track B");
+    expect(result.entries[1]!.deck).toBe(2);
+    expect(result.bytesConsumed).toBe(buf.length);
   });
 
   it("skips non-OENT chunks", () => {
@@ -250,24 +253,47 @@ describe("parseSessionBytes", () => {
       buildTextField(6, "Real Artist"),
     ]);
 
-    const entries = parseSessionBytes(Buffer.concat([unknownChunk, oentChunk]));
+    const result = parseSessionBytes(Buffer.concat([unknownChunk, oentChunk]));
 
-    expect(entries).toHaveLength(1);
-    expect(entries[0]!.title).toBe("Real Track");
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]!.title).toBe("Real Track");
   });
 
-  it("returns empty array for empty buffer", () => {
-    expect(parseSessionBytes(Buffer.alloc(0))).toEqual([]);
+  it("returns empty result for empty buffer", () => {
+    const result = parseSessionBytes(Buffer.alloc(0));
+    expect(result.entries).toEqual([]);
+    expect(result.bytesConsumed).toBe(0);
   });
 
-  it("handles truncated chunk gracefully", () => {
-    // Just a tag + length but no content
+  it("handles truncated chunk gracefully and reports partial consumption", () => {
+    // Just a tag + length but no content (claims 1000 bytes)
     const buf = Buffer.alloc(8);
     buf.write("oent", 0, 4, "ascii");
     buf.writeUInt32BE(1000, 4); // claims 1000 bytes
 
-    const entries = parseSessionBytes(buf);
-    expect(entries).toEqual([]);
+    const result = parseSessionBytes(buf);
+    expect(result.entries).toEqual([]);
+    expect(result.bytesConsumed).toBe(0); // nothing was fully consumed
+  });
+
+  it("reports correct bytesConsumed when trailing chunk is incomplete", () => {
+    const complete = buildOentChunk([
+      buildTextField(2, "Complete Track"),
+      buildTextField(6, "Complete Artist"),
+    ]);
+
+    // Incomplete trailing chunk (header only, no data)
+    const incomplete = Buffer.alloc(8);
+    incomplete.write("oent", 0, 4, "ascii");
+    incomplete.writeUInt32BE(500, 4);
+
+    const buf = Buffer.concat([complete, incomplete]);
+    const result = parseSessionBytes(buf);
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]!.title).toBe("Complete Track");
+    // Only the complete chunk should be counted
+    expect(result.bytesConsumed).toBe(complete.length);
   });
 
   it("parses session with vrsn header followed by oent chunks", () => {
@@ -286,13 +312,13 @@ describe("parseSessionBytes", () => {
       buildU32Field(52, 2),
     ]);
 
-    const entries = parseSessionBytes(
+    const result = parseSessionBytes(
       Buffer.concat([vrsnChunk, oent1, oent2])
     );
 
-    expect(entries).toHaveLength(2);
-    expect(entries[0]!.title).toBe("First");
-    expect(entries[1]!.title).toBe("Second");
+    expect(result.entries).toHaveLength(2);
+    expect(result.entries[0]!.title).toBe("First");
+    expect(result.entries[1]!.title).toBe("Second");
   });
 
   it("handles incremental parsing of appended bytes", () => {
@@ -310,10 +336,11 @@ describe("parseSessionBytes", () => {
 
     // Parse only the "new" portion (starting from chunk2's offset)
     const newBytes = fullBuffer.subarray(chunk1.length);
-    const entries = parseSessionBytes(newBytes);
+    const result = parseSessionBytes(newBytes);
 
-    expect(entries).toHaveLength(1);
-    expect(entries[0]!.title).toBe("New Track");
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]!.title).toBe("New Track");
+    expect(result.bytesConsumed).toBe(chunk2.length);
   });
 });
 

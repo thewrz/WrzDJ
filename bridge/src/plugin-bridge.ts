@@ -28,6 +28,11 @@ const LOG_DEDUP_WINDOW_MS = 60_000;
 /** Heartbeat interval — emits 'heartbeat' event to keep bridge_last_seen fresh */
 const HEARTBEAT_INTERVAL_MS = 120_000;
 
+/** Auto-reconnect backoff constants */
+const RECONNECT_INITIAL_MS = 2000;
+const RECONNECT_MAX_MS = 30_000;
+const RECONNECT_MULTIPLIER = 2;
+
 /**
  * PluginBridge connects an EquipmentSourcePlugin to a DeckStateManager,
  * translating plugin events and synthesizing missing data.
@@ -44,6 +49,10 @@ export class PluginBridge extends EventEmitter {
   private running = false;
   private readonly recentLogs = new Map<string, number>();
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempt = 0;
+  private wasConnected = false;
+  private pluginConfig?: Record<string, unknown>;
 
   constructor(plugin: EquipmentSourcePlugin, config: DeckStateManagerConfig) {
     super();
@@ -73,8 +82,12 @@ export class PluginBridge extends EventEmitter {
       throw new Error("PluginBridge is already running");
     }
 
+    this.pluginConfig = pluginConfig;
+    this.reconnectAttempt = 0;
+    this.wasConnected = false;
     this.running = true;
-    this.wireEvents();
+    this.wireDeckManagerEvents();
+    this.wirePluginEvents();
 
     try {
       await this.plugin.start(pluginConfig);
@@ -89,6 +102,7 @@ export class PluginBridge extends EventEmitter {
     if (!this.running) return;
 
     this.running = false;
+    this.cancelReconnect();
 
     try {
       await this.plugin.stop();
@@ -100,6 +114,7 @@ export class PluginBridge extends EventEmitter {
   }
 
   private cleanup(): void {
+    this.cancelReconnect();
     this.stopHeartbeat();
     this.emit("clearNowPlaying");
     this.deckManager.destroy();
@@ -119,8 +134,8 @@ export class PluginBridge extends EventEmitter {
     }
   }
 
-  private wireEvents(): void {
-    // Forward DeckStateManager events
+  /** Wire DeckStateManager events (called once per start). */
+  private wireDeckManagerEvents(): void {
     this.deckManager.on("deckLive", (event: DeckLiveEvent) => {
       this.emit("deckLive", event);
     });
@@ -132,8 +147,10 @@ export class PluginBridge extends EventEmitter {
     this.deckManager.on("nowPlayingCleared", () => {
       this.emit("clearNowPlaying");
     });
+  }
 
-    // Wire plugin events
+  /** Wire plugin events (called on start and on reconnect). */
+  private wirePluginEvents(): void {
     this.plugin.on("track", (event: PluginTrackEvent) => {
       this.handleTrack(event);
     });
@@ -152,10 +169,15 @@ export class PluginBridge extends EventEmitter {
 
     this.plugin.on("connection", (event: PluginConnectionEvent) => {
       if (event.connected) {
+        this.wasConnected = true;
+        this.reconnectAttempt = 0;
         this.startHeartbeat();
       } else {
         this.stopHeartbeat();
         this.emit("clearNowPlaying");
+        if (this.wasConnected) {
+          this.scheduleReconnect();
+        }
       }
       this.emit("connection", event);
     });
@@ -172,6 +194,66 @@ export class PluginBridge extends EventEmitter {
     this.plugin.on("error", (err: Error) => {
       this.emit("error", err);
     });
+  }
+
+  // --- Auto-reconnect ---
+
+  private scheduleReconnect(): void {
+    if (!this.running || this.reconnectTimer !== null) return;
+
+    this.reconnectAttempt++;
+    const delay = Math.min(
+      RECONNECT_INITIAL_MS * Math.pow(RECONNECT_MULTIPLIER, this.reconnectAttempt - 1),
+      RECONNECT_MAX_MS,
+    );
+
+    this.emit(
+      "log",
+      `Device disconnected — reconnecting in ${(delay / 1000).toFixed(0)}s (attempt ${this.reconnectAttempt})`,
+    );
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.attemptReconnect();
+    }, delay);
+  }
+
+  private async attemptReconnect(): Promise<void> {
+    if (!this.running) return;
+
+    this.emit("log", `Reconnecting to ${this.plugin.info.name}...`);
+
+    try {
+      // Stop the old plugin instance (clean up stale resources)
+      try {
+        await this.plugin.stop();
+      } catch {
+        // Best effort
+      }
+
+      // Clear stale deck state from the old connection
+      this.deckManager.reset();
+
+      // Re-wire plugin events (old listeners removed by stop)
+      this.plugin.removeAllListeners();
+      this.wirePluginEvents();
+
+      // Restart
+      await this.plugin.start(this.pluginConfig);
+      this.emit("log", `Reconnected to ${this.plugin.info.name} successfully`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.emit("log", `Reconnect failed: ${message}`);
+      this.scheduleReconnect();
+    }
+  }
+
+  private cancelReconnect(): void {
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectAttempt = 0;
   }
 
   /** Suppress duplicate log messages — only allow each unique message once per dedup window. */

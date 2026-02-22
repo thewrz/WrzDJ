@@ -1,14 +1,18 @@
-import { ipcMain, type BrowserWindow } from 'electron';
+import { app, dialog, ipcMain, type BrowserWindow } from 'electron';
+import { readFileSync, writeFileSync } from 'fs';
+import { platform, release, arch } from 'os';
 import { login, verifyToken, buildAuthState } from './auth-service.js';
 import { fetchBridgeApiKey } from './bridge-api-key-service.js';
 import { fetchEvents } from './events-service.js';
+import { LogFileWriter } from './log-file-writer.js';
 import { listPluginMeta } from '@bridge/plugin-registry.js';
 import { BridgeRunner } from './bridge-runner.js';
 import * as store from './store.js';
 import { IPC_CHANNELS } from '../shared/types.js';
-import type { BridgeSettings } from '../shared/types.js';
+import type { BridgeSettings, IpcLogMessage } from '../shared/types.js';
 
 const bridgeRunner = new BridgeRunner();
+const logFileWriter = new LogFileWriter(app.getPath('logs'));
 
 /** Validate that a value is a valid HTTP(S) URL. */
 function isValidHttpUrl(value: unknown): value is string {
@@ -61,10 +65,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   });
 
-  // Forward bridge log messages to renderer
-  bridgeRunner.on('log', (message: string) => {
+  // Forward bridge log messages to renderer and persist to file
+  bridgeRunner.on('log', (logMessage: IpcLogMessage) => {
+    logFileWriter.write(logMessage.level, logMessage.message);
     if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(IPC_CHANNELS.BRIDGE_LOG, message);
+      mainWindow.webContents.send(IPC_CHANNELS.BRIDGE_LOG, logMessage);
     }
   });
 
@@ -171,6 +176,66 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     const validated = validateSettingsUpdate(partial);
     return store.updateSettings(validated);
   });
+
+  // --- Debug Report ---
+
+  ipcMain.handle(IPC_CHANNELS.BRIDGE_EXPORT_DEBUG_REPORT, async () => {
+    const { filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export Debug Report',
+      defaultPath: `wrzdj-debug-${new Date().toISOString().slice(0, 10)}.txt`,
+      filters: [{ name: 'Text', extensions: ['txt'] }],
+    });
+
+    if (!filePath) return null;
+
+    const status = bridgeRunner.getStatus();
+    const settings = store.getSettings();
+
+    let logContents = '';
+    try {
+      logContents = readFileSync(logFileWriter.getLogPath(), 'utf-8');
+    } catch {
+      logContents = '(no log file found)';
+    }
+
+    const lines = [
+      '=== WrzDJ Bridge Debug Report ===',
+      `Generated: ${new Date().toISOString()}`,
+      '',
+      '--- System ---',
+      `App Version: ${app.getVersion()}`,
+      `Electron: ${process.versions.electron}`,
+      `Node: ${process.versions.node}`,
+      `Chrome: ${process.versions.chrome}`,
+      `OS: ${platform()} ${release()} (${arch()})`,
+      '',
+      '--- Bridge Status ---',
+      `Running: ${status.isRunning}`,
+      `Event Code: ${status.eventCode ?? 'none'}`,
+      `Connected Device: ${status.connectedDevice ?? 'none'}`,
+      `Backend Reachable: ${status.backendReachable}`,
+      `Stop Reason: ${status.stopReason ?? 'none'}`,
+      `Current Track: ${status.currentTrack ? `"${status.currentTrack.title}" by ${status.currentTrack.artist}` : 'none'}`,
+      `Active Decks: ${status.deckStates.length}`,
+      `Network Warnings: ${status.networkWarnings.length > 0 ? status.networkWarnings.join('; ') : 'none'}`,
+      '',
+      '--- Settings ---',
+      `Protocol: ${settings.protocol}`,
+      `Live Threshold: ${settings.liveThresholdSeconds}s`,
+      `Pause Grace: ${settings.pauseGraceSeconds}s`,
+      `Now Playing Pause: ${settings.nowPlayingPauseSeconds}s`,
+      `Fader Detection: ${settings.useFaderDetection}`,
+      `Master Deck Priority: ${settings.masterDeckPriority}`,
+      `Min Play Seconds: ${settings.minPlaySeconds}`,
+      ...(settings.pluginConfig ? [`Plugin Config: ${JSON.stringify(settings.pluginConfig)}`] : []),
+      '',
+      '--- Log File ---',
+      logContents,
+    ];
+
+    writeFileSync(filePath, lines.join('\n'), 'utf-8');
+    return filePath;
+  });
 }
 
 /**
@@ -185,4 +250,11 @@ export async function checkStoredAuth(): Promise<void> {
  */
 export function getBridgeRunner(): BridgeRunner {
   return bridgeRunner;
+}
+
+/**
+ * Get the path to the bridge log file (for debug report export).
+ */
+export function getLogFilePath(): string {
+  return logFileWriter.getLogPath();
 }
