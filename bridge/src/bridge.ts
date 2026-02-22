@@ -9,7 +9,11 @@
  */
 import { config } from "./config.js";
 import { CircuitBreaker } from "./circuit-breaker.js";
+import { Logger } from "./logger.js";
+import { TrackHistoryBuffer } from "./track-history-buffer.js";
 import type { BridgeStatusPayload, NowPlayingPayload } from "./types.js";
+
+const log = new Logger("Bridge");
 
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 2000;
@@ -26,13 +30,17 @@ let lastPostTime = 0;
 /** Circuit breaker for backend communication */
 const circuitBreaker = new CircuitBreaker({ failureThreshold: 3, cooldownMs: 60_000 });
 
+/** Buffer for tracks that failed to post (replayed on backend recovery) */
+const trackBuffer = new TrackHistoryBuffer();
+
 circuitBreaker.on("stateChange", ({ from, to }: { from: string; to: string }) => {
   if (to === "OPEN") {
-    console.error(`[Bridge] Circuit breaker OPEN — backend unreachable, pausing API calls for 60s`);
+    log.error("Circuit breaker OPEN — backend unreachable, pausing API calls for 60s");
   } else if (to === "HALF_OPEN") {
-    console.log(`[Bridge] Circuit breaker HALF_OPEN — probing backend...`);
+    log.info("Circuit breaker HALF_OPEN — probing backend...");
   } else if (to === "CLOSED" && from !== "CLOSED") {
-    console.log(`[Bridge] Circuit breaker CLOSED — backend recovered`);
+    log.info("Circuit breaker CLOSED — backend recovered");
+    replayBufferedTracks();
   }
 });
 
@@ -66,8 +74,8 @@ export function shouldSkipTrack(artist: string, title: string): boolean {
   // Debounce rapid changes (5 second cooldown)
   const now = Date.now();
   if (now - lastPostTime < config.minPlaySeconds * 1000) {
-    console.log(
-      `[Bridge] Debouncing track change (${now - lastPostTime}ms since last, threshold: ${config.minPlaySeconds}s)`
+    log.debug(
+      `Debouncing track change (${now - lastPostTime}ms since last, threshold: ${config.minPlaySeconds}s)`
     );
     return true;
   }
@@ -110,7 +118,7 @@ async function postWithRetry(
   payload: NowPlayingPayload | BridgeStatusPayload,
 ): Promise<boolean> {
   if (!circuitBreaker.allowRequest()) {
-    console.log(`[Bridge] POST ${endpoint} skipped — circuit breaker OPEN`);
+    log.warn(`POST ${endpoint} skipped — circuit breaker OPEN`);
     return false;
   }
 
@@ -132,31 +140,28 @@ async function postWithRetry(
         throw new Error(`HTTP ${response.status}: ${text}`);
       }
 
-      console.log(`[Bridge] POST ${endpoint} succeeded`);
+      log.info(`POST ${endpoint} succeeded`);
       circuitBreaker.recordSuccess();
       return true;
     } catch (err) {
       lastError = err as Error;
       if (attempt < MAX_RETRIES) {
         const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
-        console.log(
-          `[Bridge] Retry ${attempt + 1}/${MAX_RETRIES} in ${backoff}ms: ${lastError.message}`
-        );
+        log.warn(`Retry ${attempt + 1}/${MAX_RETRIES} in ${backoff}ms: ${lastError.message}`);
         await new Promise((resolve) => setTimeout(resolve, backoff));
       }
     }
   }
 
   circuitBreaker.recordFailure();
-  console.error(
-    `[Bridge] POST ${endpoint} failed after ${MAX_RETRIES + 1} attempts: ${lastError?.message}`
-  );
+  log.error(`POST ${endpoint} failed after ${MAX_RETRIES + 1} attempts: ${lastError?.message}`);
   return false;
 }
 
 /**
  * Post a now-playing update to the backend.
  * Returns true if the backend acknowledged the update.
+ * Failed payloads are buffered for replay when the backend recovers.
  */
 export async function postNowPlaying(
   title: string,
@@ -172,8 +177,33 @@ export async function postNowPlaying(
     deck: deck ?? null,
   };
 
-  console.log(`[Bridge] Now Playing: "${title}" by ${artist}`);
-  return postWithRetry("/api/bridge/nowplaying", payload);
+  log.info(`Now Playing: "${title}" by ${artist}`);
+  const success = await postWithRetry("/api/bridge/nowplaying", payload);
+  if (!success) {
+    trackBuffer.push(payload);
+    log.info(`Buffered track for replay (${trackBuffer.size} in buffer)`);
+  }
+  return success;
+}
+
+/**
+ * Replay buffered tracks that failed during backend downtime.
+ * Called automatically when the circuit breaker closes.
+ */
+async function replayBufferedTracks(): Promise<void> {
+  const tracks = trackBuffer.drain();
+  if (tracks.length === 0) return;
+
+  log.info(`Replaying ${tracks.length} buffered track(s)...`);
+  for (const { payload } of tracks) {
+    const replayPayload = { ...payload, delayed: true };
+    const success = await postWithRetry("/api/bridge/nowplaying", replayPayload);
+    if (!success) {
+      log.warn(`Replay failed for "${payload.title}" — backend may be down again`);
+      return; // Stop replaying if backend goes down again
+    }
+    log.info(`Replayed: "${payload.title}" by ${payload.artist}`);
+  }
 }
 
 /**
@@ -197,16 +227,16 @@ export async function clearNowPlaying(): Promise<void> {
         throw new Error(`HTTP ${response.status}: ${text}`);
       }
 
-      console.log(`[Bridge] DELETE ${endpoint} succeeded`);
+      log.info(`DELETE ${endpoint} succeeded`);
       return;
     } catch (err) {
       const message = (err as Error).message;
       if (attempt < DELETE_MAX_RETRIES) {
         const backoff = DELETE_BACKOFF_MS * Math.pow(2, attempt);
-        console.log(`[Bridge] DELETE ${endpoint} retry ${attempt + 1}/${DELETE_MAX_RETRIES} in ${backoff}ms: ${message}`);
+        log.warn(`DELETE ${endpoint} retry ${attempt + 1}/${DELETE_MAX_RETRIES} in ${backoff}ms: ${message}`);
         await new Promise((resolve) => setTimeout(resolve, backoff));
       } else {
-        console.error(`[Bridge] DELETE ${endpoint} failed after ${DELETE_MAX_RETRIES + 1} attempts: ${message}`);
+        log.error(`DELETE ${endpoint} failed after ${DELETE_MAX_RETRIES + 1} attempts: ${message}`);
       }
     }
   }
@@ -226,8 +256,8 @@ export async function postBridgeStatus(
     device_name: deviceName ?? null,
   };
 
-  console.log(
-    `[Bridge] Status: ${connected ? "Connected" : "Disconnected"}${deviceName ? ` (${deviceName})` : ""}`
+  log.info(
+    `Status: ${connected ? "Connected" : "Disconnected"}${deviceName ? ` (${deviceName})` : ""}`
   );
   return postWithRetry("/api/bridge/status", payload);
 }

@@ -686,4 +686,179 @@ describe("PluginBridge", () => {
       expect(logs.some((m) => m.includes("Track loaded"))).toBe(true);
     });
   });
+
+  describe("Auto-reconnect", () => {
+    it("schedules reconnect after disconnect when previously connected", async () => {
+      plugin = createMockPlugin();
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+
+      const logs: string[] = [];
+      bridge.on("log", (msg: string) => logs.push(msg));
+
+      // Simulate connection then disconnection
+      plugin.emit("connection", { connected: true, deviceName: "CDJ" });
+      plugin.emit("connection", { connected: false });
+
+      expect(logs.some((m) => m.includes("reconnecting in 2s"))).toBe(true);
+    });
+
+    it("does NOT schedule reconnect if never connected", async () => {
+      plugin = createMockPlugin();
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+
+      const logs: string[] = [];
+      bridge.on("log", (msg: string) => logs.push(msg));
+
+      // Disconnect without prior connection
+      plugin.emit("connection", { connected: false });
+
+      expect(logs.some((m) => m.includes("reconnecting"))).toBe(false);
+    });
+
+    it("attempts reconnect after backoff delay", async () => {
+      plugin = createMockPlugin();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const startSpy = vi.spyOn(plugin as any, "start");
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+
+      // Reset spy to only track reconnect calls
+      startSpy.mockClear();
+
+      // Connect then disconnect
+      plugin.emit("connection", { connected: true, deviceName: "CDJ" });
+      plugin.emit("connection", { connected: false });
+
+      // Before backoff expires: no reconnect
+      vi.advanceTimersByTime(1999);
+      expect(startSpy).not.toHaveBeenCalled();
+
+      // After 2s backoff: reconnect attempted
+      await vi.advanceTimersByTimeAsync(1);
+      expect(startSpy).toHaveBeenCalledOnce();
+    });
+
+    it("uses exponential backoff on consecutive failures", async () => {
+      plugin = createMockPlugin();
+      let startCallCount = 0;
+      (plugin as unknown as Record<string, unknown>).start = async () => {
+        startCallCount++;
+        if (startCallCount > 1) {
+          throw new Error("Connection failed");
+        }
+      };
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+
+      const logs: string[] = [];
+      bridge.on("log", (msg: string) => logs.push(msg));
+
+      // Connect then disconnect (triggers reconnect)
+      plugin.emit("connection", { connected: true, deviceName: "CDJ" });
+      plugin.emit("connection", { connected: false });
+
+      // First attempt after 2s — fails
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(logs.some((m) => m.includes("Reconnect failed"))).toBe(true);
+
+      // Second attempt scheduled after 4s
+      expect(logs.some((m) => m.includes("reconnecting in 4s"))).toBe(true);
+    });
+
+    it("caps backoff at 30 seconds", async () => {
+      plugin = createMockPlugin();
+      let startCallCount = 0;
+      (plugin as unknown as Record<string, unknown>).start = async () => {
+        startCallCount++;
+        if (startCallCount > 1) throw new Error("fail");
+      };
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+
+      const logs: string[] = [];
+      bridge.on("log", (msg: string) => logs.push(msg));
+
+      // Connect then disconnect
+      plugin.emit("connection", { connected: true, deviceName: "CDJ" });
+      plugin.emit("connection", { connected: false });
+
+      // Advance through several reconnect cycles: 2s, 4s, 8s, 16s, 30s (capped)
+      for (const expected of [2, 4, 8, 16, 30]) {
+        expect(logs.some((m) => m.includes(`reconnecting in ${expected}s`))).toBe(true);
+        await vi.advanceTimersByTimeAsync(expected * 1000);
+      }
+    });
+
+    it("resets backoff on successful reconnection", async () => {
+      plugin = createMockPlugin();
+      let failNext = false;
+      const originalStart = plugin.start.bind(plugin);
+      (plugin as unknown as Record<string, unknown>).start = async (config?: Record<string, unknown>) => {
+        if (failNext) {
+          failNext = false;
+          throw new Error("Connection failed");
+        }
+        return originalStart(config);
+      };
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+
+      const logs: string[] = [];
+      bridge.on("log", (msg: string) => logs.push(msg));
+
+      // First cycle: connect → disconnect → reconnect succeeds
+      plugin.emit("connection", { connected: true, deviceName: "CDJ" });
+      plugin.emit("connection", { connected: false });
+      await vi.advanceTimersByTimeAsync(2000); // 2s backoff
+      expect(logs.some((m) => m.includes("Reconnected to Mock Plugin successfully"))).toBe(true);
+
+      // Clear logs
+      logs.length = 0;
+
+      // Second cycle: disconnect again → backoff should reset to 2s (not 4s)
+      plugin.emit("connection", { connected: true, deviceName: "CDJ" });
+      plugin.emit("connection", { connected: false });
+      expect(logs.some((m) => m.includes("reconnecting in 2s"))).toBe(true);
+    });
+
+    it("cancels reconnect on stop", async () => {
+      plugin = createMockPlugin();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const startSpy = vi.spyOn(plugin as any, "start");
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+      startSpy.mockClear();
+
+      // Connect then disconnect (schedules reconnect)
+      plugin.emit("connection", { connected: true, deviceName: "CDJ" });
+      plugin.emit("connection", { connected: false });
+
+      // Stop before backoff expires
+      await bridge.stop();
+
+      // Advance past the reconnect time
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(startSpy).not.toHaveBeenCalled();
+    });
+
+    it("does not schedule duplicate reconnects on multiple disconnect events", async () => {
+      plugin = createMockPlugin();
+      bridge = new PluginBridge(plugin, DEFAULT_CONFIG);
+      await bridge.start();
+
+      const logs: string[] = [];
+      bridge.on("log", (msg: string) => logs.push(msg));
+
+      // Connect then disconnect twice
+      plugin.emit("connection", { connected: true, deviceName: "CDJ" });
+      plugin.emit("connection", { connected: false });
+      plugin.emit("connection", { connected: false });
+
+      // Should only see one "reconnecting" message (second is ignored because timer is pending)
+      const reconnectLogs = logs.filter((m) => m.includes("reconnecting in"));
+      expect(reconnectLogs).toHaveLength(1);
+    });
+  });
 });

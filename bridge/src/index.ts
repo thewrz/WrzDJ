@@ -24,9 +24,12 @@ import {
   updateLastTrack,
 } from "./bridge.js";
 import type { DeckLiveEvent } from "./deck-state.js";
+import { Logger } from "./logger.js";
 import { getPlugin } from "./plugin-registry.js";
 import { PluginBridge } from "./plugin-bridge.js";
 import type { PluginConnectionEvent } from "./plugin-types.js";
+
+const log = new Logger("Bridge");
 
 // Register built-in plugins
 import "./plugins/index.js";
@@ -34,19 +37,19 @@ import "./plugins/index.js";
 let pluginBridge: PluginBridge | null = null;
 
 async function main(): Promise<void> {
-  console.log("[Bridge] WrzDJ Bridge starting...");
+  log.info("WrzDJ Bridge starting...");
 
   // Validate configuration
   validateConfig();
-  console.log(`[Bridge] API URL: ${config.apiUrl}`);
-  console.log(`[Bridge] Event Code: ${config.eventCode}`);
-  console.log(`[Bridge] Plugin: ${config.plugin}`);
-  console.log(`[Bridge] Live Threshold: ${config.liveThresholdSeconds}s`);
-  console.log(`[Bridge] Pause Grace: ${config.pauseGraceSeconds}s`);
-  console.log(`[Bridge] Now Playing Pause: ${config.nowPlayingPauseSeconds}s`);
-  console.log(`[Bridge] Min Play Seconds: ${config.minPlaySeconds}s`);
-  console.log(`[Bridge] Fader Detection: ${config.useFaderDetection}`);
-  console.log(`[Bridge] Master Deck Priority: ${config.masterDeckPriority}`);
+  log.info(`API URL: ${config.apiUrl}`);
+  log.info(`Event Code: ${config.eventCode}`);
+  log.info(`Plugin: ${config.plugin}`);
+  log.info(`Live Threshold: ${config.liveThresholdSeconds}s`);
+  log.info(`Pause Grace: ${config.pauseGraceSeconds}s`);
+  log.info(`Now Playing Pause: ${config.nowPlayingPauseSeconds}s`);
+  log.info(`Min Play Seconds: ${config.minPlaySeconds}s`);
+  log.info(`Fader Detection: ${config.useFaderDetection}`);
+  log.info(`Master Deck Priority: ${config.masterDeckPriority}`);
 
   // Create the plugin
   const plugin = getPlugin(config.plugin);
@@ -67,7 +70,7 @@ async function main(): Promise<void> {
 
   // Forward logs
   pluginBridge.on("log", (message: string) => {
-    console.log(`[Bridge] ${message}`);
+    log.info(message);
   });
 
   // Handle track going "live"
@@ -78,9 +81,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    console.log(
-      `[Bridge] Deck ${deckId} LIVE: "${track.title}" by ${track.artist}`
-    );
+    log.info(`Deck ${deckId} LIVE: "${track.title}" by ${track.artist}`);
 
     updateLastTrack(track.artist, track.title);
     await postNowPlaying(track.title, track.artist, track.album, deckId);
@@ -99,17 +100,17 @@ async function main(): Promise<void> {
   // Handle connection status
   pluginBridge.on("connection", async (event: PluginConnectionEvent) => {
     if (event.connected) {
-      console.log(`[Bridge] Device connected: ${event.deviceName}`);
+      log.info(`Device connected: ${event.deviceName}`);
       await postBridgeStatus(true, event.deviceName);
     } else {
-      console.log("[Bridge] Device disconnected");
+      log.info("Device disconnected");
       await postBridgeStatus(false);
     }
   });
 
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {
-    console.log(`\n[Bridge] Received ${signal}, shutting down...`);
+    log.info(`Received ${signal}, shutting down...`);
     if (pluginBridge) {
       await pluginBridge.stop();
     }
@@ -127,7 +128,7 @@ async function main(): Promise<void> {
 
 // Run the bridge
 main().catch((err: Error) => {
-  console.error("[Bridge] Fatal error:", err.message);
+  log.error(`Fatal error: ${err.message}`);
   if (pluginBridge) {
     pluginBridge.stop().catch(() => {});
   }

@@ -12,12 +12,14 @@ import { EventEmitter } from 'events';
 import { PluginBridge } from '@bridge/plugin-bridge.js';
 import { getPlugin } from '@bridge/plugin-registry.js';
 import { CircuitBreaker } from '@bridge/circuit-breaker.js';
+import { Logger, type LogLevel } from '@bridge/logger.js';
+import { TrackHistoryBuffer } from '@bridge/track-history-buffer.js';
 import type { DeckLiveEvent, DeckState } from '@bridge/deck-state.js';
 import type { NowPlayingPayload, BridgeStatusPayload } from '@bridge/types.js';
 import type { PluginConnectionEvent } from '@bridge/plugin-types.js';
 import { checkEventHealth } from './event-health-service.js';
 import { detectSubnetConflicts, formatConflictWarnings } from './network-check.js';
-import type { BridgeRunnerConfig, BridgeStatus, DeckDisplay, TrackDisplay } from '../shared/types.js';
+import type { BridgeRunnerConfig, BridgeStatus, DeckDisplay, IpcLogMessage, TrackDisplay } from '../shared/types.js';
 
 // Register built-in plugins
 import '@bridge/plugins/index.js';
@@ -49,6 +51,8 @@ export class BridgeRunner extends EventEmitter {
   private networkWarnings: string[] = [];
   private backendReachable = true;
   private circuitBreaker = new CircuitBreaker({ failureThreshold: 3, cooldownMs: 60_000 });
+  private readonly logger = new Logger('Bridge');
+  private readonly trackBuffer = new TrackHistoryBuffer();
 
   constructor() {
     super();
@@ -74,6 +78,7 @@ export class BridgeRunner extends EventEmitter {
     this.networkWarnings = [];
     this.backendReachable = true;
     this.circuitBreaker.reset();
+    this.trackBuffer.clear();
 
     const protocol = config.settings.protocol || 'stagelinq';
 
@@ -89,7 +94,7 @@ export class BridgeRunner extends EventEmitter {
     if (conflicts.length > 0) {
       this.networkWarnings = formatConflictWarnings(conflicts);
       for (const warning of this.networkWarnings) {
-        this.log(`WARNING: ${warning}`);
+        this.log(warning, 'warn');
       }
     }
 
@@ -123,7 +128,7 @@ export class BridgeRunner extends EventEmitter {
       this.running = false;
       this.pluginBridge = null;
       const message = err instanceof Error ? err.message : String(err);
-      this.log(`Failed to connect: ${message}`);
+      this.log(`Failed to connect: ${message}`, 'error');
       this.emitStatus();
       throw err;
     }
@@ -197,7 +202,7 @@ export class BridgeRunner extends EventEmitter {
   private wireCircuitBreaker(): void {
     this.circuitBreaker.on('stateChange', ({ from, to }: { from: string; to: string }) => {
       if (to === 'OPEN') {
-        this.log('Circuit breaker OPEN — backend unreachable, pausing API calls for 60s');
+        this.log('Circuit breaker OPEN — backend unreachable, pausing API calls for 60s', 'error');
         if (this.backendReachable) {
           this.backendReachable = false;
           this.emitStatus();
@@ -210,6 +215,7 @@ export class BridgeRunner extends EventEmitter {
           this.backendReachable = true;
           this.emitStatus();
         }
+        this.replayBufferedTracks();
       }
     });
   }
@@ -295,7 +301,7 @@ export class BridgeRunner extends EventEmitter {
 
     const now = Date.now();
     if (this.config && now - this.lastPostTime < this.config.settings.minPlaySeconds * 1000) {
-      this.log(`Debouncing track change (${now - this.lastPostTime}ms since last)`);
+      this.log(`Debouncing track change (${now - this.lastPostTime}ms since last)`, 'debug');
       return true;
     }
 
@@ -339,7 +345,7 @@ export class BridgeRunner extends EventEmitter {
     if (!this.config) return false;
 
     if (!this.circuitBreaker.allowRequest()) {
-      this.log(`POST ${endpoint} skipped — circuit breaker OPEN`);
+      this.log(`POST ${endpoint} skipped — circuit breaker OPEN`, 'warn');
       return false;
     }
 
@@ -358,7 +364,7 @@ export class BridgeRunner extends EventEmitter {
 
         if (response.status === 401) {
           // 401 is an auth problem, not a backend availability issue — don't count as circuit failure
-          this.log(`POST ${endpoint} returned 401 — session expired`);
+          this.log(`POST ${endpoint} returned 401 — session expired`, 'error');
           // Stop bridge asynchronously (don't block the retry loop)
           setTimeout(() => {
             this.stop('Session expired — please log in again');
@@ -382,7 +388,7 @@ export class BridgeRunner extends EventEmitter {
         lastError = err as Error;
         if (attempt < MAX_RETRIES) {
           const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
-          this.log(`Retry ${attempt + 1}/${MAX_RETRIES} in ${backoff}ms: ${lastError.message}`);
+          this.log(`Retry ${attempt + 1}/${MAX_RETRIES} in ${backoff}ms: ${lastError.message}`, 'warn');
           await new Promise((resolve) => setTimeout(resolve, backoff));
         }
       }
@@ -393,7 +399,7 @@ export class BridgeRunner extends EventEmitter {
       this.backendReachable = false;
       this.emitStatus();
     }
-    this.log(`POST ${endpoint} failed after ${MAX_RETRIES + 1} attempts: ${lastError?.message}`);
+    this.log(`POST ${endpoint} failed after ${MAX_RETRIES + 1} attempts: ${lastError?.message}`, 'error');
     return false;
   }
 
@@ -413,7 +419,11 @@ export class BridgeRunner extends EventEmitter {
       deck: deck ?? null,
     };
 
-    await this.postWithRetry('/api/bridge/nowplaying', payload);
+    const success = await this.postWithRetry('/api/bridge/nowplaying', payload);
+    if (!success) {
+      this.trackBuffer.push(payload);
+      this.log(`Buffered track for replay (${this.trackBuffer.size} in buffer)`);
+    }
   }
 
   private async postBridgeStatus(connected: boolean, deviceName?: string): Promise<void> {
@@ -456,10 +466,10 @@ export class BridgeRunner extends EventEmitter {
         const message = (err as Error).message;
         if (attempt < DELETE_MAX_RETRIES) {
           const backoff = DELETE_BACKOFF_MS * Math.pow(2, attempt);
-          this.log(`DELETE ${endpoint} retry ${attempt + 1}/${DELETE_MAX_RETRIES} in ${backoff}ms: ${message}`);
+          this.log(`DELETE ${endpoint} retry ${attempt + 1}/${DELETE_MAX_RETRIES} in ${backoff}ms: ${message}`, 'warn');
           await new Promise((resolve) => setTimeout(resolve, backoff));
         } else {
-          this.log(`DELETE ${endpoint} failed after ${DELETE_MAX_RETRIES + 1} attempts: ${message}`);
+          this.log(`DELETE ${endpoint} failed after ${DELETE_MAX_RETRIES + 1} attempts: ${message}`, 'error');
         }
       }
     }
@@ -496,14 +506,37 @@ export class BridgeRunner extends EventEmitter {
     // 'active' and 'error' — do nothing (don't stop on transient errors)
   }
 
+  // --- Track buffer replay ---
+
+  private replayBufferedTracks(): void {
+    const tracks = this.trackBuffer.drain();
+    if (tracks.length === 0) return;
+
+    this.log(`Replaying ${tracks.length} buffered track(s)...`);
+
+    // Replay asynchronously — don't block the circuit breaker handler
+    (async () => {
+      for (const { payload } of tracks) {
+        const replayPayload: NowPlayingPayload = { ...payload, delayed: true };
+        const success = await this.postWithRetry('/api/bridge/nowplaying', replayPayload);
+        if (!success) {
+          this.log(`Replay failed for "${payload.title}" — backend may be down again`, 'warn');
+          return;
+        }
+        this.log(`Replayed: "${payload.title}" by ${payload.artist}`);
+      }
+    })();
+  }
+
   // --- Status emission ---
 
   private emitStatus(): void {
     this.emit('statusChanged', this.getStatus());
   }
 
-  private log(message: string): void {
-    console.log(`[Bridge] ${message}`);
-    this.emit('log', message);
+  private log(message: string, level: LogLevel = 'info'): void {
+    this.logger[level](message);
+    const logMessage: IpcLogMessage = { message, level };
+    this.emit('log', logMessage);
   }
 }

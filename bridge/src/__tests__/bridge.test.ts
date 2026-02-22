@@ -319,6 +319,62 @@ describe("bridge.ts", () => {
     });
   });
 
+  describe("track history buffer", () => {
+    it("buffers failed tracks and replays on circuit breaker recovery", async () => {
+      mockFetch.mockRejectedValue(new Error("Network error"));
+
+      // Buffer a track by failing all retries
+      const p1 = postNowPlaying("Track A", "Artist A");
+      await vi.advanceTimersByTimeAsync(20_000);
+      const result = await p1;
+      expect(result).toBe(false);
+
+      // Trip the circuit breaker (need 3 failures total)
+      const p2 = postBridgeStatus(true);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await p2;
+
+      const p3 = postBridgeStatus(true);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await p3;
+
+      expect(getCircuitBreaker().getState()).toBe("OPEN");
+
+      // Wait for cooldown
+      vi.advanceTimersByTime(60_000);
+
+      // Backend recovers
+      mockFetch.mockResolvedValue(createMockResponse(200));
+      mockFetch.mockClear();
+
+      // Trigger a request to close the circuit breaker (probe succeeds)
+      const probeResult = await postBridgeStatus(true);
+      expect(probeResult).toBe(true);
+
+      // Allow replay to execute
+      await vi.advanceTimersByTimeAsync(100);
+
+      // Should have replayed the buffered track with delayed: true
+      const replayCalls = mockFetch.mock.calls.filter((call) => {
+        if (typeof call[0] !== "string") return false;
+        if (!call[0].includes("/bridge/nowplaying")) return false;
+        const body = JSON.parse(call[1].body);
+        return body.delayed === true;
+      });
+      expect(replayCalls.length).toBeGreaterThanOrEqual(1);
+
+      // Find the replayed "Track A" payload
+      const trackAReplay = replayCalls.find((call) => {
+        const body = JSON.parse(call[1].body);
+        return body.title === "Track A";
+      });
+      expect(trackAReplay).toBeDefined();
+      const replayBody = JSON.parse(trackAReplay![1].body);
+      expect(replayBody.artist).toBe("Artist A");
+      expect(replayBody.delayed).toBe(true);
+    });
+  });
+
   describe("fetch timeout (AbortController)", () => {
     it("passes AbortSignal to fetch", async () => {
       mockFetch.mockResolvedValue(createMockResponse(200));

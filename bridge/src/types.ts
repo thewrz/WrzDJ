@@ -9,6 +9,8 @@ export interface NowPlayingPayload {
   artist: string;
   album?: string | null;
   deck?: string | null;
+  /** True when this track is being replayed from the buffer after backend recovery */
+  delayed?: boolean;
 }
 
 /** Payload sent to POST /api/bridge/status */

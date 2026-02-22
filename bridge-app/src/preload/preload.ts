@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
-import type { AuthState, BridgeSettings, BridgeStatus, EventInfo, PluginMeta } from '../shared/types.js';
+import type { AuthState, BridgeSettings, BridgeStatus, EventInfo, IpcLogMessage, PluginMeta } from '../shared/types.js';
 import { IPC_CHANNELS } from '../shared/types.js';
 
 const bridgeApi = {
@@ -35,6 +35,10 @@ const bridgeApi = {
   updateSettings: (settings: Partial<BridgeSettings>): Promise<BridgeSettings> =>
     ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE, settings),
 
+  // Debug
+  exportDebugReport: (): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.BRIDGE_EXPORT_DEBUG_REPORT),
+
   // Status subscriptions (main -> renderer)
   onBridgeStatus: (callback: (status: BridgeStatus) => void): (() => void) => {
     const listener = (_event: IpcRendererEvent, status: BridgeStatus) => callback(status);
@@ -42,8 +46,8 @@ const bridgeApi = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.BRIDGE_STATUS, listener);
   },
 
-  onBridgeLog: (callback: (message: string) => void): (() => void) => {
-    const listener = (_event: IpcRendererEvent, message: string) => callback(message);
+  onBridgeLog: (callback: (logMessage: IpcLogMessage) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, logMessage: IpcLogMessage) => callback(logMessage);
     ipcRenderer.on(IPC_CHANNELS.BRIDGE_LOG, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.BRIDGE_LOG, listener);
   },

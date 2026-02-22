@@ -446,6 +446,12 @@ body {
   flex-shrink: 0;
 }
 
+.log-level {
+  flex-shrink: 0;
+  font-weight: 600;
+  min-width: 2.2em;
+}
+
 .log-message {
   color: #b0b0b0;
 }

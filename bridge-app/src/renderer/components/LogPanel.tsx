@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { api } from '../api.js';
 import type { LogEntry } from '../hooks/useBridgeLog.js';
+import type { LogLevel } from '../../shared/types.js';
 
 interface LogPanelProps {
   entries: readonly LogEntry[];
@@ -15,10 +17,31 @@ function formatTime(timestamp: number): string {
   return `${h}:${m}:${s}.${ms}`;
 }
 
+const LEVEL_STYLES: Record<LogLevel, { color: string; label: string }> = {
+  debug: { color: '#666', label: 'DBG' },
+  info: { color: '#5b9bd5', label: 'INF' },
+  warn: { color: '#e5a00d', label: 'WRN' },
+  error: { color: '#e55', label: 'ERR' },
+};
+
 export function LogPanel({ entries, onClear }: LogPanelProps) {
   const [open, setOpen] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
+
+  const handleExportDebugReport = useCallback(async () => {
+    try {
+      const filePath = await api.exportDebugReport();
+      if (filePath) {
+        setExportStatus('Report saved');
+        setTimeout(() => setExportStatus(null), 3000);
+      }
+    } catch {
+      setExportStatus('Export failed');
+      setTimeout(() => setExportStatus(null), 3000);
+    }
+  }, []);
 
   useEffect(() => {
     if (open && autoScroll && logRef.current) {
@@ -53,7 +76,16 @@ export function LogPanel({ entries, onClear }: LogPanelProps) {
 
       {open && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '0.5rem', gap: '0.5rem' }}>
+            {exportStatus && (
+              <span style={{ fontSize: '0.7rem', color: '#5b9bd5' }}>{exportStatus}</span>
+            )}
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={(e) => { e.stopPropagation(); handleExportDebugReport(); }}
+            >
+              Export Report
+            </button>
             <button
               className="btn btn-ghost btn-sm"
               onClick={(e) => { e.stopPropagation(); onClear(); }}
@@ -70,12 +102,21 @@ export function LogPanel({ entries, onClear }: LogPanelProps) {
             {entries.length === 0 ? (
               <div className="log-empty">No log entries yet. Start the bridge to see diagnostic output.</div>
             ) : (
-              entries.map((entry) => (
-                <div key={entry.id} className="log-entry">
-                  <span className="log-timestamp">{formatTime(entry.timestamp)}</span>
-                  <span className="log-message">{entry.message}</span>
-                </div>
-              ))
+              entries.map((entry) => {
+                const levelStyle = LEVEL_STYLES[entry.level];
+                return (
+                  <div key={entry.id} className="log-entry">
+                    <span className="log-timestamp">{formatTime(entry.timestamp)}</span>
+                    <span className="log-level" style={{ color: levelStyle.color }}>{levelStyle.label}</span>
+                    <span
+                      className="log-message"
+                      style={entry.level === 'error' ? { color: '#e55' } : entry.level === 'warn' ? { color: '#d4a' } : undefined}
+                    >
+                      {entry.message}
+                    </span>
+                  </div>
+                );
+              })
             )}
           </div>
 
