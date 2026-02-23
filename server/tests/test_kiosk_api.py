@@ -65,14 +65,17 @@ class TestKioskPairStatus:
 
 
 class TestKioskSessionAssignment:
-    """GET /api/public/kiosk/session/{session_token}/assignment"""
+    """GET /api/public/kiosk/session/assignment (token in X-Kiosk-Session header)"""
 
     def test_returns_event_info(
         self, client: TestClient, db: Session, test_user: User, test_event: Event
     ):
         kiosk = create_kiosk(db)
         complete_pairing(db, kiosk, test_event.code, test_user.id)
-        resp = client.get(f"/api/public/kiosk/session/{kiosk.session_token}/assignment")
+        resp = client.get(
+            "/api/public/kiosk/session/assignment",
+            headers={"X-Kiosk-Session": kiosk.session_token},
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "active"
@@ -85,20 +88,39 @@ class TestKioskSessionAssignment:
         kiosk = create_kiosk(db)
         complete_pairing(db, kiosk, test_event.code, test_user.id)
         assert kiosk.last_seen_at is None
-        client.get(f"/api/public/kiosk/session/{kiosk.session_token}/assignment")
+        client.get(
+            "/api/public/kiosk/session/assignment",
+            headers={"X-Kiosk-Session": kiosk.session_token},
+        )
         db.refresh(kiosk)
         assert kiosk.last_seen_at is not None
 
+    def test_401_missing_header(self, client: TestClient):
+        resp = client.get("/api/public/kiosk/session/assignment")
+        assert resp.status_code == 401
+
     def test_404_for_unknown_token(self, client: TestClient):
-        resp = client.get(f"/api/public/kiosk/session/{'x' * 64}/assignment")
+        resp = client.get(
+            "/api/public/kiosk/session/assignment",
+            headers={"X-Kiosk-Session": "x" * 64},
+        )
         assert resp.status_code == 404
 
     def test_returns_pairing_status_before_paired(self, client: TestClient, db: Session):
         kiosk = create_kiosk(db)
-        resp = client.get(f"/api/public/kiosk/session/{kiosk.session_token}/assignment")
+        resp = client.get(
+            "/api/public/kiosk/session/assignment",
+            headers={"X-Kiosk-Session": kiosk.session_token},
+        )
         assert resp.status_code == 200
         assert resp.json()["status"] == "pairing"
         assert resp.json()["event_code"] is None
+
+    def test_old_url_path_endpoint_removed(self, client: TestClient, db: Session):
+        """Verify the old path-token endpoint no longer exists."""
+        kiosk = create_kiosk(db)
+        resp = client.get(f"/api/public/kiosk/session/{kiosk.session_token}/assignment")
+        assert resp.status_code == 404 or resp.status_code == 405
 
 
 class TestCompletePairingEndpoint:

@@ -68,7 +68,7 @@ export default function StreamOverlayPage() {
       if (!stopped) {
         poll();
       }
-    }, 3000);
+    }, 10_000);
 
     return () => {
       if (intervalId) {

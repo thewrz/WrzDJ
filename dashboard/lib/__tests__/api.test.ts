@@ -852,7 +852,7 @@ describe('ApiClient', () => {
       expect(url).toContain('/api/public/kiosk/pair/ABC234/status');
     });
 
-    it('polls kiosk session assignment', async () => {
+    it('polls kiosk session assignment via X-Kiosk-Session header', async () => {
       const token = 'b'.repeat(64);
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -867,8 +867,12 @@ describe('ApiClient', () => {
       expect(result.status).toBe('active');
       expect(result.event_code).toBe('EVT001');
 
-      const [url] = mockFetch.mock.calls[0];
-      expect(url).toContain(`/api/public/kiosk/session/${token}/assignment`);
+      const [url, options] = mockFetch.mock.calls[0];
+      // Token must NOT appear in the URL (security: prevents log leakage)
+      expect(url).toContain('/api/public/kiosk/session/assignment');
+      expect(url).not.toContain(token);
+      // Token sent in header instead
+      expect(options.headers['X-Kiosk-Session']).toBe(token);
     });
 
     it('completes kiosk pairing', async () => {

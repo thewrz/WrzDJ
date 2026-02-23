@@ -335,7 +335,7 @@ describe('KioskDisplayPage', () => {
     });
   });
 
-  describe('3s polling loop', () => {
+  describe('10s polling loop (SSE handles real-time)', () => {
     it('calls loadDisplay on mount', async () => {
       setupDefaultMocks();
 
@@ -346,7 +346,7 @@ describe('KioskDisplayPage', () => {
       expect(api.getKioskDisplay).toHaveBeenCalledTimes(1);
     });
 
-    it('polls every 3 seconds', async () => {
+    it('polls every 10 seconds', async () => {
       vi.useFakeTimers();
       setupDefaultMocks();
 
@@ -356,12 +356,12 @@ describe('KioskDisplayPage', () => {
 
       expect(api.getKioskDisplay).toHaveBeenCalledTimes(1);
 
-      // Advance 3s — second poll
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      // Advance 10s — second poll
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
       expect(api.getKioskDisplay).toHaveBeenCalledTimes(2);
 
-      // Advance 3s more — third poll
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      // Advance 10s more — third poll
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
       expect(api.getKioskDisplay).toHaveBeenCalledTimes(3);
     });
 
@@ -410,11 +410,11 @@ describe('KioskDisplayPage', () => {
       expect(api.getKioskDisplay).toHaveBeenCalledTimes(1);
 
       // Error on second call
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
       expect(api.getKioskDisplay).toHaveBeenCalledTimes(2);
 
       // Should still poll after error
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
       expect(api.getKioskDisplay).toHaveBeenCalledTimes(3);
     });
   });
@@ -469,7 +469,7 @@ describe('KioskDisplayPage', () => {
 
       // Now playing goes null on next poll
       vi.mocked(api.getNowPlaying).mockResolvedValue(null);
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
 
       // Track should still be visible during grace period
       expect(screen.getByText('Currently Playing Song')).toBeInTheDocument();
@@ -491,7 +491,7 @@ describe('KioskDisplayPage', () => {
 
       // Now playing goes null
       vi.mocked(api.getNowPlaying).mockResolvedValue(null);
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
 
       // Advance past the 10s grace
       await act(async () => { await vi.advanceTimersByTimeAsync(11000); });
@@ -511,12 +511,12 @@ describe('KioskDisplayPage', () => {
 
       // Now playing goes null — starts grace period
       vi.mocked(api.getNowPlaying).mockResolvedValue(null);
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
 
       // New track arrives within grace period
       const newTrack = { ...mockNowPlaying, title: 'New Track', artist: 'New Artist' };
       vi.mocked(api.getNowPlaying).mockResolvedValue(newTrack);
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
 
       expect(screen.getByText('New Track')).toBeInTheDocument();
       expect(screen.getByText('New Artist')).toBeInTheDocument();
@@ -549,7 +549,7 @@ describe('KioskDisplayPage', () => {
           { id: 3, title: 'Song 3', artist: 'Artist 3', artwork_url: null, vote_count: 0 },
         ],
       });
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
 
       const newItem = screen.getByText('Song 3').closest('.queue-item');
       expect(newItem?.classList.contains('queue-item-new')).toBe(true);
@@ -575,7 +575,7 @@ describe('KioskDisplayPage', () => {
           { id: 3, title: 'Song 3', artist: 'Artist 3', artwork_url: null, vote_count: 0 },
         ],
       });
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
 
       // Verify animation class is present
       let newItem = screen.getByText('Song 3').closest('.queue-item');
