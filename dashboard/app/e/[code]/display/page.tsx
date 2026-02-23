@@ -309,8 +309,7 @@ export default function KioskDisplayPage() {
           object-fit: cover;
           display: block;
         }
-        .kiosk-banner-bg::after {
-          content: '';
+        .kiosk-banner-fade {
           position: absolute;
           top: 0;
           left: 0;
@@ -318,6 +317,7 @@ export default function KioskDisplayPage() {
           height: 100%;
           background: linear-gradient(to bottom, transparent 0%, transparent 40%, var(--kiosk-bg-solid, #1a1a2e) 100%);
           pointer-events: none;
+          z-index: 1;
         }
         .kiosk-header {
           display: flex;
@@ -880,6 +880,7 @@ export default function KioskDisplayPage() {
                 if (parent) parent.style.display = 'none';
               }}
             />
+            <div className="kiosk-banner-fade" />
           </div>
         )}
 
