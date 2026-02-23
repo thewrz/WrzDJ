@@ -12,8 +12,8 @@ const sampleEntries: ActivityLogEntry[] = [
 describe('ActivityLogPanel', () => {
   it('renders with collapsed state by default', () => {
     render(<ActivityLogPanel entries={sampleEntries} />);
-    expect(screen.getByText('Activity Log')).toBeTruthy();
-    expect(screen.getByText('Expand')).toBeTruthy();
+    expect(screen.getByText('Activity Log')).toBeInTheDocument();
+    expect(screen.getByText('Expand')).toBeInTheDocument();
     expect(screen.queryByText('Bridge connected')).toBeNull();
   });
 
@@ -21,50 +21,50 @@ describe('ActivityLogPanel', () => {
     render(<ActivityLogPanel entries={sampleEntries} />);
     fireEvent.click(screen.getByText('Expand'));
 
-    expect(screen.getByText('Bridge connected')).toBeTruthy();
-    expect(screen.getByText('Track not found on Tidal')).toBeTruthy();
-    expect(screen.getByText('Beatport sync failed')).toBeTruthy();
+    expect(screen.getByText('Bridge connected')).toBeInTheDocument();
+    expect(screen.getByText('Track not found on Tidal')).toBeInTheDocument();
+    expect(screen.getByText('Beatport sync failed')).toBeInTheDocument();
   });
 
   it('shows empty state when no entries', () => {
     render(<ActivityLogPanel entries={[]} />);
     fireEvent.click(screen.getByText('Expand'));
 
-    expect(screen.getByText('No recent activity')).toBeTruthy();
+    expect(screen.getByText('No recent activity')).toBeInTheDocument();
   });
 
   it('shows warning count badge', () => {
     render(<ActivityLogPanel entries={sampleEntries} />);
-    expect(screen.getByText('2 warnings')).toBeTruthy();
+    expect(screen.getByText('2 warnings')).toBeInTheDocument();
   });
 
   it('shows level badges when expanded', () => {
     render(<ActivityLogPanel entries={sampleEntries} />);
     fireEvent.click(screen.getByText('Expand'));
 
-    expect(screen.getByText('info')).toBeTruthy();
-    expect(screen.getByText('warning')).toBeTruthy();
-    expect(screen.getByText('error')).toBeTruthy();
+    expect(screen.getByText('info')).toBeInTheDocument();
+    expect(screen.getByText('warning')).toBeInTheDocument();
+    expect(screen.getByText('error')).toBeInTheDocument();
   });
 
   it('shows source badges when expanded', () => {
     render(<ActivityLogPanel entries={sampleEntries} />);
     fireEvent.click(screen.getByText('Expand'));
 
-    expect(screen.getByText('bridge')).toBeTruthy();
-    expect(screen.getByText('tidal')).toBeTruthy();
-    expect(screen.getByText('beatport')).toBeTruthy();
+    expect(screen.getByText('bridge')).toBeInTheDocument();
+    expect(screen.getByText('tidal')).toBeInTheDocument();
+    expect(screen.getByText('beatport')).toBeInTheDocument();
   });
 
   it('toggles collapse on click', () => {
     render(<ActivityLogPanel entries={sampleEntries} />);
 
     fireEvent.click(screen.getByText('Expand'));
-    expect(screen.getByText('Collapse')).toBeTruthy();
-    expect(screen.getByText('Bridge connected')).toBeTruthy();
+    expect(screen.getByText('Collapse')).toBeInTheDocument();
+    expect(screen.getByText('Bridge connected')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Collapse'));
-    expect(screen.getByText('Expand')).toBeTruthy();
+    expect(screen.getByText('Expand')).toBeInTheDocument();
     expect(screen.queryByText('Bridge connected')).toBeNull();
   });
 });

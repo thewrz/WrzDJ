@@ -298,6 +298,9 @@ describe('ApiClient', () => {
       expect(user.id).toBe(1);
       expect(user.username).toBe('testuser');
       expect(user.role).toBe('admin');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/auth/me');
     });
   });
 
@@ -748,6 +751,9 @@ describe('ApiClient', () => {
 
       const result = await api.getNowPlaying('ABC123');
       expect(result).toBeNull();
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/public/e/ABC123/nowplaying');
     });
 
     it('throws ApiError for 404', async () => {
@@ -1556,6 +1562,10 @@ describe('ApiClient', () => {
 
       const result = await api.disconnectTidal();
       expect(result.status).toBe('ok');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/tidal/disconnect');
+      expect(options.method).toBe('POST');
     });
 
     it('fetches Tidal event settings', async () => {
@@ -1608,6 +1618,10 @@ describe('ApiClient', () => {
 
       const result = await api.syncRequestToTidal(7);
       expect(result.status).toBe('synced');
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/tidal/requests/7/sync');
+      expect(options.method).toBe('POST');
     });
 
     it('links Tidal track to request', async () => {
@@ -1678,7 +1692,10 @@ describe('ApiClient', () => {
       const result = await api.generateLLMRecommendations('ABC123', 'something upbeat');
       expect(result.suggestions).toHaveLength(1);
 
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/events/ABC123/recommendations/llm');
+      expect(options.method).toBe('POST');
+      const body = JSON.parse(options.body);
       expect(body.prompt).toBe('something upbeat');
     });
 

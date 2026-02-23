@@ -65,22 +65,22 @@ const baseProps = {
 describe('SongManagementTab', () => {
   it('renders RequestQueueSection', () => {
     render(<SongManagementTab {...baseProps} />);
-    expect(screen.getByTestId('request-queue')).toBeTruthy();
+    expect(screen.getByTestId('request-queue')).toBeInTheDocument();
   });
 
   it('renders SyncReportPanel', () => {
     render(<SongManagementTab {...baseProps} />);
-    expect(screen.getByTestId('sync-report')).toBeTruthy();
+    expect(screen.getByTestId('sync-report')).toBeInTheDocument();
   });
 
   it('renders PlayHistorySection', () => {
     render(<SongManagementTab {...baseProps} />);
-    expect(screen.getByTestId('play-history')).toBeTruthy();
+    expect(screen.getByTestId('play-history')).toBeInTheDocument();
   });
 
   it('renders RecommendationsCard when not expired', () => {
     render(<SongManagementTab {...baseProps} />);
-    expect(screen.getByTestId('recommendations')).toBeTruthy();
+    expect(screen.getByTestId('recommendations')).toBeInTheDocument();
   });
 
   it('hides RecommendationsCard when expired', () => {

@@ -70,26 +70,26 @@ const baseProps = {
 describe('EventManagementTab', () => {
   it('renders KioskControlsCard', () => {
     render(<EventManagementTab {...baseProps} />);
-    expect(screen.getByTestId('kiosk-controls')).toBeTruthy();
+    expect(screen.getByTestId('kiosk-controls')).toBeInTheDocument();
   });
 
   it('renders StreamOverlayCard', () => {
     render(<EventManagementTab {...baseProps} />);
-    expect(screen.getByTestId('stream-overlay')).toBeTruthy();
+    expect(screen.getByTestId('stream-overlay')).toBeInTheDocument();
   });
 
   it('renders BridgeStatusCard', () => {
     render(<EventManagementTab {...baseProps} />);
-    expect(screen.getByTestId('bridge-status')).toBeTruthy();
+    expect(screen.getByTestId('bridge-status')).toBeInTheDocument();
   });
 
   it('renders CloudProvidersCard', () => {
     render(<EventManagementTab {...baseProps} />);
-    expect(screen.getByTestId('cloud-providers')).toBeTruthy();
+    expect(screen.getByTestId('cloud-providers')).toBeInTheDocument();
   });
 
   it('renders EventCustomizationCard', () => {
     render(<EventManagementTab {...baseProps} />);
-    expect(screen.getByTestId('event-customization')).toBeTruthy();
+    expect(screen.getByTestId('event-customization')).toBeInTheDocument();
   });
 });

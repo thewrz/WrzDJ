@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { KeyBadge, BpmBadge, GenreBadge } from '../MusicBadges';
+import { getCamelotColor } from '@/lib/camelot-colors';
+import { getBpmColor } from '@/lib/bpm-color';
 
 describe('KeyBadge', () => {
   it('renders nothing when musicalKey is null', () => {
@@ -32,8 +34,9 @@ describe('KeyBadge', () => {
   it('uses colored background based on Camelot position', () => {
     const { container } = render(<KeyBadge musicalKey="8A" />);
     const badge = container.firstChild as HTMLElement;
-    // Position 8 = teal (#32D7A0)
-    expect(badge.style.backgroundColor).toBeTruthy();
+    // Position 8 = teal (#32D7A0) — verify component wires the correct color
+    const expected = getCamelotColor('8A');
+    expect(badge).toHaveStyle({ backgroundColor: expected.bg });
   });
 
   it('renders fallback style for unparseable keys', () => {
@@ -74,19 +77,25 @@ describe('BpmBadge', () => {
   it('shows green tier when close to average', () => {
     const { container } = render(<BpmBadge bpm={128} avgBpm={128} />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.style.backgroundColor).toBeTruthy();
+    const expected = getBpmColor(128, 128);
+    expect(expected.tier).toBe('match');
+    expect(badge).toHaveStyle({ backgroundColor: expected.bg });
   });
 
   it('shows amber tier when moderately far from average', () => {
     const { container } = render(<BpmBadge bpm={140} avgBpm={128} />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.style.backgroundColor).toBeTruthy();
+    const expected = getBpmColor(140, 128);
+    expect(expected.tier).toBe('near');
+    expect(badge).toHaveStyle({ backgroundColor: expected.bg });
   });
 
   it('shows neutral tier when no average is provided', () => {
     const { container } = render(<BpmBadge bpm={128} />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.style.backgroundColor).toBeTruthy();
+    const expected = getBpmColor(128, null);
+    expect(expected.tier).toBe('neutral');
+    expect(badge).toHaveStyle({ backgroundColor: expected.bg });
   });
 
   it('applies bold font weight for visibility', () => {
@@ -98,14 +107,17 @@ describe('BpmBadge', () => {
   it('shows neutral tier when isOutlier is true', () => {
     const { container } = render(<BpmBadge bpm={68} avgBpm={128} isOutlier={true} />);
     const badge = container.firstChild as HTMLElement;
-    // Neutral gray background
-    expect(badge.style.backgroundColor).toBeTruthy();
+    const expected = getBpmColor(68, 128, true);
+    expect(expected.tier).toBe('neutral');
+    expect(badge).toHaveStyle({ backgroundColor: expected.bg });
   });
 
   it('shows normal color when isOutlier is false', () => {
     const { container } = render(<BpmBadge bpm={128} avgBpm={128} isOutlier={false} />);
     const badge = container.firstChild as HTMLElement;
-    expect(badge.style.backgroundColor).toBeTruthy();
+    const expected = getBpmColor(128, 128, false);
+    expect(expected.tier).toBe('match');
+    expect(badge).toHaveStyle({ backgroundColor: expected.bg });
   });
 });
 
