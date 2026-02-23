@@ -852,7 +852,9 @@ export default function KioskDisplayPage() {
       <div
         className="kiosk-container"
         style={display.banner_colors ? {
-          '--kiosk-bg': `linear-gradient(135deg, ${safeColor(display.banner_colors[0], '#1a1a2e')} 0%, ${safeColor(display.banner_colors[1], '#16213e')} 50%, ${safeColor(display.banner_colors[2], '#0f3460')} 100%)`,
+          '--kiosk-bg': display.banner_kiosk_url
+            ? safeColor(display.banner_colors[0], '#1a1a2e')
+            : `linear-gradient(135deg, ${safeColor(display.banner_colors[0], '#1a1a2e')} 0%, ${safeColor(display.banner_colors[1], '#16213e')} 50%, ${safeColor(display.banner_colors[2], '#0f3460')} 100%)`,
         } as React.CSSProperties : undefined}
       >
         {display.banner_kiosk_url && (
