@@ -810,9 +810,14 @@ class ApiClient {
   }
 
   async getKioskAssignment(sessionToken: string): Promise<KioskSessionResponse> {
-    return this.publicFetch(
-      `${getApiUrl()}/api/public/kiosk/session/${sessionToken}/assignment`
-    );
+    const response = await fetch(`${getApiUrl()}/api/public/kiosk/session/assignment`, {
+      headers: { 'X-Kiosk-Session': sessionToken },
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+      throw new ApiError(error.detail || 'Request failed', response.status);
+    }
+    return response.json();
   }
 
   async completeKioskPairing(

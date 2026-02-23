@@ -391,10 +391,10 @@ describe('EventQueuePage', () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(100); });
       expect(api.getEvent).toHaveBeenCalledTimes(1);
 
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
       expect(api.getEvent).toHaveBeenCalledTimes(2);
 
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
       expect(api.getEvent).toHaveBeenCalledTimes(3);
     });
 
@@ -435,11 +435,11 @@ describe('EventQueuePage', () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(100); });
       expect(api.getEvent).toHaveBeenCalledTimes(1);
 
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
       expect(api.getEvent).toHaveBeenCalledTimes(2);
 
       // Should still poll after transient error
-      await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
       expect(api.getEvent).toHaveBeenCalledTimes(3);
     });
   });
