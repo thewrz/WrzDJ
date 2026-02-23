@@ -71,25 +71,45 @@ envsubst "$VARS" < "$TEMPLATE_DIR/app.conf.template" \
   > "$TEMPLATE_DIR/$APP_DOMAIN.conf"
 echo "    Generated: $TEMPLATE_DIR/$APP_DOMAIN.conf"
 
+# Generate default catch-all server block
+envsubst "$VARS" < "$TEMPLATE_DIR/default.conf.template" \
+  > "$TEMPLATE_DIR/default.conf"
+echo "    Generated: $TEMPLATE_DIR/default.conf"
+
 # Install to nginx if running as root / with sudo
 if [ -d /etc/nginx/sites-available ]; then
   echo ""
-  echo "==> Installing to nginx"
+  echo "==> Installing JSON log format to conf.d"
+
+  # logging.conf goes to conf.d (http-level, not a vhost)
+  if [ -n "$SUDO" ] && [ -x /usr/local/bin/wrzdj-nginx-confd-install ]; then
+    $SUDO /usr/local/bin/wrzdj-nginx-confd-install "$TEMPLATE_DIR/logging.conf"
+  else
+    cp "$TEMPLATE_DIR/logging.conf" "/etc/nginx/conf.d/wrzdj-logging.conf"
+  fi
+  echo "    Installed: /etc/nginx/conf.d/wrzdj-logging.conf"
+
+  echo ""
+  echo "==> Installing vhost configs to sites-available"
 
   if [ -n "$SUDO" ] && [ -x /usr/local/bin/wrzdj-nginx-install ]; then
     # Use wrapper script (validates names, does cp + ln together)
     $SUDO /usr/local/bin/wrzdj-nginx-install "$TEMPLATE_DIR/$API_DOMAIN.conf"
     $SUDO /usr/local/bin/wrzdj-nginx-install "$TEMPLATE_DIR/$APP_DOMAIN.conf"
+    $SUDO /usr/local/bin/wrzdj-nginx-install "$TEMPLATE_DIR/default.conf"
   else
     # Running as root — direct cp/ln
     cp "$TEMPLATE_DIR/$API_DOMAIN.conf" "/etc/nginx/sites-available/$API_DOMAIN"
     cp "$TEMPLATE_DIR/$APP_DOMAIN.conf" "/etc/nginx/sites-available/$APP_DOMAIN"
+    cp "$TEMPLATE_DIR/default.conf" "/etc/nginx/sites-available/default"
     ln -sf "/etc/nginx/sites-available/$API_DOMAIN" "/etc/nginx/sites-enabled/$API_DOMAIN"
     ln -sf "/etc/nginx/sites-available/$APP_DOMAIN" "/etc/nginx/sites-enabled/$APP_DOMAIN"
+    ln -sf "/etc/nginx/sites-available/default" "/etc/nginx/sites-enabled/default"
   fi
 
   echo "    Installed: /etc/nginx/sites-available/$API_DOMAIN"
   echo "    Installed: /etc/nginx/sites-available/$APP_DOMAIN"
+  echo "    Installed: /etc/nginx/sites-available/default (catch-all)"
 
   echo ""
   echo "==> Testing nginx config"
@@ -107,8 +127,10 @@ else
   echo ""
   echo "==> /etc/nginx/sites-available not found — configs generated but not installed."
   echo "    Copy them manually:"
+  echo "      sudo cp $TEMPLATE_DIR/logging.conf /etc/nginx/conf.d/wrzdj-logging.conf"
   echo "      sudo cp $TEMPLATE_DIR/$API_DOMAIN.conf /etc/nginx/sites-available/$API_DOMAIN"
   echo "      sudo cp $TEMPLATE_DIR/$APP_DOMAIN.conf /etc/nginx/sites-available/$APP_DOMAIN"
+  echo "      sudo cp $TEMPLATE_DIR/default.conf /etc/nginx/sites-available/default"
 fi
 
 # --- Migration: ensure overlay location block exists for existing deployments ---
@@ -131,3 +153,5 @@ echo ""
 echo "==> Next steps:"
 echo "    1. Set up SSL: sudo wrzdj-certbot --nginx -d $API_DOMAIN -d $APP_DOMAIN"
 echo "    2. Verify: curl -I https://$API_DOMAIN/health"
+echo "    3. Verify JSON logs: tail -1 /var/log/nginx/$API_DOMAIN.access.log | python3 -m json.tool"
+echo "    4. Analytics: ./deploy/scripts/analytics.sh --api"

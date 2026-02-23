@@ -1,3 +1,7 @@
 # Generated nginx configs (from templates via setup-nginx.sh)
 *.conf
 !*.conf.template
+
+# Static configs that ARE tracked (not generated from templates)
+!logging.conf
+!goaccess.conf
