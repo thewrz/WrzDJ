@@ -1,4 +1,5 @@
 import logging
+import mimetypes
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -12,6 +13,9 @@ from app.api import api_router
 from app.core.config import get_settings
 from app.core.rate_limit import limiter, rate_limit_exceeded_handler
 from app.core.security_headers import SecurityHeadersMiddleware
+
+# Ensure WebP MIME type is registered (missing on some minimal Docker images)
+mimetypes.add_type("image/webp", ".webp")
 
 settings = get_settings()
 
