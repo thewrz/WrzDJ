@@ -2,8 +2,11 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { api, ApiError, SearchResult } from '@/lib/api';
+import { KioskKeyboard } from './KioskKeyboard';
 
 const INACTIVITY_TIMEOUT = 60000; // 60 seconds
+const MAX_SEARCH_LENGTH = 200;
+const MAX_NOTE_LENGTH = 500;
 
 interface RequestModalProps {
   code: string;
@@ -21,6 +24,17 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
   const [submitted, setSubmitted] = useState(false);
   const [submitIsDuplicate, setSubmitIsDuplicate] = useState(false);
   const [submitVoteCount, setSubmitVoteCount] = useState(0);
+
+  // Touch detection — evaluated client-side only via useEffect
+  const [isTouch, setIsTouch] = useState(false);
+  useEffect(() => {
+    setIsTouch('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  }, []);
+
+  // Virtual keyboard state (touch devices only)
+  const [showKeyboard, setShowKeyboard] = useState(false);
+  const [activeInput, setActiveInput] = useState<'search' | 'note' | null>(null);
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
 
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -57,8 +71,8 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
     };
   }, [resetInactivityTimer]);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!searchQuery.trim()) return;
 
     setSearching(true);
@@ -72,6 +86,10 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
       setSearching(false);
     }
   };
+
+  // Ref-stable handleSearch for use in keyboard callbacks
+  const handleSearchRef = useRef(handleSearch);
+  handleSearchRef.current = handleSearch;
 
   const handleSubmit = async () => {
     if (!selectedSong) return;
@@ -104,9 +122,68 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
     }
   };
 
+  const hideKeyboard = useCallback(() => {
+    setShowKeyboard(false);
+    setActiveInput(null);
+  }, []);
+
+  const handleInputFocus = useCallback(
+    (input: 'search' | 'note') => {
+      if (!isTouch) return;
+      setActiveInput(input);
+      setShowKeyboard(true);
+    },
+    [isTouch]
+  );
+
+  const handleKeyboardChange = useCallback(
+    (value: string) => {
+      if (activeInput === 'search') {
+        setSearchQuery(value.slice(0, MAX_SEARCH_LENGTH));
+      } else if (activeInput === 'note') {
+        setNote(value.slice(0, MAX_NOTE_LENGTH));
+      }
+    },
+    [activeInput]
+  );
+
+  const handleKeyboardDone = useCallback(() => {
+    if (activeInput === 'search') {
+      hideKeyboard();
+      handleSearchRef.current();
+    } else if (activeInput === 'note') {
+      hideKeyboard();
+      submitButtonRef.current?.focus();
+    }
+  }, [activeInput, hideKeyboard]);
+
+  const handleSelectSong = useCallback(
+    (song: SearchResult) => {
+      setSelectedSong(song);
+      hideKeyboard();
+    },
+    [hideKeyboard]
+  );
+
+  const handleBack = useCallback(() => {
+    setSelectedSong(null);
+    hideKeyboard();
+  }, [hideKeyboard]);
+
+  const keyboardInputValue = activeInput === 'search' ? searchQuery : activeInput === 'note' ? note : '';
+  const keyboardDoneLabel = activeInput === 'search' ? 'Search' : 'Done';
+
   return (
-    <div className="modal-overlay" onClick={() => !submitting && closeModal()}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+    <div
+      className={`modal-overlay${showKeyboard ? ' keyboard-overlay-active' : ''}`}
+      onClick={() => {
+        if (!submitting) closeModal();
+      }}
+    >
+      <div
+        className={`modal-content${showKeyboard ? ' keyboard-active' : ''}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <h2 className="modal-title">
             {submitted ? 'Success!' : selectedSong ? 'Confirm Request' : 'Request a Song'}
@@ -140,17 +217,20 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
               placeholder="Add a note (optional)"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              maxLength={500}
+              onFocus={() => handleInputFocus('note')}
+              readOnly={isTouch}
+              maxLength={MAX_NOTE_LENGTH}
             />
             <div className="confirm-buttons">
               <button
+                ref={submitButtonRef}
                 className="confirm-submit"
                 onClick={handleSubmit}
                 disabled={submitting}
               >
                 {submitting ? 'Submitting...' : 'Submit Request'}
               </button>
-              <button className="confirm-back" onClick={() => setSelectedSong(null)}>
+              <button className="confirm-back" onClick={handleBack}>
                 Back
               </button>
             </div>
@@ -164,19 +244,21 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
                 placeholder="Search for a song..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                autoFocus
+                onFocus={() => handleInputFocus('search')}
+                readOnly={isTouch}
+                autoFocus={!isTouch}
               />
               <button type="submit" className="search-button" disabled={searching}>
                 {searching ? '...' : 'Search'}
               </button>
             </form>
             {searchResults.length > 0 && (
-              <div className="search-results">
+              <div className={`search-results${showKeyboard ? ' search-results-compact' : ''}`}>
                 {searchResults.map((result, index) => (
                   <button
                     key={result.spotify_id || index}
                     className="search-result-item"
-                    onClick={() => setSelectedSong(result)}
+                    onClick={() => handleSelectSong(result)}
                   >
                     {result.album_art ? (
                       <img
@@ -200,6 +282,16 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
               </div>
             )}
           </>
+        )}
+
+        {isTouch && showKeyboard && !submitted && (
+          <KioskKeyboard
+            onChange={handleKeyboardChange}
+            onDone={handleKeyboardDone}
+            inputValue={keyboardInputValue}
+            doneLabel={keyboardDoneLabel}
+            resetTimer={resetInactivityTimer}
+          />
         )}
       </div>
     </div>

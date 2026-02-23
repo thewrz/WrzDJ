@@ -1,0 +1,69 @@
+/* Override simple-keyboard default theme for kiosk dark mode */
+
+.kiosk-keyboard-wrapper {
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.kiosk-keyboard-wrapper .simple-keyboard {
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  font-family: inherit;
+}
+
+.kiosk-keyboard-wrapper .simple-keyboard .hg-row {
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.kiosk-keyboard-wrapper .simple-keyboard .hg-row:last-child {
+  margin-bottom: 0;
+}
+
+.kiosk-keyboard-wrapper .simple-keyboard .hg-button {
+  background: #374151;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1.125rem;
+  font-weight: 500;
+  height: 48px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.kiosk-keyboard-wrapper .simple-keyboard .hg-button:active,
+.kiosk-keyboard-wrapper .simple-keyboard .hg-button.hg-activeButton {
+  background: #4b5563;
+}
+
+/* Special keys: shift, backspace, numbers toggle */
+.kiosk-keyboard-wrapper .simple-keyboard .hg-button.hg-functionBtn {
+  background: #4b5563;
+}
+
+.kiosk-keyboard-wrapper .simple-keyboard .hg-button.hg-functionBtn:active {
+  background: #6b7280;
+}
+
+/* Done/Search key: blue accent */
+.kiosk-keyboard-wrapper .simple-keyboard .hg-button[data-skbtn="{done}"] {
+  background: #3b82f6;
+  font-weight: 600;
+}
+
+.kiosk-keyboard-wrapper .simple-keyboard .hg-button[data-skbtn="{done}"]:active {
+  background: #2563eb;
+}
+
+/* Shift active state */
+.kiosk-keyboard-wrapper .simple-keyboard .hg-button.hg-activeButton[data-skbtn="{shift}"] {
+  background: #3b82f6;
+}
+
+/* Space bar: wider, same style */
+.kiosk-keyboard-wrapper .simple-keyboard .hg-button[data-skbtn="{space}"] {
+  min-width: 40%;
+}
