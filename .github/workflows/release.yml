@@ -161,7 +161,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: "WrzDJ ${{ github.ref_name }}"
           body_path: release_notes.md
-          draft: true
+          draft: false
           prerelease: false
           files: |
             artifacts/**/*
