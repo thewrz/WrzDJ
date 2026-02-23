@@ -717,6 +717,48 @@ describe('EventQueuePage', () => {
       expect(typeof capturedManageTabProps.onToggleDisplayOnly).toBe('function');
       expect(typeof capturedManageTabProps.onBannerSelect).toBe('function');
     });
+
+    it('onToggleRequests calls setRequestsOpen', async () => {
+      setupDefaultMocks();
+      vi.mocked(api.setRequestsOpen).mockResolvedValue(undefined as never);
+
+      render(<EventQueuePage />);
+      await screen.findByText('Test Event');
+      fireEvent.click(screen.getByText('Event Management'));
+
+      const onToggleRequests = capturedManageTabProps.onToggleRequests as () => Promise<void>;
+      await act(async () => { await onToggleRequests(); });
+
+      expect(api.setRequestsOpen).toHaveBeenCalledWith('TEST', false);
+    });
+
+    it('onToggleNowPlaying calls setNowPlayingVisibility', async () => {
+      setupDefaultMocks();
+      vi.mocked(api.setNowPlayingVisibility).mockResolvedValue(undefined as never);
+
+      render(<EventQueuePage />);
+      await screen.findByText('Test Event');
+      fireEvent.click(screen.getByText('Event Management'));
+
+      const onToggleNowPlaying = capturedManageTabProps.onToggleNowPlaying as () => Promise<void>;
+      await act(async () => { await onToggleNowPlaying(); });
+
+      expect(api.setNowPlayingVisibility).toHaveBeenCalledWith('TEST', true);
+    });
+
+    it('onToggleDisplayOnly calls setKioskDisplayOnly', async () => {
+      setupDefaultMocks();
+      vi.mocked(api.setKioskDisplayOnly).mockResolvedValue(undefined as never);
+
+      render(<EventQueuePage />);
+      await screen.findByText('Test Event');
+      fireEvent.click(screen.getByText('Event Management'));
+
+      const onToggleDisplayOnly = capturedManageTabProps.onToggleDisplayOnly as () => Promise<void>;
+      await act(async () => { await onToggleDisplayOnly(); });
+
+      expect(api.setKioskDisplayOnly).toHaveBeenCalledWith('TEST', true);
+    });
   });
 
   describe('Tidal auth flow', () => {
@@ -834,6 +876,30 @@ describe('EventQueuePage', () => {
       fireEvent.click(screen.getByText('Event Management'));
 
       expect(typeof capturedManageTabProps.onBannerSelect).toBe('function');
+    });
+
+    it('onBannerSelect calls uploadEventBanner with file', async () => {
+      setupDefaultMocks();
+      vi.mocked(api.uploadEventBanner).mockResolvedValue(mockEvent({
+        banner_url: '/uploads/banners/test.webp',
+        banner_kiosk_url: '/uploads/banners/test_kiosk.webp',
+      }) as never);
+
+      render(<EventQueuePage />);
+      await screen.findByText('Test Event');
+      fireEvent.click(screen.getByText('Event Management'));
+
+      const file = new File(['fake-image'], 'banner.png', { type: 'image/png' });
+      const onBannerSelect = capturedManageTabProps.onBannerSelect as (
+        e: React.ChangeEvent<HTMLInputElement>,
+      ) => Promise<void>;
+      await act(async () => {
+        await onBannerSelect({
+          target: { files: [file] },
+        } as unknown as React.ChangeEvent<HTMLInputElement>);
+      });
+
+      expect(api.uploadEventBanner).toHaveBeenCalledWith('TEST', file);
     });
   });
 

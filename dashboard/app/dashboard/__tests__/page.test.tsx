@@ -58,7 +58,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Friday Party')).toBeTruthy();
+      expect(screen.getByText('Friday Party')).toBeInTheDocument();
     });
   });
 
@@ -71,11 +71,11 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Cloud Providers')).toBeTruthy();
+      expect(screen.getByText('Cloud Providers')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Connected')).toBeTruthy();
-    expect(screen.getByText('Not connected')).toBeTruthy();
+    expect(screen.getByText('Connected')).toBeInTheDocument();
+    expect(screen.getByText('Not connected')).toBeInTheDocument();
   });
 
   it('renders activity log panel', async () => {
@@ -84,7 +84,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Activity Log')).toBeTruthy();
+      expect(screen.getByText('Activity Log')).toBeInTheDocument();
     });
   });
 
@@ -94,12 +94,12 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Dashboard')).toBeTruthy();
+      expect(screen.getByText('Dashboard')).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByText('Create Event'));
 
-    expect(screen.getByText('Create New Event')).toBeTruthy();
+    expect(screen.getByText('Create New Event')).toBeInTheDocument();
   });
 
   it('shows empty state when no events', async () => {
@@ -108,7 +108,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('No events yet. Create your first event!')).toBeTruthy();
+      expect(screen.getByText('No events yet. Create your first event!')).toBeInTheDocument();
     });
   });
 
@@ -129,12 +129,12 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Dashboard')).toBeTruthy();
+      expect(screen.getByText('Dashboard')).toBeInTheDocument();
     });
 
     // Open create form
     fireEvent.click(screen.getByText('Create Event'));
-    expect(screen.getByText('Create New Event')).toBeTruthy();
+    expect(screen.getByText('Create New Event')).toBeInTheDocument();
 
     // Fill and submit
     fireEvent.change(screen.getByLabelText('Event Name'), {
@@ -143,10 +143,10 @@ describe('DashboardPage', () => {
     fireEvent.submit(screen.getByText('Create'));
 
     await waitFor(() => {
-      expect(screen.getByText('New Party')).toBeTruthy();
+      expect(screen.getByText('New Party')).toBeInTheDocument();
     });
     // Form should be hidden after creation
-    expect(screen.queryByText('Create New Event')).not.toBeTruthy();
+    expect(screen.queryByText('Create New Event')).not.toBeInTheDocument();
   });
 
   it('shows error when create event fails', async () => {
@@ -156,7 +156,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Dashboard')).toBeTruthy();
+      expect(screen.getByText('Dashboard')).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByText('Create Event'));
@@ -166,7 +166,7 @@ describe('DashboardPage', () => {
     fireEvent.submit(screen.getByText('Create'));
 
     await waitFor(() => {
-      expect(screen.getByText('Server error')).toBeTruthy();
+      expect(screen.getByText('Server error')).toBeInTheDocument();
     });
   });
 
@@ -176,7 +176,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Dashboard')).toBeTruthy();
+      expect(screen.getByText('Dashboard')).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByText('Logout'));
@@ -190,7 +190,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Admin')).toBeTruthy();
+      expect(screen.getByText('Admin')).toBeInTheDocument();
     });
   });
 
@@ -200,10 +200,10 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Dashboard')).toBeTruthy();
+      expect(screen.getByText('Dashboard')).toBeInTheDocument();
     });
 
-    expect(screen.queryByText('Admin')).not.toBeTruthy();
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument();
   });
 
   it('shows inactive badge for expired events', async () => {
@@ -217,7 +217,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Inactive')).toBeTruthy();
+      expect(screen.getByText('Inactive')).toBeInTheDocument();
     });
   });
 
@@ -227,13 +227,13 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Dashboard')).toBeTruthy();
+      expect(screen.getByText('Dashboard')).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByText('Create Event'));
-    expect(screen.getByText('Create New Event')).toBeTruthy();
+    expect(screen.getByText('Create New Event')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Cancel'));
-    expect(screen.queryByText('Create New Event')).not.toBeTruthy();
+    expect(screen.queryByText('Create New Event')).not.toBeInTheDocument();
   });
 });

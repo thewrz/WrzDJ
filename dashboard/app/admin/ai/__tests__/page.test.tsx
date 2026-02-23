@@ -44,7 +44,7 @@ describe('AdminAISettingsPage', () => {
     vi.spyOn(api, 'getAIModels').mockImplementation(() => new Promise(() => {}));
 
     render(<AdminAISettingsPage />);
-    expect(screen.getByText('Loading AI settings...')).toBeTruthy();
+    expect(screen.getByText('Loading AI settings...')).toBeInTheDocument();
   });
 
   it('renders settings after load', async () => {
@@ -65,11 +65,11 @@ describe('AdminAISettingsPage', () => {
     render(<AdminAISettingsPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('AI / LLM Settings')).toBeTruthy();
+      expect(screen.getByText('AI / LLM Settings')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Configured')).toBeTruthy();
-    expect(screen.getByText('...abcd')).toBeTruthy();
+    expect(screen.getByText('Configured')).toBeInTheDocument();
+    expect(screen.getByText('...abcd')).toBeInTheDocument();
   });
 
   it('shows not configured badge when no API key', async () => {
@@ -85,7 +85,7 @@ describe('AdminAISettingsPage', () => {
     render(<AdminAISettingsPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Not Configured')).toBeTruthy();
+      expect(screen.getByText('Not Configured')).toBeInTheDocument();
     });
   });
 
@@ -111,7 +111,7 @@ describe('AdminAISettingsPage', () => {
     render(<AdminAISettingsPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Save Settings')).toBeTruthy();
+      expect(screen.getByText('Save Settings')).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByText('Save Settings'));
@@ -128,7 +128,7 @@ describe('AdminAISettingsPage', () => {
     render(<AdminAISettingsPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load AI settings')).toBeTruthy();
+      expect(screen.getByText('Failed to load AI settings')).toBeInTheDocument();
     });
   });
 });

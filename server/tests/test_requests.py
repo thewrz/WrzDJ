@@ -300,7 +300,7 @@ class TestStatusStateMachine:
     """Tests for request status transition validation."""
 
     def test_invalid_new_to_played(
-        self, client: TestClient, auth_headers: dict, test_request: Request
+        self, client: TestClient, auth_headers: dict, test_request: Request, db: Session
     ):
         """NEW -> PLAYED is not a valid transition."""
         response = client.patch(
@@ -310,9 +310,11 @@ class TestStatusStateMachine:
         )
         assert response.status_code == 400
         assert "Cannot transition" in response.json()["detail"]
+        db.refresh(test_request)
+        assert test_request.status == "new"
 
     def test_invalid_new_to_playing(
-        self, client: TestClient, auth_headers: dict, test_request: Request
+        self, client: TestClient, auth_headers: dict, test_request: Request, db: Session
     ):
         """NEW -> PLAYING is not a valid transition."""
         response = client.patch(
@@ -321,9 +323,11 @@ class TestStatusStateMachine:
             headers=auth_headers,
         )
         assert response.status_code == 400
+        db.refresh(test_request)
+        assert test_request.status == "new"
 
     def test_invalid_played_to_any(
-        self, client: TestClient, auth_headers: dict, test_request: Request
+        self, client: TestClient, auth_headers: dict, test_request: Request, db: Session
     ):
         """PLAYED is a terminal state — no transitions allowed."""
         # Move to PLAYED via valid path
@@ -349,6 +353,8 @@ class TestStatusStateMachine:
             headers=auth_headers,
         )
         assert response.status_code == 400
+        db.refresh(test_request)
+        assert test_request.status == "played"
 
     def test_rejected_to_new(self, client: TestClient, auth_headers: dict, test_request: Request):
         """REJECTED -> NEW is valid (re-queue)."""
