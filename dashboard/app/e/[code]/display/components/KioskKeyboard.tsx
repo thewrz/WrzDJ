@@ -136,7 +136,7 @@ export function KioskKeyboard({
 
   return (
     <div className="kiosk-keyboard-wrapper">
-      <div ref={containerRef} />
+      <div ref={containerRef} className="kiosk-keyboard" />
     </div>
   );
 }
