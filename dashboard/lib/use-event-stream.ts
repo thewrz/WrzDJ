@@ -8,8 +8,8 @@ interface EventStreamHandlers {
   onBridgeStatusChanged?: (data: { connected: boolean; device_name: string | null }) => void;
 }
 
-const MAX_RETRIES = 3;
 const INITIAL_RETRY_MS = 1000;
+const MAX_RETRY_MS = 30_000;
 
 export function useEventStream(
   eventCode: string | null,
@@ -18,6 +18,7 @@ export function useEventStream(
   const [connected, setConnected] = useState(false);
   const retryCount = useRef(0);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
 
@@ -40,11 +41,13 @@ export function useEventStream(
       eventSourceRef.current = null;
       setConnected(false);
 
-      if (retryCount.current < MAX_RETRIES) {
-        const delay = INITIAL_RETRY_MS * Math.pow(2, retryCount.current);
-        retryCount.current++;
-        setTimeout(connect, delay);
-      }
+      // Exponential backoff capped at MAX_RETRY_MS, retries indefinitely
+      const delay = Math.min(
+        INITIAL_RETRY_MS * Math.pow(2, retryCount.current),
+        MAX_RETRY_MS,
+      );
+      retryCount.current++;
+      retryTimerRef.current = setTimeout(connect, delay);
     };
 
     es.addEventListener('request_created', (e) => {
@@ -67,6 +70,10 @@ export function useEventStream(
   useEffect(() => {
     connect();
     return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
       setConnected(false);

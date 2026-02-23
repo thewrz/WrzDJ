@@ -130,29 +130,40 @@ describe('useEventStream', () => {
     expect(MockEventSource.instances).toHaveLength(2);
   });
 
-  it('stops retrying after MAX_RETRIES (3)', () => {
+  it('retries indefinitely with capped backoff', () => {
     renderHook(() => useEventStream('EVT01', {}));
 
-    // 3 errors + retries
-    for (let i = 0; i < 3; i++) {
+    // Simulate 5 consecutive errors — should keep retrying
+    for (let i = 0; i < 5; i++) {
       act(() => {
         MockEventSource.latest()!.simulateError();
       });
       act(() => {
-        vi.advanceTimersByTime(10000); // Past any backoff
+        vi.advanceTimersByTime(30_000); // Past max backoff cap
       });
     }
 
-    const countBefore = MockEventSource.instances.length;
+    // Should still create new connections (initial + 5 retries = 6)
+    expect(MockEventSource.instances.length).toBe(6);
+  });
 
-    // 4th error should NOT create another connection
-    act(() => {
-      MockEventSource.latest()!.simulateError();
-    });
-    act(() => {
-      vi.advanceTimersByTime(20000);
-    });
-    expect(MockEventSource.instances).toHaveLength(countBefore);
+  it('resets retry count on successful connection', () => {
+    renderHook(() => useEventStream('EVT01', {}));
+
+    // Fail twice
+    act(() => { MockEventSource.latest()!.simulateError(); });
+    act(() => { vi.advanceTimersByTime(1000); });
+    act(() => { MockEventSource.latest()!.simulateError(); });
+    act(() => { vi.advanceTimersByTime(2000); });
+
+    // Now connect successfully — resets retry count
+    act(() => { MockEventSource.latest()!.simulateOpen(); });
+
+    // Next error should retry at initial delay (1s), not continued backoff
+    act(() => { MockEventSource.latest()!.simulateError(); });
+    const countBefore = MockEventSource.instances.length;
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(MockEventSource.instances.length).toBe(countBefore + 1);
   });
 
   describe('event handlers', () => {

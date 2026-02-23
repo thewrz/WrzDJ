@@ -13,14 +13,19 @@ from app.services.event_bus import get_event_bus
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-KEEPALIVE_INTERVAL = 15  # seconds
+DISCONNECT_CHECK_INTERVAL = 15  # seconds
 
 
 async def _event_generator(
     request: Request,
     event_code: str,
 ) -> Any:
-    """Yield SSE events for a given event code until the client disconnects."""
+    """Yield SSE events for a given event code until the client disconnects.
+
+    Keepalive pings are handled by sse-starlette's built-in ping task (every 15s).
+    This generator only yields actual events. The timeout on queue.get() lets us
+    periodically check for client disconnect without blocking forever.
+    """
     bus = get_event_bus()
     queue = bus.subscribe(event_code)
     try:
@@ -28,14 +33,14 @@ async def _event_generator(
             if await request.is_disconnected():
                 break
             try:
-                message = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_INTERVAL)
+                message = await asyncio.wait_for(queue.get(), timeout=DISCONNECT_CHECK_INTERVAL)
                 yield {
                     "event": message["event"],
                     "data": json.dumps(message["data"]),
                 }
             except TimeoutError:
-                # Send keepalive comment to prevent proxy/browser timeouts
-                yield {"comment": "keepalive"}
+                # No event received — loop to check is_disconnected()
+                continue
     finally:
         bus.unsubscribe(event_code, queue)
 
@@ -54,4 +59,5 @@ async def event_stream(code: str, request: Request) -> EventSourceResponse:
     return EventSourceResponse(
         _event_generator(request, code),
         media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no"},
     )
