@@ -31,6 +31,7 @@ server {
     # Requires certs to exist (same as api/app vhosts — run certbot first).
     ssl_certificate /etc/letsencrypt/live/${APP_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${APP_DOMAIN}/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
 
     access_log /var/log/nginx/default.access.log json_analytics;
 
