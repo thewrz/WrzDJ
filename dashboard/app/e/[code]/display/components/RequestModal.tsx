@@ -46,6 +46,15 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
   const [activeInput, setActiveInput] = useState<'search' | 'note' | null>(null);
   const submitButtonRef = useRef<HTMLButtonElement>(null);
 
+  // Auto-show keyboard when modal opens on kiosk/touch devices.
+  // Relying on onFocus alone is unreliable through Cage/Wayland input stacks.
+  useEffect(() => {
+    if (isTouch && !selectedSong && !submitted) {
+      setActiveInput('search');
+      setShowKeyboard(true);
+    }
+  }, [isTouch, selectedSong, submitted]);
+
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const closeModal = useCallback(() => {

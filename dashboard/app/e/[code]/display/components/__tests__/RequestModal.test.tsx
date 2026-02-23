@@ -2,6 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { RequestModal } from '../RequestModal';
 
+vi.mock('simple-keyboard', () => ({
+  default: class MockKeyboard {
+    setOptions = vi.fn();
+    setInput = vi.fn();
+    destroy = vi.fn();
+  },
+}));
+
 vi.mock('@/lib/api', () => ({
   api: {
     search: vi.fn(),
