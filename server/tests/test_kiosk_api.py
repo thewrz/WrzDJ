@@ -116,6 +116,18 @@ class TestKioskSessionAssignment:
         assert resp.json()["status"] == "pairing"
         assert resp.json()["event_code"] is None
 
+    def test_returns_expired_for_pairing_kiosk_past_ttl(self, client: TestClient, db: Session):
+        kiosk = create_kiosk(db)
+        kiosk.pair_expires_at = utcnow() - timedelta(minutes=1)
+        db.commit()
+        resp = client.get(
+            "/api/public/kiosk/session/assignment",
+            headers={"X-Kiosk-Session": kiosk.session_token},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "expired"
+        assert resp.json()["event_code"] is None
+
     def test_old_url_path_endpoint_removed(self, client: TestClient, db: Session):
         """Verify the old path-token endpoint no longer exists."""
         kiosk = create_kiosk(db)
