@@ -103,12 +103,12 @@ export default function KioskDisplayPage() {
 
     poll();
 
-    // Poll every 3 seconds unless stopped
+    // Poll every 10s as fallback (SSE handles real-time updates)
     intervalId = setInterval(() => {
       if (!stopped) {
         poll();
       }
-    }, 3000);
+    }, 10_000);
 
     return () => {
       if (intervalId) {

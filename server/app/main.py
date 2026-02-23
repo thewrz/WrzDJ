@@ -73,7 +73,7 @@ else:
         allow_origins=origins,
         allow_credentials=True,
         allow_methods=CORS_ALLOW_METHODS,
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-Kiosk-Session"],
     )
 
 # Include API router

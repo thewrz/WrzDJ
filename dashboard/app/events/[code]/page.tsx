@@ -297,12 +297,12 @@ export default function EventQueuePage() {
 
       poll();
 
-      // Poll every 3 seconds unless stopped
+      // Poll every 5 seconds unless stopped (SSE handles real-time updates)
       intervalId = setInterval(() => {
         if (!stopped) {
           poll();
         }
-      }, 3000);
+      }, 5000);
 
       return () => {
         if (intervalId) {

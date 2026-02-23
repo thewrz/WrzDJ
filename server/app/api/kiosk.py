@@ -80,10 +80,18 @@ def get_pair_status(pair_code: str, request: Request, db: Session = Depends(get_
     )
 
 
-@public_router.get("/session/{session_token}/assignment", response_model=KioskSessionResponse)
+@public_router.get("/session/assignment", response_model=KioskSessionResponse)
 @limiter.limit("60/minute")
-def get_session_assignment(session_token: str, request: Request, db: Session = Depends(get_db)):
-    """Poll the kiosk's current event assignment. Updates last_seen_at."""
+def get_session_assignment(request: Request, db: Session = Depends(get_db)):
+    """Poll the kiosk's current event assignment. Updates last_seen_at.
+
+    Session token must be sent in the X-Kiosk-Session header (not in the URL path)
+    to prevent token leakage in access logs.
+    """
+    session_token = request.headers.get("X-Kiosk-Session")
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Missing X-Kiosk-Session header")
+
     kiosk = get_kiosk_by_session_token(db, session_token)
     if not kiosk:
         raise HTTPException(status_code=404, detail="Kiosk session not found")
