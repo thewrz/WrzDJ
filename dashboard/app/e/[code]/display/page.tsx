@@ -297,16 +297,12 @@ export default function KioskDisplayPage() {
           top: 0;
           left: 0;
           width: 100%;
-          height: 30vh;
-          min-height: 200px;
-          max-height: 350px;
           z-index: 0;
           overflow: hidden;
         }
         .kiosk-banner-bg img {
           width: 100%;
-          height: 100%;
-          object-fit: cover;
+          height: auto;
           display: block;
         }
         .kiosk-header {
