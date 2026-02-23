@@ -184,7 +184,34 @@ WRAPPER
 chmod 750 /usr/local/bin/wrzdj-certbot
 chown root:wrzdj /usr/local/bin/wrzdj-certbot
 
-echo "    Installed wrzdj-nginx-install and wrzdj-certbot"
+cat > /usr/local/bin/wrzdj-nginx-confd-install << 'WRAPPER'
+#!/bin/bash
+set -euo pipefail
+# Install an nginx config file to conf.d/ safely (http-level configs like log formats)
+ALLOWED_DIR="/opt/wrzdj/deploy/nginx"
+
+src="$(realpath "$1")"
+name="$(basename "$1")"
+
+# Validate source is under the allowed directory
+if [[ "$src" != "$ALLOWED_DIR"/* ]]; then
+  echo "ERROR: Source file must be under $ALLOWED_DIR (got: $src)" >&2
+  exit 1
+fi
+
+# Validate filename (no slashes, dots-only, etc.)
+if [[ ! "$name" =~ ^[a-zA-Z0-9._-]+\.conf$ ]]; then
+  echo "ERROR: Invalid config name: $name (must end in .conf)" >&2
+  exit 1
+fi
+
+cp -- "$src" "/etc/nginx/conf.d/wrzdj-$name"
+echo "Installed: /etc/nginx/conf.d/wrzdj-$name"
+WRAPPER
+chmod 750 /usr/local/bin/wrzdj-nginx-confd-install
+chown root:wrzdj /usr/local/bin/wrzdj-nginx-confd-install
+
+echo "    Installed wrzdj-nginx-install, wrzdj-nginx-confd-install, and wrzdj-certbot"
 
 # 4. Install limited sudoers
 echo "    Installing sudoers to $SUDOERS_FILE"
@@ -192,8 +219,9 @@ cat > "$SUDOERS_FILE" << 'SUDOERS'
 # WrzDJ deploy user — limited sudo privileges
 # Managed by deploy/setup-user.sh — do not edit manually
 
-# nginx config management (via wrapper — no wildcards)
+# nginx config management (via wrappers — no wildcards)
 wrzdj ALL=(root) NOPASSWD: /usr/local/bin/wrzdj-nginx-install
+wrzdj ALL=(root) NOPASSWD: /usr/local/bin/wrzdj-nginx-confd-install
 wrzdj ALL=(root) NOPASSWD: /usr/sbin/nginx -t
 
 # nginx service management

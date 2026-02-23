@@ -8,6 +8,8 @@ server {
     listen 80;
     server_name ${API_DOMAIN};
 
+    access_log /var/log/nginx/${API_DOMAIN}.access.log json_analytics;
+
     # Let's Encrypt ACME challenge
     location /.well-known/acme-challenge/ {
         root /var/www/html;
@@ -21,6 +23,8 @@ server {
 server {
     listen 443 ssl http2;
     server_name ${API_DOMAIN};
+
+    access_log /var/log/nginx/${API_DOMAIN}.access.log json_analytics;
 
     # SSL certificates (managed by certbot)
     # ECDSA certificate (primary, best performance)
