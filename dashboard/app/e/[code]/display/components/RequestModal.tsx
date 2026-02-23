@@ -25,10 +25,20 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
   const [submitIsDuplicate, setSubmitIsDuplicate] = useState(false);
   const [submitVoteCount, setSubmitVoteCount] = useState(0);
 
-  // Touch detection — evaluated client-side only via useEffect
+  // Virtual keyboard detection — evaluated client-side only via useEffect.
+  // Check browser touch APIs AND kiosk session token because some touchscreens
+  // (e.g. ILITEK USB) present as mouse devices through Wayland compositors,
+  // causing touch APIs to report false even when touch physically works.
   const [isTouch, setIsTouch] = useState(false);
   useEffect(() => {
-    setIsTouch('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    let isKiosk = false;
+    try {
+      isKiosk = !!localStorage.getItem('kiosk_session_token');
+    } catch {
+      // localStorage may be unavailable in some environments
+    }
+    setIsTouch(hasTouch || isKiosk);
   }, []);
 
   // Virtual keyboard state (touch devices only)
