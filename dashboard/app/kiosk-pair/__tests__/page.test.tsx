@@ -99,7 +99,7 @@ describe('KioskPairPage', () => {
     }, { timeout: 5000 });
   });
 
-  it('shows expired state when code expires', async () => {
+  it('shows expired state and auto-regenerates when code expires', async () => {
     mockGetKioskPairStatus.mockResolvedValue({
       status: 'expired',
       event_code: null,
@@ -109,7 +109,8 @@ describe('KioskPairPage', () => {
     render(<KioskPairPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Generate New Code')).toBeInTheDocument();
+      expect(screen.getByText('Pairing code expired')).toBeInTheDocument();
+      expect(screen.getByText('Generating new code...')).toBeInTheDocument();
     }, { timeout: 5000 });
   });
 

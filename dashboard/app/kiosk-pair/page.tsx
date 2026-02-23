@@ -56,6 +56,12 @@ export default function KioskPairPage() {
         router.push(`/e/${status.event_code}/display`);
         return;
       }
+      if (status.status === 'expired') {
+        localStorage.removeItem(SESSION_TOKEN_KEY);
+        localStorage.removeItem(PAIR_CODE_KEY);
+        createNewPairing();
+        return;
+      }
       // If not yet assigned, start interval polling
       pollRef.current = setInterval(async () => {
         try {
@@ -63,6 +69,11 @@ export default function KioskPairPage() {
           if (s.status === 'active' && s.event_code) {
             stopPolling();
             router.push(`/e/${s.event_code}/display`);
+          } else if (s.status === 'expired') {
+            stopPolling();
+            localStorage.removeItem(SESSION_TOKEN_KEY);
+            localStorage.removeItem(PAIR_CODE_KEY);
+            createNewPairing();
           }
         } catch {
           // Silently retry
@@ -106,6 +117,17 @@ export default function KioskPairPage() {
     return stopPolling;
   }, []);
 
+  // Auto-regenerate when pairing code expires (no human present to press a button)
+  useEffect(() => {
+    if (state !== 'expired') return;
+    const timer = setTimeout(() => {
+      localStorage.removeItem(SESSION_TOKEN_KEY);
+      localStorage.removeItem(PAIR_CODE_KEY);
+      createNewPairing();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [state, createNewPairing]);
+
   const handleRegenerate = () => {
     localStorage.removeItem(SESSION_TOKEN_KEY);
     localStorage.removeItem(PAIR_CODE_KEY);
@@ -117,6 +139,18 @@ export default function KioskPairPage() {
     : `/kiosk-link/${pairCode}`;
 
   return (
+    <>
+    <style jsx global>{`
+      * {
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        cursor: none;
+      }
+      body {
+        overflow: hidden;
+      }
+    `}</style>
     <div style={{
       minHeight: '100vh',
       display: 'flex',
@@ -186,13 +220,10 @@ export default function KioskPairPage() {
 
       {state === 'expired' && (
         <div style={{ textAlign: 'center' }}>
-          <p style={{ color: '#ef4444', marginBottom: '1rem' }}>Pairing code expired</p>
-          <button
-            onClick={handleRegenerate}
-            className="btn btn-primary"
-          >
-            Generate New Code
-          </button>
+          <p style={{ color: '#f59e0b' }}>Pairing code expired</p>
+          <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+            Generating new code...
+          </p>
         </div>
       )}
 
@@ -208,5 +239,6 @@ export default function KioskPairPage() {
         </div>
       )}
     </div>
+    </>
   );
 }

@@ -96,6 +96,10 @@ def get_session_assignment(request: Request, db: Session = Depends(get_db)):
     if not kiosk:
         raise HTTPException(status_code=404, detail="Kiosk session not found")
 
+    # Check if expired and still in pairing state
+    if kiosk.status == "pairing" and is_pair_code_expired(kiosk):
+        return KioskSessionResponse(status="expired")
+
     # Update last_seen for active kiosks
     if kiosk.status == "active":
         update_kiosk_last_seen(db, kiosk)
