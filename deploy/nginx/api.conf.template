@@ -75,6 +75,16 @@ server {
         add_header Access-Control-Allow-Origin "*" always;
     }
 
+    # SSE: disable buffering for Server-Sent Events
+    location ~ ^/api/public/events/.+/stream$ {
+        proxy_pass http://127.0.0.1:${PORT_API};
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_set_header Connection '';
+        chunked_transfer_encoding off;
+        proxy_read_timeout 86400s;
+    }
+
     # API -> FastAPI
     location / {
         proxy_pass http://127.0.0.1:${PORT_API};

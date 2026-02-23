@@ -54,4 +54,5 @@ async def event_stream(code: str, request: Request) -> EventSourceResponse:
     return EventSourceResponse(
         _event_generator(request, code),
         media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no"},
     )
