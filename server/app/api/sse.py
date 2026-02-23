@@ -55,4 +55,5 @@ async def event_stream(code: str, request: Request) -> EventSourceResponse:
         _event_generator(request, code),
         media_type="text/event-stream",
         headers={"X-Accel-Buffering": "no"},
+        ping=0,  # Disable built-in ping — generator sends its own keepalive
     )
