@@ -78,10 +78,20 @@ def _extract_dominant_colors(img: Image.Image, num_colors: int = 3) -> list[str]
     return colors
 
 
-def _create_kiosk_variant(img: Image.Image) -> Image.Image:
-    """Create a desaturated, slightly blurred variant for the kiosk display.
+def _create_kiosk_variant(
+    img: Image.Image, fade_color: tuple[int, int, int] | None = None
+) -> Image.Image:
+    """Create a desaturated kiosk variant with a baked-in bottom fade.
 
-    Reduces saturation to ~40% and applies a subtle blur for a subdued background feel.
+    Reduces saturation to ~40%, darkens slightly, and composites a gradient fade
+    into the bottom 60% of the image so it blends into the kiosk background color.
+    The fade is baked into the pixels — no browser alpha compositing needed (which
+    fails on Raspberry Pi Chromium under Wayland/Cage).
+
+    Args:
+        img: Source image (RGB).
+        fade_color: RGB tuple for the fade target (typically the first dominant color).
+            If None, defaults to the dark theme background.
     """
     kiosk = img.copy()
     if kiosk.mode != "RGB":
@@ -95,7 +105,22 @@ def _create_kiosk_variant(img: Image.Image) -> Image.Image:
     enhancer = ImageEnhance.Brightness(kiosk)
     kiosk = enhancer.enhance(0.8)
 
-    return kiosk
+    # Bake gradient fade into the image pixels
+    bg_color = fade_color or (26, 26, 46)
+    w, h = kiosk.size
+    fade_start = int(h * 0.4)  # Top 40% fully visible, bottom 60% fades out
+
+    # Create alpha mask: 255 (opaque image) at top → 0 (show background) at bottom
+    mask = Image.new("L", (w, h), 255)
+    for y in range(fade_start, h):
+        alpha = int(255 * (1.0 - (y - fade_start) / (h - fade_start)))
+        mask.paste(alpha, (0, y, w, y + 1))
+
+    # Composite: kiosk image over solid background using the mask
+    bg = Image.new("RGB", (w, h), bg_color)
+    result = Image.composite(kiosk, bg, mask)
+
+    return result
 
 
 def process_banner_upload(file: UploadFile, event_code: str) -> tuple[str, str, list[str]]:
@@ -167,8 +192,10 @@ def process_banner_upload(file: UploadFile, event_code: str) -> tuple[str, str, 
     # Save main banner
     img.save(banners_dir / f"{base_name}.webp", "WEBP", quality=92)
 
-    # Create and save kiosk variant (desaturated)
-    kiosk_img = _create_kiosk_variant(img)
+    # Create and save kiosk variant (desaturated + baked gradient fade)
+    # Parse first dominant color as RGB for the fade target
+    fade_rgb = _hex_to_rgb(colors[0]) if colors else None
+    kiosk_img = _create_kiosk_variant(img, fade_color=fade_rgb)
     kiosk_img.save(banners_dir / f"{base_name}_kiosk.webp", "WEBP", quality=92)
 
     return banner_filename, kiosk_filename, colors
@@ -195,6 +222,12 @@ def delete_banner_files(banner_filename: str | None) -> None:
             filepath.unlink(missing_ok=True)
         except OSError:
             pass  # nosec B110
+
+
+def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
+    """Convert a hex color string like '#1a2b3c' to an (R, G, B) tuple."""
+    h = hex_color.lstrip("#")
+    return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
 
 def _kiosk_filename(banner_filename: str) -> str:

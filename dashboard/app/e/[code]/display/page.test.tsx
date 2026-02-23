@@ -681,8 +681,6 @@ describe('KioskDisplayPage', () => {
       expect(bgStyle).toContain('#1a2b3c');
       expect(bgStyle).toContain('#4d5e6f');
       expect(bgStyle).toContain('#7a8b9c');
-      const solidStyle = container?.style.getPropertyValue('--kiosk-bg-solid');
-      expect(solidStyle).toBe('#1a2b3c');
     });
 
     it('falls back for invalid color values', async () => {
@@ -703,8 +701,6 @@ describe('KioskDisplayPage', () => {
       expect(bgStyle).toContain('#1a1a2e'); // fallback for first
       expect(bgStyle).toContain('#4d5e6f'); // valid
       expect(bgStyle).toContain('#0f3460'); // fallback for third
-      const solidStyle = container?.style.getPropertyValue('--kiosk-bg-solid');
-      expect(solidStyle).toBe('#1a1a2e'); // fallback for invalid first color
     });
 
     it('renders banner image when present', async () => {
