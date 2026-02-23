@@ -138,7 +138,7 @@ export default function StreamOverlayPage() {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body {
           overflow: hidden;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-family: var(--font-body, 'DM Sans'), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         @keyframes pulse-live {
           0%, 100% { opacity: 1; }
@@ -166,6 +166,7 @@ export default function StreamOverlayPage() {
               letterSpacing: '0.08em',
               color: '#22c55e',
               fontWeight: 600,
+              fontFamily: "var(--font-display, 'Plus Jakarta Sans'), -apple-system, sans-serif",
             }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 18V5l12-2v13" />
@@ -267,6 +268,7 @@ export default function StreamOverlayPage() {
               letterSpacing: '0.08em',
               color: '#3b82f6',
               fontWeight: 600,
+              fontFamily: "var(--font-display, 'Plus Jakarta Sans'), -apple-system, sans-serif",
               marginBottom: '8px',
             }}>
               IN QUEUE
