@@ -168,7 +168,9 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
 
   const handleKeyboardDone = useCallback(() => {
     if (activeInput === 'search') {
-      hideKeyboard();
+      // Keep keyboard visible so results show above it and users can refine.
+      // Hiding here causes a touch-through: the synthesized click lands on the
+      // overlay (behind the now-gone fixed keyboard) and closes the modal.
       handleSearchRef.current();
     } else if (activeInput === 'note') {
       hideKeyboard();
