@@ -6,9 +6,17 @@
  * When passed a DOM element, it uses the element's existing classes
  * plus .hg-theme-default from the theme option. */
 
+/* Pin keyboard to the bottom of the viewport so search results
+   get all remaining vertical space above it. */
 .kiosk-keyboard-wrapper {
-  padding-top: 0.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1001;
+  background: #1f2937;
+  padding: 0.5rem 1rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .kiosk-keyboard-wrapper .kiosk-keyboard {
