@@ -46,11 +46,16 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
   const [activeInput, setActiveInput] = useState<'search' | 'note' | null>(null);
   const submitButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Auto-show keyboard when modal opens on kiosk/touch devices.
+  // Auto-show keyboard when modal opens on kiosk/touch devices, and
+  // re-show for the note input when a song is selected.
   // Relying on onFocus alone is unreliable through Cage/Wayland input stacks.
   useEffect(() => {
-    if (isTouch && !selectedSong && !submitted) {
-      setActiveInput('search');
+    if (isTouch && !submitted) {
+      if (selectedSong) {
+        setActiveInput('note');
+      } else {
+        setActiveInput('search');
+      }
       setShowKeyboard(true);
     }
   }, [isTouch, selectedSong, submitted]);

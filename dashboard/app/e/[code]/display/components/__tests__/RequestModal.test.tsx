@@ -320,6 +320,62 @@ describe('RequestModal', () => {
     expect(mockOnClose).toHaveBeenCalled();
   });
 
+  describe('kiosk virtual keyboard', () => {
+    let getItemSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) =>
+        key === 'kiosk_session_token' ? 'test-token' : null
+      );
+    });
+
+    afterEach(() => {
+      getItemSpy.mockRestore();
+    });
+
+    it('keeps keyboard visible after search so touch-through does not close modal', async () => {
+      vi.mocked(api.search).mockResolvedValue(mockResults);
+
+      const { container } = renderModal();
+
+      // Keyboard auto-shows on kiosk devices
+      expect(container.querySelector('.kiosk-keyboard-wrapper')).toBeInTheDocument();
+
+      // Type and submit search via the HTML Search button
+      fireEvent.change(screen.getByPlaceholderText('Search for a song...'), {
+        target: { value: 'strobe' },
+      });
+      await act(async () => {
+        fireEvent.submit(screen.getByRole('button', { name: 'Search' }));
+      });
+
+      // Results appear AND keyboard is still visible
+      expect(screen.getByText('Strobe')).toBeInTheDocument();
+      expect(container.querySelector('.kiosk-keyboard-wrapper')).toBeInTheDocument();
+      expect(mockOnClose).not.toHaveBeenCalled();
+    });
+
+    it('shows keyboard for note input after selecting a song', async () => {
+      vi.mocked(api.search).mockResolvedValue(mockResults);
+
+      const { container } = renderModal();
+
+      // Search and select a song
+      fireEvent.change(screen.getByPlaceholderText('Search for a song...'), {
+        target: { value: 'strobe' },
+      });
+      await act(async () => {
+        fireEvent.submit(screen.getByRole('button', { name: 'Search' }));
+      });
+      fireEvent.click(screen.getByText('Strobe'));
+
+      // Confirm view shows with keyboard still present for the note input
+      expect(screen.getByText('Confirm Request')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Add a note (optional)')).toBeInTheDocument();
+      expect(container.querySelector('.kiosk-keyboard-wrapper')).toBeInTheDocument();
+    });
+  });
+
   it('renders placeholder icon for results without album art', async () => {
     vi.mocked(api.search).mockResolvedValue([
       {
