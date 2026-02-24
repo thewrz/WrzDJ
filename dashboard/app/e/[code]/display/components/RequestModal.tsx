@@ -111,7 +111,7 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
     }
   };
 
-  // Ref-stable handleSearch for use in keyboard callbacks
+  // Ref-stable callbacks for use in keyboard done handler
   const handleSearchRef = useRef(handleSearch);
   handleSearchRef.current = handleSearch;
 
@@ -146,6 +146,9 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
     }
   };
 
+  const handleSubmitRef = useRef(handleSubmit);
+  handleSubmitRef.current = handleSubmit;
+
   const hideKeyboard = useCallback(() => {
     setShowKeyboard(false);
     setActiveInput(null);
@@ -178,8 +181,7 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
       // overlay (behind the now-gone fixed keyboard) and closes the modal.
       handleSearchRef.current();
     } else if (activeInput === 'note') {
-      hideKeyboard();
-      submitButtonRef.current?.focus();
+      handleSubmitRef.current();
     }
   }, [activeInput, hideKeyboard]);
 
@@ -197,7 +199,7 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
   }, [hideKeyboard]);
 
   const keyboardInputValue = activeInput === 'search' ? searchQuery : activeInput === 'note' ? note : '';
-  const keyboardDoneLabel = activeInput === 'search' ? 'Search' : 'Done';
+  const keyboardDoneLabel = activeInput === 'search' ? 'Search' : 'Submit';
 
   return (
     <div
