@@ -7,7 +7,7 @@
  * plus .hg-theme-default from the theme option. */
 
 .kiosk-keyboard-wrapper {
-  padding-top: 0.75rem;
+  padding-top: 0.5rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -19,8 +19,8 @@
 }
 
 .kiosk-keyboard-wrapper .kiosk-keyboard .hg-row {
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 5px;
+  margin-bottom: 6px;
 }
 
 .kiosk-keyboard-wrapper .kiosk-keyboard .hg-row:last-child {
