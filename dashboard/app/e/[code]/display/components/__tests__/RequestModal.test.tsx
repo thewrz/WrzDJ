@@ -2,11 +2,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { RequestModal } from '../RequestModal';
 
+// Track mock instances so tests can inspect setOptions calls
+const mockKeyboardInstances: Array<{
+  setOptions: ReturnType<typeof vi.fn>;
+  setInput: ReturnType<typeof vi.fn>;
+  destroy: ReturnType<typeof vi.fn>;
+}> = [];
+
 vi.mock('simple-keyboard', () => ({
   default: class MockKeyboard {
     setOptions = vi.fn();
     setInput = vi.fn();
     destroy = vi.fn();
+    constructor() {
+      mockKeyboardInstances.push(this);
+    }
   },
 }));
 
@@ -59,6 +69,7 @@ describe('RequestModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    mockKeyboardInstances.length = 0;
   });
 
   afterEach(() => {
@@ -318,6 +329,94 @@ describe('RequestModal', () => {
     }
 
     expect(mockOnClose).toHaveBeenCalled();
+  });
+
+  describe('kiosk virtual keyboard', () => {
+    let getItemSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) =>
+        key === 'kiosk_session_token' ? 'test-token' : null
+      );
+    });
+
+    afterEach(() => {
+      getItemSpy.mockRestore();
+    });
+
+    it('keeps keyboard visible after search so touch-through does not close modal', async () => {
+      vi.mocked(api.search).mockResolvedValue(mockResults);
+
+      const { container } = renderModal();
+
+      // Keyboard auto-shows on kiosk devices
+      expect(container.querySelector('.kiosk-keyboard-wrapper')).toBeInTheDocument();
+
+      // Type and submit search via the HTML Search button
+      fireEvent.change(screen.getByPlaceholderText('Search for a song...'), {
+        target: { value: 'strobe' },
+      });
+      await act(async () => {
+        fireEvent.submit(screen.getByRole('button', { name: 'Search' }));
+      });
+
+      // Results appear AND keyboard is still visible
+      expect(screen.getByText('Strobe')).toBeInTheDocument();
+      expect(container.querySelector('.kiosk-keyboard-wrapper')).toBeInTheDocument();
+      expect(mockOnClose).not.toHaveBeenCalled();
+    });
+
+    it('shows keyboard for note input after selecting a song', async () => {
+      vi.mocked(api.search).mockResolvedValue(mockResults);
+
+      const { container } = renderModal();
+
+      // Search and select a song
+      fireEvent.change(screen.getByPlaceholderText('Search for a song...'), {
+        target: { value: 'strobe' },
+      });
+      await act(async () => {
+        fireEvent.submit(screen.getByRole('button', { name: 'Search' }));
+      });
+      fireEvent.click(screen.getByText('Strobe'));
+
+      // Confirm view shows with keyboard still present for the note input
+      expect(screen.getByText('Confirm Request')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Add a note (optional)')).toBeInTheDocument();
+      expect(container.querySelector('.kiosk-keyboard-wrapper')).toBeInTheDocument();
+    });
+
+    it('labels keyboard done key "Submit" on confirm view to trigger submission', async () => {
+      vi.mocked(api.search).mockResolvedValue(mockResults);
+
+      renderModal();
+
+      // Search and select a song
+      fireEvent.change(screen.getByPlaceholderText('Search for a song...'), {
+        target: { value: 'strobe' },
+      });
+      await act(async () => {
+        fireEvent.submit(screen.getByRole('button', { name: 'Search' }));
+      });
+
+      // Selecting a song triggers: setSelectedSong → auto-show effect →
+      // activeInput='note' → doneLabel='Submit' → KioskKeyboard useEffect
+      // Wrap in act to flush the full effect chain.
+      await act(async () => {
+        fireEvent.click(screen.getByText('Strobe'));
+      });
+
+      // The keyboard unmounts then remounts when transitioning to confirm view,
+      // creating a new instance. Check the latest one.
+      const kb = mockKeyboardInstances[mockKeyboardInstances.length - 1];
+      expect(kb).toBeDefined();
+      const setOptionsCalls = kb.setOptions.mock.calls as Array<[Record<string, Record<string, string>>]>;
+      const lastDisplayCall = setOptionsCalls
+        .filter((call) => call[0]?.display)
+        .pop();
+      expect(lastDisplayCall).toBeDefined();
+      expect(lastDisplayCall![0].display['{done}']).toBe('Submit');
+    });
   });
 
   it('renders placeholder icon for results without album art', async () => {

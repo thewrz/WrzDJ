@@ -46,11 +46,16 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
   const [activeInput, setActiveInput] = useState<'search' | 'note' | null>(null);
   const submitButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Auto-show keyboard when modal opens on kiosk/touch devices.
+  // Auto-show keyboard when modal opens on kiosk/touch devices, and
+  // re-show for the note input when a song is selected.
   // Relying on onFocus alone is unreliable through Cage/Wayland input stacks.
   useEffect(() => {
-    if (isTouch && !selectedSong && !submitted) {
-      setActiveInput('search');
+    if (isTouch && !submitted) {
+      if (selectedSong) {
+        setActiveInput('note');
+      } else {
+        setActiveInput('search');
+      }
       setShowKeyboard(true);
     }
   }, [isTouch, selectedSong, submitted]);
@@ -106,7 +111,7 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
     }
   };
 
-  // Ref-stable handleSearch for use in keyboard callbacks
+  // Ref-stable callbacks for use in keyboard done handler
   const handleSearchRef = useRef(handleSearch);
   handleSearchRef.current = handleSearch;
 
@@ -141,6 +146,9 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
     }
   };
 
+  const handleSubmitRef = useRef(handleSubmit);
+  handleSubmitRef.current = handleSubmit;
+
   const hideKeyboard = useCallback(() => {
     setShowKeyboard(false);
     setActiveInput(null);
@@ -168,11 +176,12 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
 
   const handleKeyboardDone = useCallback(() => {
     if (activeInput === 'search') {
-      hideKeyboard();
+      // Keep keyboard visible so results show above it and users can refine.
+      // Hiding here causes a touch-through: the synthesized click lands on the
+      // overlay (behind the now-gone fixed keyboard) and closes the modal.
       handleSearchRef.current();
     } else if (activeInput === 'note') {
-      hideKeyboard();
-      submitButtonRef.current?.focus();
+      handleSubmitRef.current();
     }
   }, [activeInput, hideKeyboard]);
 
@@ -190,7 +199,7 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
   }, [hideKeyboard]);
 
   const keyboardInputValue = activeInput === 'search' ? searchQuery : activeInput === 'note' ? note : '';
-  const keyboardDoneLabel = activeInput === 'search' ? 'Search' : 'Done';
+  const keyboardDoneLabel = activeInput === 'search' ? 'Search' : 'Submit';
 
   return (
     <div
