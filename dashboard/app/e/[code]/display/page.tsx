@@ -688,6 +688,7 @@ export default function KioskDisplayPage() {
           max-height: 95vh;
           overflow-y: auto;
           padding: 1.25rem;
+          padding-bottom: 280px;
         }
         .modal-overlay.keyboard-overlay-active {
           align-items: flex-start;
@@ -747,7 +748,7 @@ export default function KioskDisplayPage() {
           transition: max-height 0.2s ease;
         }
         .search-results-compact {
-          max-height: 120px;
+          max-height: 50vh;
         }
         .search-result-item {
           display: flex;
