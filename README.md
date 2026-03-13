@@ -56,7 +56,7 @@ A real-time song request system for DJs. Guests scan a QR code to submit request
 **Kiosk display**
 - Full-screen three-column layout: Now Playing, Up Next, Recently Played
 - QR pairing with session persistence across power cycles
-- Custom banner backgrounds, built-in request modal, display-only mode
+- Custom banner backgrounds, built-in request modal with touchscreen keyboard, display-only mode
 - Raspberry Pi deployment with WiFi captive portal and crash recovery watchdog
 
 **Stream overlay**
@@ -67,6 +67,7 @@ A real-time song request system for DJs. Guests scan a QR code to submit request
 - Plugin system: Denon StageLinQ, Pioneer PRO DJ LINK, Serato DJ, Traktor Broadcast
 - Automatic request matching via fuzzy search, Spotify album art enrichment
 - Circuit breaker, reconnection with backoff, track buffer replay
+- Upstream dependency contract testing with weekly drift detection CI
 - Desktop app (Windows/macOS/Linux) or CLI
 
 ---
@@ -221,6 +222,8 @@ APP_DOMAIN=app.yourdomain.com API_DOMAIN=api.yourdomain.com ./deploy/setup-nginx
 sudo certbot --nginx -d app.yourdomain.com -d api.yourdomain.com
 ```
 
+GoAccess analytics are available for production traffic — see `deploy/scripts/analytics.sh`.
+
 See `deploy/DEPLOYMENT.md` for full setup instructions.
 
 ### Required Backend Environment Variables
@@ -258,7 +261,7 @@ WrzDJ/
   kiosk/            # Raspberry Pi kiosk deployment
   deploy/           # Production deployment configs
   scripts/          # Git hooks and dev tooling
-  .github/workflows # CI + release pipeline
+  .github/workflows # CI, release, and dependency health pipelines
 ```
 
 ---
