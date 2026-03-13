@@ -1,0 +1,246 @@
+name: Dependency Health
+
+on:
+  schedule:
+    - cron: "0 6 * * 3" # Wednesday 6am UTC (offset from CodeQL's Monday)
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  contract-tests-pinned:
+    name: Contract Tests (Pinned Versions)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: bridge
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: bridge/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run contract tests
+        run: npx vitest run 'contracts'
+
+  contract-tests-latest:
+    name: Contract Tests (Latest Versions)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: bridge
+    outputs:
+      test_result: ${{ steps.test.outcome }}
+      stagelinq_version: ${{ steps.versions.outputs.stagelinq }}
+      alphatheta_version: ${{ steps.versions.outputs.alphatheta }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: bridge/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Upgrade to latest versions
+        run: npm install stagelinq@latest alphatheta-connect@latest --save-exact
+
+      - name: Capture installed versions
+        id: versions
+        run: |
+          echo "stagelinq=$(node -p "require('./node_modules/stagelinq/package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "alphatheta=$(node -p "require('./node_modules/alphatheta-connect/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Run contract tests against latest
+        id: test
+        continue-on-error: true
+        run: npx vitest run 'contracts'
+
+  upstream-monitor:
+    name: Upstream Release & Health Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      stagelinq_latest: ${{ steps.check.outputs.stagelinq_latest }}
+      alphatheta_latest: ${{ steps.check.outputs.alphatheta_latest }}
+      stagelinq_pinned: ${{ steps.check.outputs.stagelinq_pinned }}
+      alphatheta_pinned: ${{ steps.check.outputs.alphatheta_pinned }}
+      stagelinq_stale: ${{ steps.check.outputs.stagelinq_stale }}
+      alphatheta_stale: ${{ steps.check.outputs.alphatheta_stale }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Check upstream health
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Pinned versions from package.json
+          STAGELINQ_PINNED=$(node -p "require('./bridge/package.json').dependencies.stagelinq")
+          ALPHATHETA_PINNED=$(node -p "require('./bridge/package.json').dependencies['alphatheta-connect']")
+          echo "stagelinq_pinned=$STAGELINQ_PINNED" >> "$GITHUB_OUTPUT"
+          echo "alphatheta_pinned=$ALPHATHETA_PINNED" >> "$GITHUB_OUTPUT"
+
+          # Latest npm versions
+          STAGELINQ_LATEST=$(npm view stagelinq version 2>/dev/null || echo "unknown")
+          ALPHATHETA_LATEST=$(npm view alphatheta-connect version 2>/dev/null || echo "unknown")
+          echo "stagelinq_latest=$STAGELINQ_LATEST" >> "$GITHUB_OUTPUT"
+          echo "alphatheta_latest=$ALPHATHETA_LATEST" >> "$GITHUB_OUTPUT"
+
+          # Staleness check (last commit > 6 months ago)
+          check_staleness() {
+            local repo=$1
+            local last_commit
+            last_commit=$(gh api "repos/$repo/commits?per_page=1" --jq '.[0].commit.committer.date' 2>/dev/null || echo "")
+            if [ -z "$last_commit" ]; then
+              echo "unknown"
+              return
+            fi
+            local last_epoch
+            last_epoch=$(date -d "$last_commit" +%s 2>/dev/null || echo "0")
+            local six_months_ago
+            six_months_ago=$(date -d "6 months ago" +%s)
+            if [ "$last_epoch" -lt "$six_months_ago" ]; then
+              echo "true"
+            else
+              echo "false"
+            fi
+          }
+
+          echo "stagelinq_stale=$(check_staleness chrisle/StageLinq)" >> "$GITHUB_OUTPUT"
+          echo "alphatheta_stale=$(check_staleness chrisle/alphatheta-connect)" >> "$GITHUB_OUTPUT"
+
+  create-issues:
+    name: Create Issues for Drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [contract-tests-pinned, contract-tests-latest, upstream-monitor]
+    if: always() && needs.contract-tests-pinned.result == 'success'
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Ensure dependency-drift label exists
+        run: gh label create dependency-drift --description "Upstream dependency API drift" --color "d93f0b" 2>/dev/null || true
+
+      - name: Report contract test drift
+        if: needs.contract-tests-latest.outputs.test_result == 'failure'
+        run: |
+          STAGELINQ_VER="${{ needs.contract-tests-latest.outputs.stagelinq_version }}"
+          ALPHATHETA_VER="${{ needs.contract-tests-latest.outputs.alphatheta_version }}"
+          STAGELINQ_PINNED="${{ needs.upstream-monitor.outputs.stagelinq_pinned }}"
+          ALPHATHETA_PINNED="${{ needs.upstream-monitor.outputs.alphatheta_pinned }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          TITLE="Dependency drift: contract tests fail with latest upstream versions"
+          EXISTING=$(gh issue list --label dependency-drift --search "$TITLE" --state open --json number --jq 'length')
+          if [ "$EXISTING" = "0" ]; then
+            gh issue create \
+              --title "$TITLE" \
+              --label "dependency-drift" \
+              --body "$(cat <<EOF
+          ## Contract Test Failure
+
+          The weekly dependency health check detected that contract tests fail when run against the latest upstream versions.
+
+          | Package | Pinned | Latest Tested |
+          |---------|--------|---------------|
+          | stagelinq | $STAGELINQ_PINNED | $STAGELINQ_VER |
+          | alphatheta-connect | $ALPHATHETA_PINNED | $ALPHATHETA_VER |
+
+          This means the upstream API surface has changed in a way that could break our bridge plugins.
+
+          **Action required**: Review the failing contract tests, check upstream changelogs, and update the plugin code if needed before bumping versions.
+
+          [View workflow run]($RUN_URL)
+          EOF
+          )"
+          fi
+
+      - name: Report new upstream releases
+        run: |
+          STAGELINQ_LATEST="${{ needs.upstream-monitor.outputs.stagelinq_latest }}"
+          ALPHATHETA_LATEST="${{ needs.upstream-monitor.outputs.alphatheta_latest }}"
+          STAGELINQ_PINNED="${{ needs.upstream-monitor.outputs.stagelinq_pinned }}"
+          ALPHATHETA_PINNED="${{ needs.upstream-monitor.outputs.alphatheta_pinned }}"
+
+          create_release_issue() {
+            local pkg=$1 latest=$2 pinned=$3
+            if [ "$latest" != "$pinned" ] && [ "$latest" != "unknown" ]; then
+              local TITLE="New release: ${pkg}@${latest} available (pinned: ${pinned})"
+              local EXISTING
+              EXISTING=$(gh issue list --label dependency-drift --search "$TITLE" --state open --json number --jq 'length')
+              if [ "$EXISTING" = "0" ]; then
+                gh issue create \
+                  --title "$TITLE" \
+                  --label "dependency-drift" \
+                  --body "$(cat <<EOF
+          A new version of \`${pkg}\` is available on npm.
+
+          | Current | Available |
+          |---------|-----------|
+          | ${pinned} | ${latest} |
+
+          **Next steps**:
+          1. Check the changelog for breaking changes
+          2. Run contract tests locally: \`cd bridge && npm install ${pkg}@${latest} --save-exact && npx vitest run 'contracts'\`
+          3. If tests pass, update \`package.json\` and open a PR
+          EOF
+          )"
+              fi
+            fi
+          }
+
+          create_release_issue "stagelinq" "$STAGELINQ_LATEST" "$STAGELINQ_PINNED"
+          create_release_issue "alphatheta-connect" "$ALPHATHETA_LATEST" "$ALPHATHETA_PINNED"
+
+      - name: Report stale upstream repos
+        run: |
+          report_staleness() {
+            local pkg=$1 repo=$2 stale=$3
+            if [ "$stale" = "true" ]; then
+              local TITLE="Upstream health: ${repo} inactive for 6+ months"
+              local EXISTING
+              EXISTING=$(gh issue list --label dependency-drift --search "$TITLE" --state open --json number --jq 'length')
+              if [ "$EXISTING" = "0" ]; then
+                gh issue create \
+                  --title "$TITLE" \
+                  --label "dependency-drift" \
+                  --body "$(cat <<EOF
+          The upstream repository [${repo}](https://github.com/${repo}) has had no commits in over 6 months.
+
+          This is a risk indicator — if the library stops being maintained, our \`${pkg}\` plugin may need to:
+          - Fork the library
+          - Find an alternative
+          - Freeze the pinned version and maintain patches locally
+
+          **No action required yet** — this is an awareness issue. Close if the repo becomes active again.
+          EOF
+          )"
+              fi
+            fi
+          }
+
+          report_staleness "stagelinq" "chrisle/StageLinq" "${{ needs.upstream-monitor.outputs.stagelinq_stale }}"
+          report_staleness "alphatheta-connect" "chrisle/alphatheta-connect" "${{ needs.upstream-monitor.outputs.alphatheta_stale }}"
