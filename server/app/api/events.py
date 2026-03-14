@@ -331,11 +331,14 @@ def event_search(
     q: str = Query(..., min_length=2, max_length=200),
     db: Session = Depends(get_db),
 ) -> list[SearchResult]:
-    """Public search endpoint for event guests. Searches across available music
-    services: Spotify, Beatport, and Tidal — with automatic fallback when a
-    service is unavailable."""
+    """Public search endpoint for event guests.
+
+    Priority: Tidal (primary) → Spotify (fallback) → Beatport (event toggle).
+    Results are filtered for junk, deduplicated by ISRC, and sorted by popularity.
+    """
     from app.services.beatport import search_beatport_tracks
-    from app.services.search_merge import merge_search_results
+    from app.services.intent_parser import parse_intent
+    from app.services.search_merge import build_search_results
     from app.services.spotify import search_songs
     from app.services.system_settings import get_system_settings
     from app.services.tidal import search_tidal_tracks
@@ -350,13 +353,19 @@ def event_search(
 
     sys_settings = get_system_settings(db)
     owner = event_obj.created_by
+    intent = parse_intent(q)
 
-    # Search Spotify if enabled
+    # Tidal primary: search if owner has Tidal linked
+    tidal_results = []
+    if owner and owner.tidal_access_token:
+        tidal_results = search_tidal_tracks(db, owner, q, limit=20)
+
+    # Spotify fallback: only if Tidal returned nothing AND Spotify is enabled
     spotify_results = []
-    if sys_settings.spotify_enabled:
+    if not tidal_results and sys_settings.spotify_enabled:
         spotify_results = search_songs(db, q)
 
-    # Search Beatport if owner has it linked and sync enabled for this event
+    # Beatport append: if owner has it linked and sync enabled for this event
     beatport_results = []
     if (
         sys_settings.beatport_enabled
@@ -366,24 +375,19 @@ def event_search(
     ):
         beatport_results = search_beatport_tracks(db, owner, q, limit=10)
 
-    # Tidal fallback: search if owner has Tidal linked and either Spotify returned
-    # nothing or Spotify is disabled (ensures guests always get results when possible)
-    tidal_results = []
-    if not spotify_results and owner and owner.tidal_access_token:
-        tidal_results = search_tidal_tracks(db, owner, q, limit=20)
-
     has_any_source = (
-        sys_settings.spotify_enabled
+        (owner and owner.tidal_access_token)
+        or sys_settings.spotify_enabled
         or sys_settings.beatport_enabled
-        or (owner and owner.tidal_access_token)
     )
     if not has_any_source:
         raise HTTPException(status_code=503, detail="Song search is currently unavailable")
 
-    return merge_search_results(
-        spotify_results,
-        beatport_results=beatport_results or None,
+    return build_search_results(
         tidal_results=tidal_results or None,
+        spotify_results=spotify_results or None,
+        beatport_results=beatport_results or None,
+        intent=intent,
     )
 
 

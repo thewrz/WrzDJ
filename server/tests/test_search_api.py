@@ -1,27 +1,95 @@
 """Tests for search API endpoints."""
 
 from datetime import UTC, datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.search_cache import SearchCache
+from app.models.user import User
 
 
 class TestSearchEndpoint:
     """Tests for GET /api/search."""
 
-    @patch("app.api.search.search_songs")
-    def test_search_success(self, mock_search, client: TestClient, auth_headers: dict):
+    @patch("app.services.tidal.search_tidal_tracks")
+    def test_search_tidal_primary(
+        self, mock_tidal, client: TestClient, auth_headers: dict, test_user: User, db: Session
+    ):
+        """Tidal is used as primary when user has Tidal linked."""
+        from app.schemas.tidal import TidalSearchResult
+
+        test_user.tidal_access_token = "test_token"
+        db.commit()
+
+        mock_tidal.return_value = [
+            TidalSearchResult(
+                track_id="123",
+                title="Strobe",
+                artist="deadmau5",
+                tidal_url="https://tidal.com/browse/track/123",
+                popularity=80,
+            )
+        ]
+
+        response = client.get("/api/search?q=strobe", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["title"] == "Strobe"
+        assert data[0]["source"] == "tidal"
+        assert data[0]["popularity"] == 80
+        mock_tidal.assert_called_once()
+
+    @patch("app.services.spotify.search_songs")
+    @patch("app.services.tidal.search_tidal_tracks")
+    def test_search_spotify_fallback(
+        self,
+        mock_tidal,
+        mock_spotify,
+        client: TestClient,
+        auth_headers: dict,
+        test_user: User,
+        db: Session,
+    ):
+        """Spotify is used as fallback when Tidal returns nothing."""
+        test_user.tidal_access_token = "test_token"
+        db.commit()
+        mock_tidal.return_value = []
+
+        from app.schemas.search import SearchResult
+
+        mock_spotify.return_value = [
+            SearchResult(
+                title="Strobe",
+                artist="deadmau5",
+                spotify_id="sp123",
+                url="https://open.spotify.com/track/sp123",
+                popularity=75,
+            )
+        ]
+
+        response = client.get("/api/search?q=strobe", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["source"] == "spotify"
+
+    @patch("app.services.spotify.search_songs")
+    def test_search_spotify_only_no_tidal(
+        self, mock_search, client: TestClient, auth_headers: dict
+    ):
+        """Spotify used when user has no Tidal linked."""
+        from app.schemas.search import SearchResult
+
         mock_search.return_value = [
-            {
-                "title": "Strobe",
-                "artist": "deadmau5",
-                "spotify_id": "sp123",
-                "url": "https://open.spotify.com/track/sp123",
-                "album_art": "https://example.com/art.jpg",
-            }
+            SearchResult(
+                title="Strobe",
+                artist="deadmau5",
+                spotify_id="sp123",
+                url="https://open.spotify.com/track/sp123",
+            )
         ]
 
         response = client.get("/api/search?q=strobe", headers=auth_headers)
@@ -39,7 +107,7 @@ class TestSearchEndpoint:
         response = client.get("/api/search?q=", headers=auth_headers)
         assert response.status_code == 422
 
-    @patch("app.api.search.search_songs")
+    @patch("app.services.spotify.search_songs")
     def test_search_returns_empty_list(self, mock_search, client: TestClient, auth_headers: dict):
         mock_search.return_value = []
 
@@ -48,11 +116,9 @@ class TestSearchEndpoint:
         assert response.json() == []
 
     @patch("app.api.search.get_system_settings")
-    def test_search_disabled_returns_503(
+    def test_search_unavailable_returns_503(
         self, mock_settings, client: TestClient, auth_headers: dict, db: Session
     ):
-        from unittest.mock import MagicMock
-
         mock_obj = MagicMock()
         mock_obj.spotify_enabled = False
         mock_settings.return_value = mock_obj

@@ -124,6 +124,7 @@ export interface SearchResult {
   genre: string | null;
   bpm: number | null;
   key: string | null;
+  isrc: string | null;
 }
 
 /** StageLinQ now-playing track info */

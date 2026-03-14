@@ -8,8 +8,6 @@ from app.models.search_cache import SearchCache
 from app.models.user import User
 from app.schemas.common import CacheClearResponse
 from app.schemas.search import SearchResult
-from app.services.search_merge import tidal_to_search_result
-from app.services.spotify import search_songs
 from app.services.system_settings import get_system_settings
 
 router = APIRouter()
@@ -24,24 +22,33 @@ def search(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> list[SearchResult]:
+    """DJ search endpoint. Tidal primary, Spotify fallback."""
+    from app.services.intent_parser import parse_intent
+    from app.services.search_merge import build_search_results
+    from app.services.spotify import search_songs
     from app.services.tidal import search_tidal_tracks
 
     sys_settings = get_system_settings(db)
+    intent = parse_intent(q)
 
-    # Search Spotify if enabled
-    results = []
-    if sys_settings.spotify_enabled:
-        results = search_songs(db, q)
-
-    # Tidal fallback when Spotify returns nothing and user has Tidal linked
-    if not results and current_user.tidal_access_token:
+    # Tidal primary: search if user has Tidal linked
+    tidal_results = []
+    if current_user.tidal_access_token:
         tidal_results = search_tidal_tracks(db, current_user, q, limit=20)
-        results = [tidal_to_search_result(t) for t in tidal_results]
 
-    if not sys_settings.spotify_enabled and not current_user.tidal_access_token:
+    # Spotify fallback: only if Tidal returned nothing AND Spotify is enabled
+    spotify_results = []
+    if not tidal_results and sys_settings.spotify_enabled:
+        spotify_results = search_songs(db, q)
+
+    if not current_user.tidal_access_token and not sys_settings.spotify_enabled:
         raise HTTPException(status_code=503, detail="Song search is currently unavailable")
 
-    return results
+    return build_search_results(
+        tidal_results=tidal_results or None,
+        spotify_results=spotify_results or None,
+        intent=intent,
+    )
 
 
 @router.delete("/cache", response_model=CacheClearResponse)

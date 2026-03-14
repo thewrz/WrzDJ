@@ -1540,3 +1540,76 @@ class TestEventSearch:
         long_query = "a" * 201
         response = client.get(f"/api/events/{test_event.code}/search?q={long_query}")
         assert response.status_code == 422
+
+    @patch("app.services.tidal.search_tidal_tracks")
+    def test_event_search_tidal_primary(
+        self, mock_tidal, client: TestClient, db: Session, test_user: User
+    ):
+        """Tidal is used as primary source when owner has Tidal linked."""
+        from app.schemas.tidal import TidalSearchResult
+
+        test_user.tidal_access_token = "tidal_token"
+        db.flush()
+
+        event = Event(
+            code="TDSRCH",
+            name="Tidal Search Test",
+            created_by_user_id=test_user.id,
+            expires_at=utcnow() + timedelta(hours=6),
+        )
+        db.add(event)
+        db.commit()
+
+        mock_tidal.return_value = [
+            TidalSearchResult(
+                track_id="t123",
+                title="Strobe",
+                artist="deadmau5",
+                tidal_url="https://tidal.com/browse/track/t123",
+                popularity=80,
+                isrc="USRC12345",
+            )
+        ]
+
+        response = client.get(f"/api/events/{event.code}/search?q=strobe")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["source"] == "tidal"
+        assert data[0]["popularity"] == 80
+        mock_tidal.assert_called_once()
+
+    @patch("app.services.spotify.search_songs")
+    @patch("app.services.tidal.search_tidal_tracks")
+    def test_event_search_spotify_fallback_when_tidal_empty(
+        self, mock_tidal, mock_spotify, client: TestClient, db: Session, test_user: User
+    ):
+        """Spotify is used when Tidal returns no results."""
+        test_user.tidal_access_token = "tidal_token"
+        db.flush()
+
+        event = Event(
+            code="FBSRCH",
+            name="Fallback Search Test",
+            created_by_user_id=test_user.id,
+            expires_at=utcnow() + timedelta(hours=6),
+        )
+        db.add(event)
+        db.commit()
+
+        mock_tidal.return_value = []
+        mock_spotify.return_value = [
+            SearchResult(
+                title="Strobe",
+                artist="deadmau5",
+                popularity=72,
+                spotify_id="sp_strobe",
+                source="spotify",
+            )
+        ]
+
+        response = client.get(f"/api/events/{event.code}/search?q=strobe")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["source"] == "spotify"

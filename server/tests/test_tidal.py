@@ -25,6 +25,49 @@ from app.services.tidal import (
 )
 
 
+def _make_mock_track(
+    track_id: int,
+    name: str,
+    artist_name: str,
+    album_name: str | None = None,
+    *,
+    bpm: float | None = None,
+    key: str | None = None,
+    duration: int = 200,
+    cover_url: str | None = None,
+    popularity: int = 0,
+    isrc: str | None = None,
+    version: str | None = None,
+    explicit: bool = False,
+    artists: list | None = None,
+) -> MagicMock:
+    """Create a properly configured mock tidalapi.Track.
+
+    Sets all fields explicitly so MagicMock doesn't auto-create
+    attributes that trip isinstance checks or Pydantic validation.
+    """
+    track = MagicMock()
+    track.id = track_id
+    track.name = name
+    track.duration = duration
+    track.bpm = bpm
+    track.key = key
+    track.popularity = popularity
+    track.isrc = isrc
+    track.version = version
+    track.explicit = explicit
+    track.artists = artists or []
+    track.artist = MagicMock()
+    track.artist.name = artist_name
+    if album_name:
+        track.album = MagicMock()
+        track.album.name = album_name
+        track.album.image.return_value = cover_url
+    else:
+        track.album = None
+    return track
+
+
 @pytest.fixture
 def tidal_user(db: Session) -> User:
     """Create a user with linked Tidal account."""
@@ -387,17 +430,15 @@ class TestTidalSearch:
     def test_search_track_exact_match(self, mock_session_fn: MagicMock, db: Session, tidal_user):
         """Test search_track returns exact match when available."""
         mock_session = MagicMock()
-        mock_track = MagicMock()
-        mock_track.id = 12345
-        mock_track.name = "Strobe"
-        mock_track.duration = 600
-        mock_track.bpm = 128
-        mock_track.key = "A Minor"
-        mock_track.artist = MagicMock()
-        mock_track.artist.name = "deadmau5"
-        mock_track.album = MagicMock()
-        mock_track.album.name = "For Lack of a Better Name"
-        mock_track.album.image.return_value = "https://img.tidal.com/cover.jpg"
+        mock_track = _make_mock_track(
+            12345,
+            "Strobe",
+            "deadmau5",
+            "For Lack of a Better Name",
+            bpm=128,
+            key="A Minor",
+            cover_url="https://img.tidal.com/cover.jpg",
+        )
 
         mock_session.search.return_value = {"tracks": [mock_track]}
         mock_session_fn.return_value = mock_session
@@ -413,17 +454,7 @@ class TestTidalSearch:
     def test_search_track_fallback_to_first(self, mock_session_fn: MagicMock, db, tidal_user):
         """Test search_track falls back to first result if no exact match."""
         mock_session = MagicMock()
-        mock_track = MagicMock()
-        mock_track.id = 99999
-        mock_track.name = "Some Other Track"
-        mock_track.duration = 300
-        mock_track.bpm = None
-        mock_track.key = None
-        mock_track.artist = MagicMock()
-        mock_track.artist.name = "Other Artist"
-        mock_track.album = MagicMock()
-        mock_track.album.name = "Album"
-        mock_track.album.image.return_value = None
+        mock_track = _make_mock_track(99999, "Some Other Track", "Other Artist", "Album")
 
         mock_session.search.return_value = {"tracks": [mock_track]}
         mock_session_fn.return_value = mock_session
@@ -457,29 +488,15 @@ class TestTidalSearch:
     def test_search_tidal_tracks(self, mock_session_fn: MagicMock, db, tidal_user):
         """Test search_tidal_tracks returns list of results."""
         mock_session = MagicMock()
-        mock_track1 = MagicMock()
-        mock_track1.id = 111
-        mock_track1.name = "Track A"
-        mock_track1.duration = 200
-        mock_track1.bpm = 125
-        mock_track1.key = "C Major"
-        mock_track1.artist = MagicMock()
-        mock_track1.artist.name = "Artist A"
-        mock_track1.album = MagicMock()
-        mock_track1.album.name = "Album A"
-        mock_track1.album.image.return_value = None
-
-        mock_track2 = MagicMock()
-        mock_track2.id = 222
-        mock_track2.name = "Track B"
-        mock_track2.duration = 300
-        mock_track2.bpm = None
-        mock_track2.key = None
-        mock_track2.artist = MagicMock()
-        mock_track2.artist.name = "Artist B"
-        mock_track2.album = MagicMock()
-        mock_track2.album.name = "Album B"
-        mock_track2.album.image.return_value = None
+        mock_track1 = _make_mock_track(
+            111,
+            "Track A",
+            "Artist A",
+            "Album A",
+            bpm=125,
+            key="C Major",
+        )
+        mock_track2 = _make_mock_track(222, "Track B", "Artist B", "Album B")
 
         mock_session.search.return_value = {"tracks": [mock_track1, mock_track2]}
         mock_session_fn.return_value = mock_session
@@ -621,19 +638,21 @@ class TestTrackToResult:
     """Tests for _track_to_result conversion."""
 
     def test_full_conversion(self):
-        """Converts track with all fields."""
-        track = MagicMock()
-        track.id = 12345
-        track.name = "Strobe"
-        track.duration = 630
-        track.bpm = 128.0
-        track.key = "F Minor"
-        track.artist = MagicMock()
-        track.artist.name = "deadmau5"
-        track.artists = []
-        track.album = MagicMock()
-        track.album.name = "For Lack of a Better Name"
-        track.album.image.return_value = "https://example.com/art.jpg"
+        """Converts track with all fields including popularity/isrc/version/explicit."""
+        track = _make_mock_track(
+            12345,
+            "Strobe",
+            "deadmau5",
+            "For Lack of a Better Name",
+            bpm=128.0,
+            key="F Minor",
+            duration=630,
+            cover_url="https://example.com/art.jpg",
+            popularity=85,
+            isrc="USRC17600001",
+            version="Original Mix",
+            explicit=False,
+        )
 
         result = _track_to_result(track)
         assert result.track_id == "12345"
@@ -642,20 +661,24 @@ class TestTrackToResult:
         assert result.bpm == 128.0
         assert result.key == "F Minor"
         assert result.cover_url == "https://example.com/art.jpg"
+        assert result.popularity == 85
+        assert result.isrc == "USRC17600001"
+        assert result.version == "Original Mix"
+        assert result.explicit is False
+
+    def test_missing_new_fields_defaults(self):
+        """Tracks without popularity/isrc/version/explicit get defaults."""
+        track = _make_mock_track(99, "Old Track", "Old Artist")
+
+        result = _track_to_result(track)
+        assert result.popularity == 0
+        assert result.isrc is None
+        assert result.version is None
+        assert result.explicit is False
 
     def test_cover_art_failure(self):
         """Returns None cover_url on image exception."""
-        track = MagicMock()
-        track.id = 1
-        track.name = "Test"
-        track.duration = 100
-        track.bpm = None
-        track.key = None
-        track.artist = MagicMock()
-        track.artist.name = "Artist"
-        track.artists = []
-        track.album = MagicMock()
-        track.album.name = "Album"
+        track = _make_mock_track(1, "Test", "Artist", "Album")
         track.album.image.side_effect = Exception("Image not found")
 
         result = _track_to_result(track)
@@ -663,16 +686,7 @@ class TestTrackToResult:
 
     def test_bpm_edge_cases(self):
         """Handles non-numeric BPM gracefully."""
-        track = MagicMock()
-        track.id = 2
-        track.name = "Test"
-        track.duration = 100
-        track.bpm = "not_a_number"
-        track.key = None
-        track.artist = MagicMock()
-        track.artist.name = "Artist"
-        track.artists = []
-        track.album = None
+        track = _make_mock_track(2, "Test", "Artist", bpm="not_a_number")
 
         result = _track_to_result(track)
         assert result.bpm is None
@@ -680,18 +694,17 @@ class TestTrackToResult:
 
     def test_multi_artist_track(self):
         """Joins multiple artist names."""
-        track = MagicMock()
-        track.id = 3
-        track.name = "Collab"
-        track.duration = 200
-        track.bpm = 120
-        track.key = None
         artist1 = MagicMock()
         artist1.name = "Artist A"
         artist2 = MagicMock()
         artist2.name = "Artist B"
-        track.artists = [artist1, artist2]
-        track.album = None
+        track = _make_mock_track(
+            3,
+            "Collab",
+            "Artist A",
+            bpm=120,
+            artists=[artist1, artist2],
+        )
 
         result = _track_to_result(track)
         assert result.artist == "Artist A, Artist B"

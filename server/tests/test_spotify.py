@@ -22,6 +22,7 @@ SPOTIFY_API_RESPONSE = {
                 "popularity": 75,
                 "preview_url": "https://p.scdn.co/preview/abc123",
                 "artists": [{"name": "deadmau5"}],
+                "external_ids": {"isrc": "USRC17600001"},
                 "album": {
                     "name": "For Lack of a Better Name",
                     "images": [
@@ -69,6 +70,10 @@ class TestCallSpotifyApi:
         assert results[0].popularity == 75
         # Should pick 300x300 image
         assert results[0].album_art == "https://i.scdn.co/image/medium"
+        # ISRC extracted from external_ids
+        assert results[0].isrc == "USRC17600001"
+        # Second track has no external_ids
+        assert results[1].isrc is None
 
     @patch("app.services.spotify._get_spotify_client")
     def test_album_art_fallback_to_first(self, mock_get_client: MagicMock):
