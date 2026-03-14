@@ -10,7 +10,7 @@ class SearchResult(BaseModel):
     album_art: str | None = None
     preview_url: str | None = None
     url: str | None = None  # Link to Spotify or Beatport
-    source: str = "spotify"  # "spotify" or "beatport"
+    source: str = "spotify"  # "spotify", "beatport", or "tidal"
     # Track metadata (populated from Beatport search results)
     genre: str | None = None
     bpm: int | None = None

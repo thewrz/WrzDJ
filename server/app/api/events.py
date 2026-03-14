@@ -331,12 +331,14 @@ def event_search(
     q: str = Query(..., min_length=2, max_length=200),
     db: Session = Depends(get_db),
 ) -> list[SearchResult]:
-    """Public search endpoint for event guests. Searches Spotify first,
-    falls back to Beatport if the event owner has it linked and enabled."""
+    """Public search endpoint for event guests. Searches across available music
+    services: Spotify, Beatport, and Tidal — with automatic fallback when a
+    service is unavailable."""
     from app.services.beatport import search_beatport_tracks
     from app.services.search_merge import merge_search_results
     from app.services.spotify import search_songs
     from app.services.system_settings import get_system_settings
+    from app.services.tidal import search_tidal_tracks
 
     event_obj, lookup_result = get_event_by_code_with_status(db, code)
 
@@ -347,15 +349,15 @@ def event_search(
         raise HTTPException(status_code=410, detail="Event has expired")
 
     sys_settings = get_system_settings(db)
+    owner = event_obj.created_by
 
     # Search Spotify if enabled
     spotify_results = []
     if sys_settings.spotify_enabled:
         spotify_results = search_songs(db, q)
 
-    # Check if owner has Beatport linked and sync enabled
+    # Search Beatport if owner has it linked and sync enabled for this event
     beatport_results = []
-    owner = event_obj.created_by
     if (
         sys_settings.beatport_enabled
         and owner
@@ -364,13 +366,25 @@ def event_search(
     ):
         beatport_results = search_beatport_tracks(db, owner, q, limit=10)
 
-    if not sys_settings.spotify_enabled and not sys_settings.beatport_enabled:
+    # Tidal fallback: search if owner has Tidal linked and either Spotify returned
+    # nothing or Spotify is disabled (ensures guests always get results when possible)
+    tidal_results = []
+    if not spotify_results and owner and owner.tidal_access_token:
+        tidal_results = search_tidal_tracks(db, owner, q, limit=20)
+
+    has_any_source = (
+        sys_settings.spotify_enabled
+        or sys_settings.beatport_enabled
+        or (owner and owner.tidal_access_token)
+    )
+    if not has_any_source:
         raise HTTPException(status_code=503, detail="Song search is currently unavailable")
 
-    if beatport_results:
-        return merge_search_results(spotify_results, beatport_results)
-
-    return spotify_results
+    return merge_search_results(
+        spotify_results,
+        beatport_results=beatport_results or None,
+        tidal_results=tidal_results or None,
+    )
 
 
 @router.patch("/{code}", response_model=EventOut)

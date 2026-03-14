@@ -121,7 +121,7 @@ def _call_spotify_api(query: str) -> list[SearchResult]:
             else:
                 logger.error(f"Spotify API timeout after {MAX_RETRIES + 1} attempts: {e}")
         except Exception as e:
-            logger.error(f"Spotify API error: {e}")
+            logger.error("Spotify API error: %s: %s", type(e).__name__, e)
             return []
 
     if response is None:

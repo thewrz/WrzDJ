@@ -39,7 +39,7 @@ class TestMergeSearchResults:
     def test_spotify_only_when_no_beatport(self):
         """No Beatport results -> all source='spotify'."""
         spotify = [_spotify("Strobe", "deadmau5"), _spotify("Faxing Berlin", "deadmau5")]
-        result = merge_search_results(spotify, [])
+        result = merge_search_results(spotify)
         assert len(result) == 2
         assert all(r.source == "spotify" for r in result)
 
@@ -47,7 +47,7 @@ class TestMergeSearchResults:
         """Unique Beatport tracks appear after Spotify results."""
         spotify = [_spotify("Strobe", "deadmau5")]
         beatport = [_beatport("Acid Phase", "DJ Pierre")]
-        result = merge_search_results(spotify, beatport)
+        result = merge_search_results(spotify, beatport_results=beatport)
         assert len(result) == 2
         assert result[0].source == "spotify"
         assert result[1].source == "beatport"
@@ -57,7 +57,7 @@ class TestMergeSearchResults:
         """Same track on both services -> only Spotify version kept."""
         spotify = [_spotify("Strobe", "deadmau5")]
         beatport = [_beatport("Strobe", "deadmau5")]
-        result = merge_search_results(spotify, beatport)
+        result = merge_search_results(spotify, beatport_results=beatport)
         assert len(result) == 1
         assert result[0].source == "spotify"
 
@@ -66,7 +66,7 @@ class TestMergeSearchResults:
         spotify = [_spotify("Strobe (Original Mix)", "deadmau5")]
         beatport = [_beatport("Strobe", "deadmau5")]
         # "Strobe" vs "Strobe (Original Mix)" scores ~0.67 combined, so 0.6 catches it
-        result = merge_search_results(spotify, beatport, dedup_threshold=0.6)
+        result = merge_search_results(spotify, beatport_results=beatport, dedup_threshold=0.6)
         assert len(result) == 1
         assert result[0].source == "spotify"
 
@@ -75,13 +75,13 @@ class TestMergeSearchResults:
         spotify = [_spotify("Strobe (Original Mix)", "deadmau5")]
         beatport = [_beatport("Strobe", "deadmau5")]
         # At 0.8 threshold, these are NOT considered duplicates (combined ~0.67)
-        result = merge_search_results(spotify, beatport, dedup_threshold=0.8)
+        result = merge_search_results(spotify, beatport_results=beatport, dedup_threshold=0.8)
         assert len(result) == 2
 
     def test_beatport_result_converted_to_search_result(self):
         """BeatportSearchResult mapped to SearchResult correctly."""
         beatport = [_beatport("Acid Phase", "DJ Pierre")]
-        result = merge_search_results([], beatport)
+        result = merge_search_results([], beatport_results=beatport)
         assert len(result) == 1
         r = result[0]
         assert r.source == "beatport"
@@ -96,7 +96,7 @@ class TestMergeSearchResults:
             _beatport("Acid Phase", "DJ Pierre"),
             _beatport("Move Your Body", "Marshall Jefferson"),
         ]
-        result = merge_search_results([], beatport)
+        result = merge_search_results([], beatport_results=beatport)
         assert len(result) == 2
         assert all(r.source == "beatport" for r in result)
 
@@ -104,7 +104,7 @@ class TestMergeSearchResults:
         """Total unique Beatport extras capped at max_beatport_extras."""
         spotify = [_spotify(f"Song {i}", f"Artist {i}") for i in range(20)]
         beatport = [_beatport(f"BP Track {i}", f"BP Artist {i}") for i in range(10)]
-        result = merge_search_results(spotify, beatport, max_beatport_extras=5)
+        result = merge_search_results(spotify, beatport_results=beatport, max_beatport_extras=5)
         beatport_count = sum(1 for r in result if r.source == "beatport")
         assert beatport_count == 5
         assert len(result) == 25
@@ -114,7 +114,7 @@ class TestMergeSearchResults:
         beatport = [
             _beatport("Acid Phase", "DJ Pierre", genre="Acid House", bpm=126, key="F Minor")
         ]
-        result = merge_search_results([], beatport)
+        result = merge_search_results([], beatport_results=beatport)
         assert len(result) == 1
         r = result[0]
         assert r.genre == "Acid House"
@@ -124,7 +124,7 @@ class TestMergeSearchResults:
     def test_spotify_results_have_no_metadata(self):
         """Spotify results have null genre/bpm/key (Spotify doesn't provide them)."""
         spotify = [_spotify("Strobe", "deadmau5")]
-        result = merge_search_results(spotify, [])
+        result = merge_search_results(spotify)
         r = result[0]
         assert r.genre is None
         assert r.bpm is None
@@ -133,7 +133,7 @@ class TestMergeSearchResults:
     def test_beatport_metadata_none_when_not_set(self):
         """Beatport results without metadata have null genre/bpm/key."""
         beatport = [_beatport("Unknown Track", "Unknown Artist")]
-        result = merge_search_results([], beatport)
+        result = merge_search_results([], beatport_results=beatport)
         r = result[0]
         assert r.genre is None
         assert r.bpm is None
