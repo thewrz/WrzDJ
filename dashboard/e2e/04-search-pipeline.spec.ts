@@ -32,7 +32,7 @@ test.describe('Search Pipeline', () => {
     await page.goto(`/join/${eventCode}`);
     await waitForPage(page, 2000);
 
-    await page.fill('input[placeholder*="Search for a song"]', 'taylor swift');
+    await page.fill('input[placeholder*="Search for a song or artist"]', 'taylor swift');
     await page.click('button:has-text("Search")');
 
     const results = page.locator('.request-item');
@@ -55,7 +55,7 @@ test.describe('Search Pipeline', () => {
     await page.goto(`/join/${eventCode}`);
     await waitForPage(page, 2000);
 
-    await page.fill('input[placeholder*="Search for a song"]', 'above and beyond');
+    await page.fill('input[placeholder*="Search for a song or artist"]', 'above and beyond');
     await page.click('button:has-text("Search")');
 
     const results = page.locator('.request-item');
@@ -86,7 +86,7 @@ test.describe('Search Pipeline', () => {
     await waitForPage(page, 2000);
 
     // First search
-    await page.fill('input[placeholder*="Search for a song"]', 'daft punk');
+    await page.fill('input[placeholder*="Search for a song or artist"]', 'daft punk');
     await page.click('button:has-text("Search")');
 
     const results = page.locator('.request-item');
@@ -98,7 +98,7 @@ test.describe('Search Pipeline', () => {
     }
 
     // Second search — clear and search again
-    const searchInput = page.locator('input[placeholder*="Search for a song"]');
+    const searchInput = page.locator('input[placeholder*="Search for a song or artist"]');
     await searchInput.clear();
     await searchInput.fill('metallica');
     await page.click('button:has-text("Search")');
@@ -115,7 +115,7 @@ test.describe('Search Pipeline', () => {
     await page.goto(`/join/${eventCode}`);
     await waitForPage(page, 2000);
 
-    await page.fill('input[placeholder*="Search for a song"]', 'bohemian rhapsody');
+    await page.fill('input[placeholder*="Search for a song or artist"]', 'bohemian rhapsody');
     await page.click('button:has-text("Search")');
 
     const results = page.locator('.request-item');
@@ -140,11 +140,15 @@ test.describe('Search Pipeline', () => {
   });
 
   test('BPM/key badges visible on some results', async ({ page }) => {
+    // Use a fresh event since prior test may have submitted a request,
+    // causing has_requested to trigger the request list view
+    const badgeEvent = await testApi.createEvent('E2E-Search-Badges');
+
     await setupAuth(page, testApi.jwt);
-    await page.goto(`/join/${eventCode}`);
+    await page.goto(`/join/${badgeEvent.code}`);
     await waitForPage(page, 2000);
 
-    await page.fill('input[placeholder*="Search for a song"]', 'above and beyond');
+    await page.fill('input[placeholder*="Search for a song or artist"]', 'above and beyond');
     await page.click('button:has-text("Search")');
 
     const results = page.locator('.request-item');

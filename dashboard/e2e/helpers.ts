@@ -92,8 +92,8 @@ export async function createTestApi(playwright: { request: { newContext: (opts: 
       return res.json();
     },
 
-    async updateRequestStatus(eventCode, requestId, status) {
-      const res = await api.patch(`/api/events/${eventCode}/requests/${requestId}`, {
+    async updateRequestStatus(_eventCode, requestId, status) {
+      const res = await api.patch(`/api/requests/${requestId}`, {
         headers: authHeaders,
         data: { status },
       });

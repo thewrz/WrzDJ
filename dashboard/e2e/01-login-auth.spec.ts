@@ -10,8 +10,8 @@ test.describe('Login & Auth', () => {
     await page.fill('#password', PASSWORD);
     await page.click('button:has-text("Sign In")');
 
-    await page.waitForURL('**/events', { timeout: 10000 });
-    expect(page.url()).toContain('/events');
+    await page.waitForURL('**/dashboard', { timeout: 10000 });
+    expect(page.url()).toContain('/dashboard');
   });
 
   test('failed login shows error message', async ({ page }) => {

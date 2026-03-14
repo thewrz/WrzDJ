@@ -6,6 +6,11 @@ import { createTestApi, waitForPage, type TestApi } from './helpers';
  *
  * Uses page.route() to intercept search API calls and return mock results,
  * ensuring deterministic tests regardless of external service availability.
+ *
+ * IMPORTANT: Tests that submit requests must use their own fresh event,
+ * because the has_requested check uses IP-based fingerprinting — after
+ * one submission, all subsequent browser visits from the same IP will
+ * see the request list view instead of the search form.
  */
 
 let testApi: TestApi;
@@ -39,11 +44,9 @@ const MOCK_SEARCH_RESULTS = [
 test.beforeAll(async ({ playwright }, testInfo) => {
   const baseURL = testInfo.project.use.baseURL || 'https://192.168.20.5';
   testApi = await createTestApi(playwright, baseURL);
+  // Shared event for read-only tests (no submission)
   const event = await testApi.createEvent('E2E-GUEST-Test');
   eventCode = event.code;
-  // Seed 2 existing requests so the guest request list has data
-  await testApi.seedRequest(eventCode, { title: 'Existing Track', artist: 'Test Artist' });
-  await testApi.seedRequest(eventCode, { title: 'Another Track', artist: 'Test Artist 2' });
 });
 
 test.afterAll(async () => {
@@ -66,11 +69,9 @@ test.describe('Guest Request Flow', () => {
     await page.goto(`/join/${eventCode}`);
     await waitForPage(page, 2000);
 
-    // Search input should be visible
-    const searchInput = page.locator('input[placeholder*="Search for a song"]');
-    await expect(searchInput).toBeVisible();
+    const searchInput = page.locator('input[placeholder*="Search for a song or artist"]');
+    await expect(searchInput).toBeVisible({ timeout: 10000 });
 
-    // Search button should be visible
     const searchButton = page.locator('button:has-text("Search")');
     await expect(searchButton).toBeVisible();
   });
@@ -80,10 +81,9 @@ test.describe('Guest Request Flow', () => {
     await page.goto(`/join/${eventCode}`);
     await waitForPage(page, 2000);
 
-    await page.fill('input[placeholder*="Search for a song"]', 'Queen');
+    await page.fill('input[placeholder*="Search for a song or artist"]', 'Queen');
     await page.click('button:has-text("Search")');
 
-    // Wait for results to appear
     const results = page.locator('.request-item');
     await expect(results.first()).toBeVisible({ timeout: 5000 });
     expect(await results.count()).toBe(2);
@@ -94,29 +94,29 @@ test.describe('Guest Request Flow', () => {
     await page.goto(`/join/${eventCode}`);
     await waitForPage(page, 2000);
 
-    await page.fill('input[placeholder*="Search for a song"]', 'Queen');
+    await page.fill('input[placeholder*="Search for a song or artist"]', 'Queen');
     await page.click('button:has-text("Search")');
 
-    // Click the first result
     const firstResult = page.locator('.request-item').first();
     await expect(firstResult).toBeVisible({ timeout: 5000 });
     await firstResult.click();
 
-    // "Submit Request" button should appear
     const submitBtn = page.locator('button:has-text("Submit Request")');
     await expect(submitBtn).toBeVisible({ timeout: 3000 });
 
-    // Note input should be visible
     const noteInput = page.locator('#note');
     await expect(noteInput).toBeVisible();
   });
 
   test('submitting request shows success message', async ({ page }) => {
+    // Fresh event — submission creates a fingerprint record for this IP
+    const submitEvent = await testApi.createEvent('E2E-GUEST-Submit');
+
     await mockSearchApi(page);
-    await page.goto(`/join/${eventCode}`);
+    await page.goto(`/join/${submitEvent.code}`);
     await waitForPage(page, 2000);
 
-    await page.fill('input[placeholder*="Search for a song"]', 'Queen');
+    await page.fill('input[placeholder*="Search for a song or artist"]', 'Queen');
     await page.click('button:has-text("Search")');
 
     const firstResult = page.locator('.request-item').first();
@@ -127,17 +127,19 @@ test.describe('Guest Request Flow', () => {
     await expect(submitBtn).toBeVisible({ timeout: 3000 });
     await submitBtn.click();
 
-    // Success text appears
     const success = page.locator('text=/Request Submitted!|Vote Added!/');
     await expect(success).toBeVisible({ timeout: 5000 });
   });
 
   test('guest request list is visible after submission', async ({ page }) => {
+    // Fresh event — this test submits and then checks the request list
+    const listEvent = await testApi.createEvent('E2E-GUEST-List');
+
     await mockSearchApi(page);
-    await page.goto(`/join/${eventCode}`);
+    await page.goto(`/join/${listEvent.code}`);
     await waitForPage(page, 2000);
 
-    await page.fill('input[placeholder*="Search for a song"]', 'Queen');
+    await page.fill('input[placeholder*="Search for a song or artist"]', 'Queen');
     await page.click('button:has-text("Search")');
 
     const firstResult = page.locator('.request-item').first();
@@ -152,7 +154,6 @@ test.describe('Guest Request Flow', () => {
     const requestList = page.locator('.guest-request-list');
     await expect(requestList).toBeVisible({ timeout: 10000 });
 
-    // Should have request items
     const items = page.locator('.guest-request-item');
     expect(await items.count()).toBeGreaterThan(0);
   });

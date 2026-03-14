@@ -40,36 +40,46 @@ test.describe('DJ Event Management', () => {
   });
 
   test('accept request changes status badge', async ({ page }) => {
+    // Use a fresh event so we have a known state
+    const acceptEvent = await testApi.createEvent('E2E-DJ-Accept');
+    await testApi.seedRequests(acceptEvent.code);
+
     await setupAuth(page, testApi.jwt);
-    await page.goto(`/events/${eventCode}`);
+    await page.goto(`/events/${acceptEvent.code}`);
     await waitForPage(page, 2000);
 
-    // Find a request item with a "new" badge and click Accept
-    const firstNew = page.locator('.request-item').filter({ has: page.locator('.badge-new') }).first();
-    await expect(firstNew).toBeVisible();
-    await firstNew.locator('button:has-text("Accept")').click();
+    // Get the first request item's ID to track it after status change
+    const firstItem = page.locator('.request-item').first();
+    await expect(firstItem).toBeVisible();
+    const itemId = await firstItem.getAttribute('id');
 
-    // Wait for the status to update
-    await page.waitForTimeout(1000);
+    // Click Accept on the first request
+    await firstItem.locator('button:has-text("Accept")').click();
 
-    // The accepted badge should now appear on that item
-    const acceptedBadge = firstNew.locator('.badge-accepted');
+    // Wait for the badge to change on that specific item (by ID)
+    const trackedItem = page.locator(`#${itemId}`);
+    const acceptedBadge = trackedItem.locator('.badge-accepted');
     await expect(acceptedBadge).toBeVisible({ timeout: 5000 });
   });
 
   test('reject request changes status badge', async ({ page }) => {
+    const rejectEvent = await testApi.createEvent('E2E-DJ-Reject');
+    await testApi.seedRequests(rejectEvent.code);
+
     await setupAuth(page, testApi.jwt);
-    await page.goto(`/events/${eventCode}`);
+    await page.goto(`/events/${rejectEvent.code}`);
     await waitForPage(page, 2000);
 
-    // Find a "new" request and reject it
-    const newItem = page.locator('.request-item').filter({ has: page.locator('.badge-new') }).first();
-    await expect(newItem).toBeVisible();
-    await newItem.locator('button:has-text("Reject")').click();
+    // Get the first request item's ID
+    const firstItem = page.locator('.request-item').first();
+    await expect(firstItem).toBeVisible();
+    const itemId = await firstItem.getAttribute('id');
 
-    await page.waitForTimeout(1000);
+    await firstItem.locator('button:has-text("Reject")').click();
 
-    const rejectedBadge = newItem.locator('.badge-rejected');
+    // Track by ID since badge-new filter will stop matching
+    const trackedItem = page.locator(`#${itemId}`);
+    const rejectedBadge = trackedItem.locator('.badge-rejected');
     await expect(rejectedBadge).toBeVisible({ timeout: 5000 });
   });
 
@@ -84,12 +94,16 @@ test.describe('DJ Event Management', () => {
     await page.goto(`/events/${playingEvent.code}`);
     await waitForPage(page, 2000);
 
-    // Find the accepted request and click Mark Playing
+    // Find the accepted request and capture its DOM ID before clicking
     const acceptedItem = page.locator('.request-item').filter({ has: page.locator('.badge-accepted') }).first();
     await expect(acceptedItem).toBeVisible({ timeout: 5000 });
+    const itemId = await acceptedItem.getAttribute('id');
+
     await acceptedItem.locator('button:has-text("Mark Playing")').click();
 
-    const playingBadge = acceptedItem.locator('.badge-playing');
+    // Track by ID since badge-accepted filter will stop matching
+    const trackedItem = page.locator(`#${itemId}`);
+    const playingBadge = trackedItem.locator('.badge-playing');
     await expect(playingBadge).toBeVisible({ timeout: 5000 });
   });
 
