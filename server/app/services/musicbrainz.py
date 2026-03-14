@@ -17,6 +17,7 @@ import time
 
 import httpx
 
+from app.services.track_normalizer import fuzzy_match_score
 from app.services.track_normalizer import primary_artist as _primary_artist
 
 logger = logging.getLogger(__name__)
@@ -73,8 +74,19 @@ def check_artist_exists(artist_name: str) -> tuple[bool, str | None]:
     if not search_data:
         return False, None
 
+    # Known false-positive names that MB returns with high scores for almost any query
+    _FALSE_POSITIVE_NAMES = {"various artists", "[unknown]"}
+
     for artist in search_data.get("artists", []):
         if artist.get("score", 0) >= 90:
+            result_name = artist.get("name", "")
+            # Reject known false-positive entries
+            if result_name.lower() in _FALSE_POSITIVE_NAMES:
+                continue
+            # Reject if the result name doesn't actually match the query
+            # (MB's score measures index relevance, not name similarity)
+            if fuzzy_match_score(artist_name, result_name) < 0.7:
+                continue
             mbid = artist.get("id")
             if mbid:
                 return True, mbid

@@ -156,6 +156,67 @@ class TestCheckArtistExists:
         assert verified is True
         assert mbid == "high-id"
 
+    def test_rejects_various_artists_false_positive(self):
+        """MB returns 'Various Artists' score=100 for nearly anything — must reject."""
+        search_data = _mock_search_response(
+            [{"id": "89ad4ac3", "name": "Various Artists", "score": 100}]
+        )
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("electrofab music")
+
+        assert verified is False
+        assert mbid is None
+
+    def test_rejects_unknown_false_positive(self):
+        """MB returns '[unknown]' — must reject."""
+        search_data = _mock_search_response([{"id": "some-id", "name": "[unknown]", "score": 95}])
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("random stock artist")
+
+        assert verified is False
+        assert mbid is None
+
+    def test_rejects_partial_name_match(self):
+        """'bombombini gusini brainrot' → MB returns 'Brainrot' (fuzzy < 0.7) → reject."""
+        search_data = _mock_search_response([{"id": "75c51736", "name": "Brainrot", "score": 100}])
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("bombombini gusini brainrot")
+
+        assert verified is False
+        assert mbid is None
+
+    def test_accepts_exact_match(self):
+        """'deadmau5' → MB returns 'deadmau5' score=100 → accept."""
+        search_data = _mock_search_response([{"id": "good-mbid", "name": "deadmau5", "score": 100}])
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("deadmau5")
+
+        assert verified is True
+        assert mbid == "good-mbid"
+
+    def test_accepts_close_name_match(self):
+        """Slight casing difference should still pass fuzzy threshold."""
+        search_data = _mock_search_response([{"id": "mbid-123", "name": "Deadmau5", "score": 100}])
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("deadmau5")
+
+        assert verified is True
+        assert mbid == "mbid-123"
+
+    def test_skips_false_positive_finds_real_match(self):
+        """If first result is 'Various Artists', but second is a real match, accept the second."""
+        search_data = _mock_search_response(
+            [
+                {"id": "va-id", "name": "Various Artists", "score": 100},
+                {"id": "real-id", "name": "Field Music", "score": 92},
+            ]
+        )
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("Field Music")
+
+        assert verified is True
+        assert mbid == "real-id"
+
 
 class TestLookupArtistGenres:
     def test_returns_genres_sorted_by_count(self):

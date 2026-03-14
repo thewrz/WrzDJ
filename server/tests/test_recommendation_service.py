@@ -14,8 +14,10 @@ from app.services.recommendation.service import (
     _deduplicate_against_template,
     _deduplicate_candidates,
     _enforce_artist_cap,
+    _filter_unverified_artists,
     _is_blocked_genre,
     _is_junk_candidate,
+    _is_stock_music_artist,
     _search_candidates,
     generate_recommendations,
 )
@@ -241,10 +243,14 @@ class TestDeduplicateCandidates:
 
 
 class TestGenerateRecommendations:
+    @patch(
+        "app.services.recommendation.mb_verify.verify_artists_batch",
+        return_value={"DJ": True},
+    )
     @patch("app.services.recommendation.service._search_candidates")
     @patch("app.services.recommendation.service.enrich_event_tracks")
     @patch("app.services.recommendation.service._get_accepted_played_requests")
-    def test_full_pipeline(self, mock_requests, mock_enrich, mock_search):
+    def test_full_pipeline(self, mock_requests, mock_enrich, mock_search, mock_mb):
         mock_requests.return_value = [
             MagicMock(song_title="Song", artist="Artist", status="accepted"),
         ]
@@ -678,6 +684,18 @@ class TestIsJunkCandidate:
     def test_drum_track_in_title(self):
         assert _is_junk_candidate("Funk Drum Track 120 BPM", "Drummer") is True
 
+    def test_music_bed_in_title(self):
+        assert _is_junk_candidate("Upbeat Music Bed - Corporate", "Stock Audio") is True
+
+    def test_cinematic_music_in_title(self):
+        assert _is_junk_candidate("Epic Cinematic Music", "Production Co") is True
+
+    def test_royalty_free_in_title(self):
+        assert _is_junk_candidate("Royalty Free Background", "Library") is True
+
+    def test_meditation_music_in_title(self):
+        assert _is_junk_candidate("Deep Meditation Music", "Zen") is True
+
 
 class TestSearchCandidates:
     """Tests for _search_candidates including cascade behavior."""
@@ -1061,3 +1079,93 @@ class TestDiversifiedTidalQueries:
         assert "Progressive House music" in queries
         # Third slot falls back to next artist
         assert "Zedd" in queries
+
+
+class TestIsStockMusicArtist:
+    """Tests for _is_stock_music_artist filter."""
+
+    def test_catches_music_zone_suffix(self):
+        assert _is_stock_music_artist("Ibiza Chill Out Music Zone") is True
+
+    def test_catches_music_bed_suffix(self):
+        assert _is_stock_music_artist("Ambient Music Bed") is True
+
+    def test_catches_music_group_suffix(self):
+        assert _is_stock_music_artist("Relaxation Music Group") is True
+
+    def test_catches_brainrot_keyword(self):
+        assert _is_stock_music_artist("Brainrot Italiano Music") is True
+        assert _is_stock_music_artist("bombombini gusini brainrot") is True
+
+    def test_catches_royalty_free_keyword(self):
+        assert _is_stock_music_artist("Royalty Free Music Co") is True
+        assert _is_stock_music_artist("Royalty-Free Beats") is True
+
+    def test_passes_real_artists(self):
+        assert _is_stock_music_artist("deadmau5") is False
+        assert _is_stock_music_artist("Field Music") is False
+        assert _is_stock_music_artist("Florence and the Machine") is False
+
+    def test_case_insensitive(self):
+        assert _is_stock_music_artist("BRAINROT BEATS") is True
+        assert _is_stock_music_artist("ibiza chill out music zone") is True
+
+
+class TestFilterUnverifiedArtists:
+    """Tests for _filter_unverified_artists."""
+
+    def test_removes_unverified_keeps_verified(self):
+        scored = [
+            _make_scored("Real Song", "deadmau5", 0.90),
+            _make_scored("Fake Song", "Electrofab Music", 0.85),
+        ]
+        db = MagicMock()
+
+        with patch(
+            "app.services.recommendation.mb_verify.verify_artists_batch",
+            return_value={"deadmau5": True, "Electrofab Music": False},
+        ) as mock_verify:
+            filtered, mb_verified = _filter_unverified_artists(db, scored)
+
+        assert len(filtered) == 1
+        assert filtered[0].profile.artist == "deadmau5"
+        assert mb_verified["deadmau5"] is True
+        assert mb_verified["Electrofab Music"] is False
+        mock_verify.assert_called_once()
+
+    def test_keeps_tracks_with_no_artist(self):
+        scored = [
+            _make_scored("Instrumental", None, 0.80),
+            _make_scored("Fake Song", "Stock Music", 0.75),
+        ]
+        db = MagicMock()
+
+        with patch(
+            "app.services.recommendation.mb_verify.verify_artists_batch",
+            return_value={"Stock Music": False},
+        ):
+            filtered, mb_verified = _filter_unverified_artists(db, scored)
+
+        assert len(filtered) == 1
+        assert filtered[0].profile.title == "Instrumental"
+
+    def test_empty_list(self):
+        db = MagicMock()
+        filtered, mb_verified = _filter_unverified_artists(db, [])
+        assert filtered == []
+        assert mb_verified == {}
+
+    def test_all_verified(self):
+        scored = [
+            _make_scored("Song A", "Artist A", 0.90),
+            _make_scored("Song B", "Artist B", 0.85),
+        ]
+        db = MagicMock()
+
+        with patch(
+            "app.services.recommendation.mb_verify.verify_artists_batch",
+            return_value={"Artist A": True, "Artist B": True},
+        ):
+            filtered, mb_verified = _filter_unverified_artists(db, scored)
+
+        assert len(filtered) == 2

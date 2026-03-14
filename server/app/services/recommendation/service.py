@@ -90,7 +90,31 @@ BLOCKED_TITLE_KEYWORDS = [
     "no click",
     "practice track",
     "minus one",
+    # Stock/royalty-free music indicators
+    "music bed",
+    "production music",
+    "royalty free",
+    "royalty-free",
+    "stock music",
+    "library music",
+    "cinematic music",
+    "background music",
+    "meditation music",
+    "sleep music",
+    "study music",
 ]
+
+# Suffixes/keywords that indicate stock music artist names
+_STOCK_ARTIST_SUFFIXES = [" music zone", " music bed", " music group"]
+_STOCK_ARTIST_KEYWORDS = ["brainrot", "royalty free", "royalty-free"]
+
+
+def _is_stock_music_artist(artist: str) -> bool:
+    """Check if an artist name matches stock/royalty-free music patterns."""
+    lower = artist.lower().strip()
+    return any(lower.endswith(s) for s in _STOCK_ARTIST_SUFFIXES) or any(
+        kw in lower for kw in _STOCK_ARTIST_KEYWORDS
+    )
 
 
 def _is_junk_candidate(title: str, artist: str) -> bool:
@@ -375,6 +399,8 @@ def _search_candidates(
                     continue
                 if _is_junk_candidate(r.title, r.artist):
                     continue
+                if _is_stock_music_artist(r.artist):
+                    continue
                 candidates.append(
                     TrackProfile(
                         title=r.title,
@@ -412,6 +438,7 @@ def _search_candidates(
                     if not is_unwanted_version(c.title)
                     and not _is_blocked_genre(c.genre)
                     and not _is_junk_candidate(c.title, c.artist)
+                    and not _is_stock_music_artist(c.artist)
                 ]
                 candidates.extend(sc_filtered)
                 total_searched += sc_searched
@@ -437,6 +464,8 @@ def _search_candidates(
                         continue
                     if _is_junk_candidate(r.title, r.artist):
                         continue
+                    if _is_stock_music_artist(r.artist):
+                        continue
                     candidates.append(
                         TrackProfile(
                             title=r.title,
@@ -456,6 +485,28 @@ def _search_candidates(
                     services_used.add("tidal")
 
     return candidates, sorted(services_used), total_searched
+
+
+def _filter_unverified_artists(
+    db: Session,
+    scored: list[ScoredTrack],
+) -> tuple[list[ScoredTrack], dict[str, bool]]:
+    """Remove tracks by artists not found in MusicBrainz.
+
+    Returns the filtered list and the verification dict for the frontend badge.
+    """
+    from app.services.recommendation.mb_verify import verify_artists_batch
+
+    artist_names = [s.profile.artist for s in scored if s.profile.artist]
+    if not artist_names:
+        return scored, {}
+
+    mb_verified = verify_artists_batch(db, artist_names)
+
+    filtered = [
+        s for s in scored if not s.profile.artist or mb_verified.get(s.profile.artist, False)
+    ]
+    return filtered, mb_verified
 
 
 @dataclass
@@ -548,13 +599,8 @@ async def generate_recommendations_from_llm(
     source_artists = {req.artist.lower() for req in requests if req.artist}
     ranked = _apply_artist_diversity(ranked, source_artists)
     ranked = _enforce_artist_cap(ranked, MAX_PER_ARTIST)
+    ranked, mb_verified = _filter_unverified_artists(db, ranked)
     ranked = ranked[:max_results]
-
-    # Step 7: MusicBrainz artist verification
-    from app.services.recommendation.mb_verify import verify_artists_batch
-
-    artist_names = [s.profile.artist for s in ranked if s.profile.artist]
-    mb_verified = verify_artists_batch(db, artist_names) if artist_names else {}
 
     logger.info(
         "Generated %d LLM recommendations for event %s (prompt=%s, queries=%d, candidates=%d)",
@@ -643,13 +689,8 @@ def generate_recommendations_from_template(
     source_artists = {t.artist.lower() for t in template_tracks if t.artist}
     ranked = _apply_artist_diversity(ranked, source_artists)
     ranked = _enforce_artist_cap(ranked, MAX_PER_ARTIST)
+    ranked, mb_verified = _filter_unverified_artists(db, ranked)
     ranked = ranked[:max_results]
-
-    # MusicBrainz artist verification
-    from app.services.recommendation.mb_verify import verify_artists_batch
-
-    artist_names = [s.profile.artist for s in ranked if s.profile.artist]
-    mb_verified = verify_artists_batch(db, artist_names) if artist_names else {}
 
     logger.info(
         "Generated %d template recommendations for event %s "
@@ -742,13 +783,8 @@ def generate_recommendations(
     source_artists = {req.artist.lower() for req in requests if req.artist}
     ranked = _apply_artist_diversity(ranked, source_artists)
     ranked = _enforce_artist_cap(ranked, MAX_PER_ARTIST)
+    ranked, mb_verified = _filter_unverified_artists(db, ranked)
     ranked = ranked[:max_results]
-
-    # Step 9: MusicBrainz artist verification
-    from app.services.recommendation.mb_verify import verify_artists_batch
-
-    artist_names = [s.profile.artist for s in ranked if s.profile.artist]
-    mb_verified = verify_artists_batch(db, artist_names) if artist_names else {}
 
     logger.info(
         "Generated %d recommendations for event %s (enriched=%d, candidates=%d, searched=%d)",
