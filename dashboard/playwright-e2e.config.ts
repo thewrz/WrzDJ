@@ -2,7 +2,8 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: '**/priority-sort.spec.ts',
+  testMatch: '**/*.spec.ts',
+  testIgnore: '**/screenshots.spec.ts',
   fullyParallel: false,
   retries: 0,
   workers: 1,

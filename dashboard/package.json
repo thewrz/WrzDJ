@@ -9,7 +9,8 @@
     "lint": "eslint app/ lib/",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
-    "screenshots": "playwright test --config playwright.config.ts"
+    "screenshots": "playwright test --config playwright.config.ts",
+    "e2e": "playwright test --config playwright-e2e.config.ts"
   },
   "dependencies": {
     "next": "^16.1.6",

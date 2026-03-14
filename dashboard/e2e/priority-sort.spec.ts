@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { createTestApi, setupAuth, waitForPage, TEST_TRACKS, type TestApi } from './helpers';
 
 /**
  * E2E tests for the Smart Request Sorting (priority sort) feature.
@@ -9,65 +10,20 @@ import { test, expect } from '@playwright/test';
  * Requires running backend + frontend (push to testing).
  */
 
-const USERNAME = process.env.SCREENSHOT_USERNAME || 'admin';
-const PASSWORD = process.env.SCREENSHOT_PASSWORD || 'admin123';
-const API_PORT = process.env.SCREENSHOT_API_PORT || '8443';
-
-let jwt = '';
+let testApi: TestApi;
 let eventCode = '';
 
 test.beforeAll(async ({ playwright }, testInfo) => {
-  const base = testInfo.project.use.baseURL || 'https://192.168.20.5';
-  const apiUrl = new URL(base);
-  apiUrl.port = API_PORT;
-
-  const api = await playwright.request.newContext({
-    baseURL: apiUrl.origin,
-    ignoreHTTPSErrors: true,
-  });
-
-  // Authenticate
-  const loginRes = await api.post('/api/auth/login', {
-    form: { username: USERNAME, password: PASSWORD },
-  });
-  expect(loginRes.ok(), `Login failed: ${loginRes.status()}`).toBeTruthy();
-  const loginData = await loginRes.json();
-  jwt = loginData.access_token;
-
-  // Always create a fresh event to avoid expired event issues
-  const createRes = await api.post('/api/events', {
-    headers: { Authorization: `Bearer ${jwt}` },
-    data: { name: 'Priority Sort E2E Test' },
-  });
-  expect(createRes.ok(), `Event creation failed: ${createRes.status()}`).toBeTruthy();
-  const created = await createRes.json();
-  eventCode = created.code;
-
-  // Seed with requests that have varied metadata for meaningful priority scoring
-  const testTracks = [
-    { title: 'Strobe', artist: 'deadmau5', bpm: 128, musical_key: '8A', genre: 'Progressive House' },
-    { title: 'Sandstorm', artist: 'Darude', bpm: 136, musical_key: '2A', genre: 'Trance' },
-    { title: 'Blue Monday', artist: 'New Order', bpm: 130, musical_key: '9B', genre: 'Synth Pop' },
-    { title: 'One More Time', artist: 'Daft Punk', bpm: 122, musical_key: '7A', genre: 'House' },
-  ];
-  for (const track of testTracks) {
-    await api.post(`/api/events/${eventCode}/requests`, { data: track });
-  }
-
-  await api.dispose();
+  const baseURL = testInfo.project.use.baseURL || 'https://192.168.20.5';
+  testApi = await createTestApi(playwright, baseURL);
+  const event = await testApi.createEvent('Priority Sort E2E Test');
+  eventCode = event.code;
+  await testApi.seedRequests(eventCode);
 });
 
-function setupAuth(page: import('@playwright/test').Page, { clearSortPrefs = true } = {}) {
-  return page.addInitScript(({ token, clear }: { token: string; clear: boolean }) => {
-    localStorage.setItem('token', token);
-    localStorage.setItem('wrzdj-help-disabled', '1');
-    if (clear) {
-      Object.keys(localStorage)
-        .filter((k) => k.startsWith('wrzdj-sort-'))
-        .forEach((k) => localStorage.removeItem(k));
-    }
-  }, { token: jwt, clear: clearSortPrefs });
-}
+test.afterAll(async () => {
+  await testApi.dispose();
+});
 
 test.describe('Priority Sort', () => {
   test.use({
@@ -75,10 +31,9 @@ test.describe('Priority Sort', () => {
   });
 
   test('Best Match toggle is visible on event page', async ({ page }) => {
-    await setupAuth(page);
+    await setupAuth(page, testApi.jwt);
     await page.goto(`/events/${eventCode}`);
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(2000);
+    await waitForPage(page, 2000);
 
     // The "Best Match" checkbox label should be visible
     const toggle = page.locator('label', { hasText: 'Best Match' });
@@ -90,10 +45,9 @@ test.describe('Priority Sort', () => {
   });
 
   test('toggling Best Match sends sort=priority API call', async ({ page }) => {
-    await setupAuth(page);
+    await setupAuth(page, testApi.jwt);
     await page.goto(`/events/${eventCode}`);
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(2000);
+    await waitForPage(page, 2000);
 
     // Intercept the next requests API call
     const requestPromise = page.waitForRequest((req) =>
@@ -112,10 +66,9 @@ test.describe('Priority Sort', () => {
   });
 
   test('priority score badges appear when Best Match is active', async ({ page }) => {
-    await setupAuth(page);
+    await setupAuth(page, testApi.jwt);
     await page.goto(`/events/${eventCode}`);
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(2000);
+    await waitForPage(page, 2000);
 
     // Before toggling: no score badges should exist
     const scoreBadgesBefore = page.locator('[title*="Priority score"]');
@@ -151,10 +104,9 @@ test.describe('Priority Sort', () => {
   });
 
   test('toggling Best Match off removes score badges', async ({ page }) => {
-    await setupAuth(page);
+    await setupAuth(page, testApi.jwt);
     await page.goto(`/events/${eventCode}`);
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(2000);
+    await waitForPage(page, 2000);
 
     // Toggle on
     const toggle = page.locator('label', { hasText: 'Best Match' });
@@ -188,10 +140,9 @@ test.describe('Priority Sort', () => {
 
   test('Best Match preference persists across page reload', async ({ page }) => {
     // Don't clear sort prefs — we need them to persist across reload
-    await setupAuth(page, { clearSortPrefs: false });
+    await setupAuth(page, testApi.jwt, { clearSortPrefs: false });
     await page.goto(`/events/${eventCode}`);
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(2000);
+    await waitForPage(page, 2000);
 
     // Toggle Best Match on
     const toggle = page.locator('label', { hasText: 'Best Match' });
@@ -206,8 +157,7 @@ test.describe('Priority Sort', () => {
 
     // Reload the page
     await page.reload();
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(2000);
+    await waitForPage(page, 2000);
 
     // The toggle should still be checked (persisted in localStorage)
     const toggleAfter = page.locator('label', { hasText: 'Best Match' });
@@ -225,10 +175,9 @@ test.describe('Priority Sort', () => {
   });
 
   test('priority sort changes request order', async ({ page }) => {
-    await setupAuth(page);
+    await setupAuth(page, testApi.jwt);
     await page.goto(`/events/${eventCode}`);
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(2000);
+    await waitForPage(page, 2000);
 
     // Get request titles in chronological order
     const getTitles = async () => {
@@ -267,10 +216,9 @@ test.describe('Priority Sort', () => {
   });
 
   test('score badges have correct color coding', async ({ page }) => {
-    await setupAuth(page);
+    await setupAuth(page, testApi.jwt);
     await page.goto(`/events/${eventCode}`);
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(2000);
+    await waitForPage(page, 2000);
 
     // Toggle Best Match on
     const toggle = page.locator('label', { hasText: 'Best Match' });
