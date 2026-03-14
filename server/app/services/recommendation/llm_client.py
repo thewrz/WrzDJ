@@ -62,6 +62,13 @@ CRITICAL RULES:
    poorly ranked results.
 5. For vibe shifts, set targets on ALL queries to the new direction. For
    "more of the same", set targets to match the current profile.
+6. If rejected tracks are listed, AVOID recommending songs that are similar
+   to the rejected ones — the DJ explicitly said no to those. Don't suggest
+   the same artists or very similar styles unless the DJ's prompt specifically
+   asks for that direction.
+7. If a currently playing track is shown, factor it into your recommendations
+   — the DJ is most likely looking for tracks that flow naturally from what's
+   playing RIGHT NOW, not just the overall set profile.
 
 Generate 1-6 search queries that would find matching tracks on
 Tidal or Beatport. Each query should be a realistic search string
@@ -134,6 +141,8 @@ def build_user_prompt(
     profile: EventProfile,
     dj_prompt: str,
     tracks: list[TrackProfile] | None = None,
+    rejected_tracks: list[tuple[str, str]] | None = None,
+    currently_playing: tuple[str, str, float | None] | None = None,
 ) -> str:
     """Build the user message from an event profile, track list, and DJ prompt."""
     parts = [f"DJ's request: {dj_prompt}", "", "Current event profile:"]
@@ -151,6 +160,12 @@ def build_user_prompt(
         if profile.dominant_genres:
             parts.append(f"  Dominant genres: {', '.join(profile.dominant_genres)}")
 
+    if currently_playing:
+        artist, title, bpm = currently_playing
+        parts.append("")
+        bpm_str = f" ({bpm:.0f} BPM)" if bpm else ""
+        parts.append(f"Currently playing: {artist} — {title}{bpm_str}")
+
     if tracks:
         parts.append("")
         parts.append("Tracks in the set:")
@@ -166,6 +181,12 @@ def build_user_prompt(
             if meta:
                 line += f" ({', '.join(meta)})"
             parts.append(line)
+
+    if rejected_tracks:
+        parts.append("")
+        parts.append("Rejected tracks (DJ said no to these — avoid similar):")
+        for artist, title in rejected_tracks[:15]:  # Cap at 15
+            parts.append(f"  - {artist} — {title}")
 
     return "\n".join(parts)
 
@@ -199,6 +220,8 @@ async def call_llm(
     dj_prompt: str,
     max_queries: int = 6,
     tracks: list[TrackProfile] | None = None,
+    rejected_tracks: list[tuple[str, str]] | None = None,
+    currently_playing: tuple[str, str, float | None] | None = None,
 ) -> LLMSuggestionResult:
     """Call Claude Haiku to generate search queries from a DJ prompt.
 
@@ -212,7 +235,13 @@ async def call_llm(
         timeout=settings.anthropic_timeout_seconds,
     )
 
-    user_message = build_user_prompt(profile, dj_prompt, tracks=tracks)
+    user_message = build_user_prompt(
+        profile,
+        dj_prompt,
+        tracks=tracks,
+        rejected_tracks=rejected_tracks,
+        currently_playing=currently_playing,
+    )
 
     response = await client.messages.create(
         model=settings.anthropic_model,

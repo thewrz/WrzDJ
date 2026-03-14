@@ -218,8 +218,8 @@ def _apply_artist_diversity(
                     break
 
             if count > 0:
-                # 1st dup -> 0.75, 2nd dup -> 0.65, 3rd -> 0.55, floor at 0.50
-                penalty = max(REPEAT_ARTIST_BASE_PENALTY - 0.10 * (count - 1), 0.50)
+                # 1st dup -> 0.75, 2nd dup -> 0.65, 3rd -> 0.55, 4th -> 0.45, floor at 0.30
+                penalty = max(REPEAT_ARTIST_BASE_PENALTY - 0.10 * (count - 1), 0.30)
                 multiplier *= penalty
 
             artist_seen_count[matched_key] = count + 1
@@ -265,6 +265,32 @@ def _get_accepted_played_requests(db: Session, event: Event) -> list[Request]:
         )
         .order_by(Request.created_at.desc())
         .all()
+    )
+
+
+def _get_rejected_requests(db: Session, event: Event) -> list[Request]:
+    """Fetch rejected requests for the event (most recent first, capped at 20)."""
+    return (
+        db.query(Request)
+        .filter(
+            Request.event_id == event.id,
+            Request.status == RequestStatus.REJECTED.value,
+        )
+        .order_by(Request.created_at.desc())
+        .limit(20)
+        .all()
+    )
+
+
+def _get_currently_playing(db: Session, event: Event) -> Request | None:
+    """Fetch the currently playing request for the event, if any."""
+    return (
+        db.query(Request)
+        .filter(
+            Request.event_id == event.id,
+            Request.status == RequestStatus.PLAYING.value,
+        )
+        .first()
     )
 
 
@@ -429,8 +455,22 @@ async def generate_recommendations_from_llm(
     enriched = enrich_event_tracks(db, user, requests) if requests else []
     profile = build_event_profile(enriched)
 
-    # Step 2: Call LLM (pass enriched tracks so it can see actual song names)
-    llm_result = await generate_llm_suggestions(profile, prompt, tracks=enriched or None)
+    # Gather extra context for the LLM
+    rejected = _get_rejected_requests(db, event)
+    rejected_names = [(r.artist, r.song_title) for r in rejected] if rejected else []
+    playing = _get_currently_playing(db, event)
+    currently_playing = (
+        (playing.artist, playing.song_title, getattr(playing, "bpm", None)) if playing else None
+    )
+
+    # Step 2: Call LLM (pass enriched tracks + rejected + currently playing)
+    llm_result = await generate_llm_suggestions(
+        profile,
+        prompt,
+        tracks=enriched or None,
+        rejected_tracks=rejected_names or None,
+        currently_playing=currently_playing,
+    )
 
     if not llm_result.queries:
         return LLMRecommendationResult(

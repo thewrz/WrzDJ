@@ -65,7 +65,14 @@ class TestGenerateLLMSuggestions:
         result = await generate_llm_suggestions(profile, "chill vibes", max_queries=3)
 
         assert result is expected
-        mock_call_llm.assert_called_once_with(profile, "chill vibes", 3, tracks=None)
+        mock_call_llm.assert_called_once_with(
+            profile,
+            "chill vibes",
+            3,
+            tracks=None,
+            rejected_tracks=None,
+            currently_playing=None,
+        )
 
     @pytest.mark.asyncio
     @patch("app.services.recommendation.llm_client.call_llm")
@@ -83,7 +90,14 @@ class TestGenerateLLMSuggestions:
         result = await generate_llm_suggestions(profile, "more like this", tracks=tracks)
 
         assert result is expected
-        mock_call_llm.assert_called_once_with(profile, "more like this", 6, tracks=tracks)
+        mock_call_llm.assert_called_once_with(
+            profile,
+            "more like this",
+            6,
+            tracks=tracks,
+            rejected_tracks=None,
+            currently_playing=None,
+        )
 
 
 class TestDataClasses:
