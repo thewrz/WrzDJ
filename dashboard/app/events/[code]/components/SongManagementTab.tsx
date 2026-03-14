@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { SongRequest, PlayHistoryItem, RecommendedTrack } from '@/lib/api-types';
+import type { SortMode } from '@/lib/priority-score';
 import { RequestQueueSection } from './RequestQueueSection';
 import { SyncReportPanel } from './SyncReportPanel';
 import { PlayHistorySection } from './PlayHistorySection';
@@ -43,6 +44,8 @@ interface SongManagementTabProps {
   rejectingAll?: boolean;
   deletingRequest?: number | null;
   refreshingRequest?: number | null;
+  sortMode: SortMode;
+  onSortModeChange: (mode: SortMode) => void;
 }
 
 export function SongManagementTab(props: SongManagementTabProps) {
@@ -84,6 +87,8 @@ export function SongManagementTab(props: SongManagementTabProps) {
         rejectingAll={props.rejectingAll}
         deletingRequest={props.deletingRequest}
         refreshingRequest={props.refreshingRequest}
+        sortMode={props.sortMode}
+        onSortModeChange={props.onSortModeChange}
       />
       </HelpSpot>
 

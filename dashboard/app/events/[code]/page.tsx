@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth';
 import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem, TidalStatus, TidalSearchResult, BeatportStatus } from '@/lib/api';
 import { useEventStream } from '@/lib/use-event-stream';
 import type { BeatportSearchResult, NowPlayingInfo } from '@/lib/api-types';
+import type { SortMode } from '@/lib/priority-score';
 import { useHelp } from '@/lib/help/HelpContext';
 import { HelpSpot } from '@/components/help/HelpSpot';
 import { HelpButton } from '@/components/help/HelpButton';
@@ -120,6 +121,29 @@ export default function EventQueuePage() {
     }
   });
 
+  // Sort mode (persisted in localStorage per event)
+  const [sortMode, setSortMode] = useState<SortMode>(() => {
+    try {
+      const stored = localStorage.getItem(`wrzdj-sort-${code}`);
+      return stored === 'priority' ? 'priority' : 'chronological';
+    } catch {
+      return 'chronological';
+    }
+  });
+
+  const handleSortModeChange = useCallback((mode: SortMode) => {
+    setSortMode(mode);
+    try {
+      localStorage.setItem(`wrzdj-sort-${code}`, mode);
+    } catch {
+      // localStorage unavailable
+    }
+  }, [code]);
+
+  // Ref so loadData/callbacks always use current sort mode
+  const sortModeRef = useRef(sortMode);
+  sortModeRef.current = sortMode;
+
   const toggleCompactMode = useCallback(() => {
     setCompactMode((prev) => {
       const next = !prev;
@@ -207,7 +231,7 @@ export default function EventQueuePage() {
     try {
       const [eventData, requestsData, historyData, displaySettings, tidalStatusData, beatportStatusData, nowPlayingData] = await Promise.all([
         api.getEvent(code),
-        api.getRequests(code),
+        api.getRequests(code, { sort: sortModeRef.current }),
         api.getPlayHistory(code).catch((): undefined => undefined),
         api.getDisplaySettings(code).catch(() => ({ now_playing_hidden: false, now_playing_auto_hide_minutes: 10, requests_open: true, kiosk_display_only: false })),
         api.getTidalStatus().catch(() => ({ linked: false, user_id: null, expires_at: null, integration_enabled: true })),
@@ -246,7 +270,7 @@ export default function EventQueuePage() {
         try {
           const [archivedEvents, requestsData] = await Promise.all([
             api.getArchivedEvents(),
-            api.getRequests(code), // Still works for owners
+            api.getRequests(code, { sort: sortModeRef.current }), // Still works for owners
           ]);
           const archivedEvent = archivedEvents.find((e) => e.code === code);
           if (archivedEvent) {
@@ -339,7 +363,7 @@ export default function EventQueuePage() {
     setAcceptingAll(true);
     try {
       await api.acceptAllRequests(code);
-      const updatedRequests = await api.getRequests(code);
+      const updatedRequests = await api.getRequests(code, { sort: sortModeRef.current });
       setRequests(updatedRequests);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Failed to accept all requests');
@@ -517,7 +541,7 @@ export default function EventQueuePage() {
         )
       );
       // Refresh to get updated sync_results_json from server
-      const updatedRequests = await api.getRequests(code);
+      const updatedRequests = await api.getRequests(code, { sort: sortModeRef.current });
       setRequests(updatedRequests);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Failed to sync to Tidal');
@@ -552,7 +576,7 @@ export default function EventQueuePage() {
     setLinkingTrack(true);
     try {
       await api.linkTidalTrack(requestId, tidalTrackId);
-      const updatedRequests = await api.getRequests(code);
+      const updatedRequests = await api.getRequests(code, { sort: sortModeRef.current });
       setRequests(updatedRequests);
       setShowTidalPicker(null);
     } catch (err) {
@@ -589,7 +613,7 @@ export default function EventQueuePage() {
     try {
       await api.linkBeatportTrack(requestId, beatportTrackId);
       // Reload requests to get updated sync_results_json
-      const updatedRequests = await api.getRequests(code);
+      const updatedRequests = await api.getRequests(code, { sort: sortModeRef.current });
       setRequests(updatedRequests);
       setShowBeatportPicker(null);
     } catch (err) {
@@ -713,7 +737,7 @@ export default function EventQueuePage() {
     setRejectingAll(true);
     try {
       await api.rejectAllRequests(code);
-      const updatedRequests = await api.getRequests(code);
+      const updatedRequests = await api.getRequests(code, { sort: sortModeRef.current });
       setRequests(updatedRequests);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Failed to reject all requests');
@@ -725,7 +749,7 @@ export default function EventQueuePage() {
   const handleBulkDelete = async (status?: string) => {
     try {
       await api.bulkDeleteRequests(code, status);
-      const updatedRequests = await api.getRequests(code);
+      const updatedRequests = await api.getRequests(code, { sort: sortModeRef.current });
       setRequests(updatedRequests);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : 'Failed to bulk delete requests');
@@ -749,12 +773,12 @@ export default function EventQueuePage() {
       },
     );
     // Refresh request list
-    const updatedRequests = await api.getRequests(code);
+    const updatedRequests = await api.getRequests(code, { sort: sortModeRef.current });
     setRequests(updatedRequests);
   };
 
   const handleRefreshRequests = useCallback(async () => {
-    const updatedRequests = await api.getRequests(code);
+    const updatedRequests = await api.getRequests(code, { sort: sortModeRef.current });
     setRequests(updatedRequests);
   }, [code]);
 
@@ -941,6 +965,8 @@ export default function EventQueuePage() {
             onSyncToTidal={handleSyncToTidal}
             onOpenTidalPicker={handleOpenTidalPicker}
             onScrollToSyncReport={handleScrollToSyncReport}
+            sortMode={sortMode}
+            onSortModeChange={handleSortModeChange}
           />
           <PlayHistorySection
             items={playHistory}
@@ -1003,6 +1029,8 @@ export default function EventQueuePage() {
               rejectingAll={rejectingAll}
               deletingRequest={deletingRequest}
               refreshingRequest={refreshingRequest}
+              sortMode={sortMode}
+              onSortModeChange={handleSortModeChange}
             />
           </div>
 
