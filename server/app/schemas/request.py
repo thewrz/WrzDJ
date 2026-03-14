@@ -79,6 +79,8 @@ class RequestOut(BaseModel):
     sync_results_json: str | None = None
     # Voting
     vote_count: int = 0
+    # Priority scoring (populated only when sort=priority)
+    priority_score: float | None = None
 
     class Config:
         from_attributes = True

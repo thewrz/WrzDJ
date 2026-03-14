@@ -301,9 +301,15 @@ class ApiClient {
     await this.rawFetch(`/api/events/${code}`, { method: 'DELETE' });
   }
 
-  async getRequests(code: string, status?: string): Promise<SongRequest[]> {
-    const params = status ? `?status=${status}` : '';
-    return this.fetch(`/api/events/${code}/requests${params}`);
+  async getRequests(
+    code: string,
+    options?: { status?: string; sort?: 'chronological' | 'priority' },
+  ): Promise<SongRequest[]> {
+    const params = new URLSearchParams();
+    if (options?.status) params.set('status', options.status);
+    if (options?.sort) params.set('sort', options.sort);
+    const qs = params.toString();
+    return this.fetch(`/api/events/${code}/requests${qs ? `?${qs}` : ''}`);
   }
 
   async acceptAllRequests(code: string): Promise<{ status: string; accepted_count: number }> {

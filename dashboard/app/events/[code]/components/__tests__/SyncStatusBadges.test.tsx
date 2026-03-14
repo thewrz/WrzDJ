@@ -19,6 +19,7 @@ function makeRequest(overrides: Partial<SongRequest> = {}): SongRequest {
     raw_search_query: null,
     sync_results_json: null,
     vote_count: 0,
+    priority_score: null,
     genre: null,
     bpm: null,
     musical_key: null,

@@ -49,6 +49,8 @@ export interface SongRequest {
   musical_key: string | null;
   // Voting
   vote_count: number;
+  // Priority scoring (populated only when sort=priority)
+  priority_score: number | null;
 }
 
 export interface PublicRequestInfo {

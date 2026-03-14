@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import (
@@ -659,12 +660,76 @@ def get_event_requests(
     status: RequestStatus | None = None,
     since: datetime | None = None,
     limit: int = Query(default=100, ge=1, le=500),
+    sort: Literal["chronological", "priority"] = "chronological",
     event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
 ) -> list[RequestOut]:
     # Owner can view requests regardless of event status
     requests = get_requests_for_event(db, event, status, since, limit)
+
+    if sort == "priority":
+        return _apply_priority_sort(requests, event, db)
+
     return [_request_to_out(r) for r in requests]
+
+
+def _apply_priority_sort(
+    requests: list,
+    event: "Event",
+    db: Session,
+) -> list[RequestOut]:
+    """Score and sort requests by DJ priority, attaching scores to output."""
+    from app.services.now_playing import get_now_playing
+    from app.services.priority_scorer import (
+        RequestScoreInput,
+        rank_requests_by_priority,
+    )
+
+    # Get now-playing context (BPM/key from matched request)
+    now_playing_key: str | None = None
+    now_playing_bpm: float | None = None
+    np = get_now_playing(db, event.id)
+    if np and np.matched_request_id:
+        matched = np.matched_request
+        if matched:
+            now_playing_key = matched.musical_key
+            now_playing_bpm = matched.bpm
+
+    # Build scoring inputs
+    inputs = [
+        RequestScoreInput(
+            request_id=r.id,
+            vote_count=r.vote_count,
+            created_at=r.created_at,
+            musical_key=r.musical_key,
+            bpm=r.bpm,
+        )
+        for r in requests
+    ]
+
+    # Score and rank
+    scored = rank_requests_by_priority(
+        inputs,
+        now_playing_key=now_playing_key,
+        now_playing_bpm=now_playing_bpm,
+    )
+
+    # Build a lookup for scores by request_id
+    score_map = {s.request_id: s.score for s in scored}
+    # Build ordered ID list
+    ordered_ids = [s.request_id for s in scored]
+
+    # Sort requests to match scored order and attach priority_score
+    request_by_id = {r.id: r for r in requests}
+    result = []
+    for rid in ordered_ids:
+        r = request_by_id.get(rid)
+        if r:
+            out = _request_to_out(r)
+            out.priority_score = score_map.get(rid)
+            result.append(out)
+
+    return result
 
 
 @router.post("/{code}/recommendations", response_model=RecommendationResponse)

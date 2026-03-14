@@ -74,6 +74,7 @@ REQUEST_OUT_KEYS = {
     "raw_search_query",
     "sync_results_json",
     "vote_count",
+    "priority_score",
     "genre",
     "bpm",
     "musical_key",
