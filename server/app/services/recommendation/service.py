@@ -46,11 +46,15 @@ _build_tidal_queries = build_tidal_queries  # noqa: F841
 SEARCH_LIMIT = 10
 
 # Penalty multiplier for candidates matching a source artist (already in queue)
-SOURCE_ARTIST_PENALTY = 0.70
+SOURCE_ARTIST_PENALTY = 0.50
 # Base penalty for repeated artists among candidates (compounds per occurrence)
 REPEAT_ARTIST_BASE_PENALTY = 0.75
 # Fuzzy match threshold for artist matching
 ARTIST_MATCH_THRESHOLD = 0.85
+# Hard cap on tracks per artist in final output
+MAX_PER_ARTIST = 2
+# Over-fetch multiplier: score more candidates before applying diversity + cap
+OVERFETCH_MULTIPLIER = 3
 
 # Genres that indicate non-music or DJ utility tracks
 BLOCKED_GENRES = {
@@ -237,6 +241,44 @@ def _apply_artist_diversity(
 
     adjusted.sort(key=lambda s: s.score, reverse=True)
     return adjusted
+
+
+def _enforce_artist_cap(
+    scored: list[ScoredTrack],
+    max_per_artist: int,
+) -> list[ScoredTrack]:
+    """Enforce a hard cap on tracks per artist in the final output.
+
+    Iterates through scored tracks (already sorted by score descending)
+    and skips any track whose artist has already appeared max_per_artist
+    times. Uses fuzzy matching to consolidate name variations.
+    """
+    artist_counts: dict[str, int] = {}
+    capped: list[ScoredTrack] = []
+
+    for st in scored:
+        artist_key = st.profile.artist.lower() if st.profile.artist else ""
+
+        # Empty-artist tracks are always allowed through (no meaningful cap)
+        if not artist_key:
+            capped.append(st)
+            continue
+
+        # Find canonical key via fuzzy matching against already-seen artists
+        matched_key = artist_key
+        for seen_key in artist_counts:
+            if artist_match_score(artist_key, seen_key) >= ARTIST_MATCH_THRESHOLD:
+                matched_key = seen_key
+                break
+
+        count = artist_counts.get(matched_key, 0)
+        if count >= max_per_artist:
+            continue
+
+        artist_counts[matched_key] = count + 1
+        capped.append(st)
+
+    return capped
 
 
 @dataclass
@@ -498,13 +540,15 @@ async def generate_recommendations_from_llm(
     if enriched:
         candidates = deduplicate_against_template(candidates, enriched)
 
-    # Step 5: Score and rank (use LLM targets for scoring if vibe shift detected)
+    # Step 5: Score and rank (over-fetch; use LLM targets if vibe shift detected)
     scoring_profile = _build_llm_scoring_profile(llm_result.queries, profile)
-    ranked = rank_candidates(candidates, scoring_profile, max_results)
+    ranked = rank_candidates(candidates, scoring_profile, max_results * OVERFETCH_MULTIPLIER)
 
-    # Step 6: Artist diversity
+    # Step 6: Artist diversity, enforce hard cap, then truncate
     source_artists = {req.artist.lower() for req in requests if req.artist}
     ranked = _apply_artist_diversity(ranked, source_artists)
+    ranked = _enforce_artist_cap(ranked, MAX_PER_ARTIST)
+    ranked = ranked[:max_results]
 
     # Step 7: MusicBrainz artist verification
     from app.services.recommendation.mb_verify import verify_artists_batch
@@ -592,12 +636,14 @@ def generate_recommendations_from_template(
     # Also deduplicate against the template tracks themselves
     candidates = deduplicate_against_template(candidates, template_tracks)
 
-    # Score and rank
-    ranked = rank_candidates(candidates, profile, max_results)
+    # Score and rank (over-fetch to give diversity room to work)
+    ranked = rank_candidates(candidates, profile, max_results * OVERFETCH_MULTIPLIER)
 
-    # Apply artist diversity penalties
+    # Apply artist diversity penalties, enforce hard cap, then truncate
     source_artists = {t.artist.lower() for t in template_tracks if t.artist}
     ranked = _apply_artist_diversity(ranked, source_artists)
+    ranked = _enforce_artist_cap(ranked, MAX_PER_ARTIST)
+    ranked = ranked[:max_results]
 
     # MusicBrainz artist verification
     from app.services.recommendation.mb_verify import verify_artists_batch
@@ -689,12 +735,14 @@ def generate_recommendations(
     all_requests = db.query(Request).filter(Request.event_id == event.id).all()
     candidates = deduplicate_against_requests(candidates, all_requests)
 
-    # Step 7: Score and rank
-    ranked = rank_candidates(candidates, profile, max_results)
+    # Step 7: Score and rank (over-fetch to give diversity room to work)
+    ranked = rank_candidates(candidates, profile, max_results * OVERFETCH_MULTIPLIER)
 
-    # Step 8: Apply artist diversity penalties
+    # Step 8: Apply artist diversity penalties, enforce hard cap, then truncate
     source_artists = {req.artist.lower() for req in requests if req.artist}
     ranked = _apply_artist_diversity(ranked, source_artists)
+    ranked = _enforce_artist_cap(ranked, MAX_PER_ARTIST)
+    ranked = ranked[:max_results]
 
     # Step 9: MusicBrainz artist verification
     from app.services.recommendation.mb_verify import verify_artists_batch

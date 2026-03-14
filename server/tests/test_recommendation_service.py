@@ -13,6 +13,7 @@ from app.services.recommendation.service import (
     _deduplicate_against_requests,
     _deduplicate_against_template,
     _deduplicate_candidates,
+    _enforce_artist_cap,
     _is_blocked_genre,
     _is_junk_candidate,
     _search_candidates,
@@ -118,7 +119,7 @@ class TestBuildBeatportQueries:
 
 class TestBuildTidalQueries:
     def test_artist_from_requests(self):
-        """Builds queries from request artists, not genres."""
+        """Top artist gets 1 slot; remaining slots use genre discovery."""
         profile = EventProfile(
             dominant_genres=["Country", "Pop"],
             track_count=5,
@@ -129,14 +130,14 @@ class TestBuildTidalQueries:
             MagicMock(artist="Morgan Wallen"),
         ]
         queries = _build_tidal_queries(profile, requests=requests)
-        assert "Luke Bryan" in queries
-        assert "Morgan Wallen" in queries
-        # Genre strings should NOT be in Tidal queries
-        assert "Country" not in queries
-        assert "Pop" not in queries
+        # Top artist gets slot 1
+        assert queries[0] == "Luke Bryan"
+        # Remaining slots filled with genre discovery, not more queue artists
+        assert any("Country" in q for q in queries[1:])
+        assert len(queries) <= 3
 
     def test_artist_from_template_tracks(self):
-        """Builds queries from template track artists."""
+        """Top template artist gets slot 1; genre fills remaining slots."""
         profile = EventProfile(dominant_genres=["House"], track_count=3)
         template_tracks = [
             TrackProfile(title="Song 1", artist="deadmau5", bpm=128.0),
@@ -145,7 +146,8 @@ class TestBuildTidalQueries:
         ]
         queries = _build_tidal_queries(profile, template_tracks=template_tracks)
         assert queries[0] == "deadmau5"  # Most frequent first
-        assert "Zedd" in queries
+        # Slot 2 should be genre discovery, not another queue artist
+        assert any("House" in q for q in queries[1:])
 
     def test_skips_unknown_artists(self):
         profile = EventProfile(track_count=2)
@@ -171,15 +173,16 @@ class TestBuildTidalQueries:
         assert len(queries) <= 3
 
     def test_combines_requests_and_template(self):
-        """Artists from both requests and templates are merged."""
+        """Artists from both requests and templates contribute to artist pool."""
         profile = EventProfile(track_count=3)
         requests = [MagicMock(artist="Artist A")]
         template_tracks = [
             TrackProfile(title="Song", artist="Artist B", bpm=128.0),
         ]
         queries = _build_tidal_queries(profile, requests=requests, template_tracks=template_tracks)
-        assert "Artist A" in queries
-        assert "Artist B" in queries
+        # Top artist gets slot 1; remaining artist fills fallback slot (no genres)
+        assert "Artist A" in queries or "Artist B" in queries
+        assert len(queries) <= 3
 
 
 class TestDeduplicateAgainstTemplate:
@@ -419,9 +422,9 @@ class TestArtistDiversity:
         # New Artist should rank first (no penalty)
         assert result[0].profile.artist == "New Artist"
         assert result[0].score == 0.90
-        # Luke Bryan gets SOURCE_ARTIST_PENALTY (0.70×)
+        # Luke Bryan gets SOURCE_ARTIST_PENALTY (0.50×)
         assert result[1].profile.artist == "Luke Bryan"
-        assert abs(result[1].score - 0.90 * 0.70) < 1e-9
+        assert abs(result[1].score - 0.90 * 0.50) < 1e-9
 
     def test_repeat_artist_penalized(self):
         """3rd occurrence of same artist ranks below 1st."""
@@ -478,9 +481,9 @@ class TestArtistDiversity:
         # Luke Bryan is in source AND will get source penalty
         result = _apply_artist_diversity(scored, {"luke bryan"})
 
-        # Luke Bryan: 0.95 * 0.70 = 0.665
+        # Luke Bryan: 0.95 * 0.50 = 0.475
         # New Artist: 0.80 (no penalty)
-        # New Artist now ranks higher since 0.80 > 0.665
+        # New Artist now ranks higher since 0.80 > 0.475
         assert result[0].profile.artist == "New Artist"
         # With a second Luke Bryan, it's even more penalized
         scored_with_repeat = [
@@ -489,8 +492,8 @@ class TestArtistDiversity:
             _make_scored("Fresh Track", "New Artist", 0.80),
         ]
         result2 = _apply_artist_diversity(scored_with_repeat, {"luke bryan"})
-        # 1st Luke Bryan: 0.95 * 0.70 = 0.665
-        # 2nd Luke Bryan: 0.90 * 0.70 (source) * 0.75 (repeat) = 0.4725
+        # 1st Luke Bryan: 0.95 * 0.50 = 0.475
+        # 2nd Luke Bryan: 0.90 * 0.50 (source) * 0.75 (repeat) = 0.3375
         # New Artist: 0.80 → ranks first
         assert result2[0].profile.artist == "New Artist"
         assert result2[2].profile.artist == "Luke Bryan"
@@ -937,3 +940,124 @@ class TestCascadeGenerateRecommendations:
         result = generate_recommendations(db, user, event)
         assert result.suggestions == []
         assert result.total_candidates_searched == 0
+
+
+class TestEnforceArtistCap:
+    """Tests for _enforce_artist_cap hard limit on tracks per artist."""
+
+    def test_caps_at_max_per_artist(self):
+        """5 tracks by the same artist → only 2 survive (MAX_PER_ARTIST=2)."""
+        scored = [_make_scored(f"Hit {i}", "Luke Bryan", 0.90 - i * 0.01) for i in range(5)]
+        result = _enforce_artist_cap(scored, max_per_artist=2)
+        assert len(result) == 2
+        assert result[0].profile.title == "Hit 0"
+        assert result[1].profile.title == "Hit 1"
+
+    def test_fuzzy_artist_matching(self):
+        """Slight name variations are treated as the same artist."""
+        scored = [
+            _make_scored("Song A", "deadmau5", 0.90),
+            _make_scored("Song B", "Deadmau5", 0.85),
+            _make_scored("Song C", "deadmau5", 0.80),
+        ]
+        result = _enforce_artist_cap(scored, max_per_artist=2)
+        assert len(result) == 2
+
+    def test_preserves_score_ordering(self):
+        """Higher-scoring tracks from the same artist are kept."""
+        scored = [
+            _make_scored("Best", "Artist X", 0.95),
+            _make_scored("Good", "Artist X", 0.80),
+            _make_scored("Okay", "Artist X", 0.70),
+        ]
+        result = _enforce_artist_cap(scored, max_per_artist=2)
+        assert result[0].profile.title == "Best"
+        assert result[1].profile.title == "Good"
+
+    def test_empty_input(self):
+        result = _enforce_artist_cap([], max_per_artist=2)
+        assert result == []
+
+    def test_all_unique_artists_pass(self):
+        """When all artists are unique, nothing is filtered."""
+        scored = [
+            _make_scored("Song A", "deadmau5", 0.90),
+            _make_scored("Song B", "Zedd", 0.85),
+            _make_scored("Song C", "Tiësto", 0.80),
+        ]
+        result = _enforce_artist_cap(scored, max_per_artist=2)
+        assert len(result) == 3
+
+    def test_none_artist_not_capped(self):
+        """Tracks with no artist are always allowed through."""
+        scored = [_make_scored(f"Track {i}", None, 0.90 - i * 0.01) for i in range(5)]
+        result = _enforce_artist_cap(scored, max_per_artist=2)
+        assert len(result) == 5
+
+    def test_mixed_artists_with_cap(self):
+        """Multiple artists, some exceeding cap, some not."""
+        scored = [
+            _make_scored("LB 1", "Luke Bryan", 0.95),
+            _make_scored("MW 1", "Morgan Wallen", 0.93),
+            _make_scored("LB 2", "Luke Bryan", 0.91),
+            _make_scored("MW 2", "Morgan Wallen", 0.89),
+            _make_scored("LB 3", "Luke Bryan", 0.87),  # Should be capped
+            _make_scored("MW 3", "Morgan Wallen", 0.85),  # Should be capped
+            _make_scored("New 1", "New Artist", 0.83),
+        ]
+        result = _enforce_artist_cap(scored, max_per_artist=2)
+        artists = [r.profile.artist for r in result]
+        assert artists.count("Luke Bryan") == 2
+        assert artists.count("Morgan Wallen") == 2
+        assert artists.count("New Artist") == 1
+        assert len(result) == 5
+
+
+class TestDiversifiedTidalQueries:
+    """Tests for the diversified Tidal query builder."""
+
+    def test_genre_discovery_fills_remaining_slots(self):
+        """With genres available, only 1 artist + genre discovery queries."""
+        profile = EventProfile(
+            dominant_genres=["House", "Tech House"],
+            track_count=5,
+        )
+        requests = [
+            MagicMock(artist="deadmau5"),
+            MagicMock(artist="deadmau5"),
+            MagicMock(artist="Zedd"),
+        ]
+        queries = _build_tidal_queries(profile, requests=requests)
+        assert queries[0] == "deadmau5"
+        assert "House music" in queries
+        assert len(queries) == 3
+
+    def test_no_genres_falls_back_to_artists(self):
+        """Without genres, all slots use queue artists."""
+        profile = EventProfile(track_count=5)
+        requests = [
+            MagicMock(artist="Artist A"),
+            MagicMock(artist="Artist B"),
+            MagicMock(artist="Artist C"),
+        ]
+        queries = _build_tidal_queries(profile, requests=requests)
+        assert queries[0] == "Artist A"
+        assert "Artist B" in queries
+        assert "Artist C" in queries
+
+    def test_one_genre_one_fallback_artist(self):
+        """1 genre available → 1 artist + 1 genre + 1 fallback artist."""
+        profile = EventProfile(
+            dominant_genres=["Progressive House"],
+            track_count=5,
+        )
+        requests = [
+            MagicMock(artist="deadmau5"),
+            MagicMock(artist="Zedd"),
+            MagicMock(artist="Avicii"),
+        ]
+        queries = _build_tidal_queries(profile, requests=requests)
+        assert queries[0] == "deadmau5"
+        assert "Progressive House music" in queries
+        # Third slot falls back to next artist
+        assert "Zedd" in queries

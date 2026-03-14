@@ -54,12 +54,17 @@ def build_tidal_queries(
     requests: list | None = None,
     template_tracks: list[TrackProfile] | None = None,
 ) -> list[str]:
-    """Generate artist-based search queries for Tidal text search.
+    """Generate search queries for Tidal text search.
 
-    Tidal's search API is a general text search -- genre strings like
-    "Country" produce irrelevant results.  Use artist names instead.
+    Limits queue-artist queries to 1 slot to prevent results dominated
+    by artists already in the queue.  Remaining slots use genre-based
+    discovery queries (e.g. "house music") for broader artist variety.
+
+    Falls back to artist-only queries when no genres are available.
     """
+    # Track counts by lowercase key; display_names preserves first-seen casing
     artist_counts: dict[str, int] = {}
+    display_names: dict[str, str] = {}
 
     # Collect artists from accepted requests (split multi-artist strings)
     if requests:
@@ -67,22 +72,44 @@ def build_tidal_queries(
             artist = getattr(req, "artist", None)
             if artist:
                 for individual in split_artists(artist):
-                    key = individual.strip().lower()
+                    canonical = individual.strip()
+                    key = canonical.lower()
                     if key not in ("unknown", "various artists", ""):
-                        artist_counts[individual.strip()] = (
-                            artist_counts.get(individual.strip(), 0) + 1
-                        )
+                        artist_counts[key] = artist_counts.get(key, 0) + 1
+                        if key not in display_names:
+                            display_names[key] = canonical
 
     # Collect artists from template tracks (split multi-artist strings)
     if template_tracks:
         for t in template_tracks:
             if t.artist:
                 for individual in split_artists(t.artist):
-                    key = individual.strip().lower()
+                    canonical = individual.strip()
+                    key = canonical.lower()
                     if key not in ("unknown", "various artists", ""):
-                        artist_counts[individual.strip()] = (
-                            artist_counts.get(individual.strip(), 0) + 1
-                        )
+                        artist_counts[key] = artist_counts.get(key, 0) + 1
+                        if key not in display_names:
+                            display_names[key] = canonical
 
-    top_artists = sorted(artist_counts, key=artist_counts.get, reverse=True)  # type: ignore[arg-type]
-    return top_artists[:MAX_SEARCH_QUERIES]
+    top_keys = sorted(artist_counts, key=artist_counts.get, reverse=True)  # type: ignore[arg-type]
+    top_artists = [display_names[k] for k in top_keys]
+
+    queries: list[str] = []
+
+    # Slot 1: top queue artist (for "more like what's playing" results)
+    if top_artists:
+        queries.append(top_artists[0])
+
+    # Slots 2-3: genre-based discovery for broader artist variety
+    for genre in profile.dominant_genres[:2]:
+        if len(queries) >= MAX_SEARCH_QUERIES:
+            break
+        queries.append(f"{genre} music")
+
+    # Fallback: fill remaining slots with queue artists when no genres
+    for artist in top_artists[1:]:
+        if len(queries) >= MAX_SEARCH_QUERIES:
+            break
+        queries.append(artist)
+
+    return queries[:MAX_SEARCH_QUERIES]
