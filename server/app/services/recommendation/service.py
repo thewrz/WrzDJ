@@ -605,11 +605,15 @@ def _search_tidal_via_lb_radio(
     total_searched = 0
     seen_tracks: set[str] = set()  # deduplicate across prompts
 
+    # Cap Tidal lookups per prompt to avoid timeout (each is ~1s)
+    max_lookups_per_prompt = 10
+
     for prompt in prompts:
         lb_tracks = lb_radio_discover(prompt)
         if not lb_tracks:
             continue
 
+        lookups_this_prompt = 0
         for lb_track in lb_tracks:
             # Deduplicate by artist+title
             dedup_key = f"{lb_track.artist.lower()}|{lb_track.title.lower()}"
@@ -617,10 +621,14 @@ def _search_tidal_via_lb_radio(
                 continue
             seen_tracks.add(dedup_key)
 
+            if lookups_this_prompt >= max_lookups_per_prompt:
+                break
+
             # Resolve to Tidal via search
             query = f"{lb_track.artist} {lb_track.title}"
             results = search_tidal_tracks(db, user, query, limit=1)
             total_searched += 1
+            lookups_this_prompt += 1
 
             if not results:
                 continue
