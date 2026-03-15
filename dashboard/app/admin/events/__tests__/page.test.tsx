@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import AdminEventsPage from '../page';
 
@@ -24,6 +24,7 @@ vi.mock('@/lib/api', () => ({
     getAdminEvents: vi.fn(),
     updateAdminEvent: vi.fn(),
     deleteAdminEvent: vi.fn(),
+    bulkDeleteAdminEvents: vi.fn(),
   },
   AdminEvent: undefined,
 }));
@@ -265,6 +266,59 @@ describe('AdminEventsPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Cannot delete')).toBeInTheDocument();
+    });
+  });
+
+  describe('Batch delete (selection mode)', () => {
+    it('renders Advanced checkbox', async () => {
+      render(<AdminEventsPage />);
+      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
+      expect(screen.getByLabelText('Advanced')).toBeInTheDocument();
+    });
+
+    it('toggles selection mode with checkbox column', async () => {
+      render(<AdminEventsPage />);
+      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
+
+      expect(screen.queryByLabelText('Select All')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByLabelText('Advanced'));
+      expect(screen.getByLabelText('Select All')).toBeInTheDocument();
+    });
+
+    it('select all header checkbox', async () => {
+      render(<AdminEventsPage />);
+      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByLabelText('Advanced'));
+
+      const selectAll = screen.getByLabelText('Select All');
+      fireEvent.click(selectAll);
+      expect(screen.getByText('Delete Selected (3)')).toBeInTheDocument();
+
+      fireEvent.click(selectAll);
+      expect(screen.queryByText(/Delete Selected/)).not.toBeInTheDocument();
+    });
+
+    it('delete selected calls bulkDeleteAdminEvents', async () => {
+      vi.mocked(api.bulkDeleteAdminEvents).mockResolvedValue({ status: 'ok', count: 2 });
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+      render(<AdminEventsPage />);
+      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByLabelText('Advanced'));
+
+      const checkboxes = screen.getAllByRole('checkbox', { name: /Select event/ });
+      fireEvent.click(checkboxes[0]);
+      fireEvent.click(checkboxes[1]);
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('Delete Selected (2)'));
+      });
+
+      expect(window.confirm).toHaveBeenCalled();
+      expect(api.bulkDeleteAdminEvents).toHaveBeenCalledWith(['FRI001', 'SAT002']);
     });
   });
 });

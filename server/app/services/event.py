@@ -152,6 +152,37 @@ def delete_event(db: Session, event: Event) -> None:
     db.commit()
 
 
+def bulk_delete_events(db: Session, codes: list[str], user: User | None = None) -> int:
+    """Delete multiple events by code in one operation.
+
+    Validates all codes before deleting any (atomic). If user is provided,
+    all events must be owned by that user. If user is None (admin mode),
+    ownership is not checked.
+
+    Raises ValueError if any code is not found or not owned by the user.
+    """
+    uppercased = [c.upper() for c in codes]
+    events = db.query(Event).filter(Event.code.in_(uppercased)).all()
+
+    # Build a lookup for fast validation
+    found_codes = {e.code for e in events}
+    missing = set(uppercased) - found_codes
+    if missing:
+        raise ValueError(f"Events not found: {', '.join(sorted(missing))}")
+
+    # Ownership check (when user is provided)
+    if user is not None:
+        not_owned = [e.code for e in events if e.created_by_user_id != user.id]
+        if not_owned:
+            raise ValueError(f"Events not found or not owned: {', '.join(sorted(not_owned))}")
+
+    # All validated — delete each event using existing cascade logic
+    for event in events:
+        delete_event(db, event)
+
+    return len(events)
+
+
 def archive_event(db: Session, event: Event) -> Event:
     """Archive an event by setting archived_at timestamp."""
     event.archived_at = utcnow()

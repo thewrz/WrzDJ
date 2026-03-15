@@ -17,6 +17,9 @@ export default function AdminEventsPage() {
   const [editEvent, setEditEvent] = useState<AdminEvent | null>(null);
   const [editName, setEditName] = useState('');
   const [error, setError] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
+  const [deletingSelected, setDeletingSelected] = useState(false);
   const limit = 20;
   const { hasSeenPage, startOnboarding, onboardingActive } = useHelp();
 
@@ -34,6 +37,7 @@ export default function AdminEventsPage() {
   };
 
   useEffect(() => {
+    setSelectedEvents(new Set());
     loadEvents();
   }, [page]);
 
@@ -65,6 +69,42 @@ export default function AdminEventsPage() {
       loadEvents();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete event');
+    }
+  };
+
+  const toggleSelection = (code: string) => {
+    setSelectedEvents((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) {
+        next.delete(code);
+      } else {
+        next.add(code);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedEvents.size === events.length) {
+      setSelectedEvents(new Set());
+    } else {
+      setSelectedEvents(new Set(events.map((e) => e.code)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedEvents.size === 0) return;
+    if (!window.confirm(`Delete ${selectedEvents.size} event${selectedEvents.size === 1 ? '' : 's'}? This cannot be undone.`)) return;
+
+    setDeletingSelected(true);
+    try {
+      await api.bulkDeleteAdminEvents([...selectedEvents]);
+      setSelectedEvents(new Set());
+      loadEvents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete events');
+    } finally {
+      setDeletingSelected(false);
     }
   };
 
@@ -121,10 +161,46 @@ export default function AdminEventsPage() {
         <div className="loading">Loading events...</div>
       ) : (
         <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: '#9ca3af', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={selectionMode}
+                onChange={(e) => {
+                  setSelectionMode(e.target.checked);
+                  if (!e.target.checked) setSelectedEvents(new Set());
+                }}
+                style={{ accentColor: '#3b82f6' }}
+                aria-label="Advanced"
+              />
+              Advanced
+            </label>
+            {selectionMode && selectedEvents.size > 0 && (
+              <button
+                className="btn btn-sm btn-danger"
+                onClick={handleBulkDelete}
+                disabled={deletingSelected}
+              >
+                {deletingSelected ? 'Deleting...' : `Delete Selected (${selectedEvents.size})`}
+              </button>
+            )}
+          </div>
+
           <HelpSpot spotId="admin-events-table" page={PAGE_ID} order={2} title="Events Table" description="Every event with code, owner, request count, and Active/Expired/Inactive status.">
             <table className="admin-table">
               <thead>
                 <tr>
+                  {selectionMode && (
+                    <th>
+                      <input
+                        type="checkbox"
+                        checked={selectedEvents.size === events.length && events.length > 0}
+                        onChange={toggleSelectAll}
+                        style={{ accentColor: '#3b82f6' }}
+                        aria-label="Select All"
+                      />
+                    </th>
+                  )}
                   <th>Code</th>
                   <th>Name</th>
                   <th>Owner</th>
@@ -141,6 +217,17 @@ export default function AdminEventsPage() {
               <tbody>
                 {events.map((event) => (
                   <tr key={event.id}>
+                    {selectionMode && (
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedEvents.has(event.code)}
+                          onChange={() => toggleSelection(event.code)}
+                          style={{ accentColor: '#3b82f6' }}
+                          aria-label={`Select event ${event.code}`}
+                        />
+                      </td>
+                    )}
                     <td style={{ fontFamily: 'monospace', color: '#3b82f6' }}>{event.code}</td>
                     <td>{event.name}</td>
                     <td>{event.owner_username}</td>
