@@ -56,6 +56,7 @@ vi.mock('@/lib/api', () => ({
   api: {
     getEvents: vi.fn(),
     createEvent: vi.fn(),
+    bulkDeleteEvents: vi.fn(),
   },
   Event: undefined,
 }));
@@ -343,6 +344,130 @@ describe('EventsPage', () => {
       render(<EventsPage />);
 
       expect(screen.queryByRole('button', { name: 'Admin' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Batch delete (selection mode)', () => {
+    const twoEvents = [
+      mockEvent({ id: 1, code: 'EVT01', name: 'Friday Night' }),
+      mockEvent({ id: 2, code: 'EVT02', name: 'Saturday Bash' }),
+    ];
+
+    it('renders Advanced checkbox', async () => {
+      vi.mocked(api.getEvents).mockResolvedValue(twoEvents);
+      render(<EventsPage />);
+      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
+      expect(screen.getByLabelText('Advanced')).toBeInTheDocument();
+    });
+
+    it('toggles selection mode', async () => {
+      vi.mocked(api.getEvents).mockResolvedValue(twoEvents);
+      render(<EventsPage />);
+      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
+
+      // No checkboxes visible initially (only the Advanced checkbox itself)
+      expect(screen.queryByRole('button', { name: /Delete Selected/ })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByLabelText('Advanced'));
+
+      // Now selection controls should appear
+      expect(screen.getByLabelText('Select All')).toBeInTheDocument();
+    });
+
+    it('selects individual events', async () => {
+      vi.mocked(api.getEvents).mockResolvedValue(twoEvents);
+      render(<EventsPage />);
+      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByLabelText('Advanced'));
+
+      const checkboxes = screen.getAllByRole('checkbox', { name: /Select event/ });
+      expect(checkboxes).toHaveLength(2);
+
+      fireEvent.click(checkboxes[0]);
+      expect(screen.getByText('Delete Selected (1)')).toBeInTheDocument();
+
+      fireEvent.click(checkboxes[1]);
+      expect(screen.getByText('Delete Selected (2)')).toBeInTheDocument();
+
+      // Deselect one
+      fireEvent.click(checkboxes[0]);
+      expect(screen.getByText('Delete Selected (1)')).toBeInTheDocument();
+    });
+
+    it('select all / deselect all', async () => {
+      vi.mocked(api.getEvents).mockResolvedValue(twoEvents);
+      render(<EventsPage />);
+      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByLabelText('Advanced'));
+
+      const selectAll = screen.getByLabelText('Select All');
+      fireEvent.click(selectAll);
+      expect(screen.getByText('Delete Selected (2)')).toBeInTheDocument();
+
+      // Deselect all
+      fireEvent.click(selectAll);
+      expect(screen.queryByText(/Delete Selected/)).not.toBeInTheDocument();
+    });
+
+    it('calls bulkDeleteEvents on confirm', async () => {
+      vi.mocked(api.getEvents).mockResolvedValue(twoEvents);
+      vi.mocked(api.bulkDeleteEvents).mockResolvedValue({ status: 'ok', count: 1 });
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+      render(<EventsPage />);
+      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByLabelText('Advanced'));
+
+      const checkboxes = screen.getAllByRole('checkbox', { name: /Select event/ });
+      fireEvent.click(checkboxes[0]);
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('Delete Selected (1)'));
+      });
+
+      expect(window.confirm).toHaveBeenCalled();
+      expect(api.bulkDeleteEvents).toHaveBeenCalledWith(['EVT01']);
+    });
+
+    it('clears selection after delete', async () => {
+      vi.mocked(api.getEvents)
+        .mockResolvedValueOnce(twoEvents)
+        .mockResolvedValueOnce([twoEvents[1]]);
+      vi.mocked(api.bulkDeleteEvents).mockResolvedValue({ status: 'ok', count: 1 });
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+      render(<EventsPage />);
+      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByLabelText('Advanced'));
+      const checkboxes = screen.getAllByRole('checkbox', { name: /Select event/ });
+      fireEvent.click(checkboxes[0]);
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('Delete Selected (1)'));
+      });
+
+      await waitFor(() => {
+        expect(screen.queryByText(/Delete Selected/)).not.toBeInTheDocument();
+      });
+    });
+
+    it('exiting advanced mode clears selection', async () => {
+      vi.mocked(api.getEvents).mockResolvedValue(twoEvents);
+      render(<EventsPage />);
+      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByLabelText('Advanced'));
+      const checkboxes = screen.getAllByRole('checkbox', { name: /Select event/ });
+      fireEvent.click(checkboxes[0]);
+      expect(screen.getByText('Delete Selected (1)')).toBeInTheDocument();
+
+      // Exit advanced mode
+      fireEvent.click(screen.getByLabelText('Advanced'));
+      expect(screen.queryByText(/Delete Selected/)).not.toBeInTheDocument();
     });
   });
 });

@@ -26,6 +26,7 @@ from app.models.user import User
 from app.schemas.activity_log import ActivityLogEntry
 from app.schemas.common import AcceptAllResponse, BulkActionResponse
 from app.schemas.event import (
+    BulkDeleteEventsRequest,
     DisplaySettingsResponse,
     DisplaySettingsUpdate,
     EventCreate,
@@ -44,6 +45,7 @@ from app.schemas.search import SearchResult
 from app.services.event import (
     EventLookupResult,
     archive_event,
+    bulk_delete_events,
     compute_event_status,
     create_event,
     delete_event,
@@ -417,6 +419,22 @@ def delete_event_endpoint(
 ) -> None:
     """Delete an event and all its requests."""
     delete_event(db, event)
+
+
+@router.post("/bulk-delete", response_model=BulkActionResponse)
+@limiter.limit("5/minute")
+def bulk_delete_events_endpoint(
+    request: Request,
+    body: BulkDeleteEventsRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> BulkActionResponse:
+    """Bulk delete multiple events owned by the current user."""
+    try:
+        count = bulk_delete_events(db, body.codes, user=current_user)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="One or more events not found")
+    return BulkActionResponse(status="ok", count=count)
 
 
 @router.post("/{code}/archive", response_model=EventOut)

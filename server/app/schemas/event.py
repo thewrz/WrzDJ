@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field, field_serializer, field_validator
 
 
 class EventStatus(str, Enum):
@@ -10,6 +10,15 @@ class EventStatus(str, Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
     ARCHIVED = "archived"
+
+
+class BulkDeleteEventsRequest(BaseModel):
+    codes: list[str] = Field(..., min_length=1, max_length=50)
+
+    @field_validator("codes", mode="before")
+    @classmethod
+    def strip_and_uppercase(cls, v: list[str]) -> list[str]:
+        return [c.strip().upper() for c in v]
 
 
 class EventCreate(BaseModel):

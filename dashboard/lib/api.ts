@@ -301,6 +301,13 @@ class ApiClient {
     await this.rawFetch(`/api/events/${code}`, { method: 'DELETE' });
   }
 
+  async bulkDeleteEvents(codes: string[]): Promise<{ status: string; count: number }> {
+    return this.fetch('/api/events/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ codes }),
+    });
+  }
+
   async getRequests(
     code: string,
     options?: { status?: string; sort?: 'chronological' | 'priority' },
@@ -744,6 +751,13 @@ class ApiClient {
 
   async deleteAdminEvent(code: string): Promise<void> {
     await this.fetch(`/api/admin/events/${code}`, { method: 'DELETE' });
+  }
+
+  async bulkDeleteAdminEvents(codes: string[]): Promise<{ status: string; count: number }> {
+    return this.fetch('/api/admin/events/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ codes }),
+    });
   }
 
   async getAdminSettings(): Promise<SystemSettings> {
