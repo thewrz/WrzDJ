@@ -247,30 +247,56 @@ export default function EventsPage() {
           <HelpSpot spotId="events-grid" page={PAGE_ID} order={4} title="Event Cards" description="Your events appear as cards. Click any card to manage its request queue, sync settings, and kiosk controls.">
             <div className="event-grid">
               {events.map((event) => (
-                <Link key={event.id} href={`/events/${event.code}`} onClick={(e) => { if (selectionMode) e.preventDefault(); }}>
-                  <div className="event-card" style={{ cursor: 'pointer', position: 'relative' }}>
-                    {selectionMode && (
-                      <input
-                        type="checkbox"
-                        checked={selectedEvents.has(event.code)}
-                        onChange={() => toggleSelection(event.code)}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ position: 'absolute', top: '0.75rem', left: '0.75rem', accentColor: '#3b82f6', width: '1rem', height: '1rem' }}
-                        aria-label={`Select event ${event.code}`}
-                      />
-                    )}
-                    <h3>{event.name}</h3>
-                    <div className="code">{event.code}</div>
-                    <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
-                      Expires: {new Date(event.expires_at).toLocaleString()}
-                    </p>
-                    {!event.is_active && (
-                      <span className="badge badge-rejected" style={{ marginTop: '0.5rem' }}>
-                        Inactive
-                      </span>
-                    )}
+                selectionMode ? (
+                  <div
+                    key={event.id}
+                    className="event-card"
+                    style={{
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '0.75rem',
+                      outline: selectedEvents.has(event.code) ? '2px solid #3b82f6' : 'none',
+                    }}
+                    onClick={() => toggleSelection(event.code)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedEvents.has(event.code)}
+                      onChange={() => toggleSelection(event.code)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ accentColor: '#3b82f6', width: '1rem', height: '1rem', marginTop: '0.25rem', flexShrink: 0 }}
+                      aria-label={`Select event ${event.code}`}
+                    />
+                    <div>
+                      <h3>{event.name}</h3>
+                      <div className="code">{event.code}</div>
+                      <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+                        Expires: {new Date(event.expires_at).toLocaleString()}
+                      </p>
+                      {!event.is_active && (
+                        <span className="badge badge-rejected" style={{ marginTop: '0.5rem' }}>
+                          Inactive
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </Link>
+                ) : (
+                  <Link key={event.id} href={`/events/${event.code}`}>
+                    <div className="event-card" style={{ cursor: 'pointer' }}>
+                      <h3>{event.name}</h3>
+                      <div className="code">{event.code}</div>
+                      <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+                        Expires: {new Date(event.expires_at).toLocaleString()}
+                      </p>
+                      {!event.is_active && (
+                        <span className="badge badge-rejected" style={{ marginTop: '0.5rem' }}>
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                )
               ))}
             </div>
           </HelpSpot>
