@@ -217,6 +217,111 @@ class TestCheckArtistExists:
         assert verified is True
         assert mbid == "real-id"
 
+    def test_rejects_stock_disambiguation_royalty_free(self):
+        """Artist with 'royalty-free' disambiguation should be rejected."""
+        search_data = _mock_search_response(
+            [
+                {
+                    "id": "stock-id",
+                    "name": "Bobby Cole",
+                    "score": 100,
+                    "disambiguation": "royalty-free music producer",
+                }
+            ]
+        )
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("Bobby Cole")
+
+        assert verified is False
+        assert mbid is None
+
+    def test_rejects_stock_disambiguation_production_music(self):
+        """Artist with 'production music' disambiguation should be rejected."""
+        search_data = _mock_search_response(
+            [
+                {
+                    "id": "pm-id",
+                    "name": "Stock Artist",
+                    "score": 95,
+                    "disambiguation": "production music composer",
+                }
+            ]
+        )
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("Stock Artist")
+
+        assert verified is False
+        assert mbid is None
+
+    def test_rejects_stock_disambiguation_library_music(self):
+        """Artist with 'library music' disambiguation should be rejected."""
+        search_data = _mock_search_response(
+            [
+                {
+                    "id": "lm-id",
+                    "name": "Library Composer",
+                    "score": 95,
+                    "disambiguation": "library music",
+                }
+            ]
+        )
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("Library Composer")
+
+        assert verified is False
+        assert mbid is None
+
+    def test_accepts_normal_disambiguation(self):
+        """Artist with normal disambiguation should pass."""
+        search_data = _mock_search_response(
+            [
+                {
+                    "id": "good-id",
+                    "name": "Bobby Cole",
+                    "score": 100,
+                    "disambiguation": "British jazz pianist",
+                }
+            ]
+        )
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("Bobby Cole")
+
+        assert verified is True
+        assert mbid == "good-id"
+
+    def test_accepts_no_disambiguation(self):
+        """Artist with no disambiguation field should pass."""
+        search_data = _mock_search_response([{"id": "good-id", "name": "Deadmau5", "score": 100}])
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("Deadmau5")
+
+        assert verified is True
+        assert mbid == "good-id"
+
+    def test_skips_stock_finds_real_match(self):
+        """If first result has stock disambiguation but second is clean, accept the second."""
+        search_data = _mock_search_response(
+            [
+                {
+                    "id": "stock-id",
+                    "name": "Bobby Cole",
+                    "score": 100,
+                    "disambiguation": "royalty-free",
+                },
+                {
+                    "id": "real-id",
+                    "name": "Bobby Cole",
+                    "score": 95,
+                    "disambiguation": "British jazz pianist",
+                },
+            ]
+        )
+        with patch("app.services.musicbrainz._throttled_get", return_value=search_data):
+            verified, mbid = check_artist_exists("Bobby Cole")
+
+        assert verified is True
+        assert mbid == "real-id"
+
 
 class TestLookupArtistGenres:
     def test_returns_genres_sorted_by_count(self):

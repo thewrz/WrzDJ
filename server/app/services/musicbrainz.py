@@ -77,6 +77,16 @@ def check_artist_exists(artist_name: str) -> tuple[bool, str | None]:
     # Known false-positive names that MB returns with high scores for almost any query
     _FALSE_POSITIVE_NAMES = {"various artists", "[unknown]"}
 
+    # Disambiguation strings that indicate stock/library music producers
+    _STOCK_DISAMBIGUATIONS = {
+        "royalty-free",
+        "royalty free",
+        "production music",
+        "stock music",
+        "library music",
+        "background music",
+    }
+
     for artist in search_data.get("artists", []):
         if artist.get("score", 0) >= 90:
             result_name = artist.get("name", "")
@@ -86,6 +96,10 @@ def check_artist_exists(artist_name: str) -> tuple[bool, str | None]:
             # Reject if the result name doesn't actually match the query
             # (MB's score measures index relevance, not name similarity)
             if fuzzy_match_score(artist_name, result_name) < 0.7:
+                continue
+            # Reject stock/library music producers by disambiguation field
+            disambiguation = artist.get("disambiguation", "").lower()
+            if any(kw in disambiguation for kw in _STOCK_DISAMBIGUATIONS):
                 continue
             mbid = artist.get("id")
             if mbid:

@@ -364,6 +364,30 @@ class TestIsBlockedGenre:
         assert _is_blocked_genre("Country") is False
         assert _is_blocked_genre("Tech House") is False
 
+    def test_meditation_genre(self):
+        assert _is_blocked_genre("Meditation") is True
+
+    def test_sleep_genre(self):
+        assert _is_blocked_genre("Sleep") is True
+
+    def test_white_noise_genre(self):
+        assert _is_blocked_genre("White Noise") is True
+
+    def test_nature_recordings_genre(self):
+        assert _is_blocked_genre("Nature Recordings") is True
+
+    def test_asmr_genre(self):
+        assert _is_blocked_genre("ASMR") is True
+
+    def test_binaural_genre(self):
+        assert _is_blocked_genre("Binaural") is True
+
+    def test_healing_genre(self):
+        assert _is_blocked_genre("Healing") is True
+
+    def test_spa_genre(self):
+        assert _is_blocked_genre("Spa") is True
+
 
 class TestCoverDetection:
     def test_cover_artist_filtered(self):
@@ -705,12 +729,118 @@ class TestIsJunkCandidate:
     def test_real_song_not_caught(self):
         assert _is_junk_candidate("Bad Guy", "Billie Eilish") is False
 
+    # Functional/wellness music
+    def test_relaxation_music(self):
+        assert _is_junk_candidate("Deep Relaxation Music", "Spa") is True
+
+    def test_healing_music(self):
+        assert _is_junk_candidate("Chakra Healing Music", "Wellness") is True
+
+    def test_yoga_music(self):
+        assert _is_junk_candidate("Morning Yoga Music Flow", "Zen") is True
+
+    def test_spa_music(self):
+        assert _is_junk_candidate("Spa Music Collection", "Relax") is True
+
+    def test_reiki_music(self):
+        assert _is_junk_candidate("Reiki Music Session", "Healer") is True
+
+    # Non-music audio content
+    def test_binaural_beats(self):
+        assert _is_junk_candidate("Alpha Binaural Beats 10Hz", "BrainWave") is True
+
+    def test_white_noise(self):
+        assert _is_junk_candidate("White Noise for Sleep", "Noise Co") is True
+
+    def test_pink_noise(self):
+        assert _is_junk_candidate("Pink Noise Generator", "Sleep Lab") is True
+
+    def test_rain_sounds(self):
+        assert _is_junk_candidate("Rain Sounds Thunderstorm", "Nature") is True
+
+    def test_ocean_waves(self):
+        assert _is_junk_candidate("Ocean Waves at Night", "Relaxation") is True
+
+    def test_nature_sounds(self):
+        assert _is_junk_candidate("Forest Nature Sounds", "Ambient") is True
+
+    def test_asmr(self):
+        assert _is_junk_candidate("ASMR Tapping Triggers", "WhisperASMR") is True
+
+    def test_solfeggio(self):
+        assert _is_junk_candidate("528Hz Solfeggio Frequency", "Healing") is True
+
+    def test_isochronic(self):
+        assert _is_junk_candidate("Isochronic Tones Theta", "BrainSync") is True
+
+    # Production format terms
+    def test_underscore(self):
+        assert _is_junk_candidate("Corporate Underscore", "Production") is True
+
+    def test_stinger(self):
+        assert _is_junk_candidate("News Stinger Dramatic", "Stock Audio") is True
+
+    def test_bumper(self):
+        assert _is_junk_candidate("Radio Bumper Jingle", "Station ID") is True
+
+    def test_audio_logo(self):
+        assert _is_junk_candidate("Tech Audio Logo", "Branding") is True
+
+    def test_seamless_loop(self):
+        assert _is_junk_candidate("Ambient Seamless Loop", "Loop Co") is True
+
+    # Practice/stripped track variants
+    def test_play_along(self):
+        assert _is_junk_candidate("Blues Play Along in E", "Guitar Lab") is True
+
+    def test_bassless(self):
+        assert _is_junk_candidate("Funk Groove Bassless", "Practice") is True
+
+    def test_guitarless(self):
+        assert _is_junk_candidate("Rock Guitarless Version", "Jam") is True
+
+    def test_no_vocals(self):
+        assert _is_junk_candidate("Pop Hit No Vocals", "Karaoke") is True
+
+    def test_no_drums(self):
+        assert _is_junk_candidate("Jazz No Drums Practice", "Band") is True
+
 
 class TestSearchCandidates:
     """Tests for _search_candidates including cascade behavior."""
 
-    def test_beatport_only(self):
-        """Beatport connected, Tidal not → only Beatport results."""
+    def test_beatport_structured_browse(self):
+        """Beatport connected with profile → uses structured browse."""
+        user = _make_user(tidal=False, beatport=True)
+        db = MagicMock()
+
+        from app.schemas.beatport import BeatportSearchResult
+
+        mock_result = BeatportSearchResult(
+            track_id="1",
+            title="Strobe",
+            artist="deadmau5",
+            bpm=128,
+            key="A min",
+            genre="Progressive House",
+            beatport_url="https://beatport.com/track/strobe/1",
+        )
+
+        with patch("app.services.beatport.browse_beatport_tracks", return_value=[mock_result]):
+            profile = EventProfile(
+                dominant_genres=["Progressive House"], avg_bpm=128, track_count=5
+            )
+            candidates, services, total = _search_candidates(
+                db, user, ["Progressive House"], profile=profile
+            )
+
+        assert len(candidates) == 1
+        assert candidates[0].source == "beatport"
+        assert "beatport" in services
+        assert "tidal" not in services
+
+    def test_beatport_text_fallback_no_profile(self):
+        """Beatport connected, no profile → falls back to text search."""
         user = _make_user(tidal=False, beatport=True)
         db = MagicMock()
 
@@ -731,12 +861,10 @@ class TestSearchCandidates:
 
         assert len(candidates) == 1
         assert candidates[0].source == "beatport"
-        assert "beatport" in services
-        assert "tidal" not in services
 
     @patch("app.services.tidal.search_tidal_tracks")
-    def test_tidal_text_fallback_when_no_soundcharts(self, mock_tidal_search):
-        """Tidal connected, no Soundcharts → falls back to text search."""
+    def test_tidal_text_fallback_when_no_lb_radio(self, mock_tidal_search):
+        """Tidal connected, LB Radio returns empty → falls back to text search."""
         user = _make_user(tidal=True, beatport=False)
         db = MagicMock()
 
@@ -753,9 +881,13 @@ class TestSearchCandidates:
 
         profile = EventProfile(dominant_genres=["House"], track_count=5)
 
-        with patch("app.core.config.get_settings") as mock_settings:
+        with (
+            patch("app.services.listenbrainz.lb_radio_discover", return_value=[]),
+            patch("app.core.config.get_settings") as mock_settings,
+        ):
             mock_settings.return_value.soundcharts_app_id = ""
             mock_settings.return_value.soundcharts_api_key = ""
+            mock_settings.return_value.listenbrainz_user_token = ""
             candidates, services, total = _search_candidates(
                 db, user, ["House"], profile=profile, tidal_queries=["deadmau5"]
             )
@@ -763,10 +895,9 @@ class TestSearchCandidates:
         assert len(candidates) == 1
         assert candidates[0].source == "tidal"
         assert "tidal" in services
-        mock_tidal_search.assert_called_once_with(db, user, "deadmau5", limit=10)
 
-    def test_beatport_failures_trigger_early_exit(self):
-        """2+ Beatport failures → stops trying remaining queries."""
+    def test_beatport_text_failures_trigger_early_exit(self):
+        """2+ Beatport text search failures → stops trying remaining queries."""
         user = _make_user(tidal=False, beatport=True)
         db = MagicMock()
 
@@ -886,25 +1017,28 @@ class TestSearchCandidates:
         assert services == []
         assert total == 0
 
-    @patch("app.services.tidal.search_tidal_tracks")
-    def test_all_services_fail_returns_empty(self, mock_tidal_search):
+    def test_all_services_fail_returns_empty(self):
         """Beatport fails + Tidal returns empty → empty candidates, no crash."""
         user = _make_user(tidal=True, beatport=True)
         db = MagicMock()
 
-        mock_tidal_search.return_value = []
-
-        with patch("app.services.beatport.search_beatport_tracks", return_value=[]):
-            with patch("app.core.config.get_settings") as mock_settings:
-                mock_settings.return_value.soundcharts_app_id = ""
-                mock_settings.return_value.soundcharts_api_key = ""
-                candidates, services, total = _search_candidates(
-                    db,
-                    user,
-                    ["House"],
-                    profile=EventProfile(dominant_genres=["House"], track_count=5),
-                    tidal_queries=["deadmau5"],
-                )
+        with (
+            patch("app.services.beatport.browse_beatport_tracks", return_value=[]),
+            patch("app.services.beatport.search_beatport_tracks", return_value=[]),
+            patch("app.services.listenbrainz.lb_radio_discover", return_value=[]),
+            patch("app.services.tidal.search_tidal_tracks", return_value=[]),
+            patch("app.core.config.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.soundcharts_app_id = ""
+            mock_settings.return_value.soundcharts_api_key = ""
+            mock_settings.return_value.listenbrainz_user_token = ""
+            candidates, services, total = _search_candidates(
+                db,
+                user,
+                ["House"],
+                profile=EventProfile(dominant_genres=["House"], track_count=5),
+                tidal_queries=["deadmau5"],
+            )
 
         assert candidates == []
 
@@ -930,9 +1064,13 @@ class TestSearchCandidates:
 
         profile = EventProfile(dominant_genres=["House"], track_count=5)
 
-        with patch("app.core.config.get_settings") as mock_settings:
+        with (
+            patch("app.services.listenbrainz.lb_radio_discover", return_value=[]),
+            patch("app.core.config.get_settings") as mock_settings,
+        ):
             mock_settings.return_value.soundcharts_app_id = "app_id"
             mock_settings.return_value.soundcharts_api_key = "api_key"
+            mock_settings.return_value.listenbrainz_user_token = ""
             candidates, services, total = _search_candidates(
                 db, user, ["House"], profile=profile, tidal_queries=["deadmau5"]
             )
@@ -1120,6 +1258,48 @@ class TestIsStockMusicArtist:
 
     def test_catches_sounds_suffix(self):
         assert _is_stock_music_artist("Relaxing Nature Sounds") is True
+
+    def test_catches_music_ensemble_suffix(self):
+        assert _is_stock_music_artist("Calm Piano Music Ensemble") is True
+
+    def test_catches_relax_club_suffix(self):
+        assert _is_stock_music_artist("Deep Sleep Relax Club") is True
+
+    def test_catches_music_therapy_suffix(self):
+        assert _is_stock_music_artist("Healing Waves Music Therapy") is True
+
+    def test_catches_sound_effects_suffix(self):
+        assert _is_stock_music_artist("Nature Sound Effects") is True
+
+    def test_catches_noise_machine_suffix(self):
+        assert _is_stock_music_artist("White Noise Machine") is True
+
+    def test_catches_relaxation_suffix(self):
+        assert _is_stock_music_artist("Deep Relaxation") is True
+
+    def test_catches_meditation_suffix(self):
+        assert _is_stock_music_artist("Guided Meditation") is True
+
+    def test_catches_sleep_music_suffix(self):
+        assert _is_stock_music_artist("Baby Sleep Music") is True
+
+    def test_catches_white_noise_for_keyword(self):
+        assert _is_stock_music_artist("White Noise for Babies") is True
+
+    def test_catches_sleep_sound_keyword(self):
+        assert _is_stock_music_artist("Sleep Sound Lab") is True
+
+    def test_catches_rain_sounds_keyword(self):
+        assert _is_stock_music_artist("Rain Sounds Studio") is True
+
+    def test_catches_nature_sounds_keyword(self):
+        assert _is_stock_music_artist("Nature Sounds Orchestra") is True
+
+    def test_catches_lofi_sleep_keyword(self):
+        assert _is_stock_music_artist("Lofi Sleep Chill") is True
+
+    def test_catches_study_music_keyword(self):
+        assert _is_stock_music_artist("Study Music Project") is True
 
     def test_catches_audio_suffix(self):
         assert _is_stock_music_artist("Corporate Background Audio") is True

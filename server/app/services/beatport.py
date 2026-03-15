@@ -410,6 +410,142 @@ def search_beatport_tracks(
     return results
 
 
+def browse_beatport_tracks(
+    db: Session,
+    user: User,
+    genre_id: int,
+    bpm_min: int | None = None,
+    bpm_max: int | None = None,
+    key: str | None = None,
+    limit: int = 10,
+) -> list[BeatportSearchResult]:
+    """Browse Beatport catalog with structured genre/BPM/key filters.
+
+    Uses GET /v4/catalog/tracks/ instead of text search for precise filtering.
+    Results are cached like search results.
+    """
+    settings = get_settings()
+
+    # Build cache key from structured params
+    parts = [f"browse:g{genre_id}"]
+    if bpm_min is not None and bpm_max is not None:
+        parts.append(f"b{bpm_min}-{bpm_max}")
+    if key:
+        parts.append(f"k{key}")
+    cache_key = ":".join(parts)
+
+    # Check cache first
+    cached = (
+        db.query(SearchCache)
+        .filter(
+            SearchCache.query == cache_key,
+            SearchCache.source == "beatport",
+            SearchCache.expires_at > utcnow(),
+        )
+        .first()
+    )
+    if cached:
+        results_data = json.loads(cached.results_json)
+        return [BeatportSearchResult(**r) for r in results_data]
+
+    if not _refresh_token_if_needed(db, user):
+        return []
+
+    params: dict[str, str | int] = {
+        "genre_id": genre_id,
+        "per_page": limit,
+        "order_by": "-publish_date",
+    }
+    if bpm_min is not None:
+        params["bpm_min"] = bpm_min
+    if bpm_max is not None:
+        params["bpm_max"] = bpm_max
+    if key:
+        params["key"] = key
+
+    try:
+        with httpx.Client(timeout=HTTP_TIMEOUT) as client:
+            response = client.get(
+                f"{BEATPORT_API_BASE}/catalog/tracks/",
+                params=params,
+                headers={"Authorization": f"Bearer {user.beatport_access_token}"},
+            )
+            response.raise_for_status()
+            data = response.json()
+    except httpx.HTTPError as e:
+        logger.error("Beatport browse failed: %s", type(e).__name__)
+        return []
+
+    results = []
+    for track in data.get("results", []):
+        artists = ", ".join(a.get("name", "") for a in track.get("artists", []))
+        genre_name = None
+        if track.get("genre"):
+            genre_name = track["genre"].get("name")
+
+        track_id_str = str(track.get("id", ""))
+        slug = track.get("slug", "untitled")
+        beatport_url = BEATPORT_TRACK_URL.format(slug=slug, track_id=track_id_str)
+
+        cover_url = None
+        if track.get("image"):
+            cover_url = track["image"].get("uri")
+
+        # Beatport browse returns key as nested object with camelot fields
+        key_data = track.get("key")
+        key_str = None
+        if key_data:
+            camelot_num = key_data.get("camelot_number")
+            camelot_let = key_data.get("camelot_letter")
+            if camelot_num and camelot_let:
+                key_str = f"{camelot_num}{camelot_let}"
+            elif key_data.get("name"):
+                key_str = key_data["name"]
+
+        results.append(
+            BeatportSearchResult(
+                track_id=track_id_str,
+                title=track.get("name", ""),
+                artist=artists,
+                mix_name=track.get("mix_name"),
+                label=track.get("label", {}).get("name") if track.get("label") else None,
+                genre=genre_name,
+                bpm=track.get("bpm"),
+                key=key_str,
+                duration_seconds=_parse_duration(track.get("length")),
+                cover_url=cover_url,
+                beatport_url=beatport_url,
+                release_date=track.get("new_release_date") or track.get("publish_date"),
+            )
+        )
+
+    # Cache the results
+    if results:
+        expires_at = utcnow() + timedelta(hours=settings.search_cache_hours)
+        results_json = json.dumps([r.model_dump() for r in results])
+
+        existing = (
+            db.query(SearchCache)
+            .filter(SearchCache.query == cache_key, SearchCache.source == "beatport")
+            .first()
+        )
+        if existing:
+            existing.results_json = results_json
+            existing.expires_at = expires_at
+            existing.created_at = utcnow()
+        else:
+            cache_entry = SearchCache(
+                query=cache_key,
+                source="beatport",
+                results_json=results_json,
+                expires_at=expires_at,
+            )
+            db.add(cache_entry)
+        db.commit()
+
+    return results
+
+
 def get_beatport_track(db: Session, user: User, track_id: str) -> BeatportSearchResult | None:
     """Fetch a single track from Beatport by ID."""
     if not _refresh_token_if_needed(db, user):

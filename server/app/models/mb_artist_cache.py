@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.time import utcnow
@@ -15,3 +15,5 @@ class MbArtistCache(Base):
     mbid: Mapped[str | None] = mapped_column(String(36), nullable=True)
     verified: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    lb_listen_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lb_user_count: Mapped[int | None] = mapped_column(Integer, nullable=True)

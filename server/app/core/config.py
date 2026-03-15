@@ -106,6 +106,9 @@ class Settings(BaseSettings):
     soundcharts_app_id: str = ""
     soundcharts_api_key: str = ""
 
+    # ListenBrainz API (artist discovery for recommendations)
+    listenbrainz_user_token: str = ""
+
     # Anthropic API (LLM-powered recommendations)
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-haiku-4-5-20251001"
