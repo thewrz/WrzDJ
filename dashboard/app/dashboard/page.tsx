@@ -20,6 +20,9 @@ export default function DashboardPage() {
   const [newEventName, setNewEventName] = useState('');
   const [creating, setCreating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
+  const [deletingSelected, setDeletingSelected] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -69,6 +72,42 @@ export default function DashboardPage() {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to create event');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const toggleSelection = (code: string) => {
+    setSelectedEvents((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) {
+        next.delete(code);
+      } else {
+        next.add(code);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedEvents.size === events.length) {
+      setSelectedEvents(new Set());
+    } else {
+      setSelectedEvents(new Set(events.map((e) => e.code)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedEvents.size === 0) return;
+    if (!window.confirm(`Delete ${selectedEvents.size} event${selectedEvents.size === 1 ? '' : 's'}? This cannot be undone.`)) return;
+
+    setDeletingSelected(true);
+    try {
+      await api.bulkDeleteEvents([...selectedEvents]);
+      setSelectedEvents(new Set());
+      setEvents((prev) => prev.filter((e) => !selectedEvents.has(e.code)));
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to delete events');
+    } finally {
+      setDeletingSelected(false);
     }
   };
 
@@ -189,7 +228,49 @@ export default function DashboardPage() {
       <ActivityLogPanel entries={activityLog} />
 
       {/* Events */}
-      <h2 style={{ marginTop: '1.5rem', marginBottom: '1rem' }}>My Events</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0 }}>My Events</h2>
+        {events.length > 0 && (
+          <>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: '#9ca3af', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={selectionMode}
+                onChange={(e) => {
+                  setSelectionMode(e.target.checked);
+                  if (!e.target.checked) setSelectedEvents(new Set());
+                }}
+                style={{ accentColor: '#3b82f6' }}
+                aria-label="Advanced"
+              />
+              Advanced
+            </label>
+            {selectionMode && (
+              <>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: '#9ca3af', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedEvents.size === events.length && events.length > 0}
+                    onChange={toggleSelectAll}
+                    style={{ accentColor: '#3b82f6' }}
+                    aria-label="Select All"
+                  />
+                  Select All
+                </label>
+                {selectedEvents.size > 0 && (
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={handleBulkDelete}
+                    disabled={deletingSelected}
+                  >
+                    {deletingSelected ? 'Deleting...' : `Delete Selected (${selectedEvents.size})`}
+                  </button>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
       {loadingEvents ? (
         <div className="loading">Loading events...</div>
       ) : events.length === 0 ? (
@@ -199,20 +280,56 @@ export default function DashboardPage() {
       ) : (
         <div className="event-grid">
           {events.map((event) => (
-            <Link key={event.id} href={`/events/${event.code}`}>
-              <div className="event-card" style={{ cursor: 'pointer' }}>
-                <h3>{event.name}</h3>
-                <div className="code">{event.code}</div>
-                <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
-                  Expires: {new Date(event.expires_at).toLocaleString()}
-                </p>
-                {!event.is_active && (
-                  <span className="badge badge-rejected" style={{ marginTop: '0.5rem' }}>
-                    Inactive
-                  </span>
-                )}
+            selectionMode ? (
+              <div
+                key={event.id}
+                className="event-card"
+                style={{
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '0.75rem',
+                  outline: selectedEvents.has(event.code) ? '2px solid #3b82f6' : 'none',
+                }}
+                onClick={() => toggleSelection(event.code)}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedEvents.has(event.code)}
+                  onChange={() => toggleSelection(event.code)}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ accentColor: '#3b82f6', width: '1rem', height: '1rem', marginTop: '0.25rem', flexShrink: 0 }}
+                  aria-label={`Select event ${event.code}`}
+                />
+                <div>
+                  <h3>{event.name}</h3>
+                  <div className="code">{event.code}</div>
+                  <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+                    Expires: {new Date(event.expires_at).toLocaleString()}
+                  </p>
+                  {!event.is_active && (
+                    <span className="badge badge-rejected" style={{ marginTop: '0.5rem' }}>
+                      Inactive
+                    </span>
+                  )}
+                </div>
               </div>
-            </Link>
+            ) : (
+              <Link key={event.id} href={`/events/${event.code}`}>
+                <div className="event-card" style={{ cursor: 'pointer' }}>
+                  <h3>{event.name}</h3>
+                  <div className="code">{event.code}</div>
+                  <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+                    Expires: {new Date(event.expires_at).toLocaleString()}
+                  </p>
+                  {!event.is_active && (
+                    <span className="badge badge-rejected" style={{ marginTop: '0.5rem' }}>
+                      Inactive
+                    </span>
+                  )}
+                </div>
+              </Link>
+            )
           ))}
         </div>
       )}
