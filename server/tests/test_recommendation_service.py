@@ -2,17 +2,18 @@
 
 from unittest.mock import MagicMock, patch
 
+from app.services.recommendation.deduplication import (
+    deduplicate_against_requests,
+    deduplicate_against_template,
+    deduplicate_candidates,
+)
 from app.services.recommendation.llm_hooks import LLMSuggestionQuery
+from app.services.recommendation.query_builder import build_beatport_queries, build_tidal_queries
 from app.services.recommendation.scorer import EventProfile, TrackProfile
 from app.services.recommendation.service import (
     RecommendationResult,
     _apply_artist_diversity,
-    _build_beatport_queries,
     _build_llm_scoring_profile,
-    _build_tidal_queries,
-    _deduplicate_against_requests,
-    _deduplicate_against_template,
-    _deduplicate_candidates,
     _enforce_artist_cap,
     _filter_unverified_artists,
     _is_blocked_genre,
@@ -43,7 +44,7 @@ class TestBuildBeatportQueries:
             dominant_genres=["Tech House", "Progressive House", "Minimal"],
             track_count=10,
         )
-        queries = _build_beatport_queries(profile)
+        queries = build_beatport_queries(profile)
         assert "Tech House" in queries
         assert "Progressive House" in queries
         assert "Minimal" in queries
@@ -54,12 +55,12 @@ class TestBuildBeatportQueries:
             dominant_genres=["House"],
             track_count=5,
         )
-        queries = _build_beatport_queries(profile)
+        queries = build_beatport_queries(profile)
         assert any("128" in q for q in queries)
 
     def test_empty_profile(self):
         profile = EventProfile(track_count=0)
-        queries = _build_beatport_queries(profile)
+        queries = build_beatport_queries(profile)
         assert queries == []
 
     def test_max_three_queries(self):
@@ -68,7 +69,7 @@ class TestBuildBeatportQueries:
             dominant_genres=["A", "B", "C"],
             track_count=10,
         )
-        queries = _build_beatport_queries(profile)
+        queries = build_beatport_queries(profile)
         assert len(queries) <= 3
 
     def test_artist_fallback_when_no_genres(self):
@@ -81,7 +82,7 @@ class TestBuildBeatportQueries:
             TrackProfile(title="Song 4", artist="Stephan Bodzin", bpm=125.0),
             TrackProfile(title="Song 5", artist="deadmau5", bpm=132.0),
         ]
-        queries = _build_beatport_queries(profile, template_tracks=template_tracks)
+        queries = build_beatport_queries(profile, template_tracks=template_tracks)
         assert len(queries) >= 1
         # deadmau5 appears most, should be first
         assert queries[0] == "deadmau5"
@@ -95,7 +96,7 @@ class TestBuildBeatportQueries:
             TrackProfile(title="Song 2", artist="Various Artists"),
             TrackProfile(title="Song 3", artist="Real Artist", bpm=120.0),
         ]
-        queries = _build_beatport_queries(profile, template_tracks=template_tracks)
+        queries = build_beatport_queries(profile, template_tracks=template_tracks)
         assert "Unknown" not in queries
         assert "Various Artists" not in queries
         assert "Real Artist" in queries
@@ -106,7 +107,7 @@ class TestBuildBeatportQueries:
         template_tracks = [
             TrackProfile(title="Song", artist="deadmau5", genre="Tech House"),
         ]
-        queries = _build_beatport_queries(profile, template_tracks=template_tracks)
+        queries = build_beatport_queries(profile, template_tracks=template_tracks)
         assert "Tech House" in queries
         # Artist shouldn't be in queries when genres are available
         assert "deadmau5" not in queries
@@ -114,7 +115,7 @@ class TestBuildBeatportQueries:
     def test_no_bpm_only_fallback_without_genres(self):
         """BPM-only query should NOT be generated when there are no genres."""
         profile = EventProfile(avg_bpm=128.0, track_count=5)
-        queries = _build_beatport_queries(profile)
+        queries = build_beatport_queries(profile)
         # Without genres or template tracks, should return empty
         assert queries == []
 
@@ -131,7 +132,7 @@ class TestBuildTidalQueries:
             MagicMock(artist="Luke Bryan"),
             MagicMock(artist="Morgan Wallen"),
         ]
-        queries = _build_tidal_queries(profile, requests=requests)
+        queries = build_tidal_queries(profile, requests=requests)
         # Top artist gets slot 1
         assert queries[0] == "Luke Bryan"
         # Remaining slots filled with genre discovery, not more queue artists
@@ -146,7 +147,7 @@ class TestBuildTidalQueries:
             TrackProfile(title="Song 2", artist="deadmau5", bpm=130.0),
             TrackProfile(title="Song 3", artist="Zedd", bpm=126.0),
         ]
-        queries = _build_tidal_queries(profile, template_tracks=template_tracks)
+        queries = build_tidal_queries(profile, template_tracks=template_tracks)
         assert queries[0] == "deadmau5"  # Most frequent first
         # Slot 2 should be genre discovery, not another queue artist
         assert any("House" in q for q in queries[1:])
@@ -158,20 +159,20 @@ class TestBuildTidalQueries:
             MagicMock(artist="Various Artists"),
             MagicMock(artist="Real Artist"),
         ]
-        queries = _build_tidal_queries(profile, requests=requests)
+        queries = build_tidal_queries(profile, requests=requests)
         assert "Unknown" not in queries
         assert "Various Artists" not in queries
         assert "Real Artist" in queries
 
     def test_empty_sources(self):
         profile = EventProfile(track_count=0)
-        queries = _build_tidal_queries(profile)
+        queries = build_tidal_queries(profile)
         assert queries == []
 
     def test_max_three_queries(self):
         profile = EventProfile(track_count=5)
         requests = [MagicMock(artist=f"Artist {i}") for i in range(10)]
-        queries = _build_tidal_queries(profile, requests=requests)
+        queries = build_tidal_queries(profile, requests=requests)
         assert len(queries) <= 3
 
     def test_combines_requests_and_template(self):
@@ -181,7 +182,7 @@ class TestBuildTidalQueries:
         template_tracks = [
             TrackProfile(title="Song", artist="Artist B", bpm=128.0),
         ]
-        queries = _build_tidal_queries(profile, requests=requests, template_tracks=template_tracks)
+        queries = build_tidal_queries(profile, requests=requests, template_tracks=template_tracks)
         # Top artist gets slot 1; remaining artist fills fallback slot (no genres)
         assert "Artist A" in queries or "Artist B" in queries
         assert len(queries) <= 3
@@ -196,13 +197,13 @@ class TestDeduplicateAgainstTemplate:
         template = [
             TrackProfile(title="Strobe", artist="deadmau5", source="tidal"),
         ]
-        result = _deduplicate_against_template(candidates, template)
+        result = deduplicate_against_template(candidates, template)
         assert len(result) == 1
         assert result[0].title == "New Track"
 
     def test_empty_template(self):
         candidates = [TrackProfile(title="Track", artist="Artist")]
-        result = _deduplicate_against_template(candidates, [])
+        result = deduplicate_against_template(candidates, [])
         assert len(result) == 1
 
 
@@ -213,13 +214,13 @@ class TestDeduplicateAgainstRequests:
             TrackProfile(title="New Track", artist="Different Artist"),
         ]
         requests = [MagicMock(song_title="Already Requested", artist="Same Artist")]
-        result = _deduplicate_against_requests(candidates, requests)
+        result = deduplicate_against_requests(candidates, requests)
         assert len(result) == 1
         assert result[0].title == "New Track"
 
     def test_empty_requests(self):
         candidates = [TrackProfile(title="Track", artist="Artist")]
-        result = _deduplicate_against_requests(candidates, [])
+        result = deduplicate_against_requests(candidates, [])
         assert len(result) == 1
 
 
@@ -230,7 +231,7 @@ class TestDeduplicateCandidates:
             TrackProfile(title="Same Track", artist="Same Artist", source="tidal"),
             TrackProfile(title="Different Track", artist="Other Artist"),
         ]
-        result = _deduplicate_candidates(candidates)
+        result = deduplicate_candidates(candidates)
         assert len(result) == 2
 
     def test_no_duplicates(self):
@@ -238,7 +239,7 @@ class TestDeduplicateCandidates:
             TrackProfile(title="Strobe", artist="deadmau5"),
             TrackProfile(title="Clarity", artist="Zedd"),
         ]
-        result = _deduplicate_candidates(candidates)
+        result = deduplicate_candidates(candidates)
         assert len(result) == 2
 
 
@@ -405,7 +406,7 @@ class TestCoverDetection:
                 artist="Big & Rich",
             ),
         ]
-        result = _deduplicate_against_requests(candidates, requests)
+        result = deduplicate_against_requests(candidates, requests)
         assert len(result) == 0
 
     def test_same_artist_not_filtered(self):
@@ -414,7 +415,7 @@ class TestCoverDetection:
             TrackProfile(title="Some Song", artist="Real Artist", source="tidal"),
         ]
         requests = [MagicMock(song_title="Some Song", artist="Real Artist")]
-        result = _deduplicate_against_requests(candidates, requests)
+        result = deduplicate_against_requests(candidates, requests)
         assert len(result) == 0
 
     def test_different_title_and_artist_passes(self):
@@ -423,7 +424,7 @@ class TestCoverDetection:
             TrackProfile(title="New Song", artist="New Artist", source="tidal"),
         ]
         requests = [MagicMock(song_title="Old Song", artist="Old Artist")]
-        result = _deduplicate_against_requests(candidates, requests)
+        result = deduplicate_against_requests(candidates, requests)
         assert len(result) == 1
 
 
@@ -1192,7 +1193,7 @@ class TestDiversifiedTidalQueries:
             MagicMock(artist="deadmau5"),
             MagicMock(artist="Zedd"),
         ]
-        queries = _build_tidal_queries(profile, requests=requests)
+        queries = build_tidal_queries(profile, requests=requests)
         assert queries[0] == "deadmau5"
         assert "House music" in queries
         assert len(queries) == 3
@@ -1205,7 +1206,7 @@ class TestDiversifiedTidalQueries:
             MagicMock(artist="Artist B"),
             MagicMock(artist="Artist C"),
         ]
-        queries = _build_tidal_queries(profile, requests=requests)
+        queries = build_tidal_queries(profile, requests=requests)
         assert queries[0] == "Artist A"
         assert "Artist B" in queries
         assert "Artist C" in queries
@@ -1221,7 +1222,7 @@ class TestDiversifiedTidalQueries:
             MagicMock(artist="Zedd"),
             MagicMock(artist="Avicii"),
         ]
-        queries = _build_tidal_queries(profile, requests=requests)
+        queries = build_tidal_queries(profile, requests=requests)
         assert queries[0] == "deadmau5"
         assert "Progressive House music" in queries
         # Third slot falls back to next artist

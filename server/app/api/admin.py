@@ -52,6 +52,7 @@ from app.services.system_settings import get_system_settings, update_system_sett
 logger = logging.getLogger(__name__)
 
 # Hardcoded fallback model list (used when Anthropic API is unreachable)
+# Last updated: 2026-03-15. Update when new Claude models release.
 FALLBACK_MODELS = [
     AIModelInfo(id="claude-haiku-4-5-20251001", name="Claude Haiku 4.5"),
     AIModelInfo(id="claude-sonnet-4-5-20250929", name="Claude Sonnet 4.5"),
