@@ -121,7 +121,7 @@ def _call_spotify_api(query: str) -> list[SearchResult]:
             else:
                 logger.error(f"Spotify API timeout after {MAX_RETRIES + 1} attempts: {e}")
         except Exception as e:
-            logger.error(f"Spotify API error: {e}")
+            logger.error("Spotify API error: %s: %s", type(e).__name__, e)
             return []
 
     if response is None:
@@ -161,6 +161,7 @@ def _call_spotify_api(query: str) -> list[SearchResult]:
 
         if title and artist:
             url = f"https://open.spotify.com/track/{spotify_id}" if spotify_id else None
+            isrc = track.get("external_ids", {}).get("isrc")
             results.append(
                 SearchResult(
                     artist=artist,
@@ -171,6 +172,7 @@ def _call_spotify_api(query: str) -> list[SearchResult]:
                     album_art=album_art,
                     preview_url=preview_url,
                     url=url,
+                    isrc=isrc,
                 )
             )
 

@@ -160,7 +160,7 @@ export function DjSongSearchModal({ code, onSongAdded, onClose }: DjSongSearchMo
                     }}
                   >
                     <span style={{ fontSize: '1.5rem' }}>
-                      {result.source === 'beatport' ? 'B' : 'S'}
+                      {result.source === 'beatport' ? 'B' : result.source === 'tidal' ? 'T' : 'S'}
                     </span>
                   </div>
                 )}

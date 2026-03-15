@@ -73,3 +73,6 @@ test-results/
 
 # LLM plan files
 llm-plans*.md
+
+# Development notes (feature brainstorms, scratch)
+notes/

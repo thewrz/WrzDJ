@@ -24,6 +24,10 @@ class TidalSearchResult(BaseModel):
     duration_seconds: int | None = None
     cover_url: str | None = None
     tidal_url: str | None = None
+    popularity: int = 0
+    isrc: str | None = None
+    version: str | None = None
+    explicit: bool = False
 
 
 class TidalSyncResult(BaseModel):

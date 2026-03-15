@@ -9,6 +9,8 @@ import { PreviewPlayer } from '@/components/PreviewPlayer';
 import { computeBpmContext } from '@/lib/bpm-stats';
 import { getRequestEmphasisStyle } from '@/lib/request-emphasis';
 import { getVoteHeatStyle } from '@/lib/vote-heat';
+import { formatPriorityScore, getPriorityScoreColor } from '@/lib/priority-score';
+import type { SortMode } from '@/lib/priority-score';
 
 interface RequestQueueSectionProps {
   requests: SongRequest[];
@@ -30,6 +32,8 @@ interface RequestQueueSectionProps {
   rejectingAll?: boolean;
   deletingRequest?: number | null;
   refreshingRequest?: number | null;
+  sortMode: SortMode;
+  onSortModeChange: (mode: SortMode) => void;
 }
 
 export function RequestQueueSection({
@@ -52,6 +56,8 @@ export function RequestQueueSection({
   rejectingAll,
   deletingRequest,
   refreshingRequest,
+  sortMode,
+  onSortModeChange,
 }: RequestQueueSectionProps) {
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [advancedMode, setAdvancedMode] = useState(false);
@@ -79,6 +85,8 @@ export function RequestQueueSection({
 
   const filteredRequests = useMemo(() => {
     const filtered = requests.filter((r) => (filter === 'all' ? true : r.status === filter));
+    // In priority mode, API returns pre-sorted results — preserve that order
+    if (sortMode === 'priority') return filtered;
     if (filter === 'all') {
       return [...filtered].sort((a, b) => {
         const aBottom = a.status === 'played' ? 1 : 0;
@@ -87,7 +95,7 @@ export function RequestQueueSection({
       });
     }
     return filtered;
-  }, [requests, filter]);
+  }, [requests, filter, sortMode]);
 
   const handleDeleteAll = async () => {
     const count = filteredRequests.length;
@@ -130,6 +138,15 @@ export function RequestQueueSection({
         </div>
         {!isExpiredOrArchived && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginLeft: 'auto' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: sortMode === 'priority' ? '#4ade80' : '#9ca3af', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={sortMode === 'priority'}
+                onChange={(e) => onSortModeChange(e.target.checked ? 'priority' : 'chronological')}
+                style={{ accentColor: '#4ade80' }}
+              />
+              Best Match
+            </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: '#9ca3af', cursor: 'pointer' }}>
               <input
                 type="checkbox"
@@ -297,6 +314,21 @@ export function RequestQueueSection({
                       }}
                     >
                       {request.vote_count} {request.vote_count === 1 ? 'vote' : 'votes'}
+                    </span>
+                  )}
+                  {sortMode === 'priority' && request.priority_score != null && (
+                    <span
+                      style={{
+                        background: getPriorityScoreColor(request.priority_score),
+                        color: '#fff',
+                        padding: '0.125rem 0.5rem',
+                        borderRadius: '1rem',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                      }}
+                      title="Priority score: votes + wait time + harmonic fit + BPM energy"
+                    >
+                      {formatPriorityScore(request.priority_score)}
                     </span>
                   )}
                 </div>

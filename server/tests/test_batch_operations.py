@@ -1,13 +1,17 @@
-"""Tests for batch request operations (reject-all, bulk delete)."""
+"""Tests for batch operations (reject-all, bulk delete requests, bulk delete events)."""
+
+from datetime import timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.core.time import utcnow
 from app.models.event import Event
 from app.models.request import Request, RequestStatus
 from app.models.request_vote import RequestVote
 from app.models.user import User
 from app.services.auth import get_password_hash
+from app.services.event import bulk_delete_events
 from app.services.request import bulk_delete_requests, reject_all_new_requests
 
 
@@ -219,3 +223,226 @@ class TestBulkDeleteEndpoint:
         )
         assert response.status_code == 200
         assert response.json()["count"] == 0
+
+
+def _create_event(db: Session, user: User, code: str, name: str = "Test Event") -> Event:
+    """Helper to create an event for bulk delete tests."""
+    event = Event(
+        code=code,
+        name=name,
+        created_by_user_id=user.id,
+        expires_at=utcnow() + timedelta(hours=6),
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+class TestBulkDeleteEvents:
+    """Tests for bulk_delete_events service function."""
+
+    def test_bulk_delete_events_all_owned(self, db: Session, test_user: User):
+        e1 = _create_event(db, test_user, "EVT01")
+        e2 = _create_event(db, test_user, "EVT02")
+
+        count = bulk_delete_events(db, ["EVT01", "EVT02"], user=test_user)
+        assert count == 2
+
+        remaining = db.query(Event).filter(Event.id.in_([e1.id, e2.id])).count()
+        assert remaining == 0
+
+    def test_bulk_delete_events_not_owned_fails(self, db: Session, test_user: User):
+        other_user = User(
+            username="otheruser",
+            password_hash=get_password_hash("password123"),
+            role="dj",
+        )
+        db.add(other_user)
+        db.commit()
+
+        _create_event(db, test_user, "EVT01")
+        e_other = _create_event(db, other_user, "EVT02")
+
+        try:
+            bulk_delete_events(db, ["EVT01", "EVT02"], user=test_user)
+            assert False, "Should have raised ValueError"
+        except ValueError as e:
+            assert "not found" in str(e).lower() or "not owned" in str(e).lower()
+
+        # Verify NONE were deleted (atomic)
+        assert db.query(Event).filter(Event.code == "EVT01").count() == 1
+        assert db.query(Event).filter(Event.id == e_other.id).count() == 1
+
+    def test_bulk_delete_events_not_found_fails(self, db: Session, test_user: User):
+        _create_event(db, test_user, "EVT01")
+
+        try:
+            bulk_delete_events(db, ["EVT01", "NONEXIST"], user=test_user)
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
+
+        # EVT01 should still exist (atomic)
+        assert db.query(Event).filter(Event.code == "EVT01").count() == 1
+
+    def test_bulk_delete_events_no_user_skips_ownership(self, db: Session, test_user: User):
+        """Admin mode: user=None deletes any event regardless of owner."""
+        other_user = User(
+            username="otheruser2",
+            password_hash=get_password_hash("password123"),
+            role="dj",
+        )
+        db.add(other_user)
+        db.commit()
+
+        _create_event(db, test_user, "EVT01")
+        _create_event(db, other_user, "EVT02")
+
+        count = bulk_delete_events(db, ["EVT01", "EVT02"], user=None)
+        assert count == 2
+
+    def test_bulk_delete_events_cascades_children(self, db: Session, test_user: User):
+        event = _create_event(db, test_user, "EVT01")
+        req = Request(
+            event_id=event.id,
+            song_title="Song",
+            artist="Artist",
+            source="manual",
+            status="new",
+            dedupe_key="dedupe_cascade_test",
+        )
+        db.add(req)
+        db.commit()
+        db.refresh(req)
+        req_id = req.id
+        event_id = event.id
+
+        vote = RequestVote(request_id=req_id, client_fingerprint="fp123")
+        db.add(vote)
+        db.commit()
+
+        count = bulk_delete_events(db, ["EVT01"], user=test_user)
+        assert count == 1
+        assert db.query(Request).filter(Request.event_id == event_id).count() == 0
+        assert db.query(RequestVote).filter(RequestVote.request_id == req_id).count() == 0
+
+    def test_bulk_delete_events_empty_after_validation(self, db: Session, test_user: User):
+        _create_event(db, test_user, "EVT01")
+        _create_event(db, test_user, "EVT02")
+        _create_event(db, test_user, "EVT03")
+
+        count = bulk_delete_events(db, ["EVT01", "EVT02", "EVT03"], user=test_user)
+        assert count == 3
+        assert db.query(Event).filter(Event.created_by_user_id == test_user.id).count() == 0
+
+
+class TestBulkDeleteEventsEndpoint:
+    """Tests for POST /api/events/bulk-delete."""
+
+    def test_bulk_delete_success(
+        self, client: TestClient, auth_headers: dict, test_user: User, db: Session
+    ):
+        _create_event(db, test_user, "EVT01")
+        _create_event(db, test_user, "EVT02")
+
+        response = client.post(
+            "/api/events/bulk-delete",
+            headers=auth_headers,
+            json={"codes": ["EVT01", "EVT02"]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["count"] == 2
+
+    def test_bulk_delete_not_owned(self, client: TestClient, auth_headers: dict, db: Session):
+        other_user = User(
+            username="otherdjuser",
+            password_hash=get_password_hash("password123"),
+            role="dj",
+        )
+        db.add(other_user)
+        db.commit()
+        _create_event(db, other_user, "OTHER1")
+
+        response = client.post(
+            "/api/events/bulk-delete",
+            headers=auth_headers,
+            json={"codes": ["OTHER1"]},
+        )
+        assert response.status_code == 404
+
+    def test_bulk_delete_not_found(self, client: TestClient, auth_headers: dict):
+        response = client.post(
+            "/api/events/bulk-delete",
+            headers=auth_headers,
+            json={"codes": ["NONEXIST"]},
+        )
+        assert response.status_code == 404
+
+    def test_bulk_delete_no_auth(self, client: TestClient):
+        response = client.post(
+            "/api/events/bulk-delete",
+            json={"codes": ["EVT01"]},
+        )
+        assert response.status_code == 401
+
+    def test_bulk_delete_empty_codes(self, client: TestClient, auth_headers: dict):
+        response = client.post(
+            "/api/events/bulk-delete",
+            headers=auth_headers,
+            json={"codes": []},
+        )
+        assert response.status_code == 422
+
+    def test_bulk_delete_pending_user(self, client: TestClient, pending_headers: dict):
+        response = client.post(
+            "/api/events/bulk-delete",
+            headers=pending_headers,
+            json={"codes": ["EVT01"]},
+        )
+        assert response.status_code == 403
+
+
+class TestAdminBulkDeleteEventsEndpoint:
+    """Tests for POST /api/admin/events/bulk-delete."""
+
+    def test_admin_bulk_delete_success(
+        self, client: TestClient, admin_headers: dict, test_user: User, db: Session
+    ):
+        _create_event(db, test_user, "EVT01")
+        _create_event(db, test_user, "EVT02")
+
+        response = client.post(
+            "/api/admin/events/bulk-delete",
+            headers=admin_headers,
+            json={"codes": ["EVT01", "EVT02"]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["count"] == 2
+
+    def test_admin_bulk_delete_not_found(self, client: TestClient, admin_headers: dict):
+        response = client.post(
+            "/api/admin/events/bulk-delete",
+            headers=admin_headers,
+            json={"codes": ["NONEXIST"]},
+        )
+        assert response.status_code == 404
+
+    def test_admin_bulk_delete_no_auth(self, client: TestClient):
+        response = client.post(
+            "/api/admin/events/bulk-delete",
+            json={"codes": ["EVT01"]},
+        )
+        assert response.status_code == 401
+
+    def test_admin_bulk_delete_non_admin(self, client: TestClient, auth_headers: dict):
+        response = client.post(
+            "/api/admin/events/bulk-delete",
+            headers=auth_headers,
+            json={"codes": ["EVT01"]},
+        )
+        assert response.status_code == 403

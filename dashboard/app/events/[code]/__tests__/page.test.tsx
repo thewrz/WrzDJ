@@ -199,7 +199,7 @@ function mockRequest(overrides: Partial<SongRequest> = {}): SongRequest {
     status: 'new', created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z', raw_search_query: null,
     sync_results_json: null, genre: null, bpm: null, musical_key: null,
-    vote_count: 0, ...overrides,
+    vote_count: 0, priority_score: null, ...overrides,
   };
 }
 

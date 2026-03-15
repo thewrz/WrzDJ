@@ -296,6 +296,14 @@ export function RecommendationsCard({
             }${generateState === 'idle' && !loading ? ' btn-complete-fade' : ''}`}
             onClick={handleGenerate}
             disabled={!canGenerate}
+            title={!canGenerate ? (
+              !hasConnectedServices ? 'Link Tidal or Beatport first'
+                : mode === 'requests' && !hasAcceptedRequests ? 'Accept some requests first'
+                : mode === 'template' && !selectedPlaylist ? 'Select a playlist first'
+                : mode === 'llm' && llmPrompt.trim().length < 3 ? 'Enter a prompt (3+ characters)'
+                : loading ? 'Generation in progress'
+                : undefined
+            ) : undefined}
           >
             {generateState === 'working'
               ? 'Working...'
@@ -321,14 +329,17 @@ export function RecommendationsCard({
           >
             From Playlist
           </button>
-          {llmAvailable && (
-            <button
-              style={modeButtonStyle(mode === 'llm')}
-              onClick={() => handleModeChange('llm')}
-            >
-              AI Assist
-            </button>
-          )}
+          <button
+            style={{
+              ...modeButtonStyle(mode === 'llm'),
+              ...((!llmAvailable && mode !== 'llm') ? { opacity: 0.4, cursor: 'not-allowed' } : {}),
+            }}
+            onClick={() => llmAvailable && handleModeChange('llm')}
+            disabled={!llmAvailable && mode !== 'llm'}
+            title={!llmAvailable ? 'Generate suggestions first to unlock AI Assist' : undefined}
+          >
+            AI Assist
+          </button>
         </div>
       )}
 
@@ -470,7 +481,9 @@ export function RecommendationsCard({
           {profile.dominant_genres.length > 0 && (
             <span>{profile.dominant_genres.join(', ')}</span>
           )}
-          <span>{profile.enriched_count}/{profile.track_count} enriched</span>
+          <span title="Tracks with BPM, key, and genre metadata available for scoring">
+            {profile.enriched_count}/{profile.track_count} with metadata
+          </span>
         </div>
       )}
 
@@ -543,8 +556,32 @@ export function RecommendationsCard({
                     />
                     <KeyBadge musicalKey={track.key} />
                     <GenreBadge genre={track.genre} />
-                    <span style={{ color: '#3b82f6', fontSize: '0.7rem' }}>
-                      {track.score.toFixed(2)}
+                    {/* Source badge */}
+                    <span style={{
+                      background: track.source === 'beatport' ? '#00b85533' : track.source === 'tidal' ? '#0066ff33' : '#1db95433',
+                      color: track.source === 'beatport' ? '#00b855' : track.source === 'tidal' ? '#6699ff' : '#1db954',
+                      padding: '0.0625rem 0.375rem',
+                      borderRadius: '0.25rem',
+                      fontSize: '0.625rem',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                    }}>
+                      {track.source === 'beatport' ? 'BP' : track.source === 'tidal' ? 'TL' : 'SP'}
+                    </span>
+                    {/* Score indicator with component breakdown tooltip */}
+                    <span
+                      title={`Match: ${Math.round(track.score * 100)}%\nBPM: ${Math.round(track.bpm_score * 100)}%  Key: ${Math.round(track.key_score * 100)}%  Genre: ${Math.round(track.genre_score * 100)}%`}
+                      style={{
+                        background: track.score >= 0.8 ? '#10b98133' : track.score >= 0.6 ? '#f59e0b33' : '#6b728033',
+                        color: track.score >= 0.8 ? '#10b981' : track.score >= 0.6 ? '#f59e0b' : '#9ca3af',
+                        padding: '0.0625rem 0.375rem',
+                        borderRadius: '0.25rem',
+                        fontSize: '0.625rem',
+                        fontWeight: 600,
+                        cursor: 'help',
+                      }}
+                    >
+                      {Math.round(track.score * 100)}%
                     </span>
                     {track.mb_verified && (
                       <span style={{

@@ -30,7 +30,7 @@ from app.services.recommendation.scorer import (
     build_event_profile,
     rank_candidates,
 )
-from app.services.track_normalizer import artist_match_score
+from app.services.track_normalizer import artist_match_score, split_artists
 from app.services.version_filter import is_unwanted_version
 
 logger = logging.getLogger(__name__)
@@ -46,11 +46,15 @@ _build_tidal_queries = build_tidal_queries  # noqa: F841
 SEARCH_LIMIT = 10
 
 # Penalty multiplier for candidates matching a source artist (already in queue)
-SOURCE_ARTIST_PENALTY = 0.70
+SOURCE_ARTIST_PENALTY = 0.50
 # Base penalty for repeated artists among candidates (compounds per occurrence)
 REPEAT_ARTIST_BASE_PENALTY = 0.75
 # Fuzzy match threshold for artist matching
 ARTIST_MATCH_THRESHOLD = 0.85
+# Hard cap on tracks per artist in final output
+MAX_PER_ARTIST = 2
+# Over-fetch multiplier: score more candidates before applying diversity + cap
+OVERFETCH_MULTIPLIER = 3
 
 # Genres that indicate non-music or DJ utility tracks
 BLOCKED_GENRES = {
@@ -63,6 +67,14 @@ BLOCKED_GENRES = {
     "sound effects",
     "stems",
     "samples",
+    "meditation",
+    "sleep",
+    "white noise",
+    "nature recordings",
+    "asmr",
+    "binaural",
+    "healing",
+    "spa",
 }
 
 
@@ -86,7 +98,93 @@ BLOCKED_TITLE_KEYWORDS = [
     "no click",
     "practice track",
     "minus one",
+    # Stock/royalty-free music indicators
+    "music bed",
+    "production music",
+    "royalty free",
+    "royalty-free",
+    "stock music",
+    "library music",
+    "music for",  # "[Genre] Music for [Purpose]" = stock/library music pattern
+    "cinematic music",
+    "background music",
+    "meditation music",
+    "sleep music",
+    "study music",
+    # Functional/wellness music (not DJ material)
+    "relaxation music",
+    "healing music",
+    "yoga music",
+    "spa music",
+    "massage music",
+    "therapy music",
+    "reiki music",
+    # Non-music audio content
+    "binaural beats",
+    "white noise",
+    "pink noise",
+    "brown noise",
+    "rain sounds",
+    "ocean waves",
+    "nature sounds",
+    "sleep sounds",
+    "asmr",
+    "solfeggio",
+    "isochronic",
+    # Production format terms (only appear in stock/library music)
+    "underscore",
+    "stinger",
+    "bumper",
+    "audio logo",
+    "jingle",
+    "seamless loop",
+    "music loop",
+    # Practice/stripped track variants
+    "play along",
+    "bassless",
+    "guitarless",
+    "no vocals",
+    "no drums",
 ]
+
+# Suffixes/keywords that indicate stock music artist names
+_STOCK_ARTIST_SUFFIXES = [
+    " music zone",
+    " music bed",
+    " music group",
+    " beats",
+    " sounds",
+    " audio",
+    " productions",
+    " music ensemble",
+    " relax club",
+    " music therapy",
+    " sound effects",
+    " noise machine",
+    " sound library",
+    " relaxation",
+    " meditation",
+    " sleep music",
+]
+_STOCK_ARTIST_KEYWORDS = [
+    "brainrot",
+    "royalty free",
+    "royalty-free",
+    "white noise for",
+    "sleep sound",
+    "rain sounds",
+    "nature sounds",
+    "lofi sleep",
+    "study music",
+]
+
+
+def _is_stock_music_artist(artist: str) -> bool:
+    """Check if an artist name matches stock/royalty-free music patterns."""
+    lower = artist.lower().strip()
+    return any(lower.endswith(s) for s in _STOCK_ARTIST_SUFFIXES) or any(
+        kw in lower for kw in _STOCK_ARTIST_KEYWORDS
+    )
 
 
 def _is_junk_candidate(title: str, artist: str) -> bool:
@@ -218,8 +316,8 @@ def _apply_artist_diversity(
                     break
 
             if count > 0:
-                # 1st dup -> 0.75, 2nd dup -> 0.65, 3rd -> 0.55, floor at 0.50
-                penalty = max(REPEAT_ARTIST_BASE_PENALTY - 0.10 * (count - 1), 0.50)
+                # 1st dup -> 0.75, 2nd dup -> 0.65, 3rd -> 0.55, 4th -> 0.45, floor at 0.30
+                penalty = max(REPEAT_ARTIST_BASE_PENALTY - 0.10 * (count - 1), 0.30)
                 multiplier *= penalty
 
             artist_seen_count[matched_key] = count + 1
@@ -237,6 +335,44 @@ def _apply_artist_diversity(
 
     adjusted.sort(key=lambda s: s.score, reverse=True)
     return adjusted
+
+
+def _enforce_artist_cap(
+    scored: list[ScoredTrack],
+    max_per_artist: int,
+) -> list[ScoredTrack]:
+    """Enforce a hard cap on tracks per artist in the final output.
+
+    Iterates through scored tracks (already sorted by score descending)
+    and skips any track whose artist has already appeared max_per_artist
+    times. Uses fuzzy matching to consolidate name variations.
+    """
+    artist_counts: dict[str, int] = {}
+    capped: list[ScoredTrack] = []
+
+    for st in scored:
+        artist_key = st.profile.artist.lower() if st.profile.artist else ""
+
+        # Empty-artist tracks are always allowed through (no meaningful cap)
+        if not artist_key:
+            capped.append(st)
+            continue
+
+        # Find canonical key via fuzzy matching against already-seen artists
+        matched_key = artist_key
+        for seen_key in artist_counts:
+            if artist_match_score(artist_key, seen_key) >= ARTIST_MATCH_THRESHOLD:
+                matched_key = seen_key
+                break
+
+        count = artist_counts.get(matched_key, 0)
+        if count >= max_per_artist:
+            continue
+
+        artist_counts[matched_key] = count + 1
+        capped.append(st)
+
+    return capped
 
 
 @dataclass
@@ -268,18 +404,317 @@ def _get_accepted_played_requests(db: Session, event: Event) -> list[Request]:
     )
 
 
+def _get_rejected_requests(db: Session, event: Event) -> list[Request]:
+    """Fetch rejected requests for the event (most recent first, capped at 20)."""
+    return (
+        db.query(Request)
+        .filter(
+            Request.event_id == event.id,
+            Request.status == RequestStatus.REJECTED.value,
+        )
+        .order_by(Request.created_at.desc())
+        .limit(20)
+        .all()
+    )
+
+
+def _get_currently_playing(db: Session, event: Event) -> Request | None:
+    """Fetch the currently playing request for the event, if any."""
+    return (
+        db.query(Request)
+        .filter(
+            Request.event_id == event.id,
+            Request.status == RequestStatus.PLAYING.value,
+        )
+        .first()
+    )
+
+
+def _filter_beatport_result(r) -> bool:
+    """Check if a Beatport result should be included (passes all filters)."""
+    if is_unwanted_version(r.title):
+        return False
+    if _is_blocked_genre(r.genre):
+        return False
+    if _is_junk_candidate(r.title, r.artist):
+        return False
+    if _is_stock_music_artist(r.artist):
+        return False
+    return True
+
+
+def _beatport_result_to_profile(r) -> TrackProfile:
+    """Convert a BeatportSearchResult to a TrackProfile."""
+    return TrackProfile(
+        title=r.title,
+        artist=r.artist,
+        bpm=float(r.bpm) if r.bpm else None,
+        key=r.key,
+        genre=r.genre,
+        source="beatport",
+        track_id=r.track_id,
+        url=r.beatport_url,
+        cover_url=r.cover_url,
+        duration_seconds=r.duration_seconds,
+    )
+
+
+def _search_beatport_structured(
+    db: Session,
+    user: User,
+    profile: EventProfile,
+) -> tuple[list[TrackProfile], int]:
+    """Search Beatport using structured genre/BPM/key browse.
+
+    Falls back to text search if no genre IDs can be resolved.
+    Returns (candidates, total_searched).
+    """
+    from app.services.beatport import browse_beatport_tracks
+    from app.services.recommendation.beatport_genres import resolve_genre_id
+
+    candidates: list[TrackProfile] = []
+    total_searched = 0
+
+    # Calculate BPM range from profile
+    bpm_min = int(profile.avg_bpm - 15) if profile.avg_bpm else None
+    bpm_max = int(profile.avg_bpm + 15) if profile.avg_bpm else None
+
+    # Resolve genre strings to Beatport IDs (deduplicate IDs)
+    seen_genre_ids: set[int] = set()
+    for genre in profile.dominant_genres[:3]:
+        genre_id = resolve_genre_id(genre)
+        if genre_id is None or genre_id in seen_genre_ids:
+            continue
+        seen_genre_ids.add(genre_id)
+
+        results = browse_beatport_tracks(
+            db, user, genre_id=genre_id, bpm_min=bpm_min, bpm_max=bpm_max, limit=SEARCH_LIMIT
+        )
+        for r in results:
+            if _filter_beatport_result(r):
+                candidates.append(_beatport_result_to_profile(r))
+        total_searched += len(results)
+
+    return candidates, total_searched
+
+
+def _search_beatport_text(
+    db: Session,
+    user: User,
+    queries: list[str],
+) -> tuple[list[TrackProfile], int]:
+    """Search Beatport using text queries (fallback for LLM-generated queries)."""
+    from app.services.beatport import search_beatport_tracks
+
+    candidates: list[TrackProfile] = []
+    total_searched = 0
+    failures = 0
+
+    for query in queries:
+        results = search_beatport_tracks(db, user, query, limit=SEARCH_LIMIT)
+        if not results:
+            failures += 1
+            if failures >= 2:
+                logger.warning("Beatport text search failing repeatedly, skipping remaining")
+                break
+            continue
+        for r in results:
+            if _filter_beatport_result(r):
+                candidates.append(_beatport_result_to_profile(r))
+        total_searched += len(results)
+
+    return candidates, total_searched
+
+
+def _build_lb_prompts(
+    profile: EventProfile,
+    requests: list | None = None,
+    template_tracks: list[TrackProfile] | None = None,
+) -> list[str]:
+    """Build ListenBrainz Radio prompts from the event profile.
+
+    Returns up to 3 prompts: artist-based (from queue) and tag-based (from genres).
+    """
+    prompts: list[str] = []
+
+    # Collect unique artists from requests or template tracks
+    artist_counts: dict[str, int] = {}
+    if requests:
+        for req in requests:
+            artist = getattr(req, "artist", None)
+            if artist:
+                for individual in split_artists(artist):
+                    key = individual.strip()
+                    if key.lower() not in ("unknown", "various artists", ""):
+                        artist_counts[key] = artist_counts.get(key, 0) + 1
+    if template_tracks:
+        for t in template_tracks:
+            if t.artist:
+                for individual in split_artists(t.artist):
+                    key = individual.strip()
+                    if key.lower() not in ("unknown", "various artists", ""):
+                        artist_counts[key] = artist_counts.get(key, 0) + 1
+
+    top_artists = sorted(artist_counts, key=artist_counts.get, reverse=True)  # type: ignore[arg-type]
+
+    # Prompt 1: top artist from the queue (similar-artist discovery)
+    if top_artists:
+        prompts.append(f"artist:({top_artists[0]})")
+
+    # Prompt 2-3: genre tags for broader discovery
+    for genre in profile.dominant_genres[:2]:
+        if len(prompts) >= 3:
+            break
+        # Clean genre for LB tag format (lowercase, strip parentheticals)
+        tag = genre.split("(")[0].strip().lower()
+        if tag:
+            prompts.append(f"tag:({tag})")
+
+    # Fallback: more artists if no genres
+    if len(prompts) < 2:
+        for artist in top_artists[1:]:
+            if len(prompts) >= 3:
+                break
+            prompts.append(f"artist:({artist})")
+
+    return prompts
+
+
+def _search_tidal_via_lb_radio(
+    db: Session,
+    user: User,
+    profile: EventProfile,
+    requests: list | None = None,
+    template_tracks: list[TrackProfile] | None = None,
+) -> tuple[list[TrackProfile], int]:
+    """Discover tracks via LB Radio, then resolve to playable Tidal tracks.
+
+    Uses ListenBrainz Radio for artist/tag-based discovery, then searches
+    Tidal by "artist title" to get playable track IDs.
+    Falls back to Soundcharts or text search if LB Radio is unavailable.
+    """
+    from app.services.listenbrainz import lb_radio_discover
+    from app.services.tidal import search_tidal_tracks
+
+    prompts = _build_lb_prompts(profile, requests, template_tracks)
+    if not prompts:
+        return [], 0
+
+    inferred_genre = profile.dominant_genres[0] if profile.dominant_genres else None
+    candidates: list[TrackProfile] = []
+    total_searched = 0
+    seen_tracks: set[str] = set()  # deduplicate across prompts
+
+    # Cap Tidal lookups per prompt to avoid timeout (each is ~1s)
+    max_lookups_per_prompt = 10
+
+    for prompt in prompts:
+        lb_tracks = lb_radio_discover(prompt)
+        if not lb_tracks:
+            continue
+
+        lookups_this_prompt = 0
+        for lb_track in lb_tracks:
+            # Deduplicate by artist+title
+            dedup_key = f"{lb_track.artist.lower()}|{lb_track.title.lower()}"
+            if dedup_key in seen_tracks:
+                continue
+            seen_tracks.add(dedup_key)
+
+            if lookups_this_prompt >= max_lookups_per_prompt:
+                break
+
+            # Resolve to Tidal via search
+            query = f"{lb_track.artist} {lb_track.title}"
+            results = search_tidal_tracks(db, user, query, limit=1)
+            total_searched += 1
+            lookups_this_prompt += 1
+
+            if not results:
+                continue
+
+            r = results[0]
+            if is_unwanted_version(r.title):
+                continue
+            if _is_junk_candidate(r.title, r.artist):
+                continue
+            if _is_stock_music_artist(r.artist):
+                continue
+
+            candidates.append(
+                TrackProfile(
+                    title=r.title,
+                    artist=r.artist,
+                    bpm=r.bpm,
+                    key=r.key,
+                    genre=inferred_genre,
+                    source="tidal",
+                    track_id=r.track_id,
+                    url=r.tidal_url,
+                    cover_url=r.cover_url,
+                    duration_seconds=r.duration_seconds,
+                )
+            )
+
+    return candidates, total_searched
+
+
+def _search_tidal_text(
+    db: Session,
+    user: User,
+    queries: list[str],
+    profile: EventProfile | None = None,
+) -> tuple[list[TrackProfile], int]:
+    """Search Tidal using text queries (fallback for LLM or when LB Radio unavailable)."""
+    from app.services.tidal import search_tidal_tracks
+
+    inferred_genre = profile.dominant_genres[0] if profile and profile.dominant_genres else None
+    candidates: list[TrackProfile] = []
+    total_searched = 0
+
+    for query in queries:
+        results = search_tidal_tracks(db, user, query, limit=SEARCH_LIMIT)
+        for r in results:
+            if is_unwanted_version(r.title):
+                continue
+            if _is_junk_candidate(r.title, r.artist):
+                continue
+            if _is_stock_music_artist(r.artist):
+                continue
+            candidates.append(
+                TrackProfile(
+                    title=r.title,
+                    artist=r.artist,
+                    bpm=r.bpm,
+                    key=r.key,
+                    genre=inferred_genre,
+                    source="tidal",
+                    track_id=r.track_id,
+                    url=r.tidal_url,
+                    cover_url=r.cover_url,
+                    duration_seconds=r.duration_seconds,
+                )
+            )
+        total_searched += len(results)
+
+    return candidates, total_searched
+
+
 def _search_candidates(
     db: Session,
     user: User,
     queries: list[str],
     profile: EventProfile | None = None,
     tidal_queries: list[str] | None = None,
+    requests: list | None = None,
+    template_tracks: list[TrackProfile] | None = None,
 ) -> tuple[list[TrackProfile], list[str], int]:
     """Search connected services for candidate tracks.
 
-    For Beatport: uses genre-based text queries (works well with their catalog).
-    For Tidal: prefers Soundcharts discovery (genre+BPM+key filtered) when
-    configured, falls back to text search otherwise.
+    For Beatport: structured genre/BPM browse when profile is available,
+    falls back to text search for LLM-generated queries.
+    For Tidal: LB Radio discovery (artist + tag prompts) when configured,
+    falls back to Soundcharts or text search.
 
     Returns (candidates, services_used, total_searched).
     """
@@ -289,47 +724,35 @@ def _search_candidates(
 
     # Search Beatport if connected
     if user.beatport_access_token:
-        from app.services.beatport import search_beatport_tracks
+        bp_candidates: list[TrackProfile] = []
+        bp_searched = 0
 
-        beatport_failures = 0
-        for query in queries:
-            results = search_beatport_tracks(db, user, query, limit=SEARCH_LIMIT)
-            if not results:
-                beatport_failures += 1
-                if beatport_failures >= 2:
-                    logger.warning("Beatport failing repeatedly, skipping remaining queries")
-                    break
-                continue
-            for r in results:
-                if is_unwanted_version(r.title):
-                    continue
-                if _is_blocked_genre(r.genre):
-                    continue
-                if _is_junk_candidate(r.title, r.artist):
-                    continue
-                candidates.append(
-                    TrackProfile(
-                        title=r.title,
-                        artist=r.artist,
-                        bpm=float(r.bpm) if r.bpm else None,
-                        key=r.key,
-                        genre=r.genre,
-                        source="beatport",
-                        track_id=r.track_id,
-                        url=r.beatport_url,
-                        cover_url=r.cover_url,
-                        duration_seconds=r.duration_seconds,
-                    )
-                )
-            total_searched += len(results)
+        # Prefer structured browse when we have a profile with genres
+        if profile and profile.dominant_genres:
+            bp_candidates, bp_searched = _search_beatport_structured(db, user, profile)
+
+        # Fall back to text search if structured browse found nothing
+        if not bp_candidates:
+            bp_candidates, bp_searched = _search_beatport_text(db, user, queries)
+
+        candidates.extend(bp_candidates)
+        total_searched += bp_searched
+        if bp_candidates:
             services_used.add("beatport")
 
     # Search Tidal if connected
     if user.tidal_access_token:
-        used_soundcharts = False
+        tidal_candidates: list[TrackProfile] = []
+        tidal_searched = 0
 
-        # Try Soundcharts discovery first (genre+BPM+key filtered, 1 API call)
-        if profile and profile.dominant_genres:
+        # Strategy 1: LB Radio discovery (best quality — artist + tag based)
+        if profile and (profile.dominant_genres or requests or template_tracks):
+            tidal_candidates, tidal_searched = _search_tidal_via_lb_radio(
+                db, user, profile, requests=requests, template_tracks=template_tracks
+            )
+
+        # Strategy 2: Soundcharts discovery (structured genre/BPM/key)
+        if not tidal_candidates and profile and profile.dominant_genres:
             from app.core.config import get_settings
             from app.services.recommendation.soundcharts_candidates import (
                 search_candidates_via_soundcharts,
@@ -338,56 +761,51 @@ def _search_candidates(
             settings = get_settings()
             if settings.soundcharts_app_id and settings.soundcharts_api_key:
                 sc_candidates, sc_searched = search_candidates_via_soundcharts(db, user, profile)
-                sc_filtered = [
+                tidal_candidates = [
                     c
                     for c in sc_candidates
                     if not is_unwanted_version(c.title)
                     and not _is_blocked_genre(c.genre)
                     and not _is_junk_candidate(c.title, c.artist)
+                    and not _is_stock_music_artist(c.artist)
                 ]
-                candidates.extend(sc_filtered)
-                total_searched += sc_searched
-                if sc_filtered:
-                    services_used.add("tidal")
-                    used_soundcharts = True
+                tidal_searched = sc_searched
 
-        # Fallback: Tidal text search (when Soundcharts not configured/no genres/failed)
-        if not used_soundcharts:
-            from app.services.tidal import search_tidal_tracks
-
-            # Infer genre from profile for Tidal results (Tidal API has no genre)
-            inferred_genre = (
-                profile.dominant_genres[0] if profile and profile.dominant_genres else None
+        # Strategy 3: Text search fallback (LLM queries or last resort)
+        if not tidal_candidates:
+            tidal_search_queries = tidal_queries or queries
+            tidal_candidates, tidal_searched = _search_tidal_text(
+                db, user, tidal_search_queries, profile
             )
 
-            # Use artist-based queries for Tidal (genre strings produce garbage)
-            tidal_search_queries = tidal_queries or queries
-            for query in tidal_search_queries:
-                results = search_tidal_tracks(db, user, query, limit=SEARCH_LIMIT)
-                for r in results:
-                    if is_unwanted_version(r.title):
-                        continue
-                    if _is_junk_candidate(r.title, r.artist):
-                        continue
-                    candidates.append(
-                        TrackProfile(
-                            title=r.title,
-                            artist=r.artist,
-                            bpm=r.bpm,
-                            key=r.key,
-                            genre=inferred_genre,
-                            source="tidal",
-                            track_id=r.track_id,
-                            url=r.tidal_url,
-                            cover_url=r.cover_url,
-                            duration_seconds=r.duration_seconds,
-                        )
-                    )
-                total_searched += len(results)
-                if results:
-                    services_used.add("tidal")
+        candidates.extend(tidal_candidates)
+        total_searched += tidal_searched
+        if tidal_candidates:
+            services_used.add("tidal")
 
     return candidates, sorted(services_used), total_searched
+
+
+def _filter_unverified_artists(
+    db: Session,
+    scored: list[ScoredTrack],
+) -> tuple[list[ScoredTrack], dict[str, bool]]:
+    """Remove tracks by artists not found in MusicBrainz.
+
+    Returns the filtered list and the verification dict for the frontend badge.
+    """
+    from app.services.recommendation.mb_verify import verify_artists_batch
+
+    artist_names = [s.profile.artist for s in scored if s.profile.artist]
+    if not artist_names:
+        return scored, {}
+
+    mb_verified = verify_artists_batch(db, artist_names)
+
+    filtered = [
+        s for s in scored if not s.profile.artist or mb_verified.get(s.profile.artist, False)
+    ]
+    return filtered, mb_verified
 
 
 @dataclass
@@ -429,8 +847,22 @@ async def generate_recommendations_from_llm(
     enriched = enrich_event_tracks(db, user, requests) if requests else []
     profile = build_event_profile(enriched)
 
-    # Step 2: Call LLM (pass enriched tracks so it can see actual song names)
-    llm_result = await generate_llm_suggestions(profile, prompt, tracks=enriched or None)
+    # Gather extra context for the LLM
+    rejected = _get_rejected_requests(db, event)
+    rejected_names = [(r.artist, r.song_title) for r in rejected] if rejected else []
+    playing = _get_currently_playing(db, event)
+    currently_playing = (
+        (playing.artist, playing.song_title, getattr(playing, "bpm", None)) if playing else None
+    )
+
+    # Step 2: Call LLM (pass enriched tracks + rejected + currently playing)
+    llm_result = await generate_llm_suggestions(
+        profile,
+        prompt,
+        tracks=enriched or None,
+        rejected_tracks=rejected_names or None,
+        currently_playing=currently_playing,
+    )
 
     if not llm_result.queries:
         return LLMRecommendationResult(
@@ -446,7 +878,12 @@ async def generate_recommendations_from_llm(
     llm_query_strings = [q.search_query for q in llm_result.queries]
 
     candidates, services_used, total_searched = _search_candidates(
-        db, user, llm_query_strings, profile=profile, tidal_queries=llm_query_strings
+        db,
+        user,
+        llm_query_strings,
+        profile=profile,
+        tidal_queries=llm_query_strings,
+        requests=requests,
     )
 
     # Step 4: Deduplicate
@@ -458,19 +895,16 @@ async def generate_recommendations_from_llm(
     if enriched:
         candidates = deduplicate_against_template(candidates, enriched)
 
-    # Step 5: Score and rank (use LLM targets for scoring if vibe shift detected)
+    # Step 5: Score and rank (over-fetch; use LLM targets if vibe shift detected)
     scoring_profile = _build_llm_scoring_profile(llm_result.queries, profile)
-    ranked = rank_candidates(candidates, scoring_profile, max_results)
+    ranked = rank_candidates(candidates, scoring_profile, max_results * OVERFETCH_MULTIPLIER)
 
-    # Step 6: Artist diversity
+    # Step 6: Artist diversity, enforce hard cap, then truncate
     source_artists = {req.artist.lower() for req in requests if req.artist}
     ranked = _apply_artist_diversity(ranked, source_artists)
-
-    # Step 7: MusicBrainz artist verification
-    from app.services.recommendation.mb_verify import verify_artists_batch
-
-    artist_names = [s.profile.artist for s in ranked if s.profile.artist]
-    mb_verified = verify_artists_batch(db, artist_names) if artist_names else {}
+    ranked = _enforce_artist_cap(ranked, MAX_PER_ARTIST)
+    ranked, mb_verified = _filter_unverified_artists(db, ranked)
+    ranked = ranked[:max_results]
 
     logger.info(
         "Generated %d LLM recommendations for event %s (prompt=%s, queries=%d, candidates=%d)",
@@ -539,7 +973,12 @@ def generate_recommendations_from_template(
 
     # Search for candidates
     candidates, services_used, total_searched = _search_candidates(
-        db, user, search_queries, profile=profile, tidal_queries=tidal_queries or None
+        db,
+        user,
+        search_queries,
+        profile=profile,
+        tidal_queries=tidal_queries or None,
+        template_tracks=template_tracks,
     )
 
     # Deduplicate candidates among themselves
@@ -552,18 +991,15 @@ def generate_recommendations_from_template(
     # Also deduplicate against the template tracks themselves
     candidates = deduplicate_against_template(candidates, template_tracks)
 
-    # Score and rank
-    ranked = rank_candidates(candidates, profile, max_results)
+    # Score and rank (over-fetch to give diversity room to work)
+    ranked = rank_candidates(candidates, profile, max_results * OVERFETCH_MULTIPLIER)
 
-    # Apply artist diversity penalties
+    # Apply artist diversity penalties, enforce hard cap, then truncate
     source_artists = {t.artist.lower() for t in template_tracks if t.artist}
     ranked = _apply_artist_diversity(ranked, source_artists)
-
-    # MusicBrainz artist verification
-    from app.services.recommendation.mb_verify import verify_artists_batch
-
-    artist_names = [s.profile.artist for s in ranked if s.profile.artist]
-    mb_verified = verify_artists_batch(db, artist_names) if artist_names else {}
+    ranked = _enforce_artist_cap(ranked, MAX_PER_ARTIST)
+    ranked, mb_verified = _filter_unverified_artists(db, ranked)
+    ranked = ranked[:max_results]
 
     logger.info(
         "Generated %d template recommendations for event %s "
@@ -639,7 +1075,12 @@ def generate_recommendations(
 
     # Step 5: Search for candidates
     candidates, services_used, total_searched = _search_candidates(
-        db, user, search_queries, profile=profile, tidal_queries=tidal_queries or None
+        db,
+        user,
+        search_queries,
+        profile=profile,
+        tidal_queries=tidal_queries or None,
+        requests=requests,
     )
 
     # Step 6a: Deduplicate candidates among themselves
@@ -649,18 +1090,15 @@ def generate_recommendations(
     all_requests = db.query(Request).filter(Request.event_id == event.id).all()
     candidates = deduplicate_against_requests(candidates, all_requests)
 
-    # Step 7: Score and rank
-    ranked = rank_candidates(candidates, profile, max_results)
+    # Step 7: Score and rank (over-fetch to give diversity room to work)
+    ranked = rank_candidates(candidates, profile, max_results * OVERFETCH_MULTIPLIER)
 
-    # Step 8: Apply artist diversity penalties
+    # Step 8: Apply artist diversity penalties, enforce hard cap, then truncate
     source_artists = {req.artist.lower() for req in requests if req.artist}
     ranked = _apply_artist_diversity(ranked, source_artists)
-
-    # Step 9: MusicBrainz artist verification
-    from app.services.recommendation.mb_verify import verify_artists_batch
-
-    artist_names = [s.profile.artist for s in ranked if s.profile.artist]
-    mb_verified = verify_artists_batch(db, artist_names) if artist_names else {}
+    ranked = _enforce_artist_cap(ranked, MAX_PER_ARTIST)
+    ranked, mb_verified = _filter_unverified_artists(db, ranked)
+    ranked = ranked[:max_results]
 
     logger.info(
         "Generated %d recommendations for event %s (enriched=%d, candidates=%d, searched=%d)",

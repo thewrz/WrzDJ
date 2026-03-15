@@ -37,6 +37,8 @@ async def generate_llm_suggestions(
     prompt: str,
     max_queries: int = 6,
     tracks: list[TrackProfile] | None = None,
+    rejected_tracks: list[tuple[str, str]] | None = None,
+    currently_playing: tuple[str, str, float | None] | None = None,
 ) -> LLMSuggestionResult:
     """Generate search queries via LLM (Claude Haiku).
 
@@ -46,7 +48,14 @@ async def generate_llm_suggestions(
     """
     from app.services.recommendation.llm_client import call_llm
 
-    return await call_llm(event_profile, prompt, max_queries, tracks=tracks)
+    return await call_llm(
+        event_profile,
+        prompt,
+        max_queries,
+        tracks=tracks,
+        rejected_tracks=rejected_tracks,
+        currently_playing=currently_playing,
+    )
 
 
 def is_llm_available(db=None) -> bool:

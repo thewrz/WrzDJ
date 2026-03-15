@@ -287,7 +287,14 @@ def score_candidate(
     event_profile: EventProfile,
     weights: dict[str, float] | None = None,
 ) -> ScoredTrack:
-    """Score a single candidate track against an event profile."""
+    """Score a single candidate track against an event profile.
+
+    Uses dimension-normalized scoring: only dimensions where the candidate
+    has real data contribute to the final score. This prevents tracks with
+    more complete metadata (e.g. Beatport with genre) from scoring higher
+    than tracks with less metadata (e.g. Tidal without genre) when their
+    actual musical compatibility is equivalent.
+    """
     if weights is None:
         weights = _compute_weights(event_profile)
 
@@ -295,7 +302,32 @@ def score_candidate(
     key_s = _score_key(candidate.key, event_profile.dominant_keys)
     genre_s = _score_genre(candidate.genre, event_profile.dominant_genres)
 
-    total = weights["bpm"] * bpm_s + weights["key"] * key_s + weights["genre"] * genre_s
+    # Dimension-normalized scoring: only include dimensions where the
+    # candidate has real data. This eliminates the metadata-completeness
+    # bias where Beatport tracks (with genre) score higher than Tidal
+    # tracks (without genre) despite equal musical compatibility.
+    has_bpm = candidate.bpm is not None and event_profile.avg_bpm is not None
+    has_key = candidate.key is not None and bool(event_profile.dominant_keys)
+    has_genre = candidate.genre is not None and bool(event_profile.dominant_genres)
+
+    active_weight = 0.0
+    total = 0.0
+    if has_bpm:
+        total += weights["bpm"] * bpm_s
+        active_weight += weights["bpm"]
+    if has_key:
+        total += weights["key"] * key_s
+        active_weight += weights["key"]
+    if has_genre:
+        total += weights["genre"] * genre_s
+        active_weight += weights["genre"]
+
+    # Normalize to 0-1 range based on active dimensions
+    if active_weight > 0:
+        total = total / active_weight
+    else:
+        # No scorable dimensions — use neutral score
+        total = 0.5
 
     return ScoredTrack(
         profile=candidate,

@@ -55,13 +55,13 @@ const mockResults = [
     title: 'Strobe', artist: 'deadmau5', spotify_id: 'sp1',
     url: 'https://open.spotify.com/track/1', album_art: 'https://example.com/art.jpg',
     album: 'For Lack of a Better Name', popularity: 80, preview_url: null,
-    source: 'spotify' as const, genre: null, bpm: null, key: null,
+    source: 'spotify' as const, genre: null, bpm: null, key: null, isrc: null,
   },
   {
     title: 'Levels', artist: 'Avicii', spotify_id: 'sp2',
     url: null, album_art: null,
     album: null, popularity: 90, preview_url: null,
-    source: 'spotify' as const, genre: null, bpm: null, key: null,
+    source: 'spotify' as const, genre: null, bpm: null, key: null, isrc: null,
   },
 ];
 
@@ -424,7 +424,7 @@ describe('RequestModal', () => {
       {
         title: 'No Art Song', artist: 'Unknown', spotify_id: 'sp3', url: null, album_art: null,
         album: null, popularity: 0, preview_url: null, source: 'spotify' as const,
-        genre: null, bpm: null, key: null,
+        genre: null, bpm: null, key: null, isrc: null,
       },
     ]);
 

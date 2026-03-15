@@ -301,9 +301,22 @@ class ApiClient {
     await this.rawFetch(`/api/events/${code}`, { method: 'DELETE' });
   }
 
-  async getRequests(code: string, status?: string): Promise<SongRequest[]> {
-    const params = status ? `?status=${status}` : '';
-    return this.fetch(`/api/events/${code}/requests${params}`);
+  async bulkDeleteEvents(codes: string[]): Promise<{ status: string; count: number }> {
+    return this.fetch('/api/events/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ codes }),
+    });
+  }
+
+  async getRequests(
+    code: string,
+    options?: { status?: string; sort?: 'chronological' | 'priority' },
+  ): Promise<SongRequest[]> {
+    const params = new URLSearchParams();
+    if (options?.status) params.set('status', options.status);
+    if (options?.sort) params.set('sort', options.sort);
+    const qs = params.toString();
+    return this.fetch(`/api/events/${code}/requests${qs ? `?${qs}` : ''}`);
   }
 
   async acceptAllRequests(code: string): Promise<{ status: string; accepted_count: number }> {
@@ -738,6 +751,13 @@ class ApiClient {
 
   async deleteAdminEvent(code: string): Promise<void> {
     await this.fetch(`/api/admin/events/${code}`, { method: 'DELETE' });
+  }
+
+  async bulkDeleteAdminEvents(codes: string[]): Promise<{ status: string; count: number }> {
+    return this.fetch('/api/admin/events/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ codes }),
+    });
   }
 
   async getAdminSettings(): Promise<SystemSettings> {

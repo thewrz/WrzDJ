@@ -27,9 +27,9 @@ def test_events_requires_auth(client: TestClient):
     assert response.status_code == 401
 
 
-def test_search_requires_query(client: TestClient):
-    """Test that search requires a query parameter."""
-    response = client.get("/api/search")
+def test_search_requires_query(client: TestClient, auth_headers: dict):
+    """Test that search requires a query parameter (auth required)."""
+    response = client.get("/api/search", headers=auth_headers)
     assert response.status_code == 422  # Validation error
 
 

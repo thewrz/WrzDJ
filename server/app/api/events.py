@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import (
@@ -25,6 +26,7 @@ from app.models.user import User
 from app.schemas.activity_log import ActivityLogEntry
 from app.schemas.common import AcceptAllResponse, BulkActionResponse
 from app.schemas.event import (
+    BulkDeleteEventsRequest,
     DisplaySettingsResponse,
     DisplaySettingsUpdate,
     EventCreate,
@@ -43,6 +45,7 @@ from app.schemas.search import SearchResult
 from app.services.event import (
     EventLookupResult,
     archive_event,
+    bulk_delete_events,
     compute_event_status,
     create_event,
     delete_event,
@@ -330,12 +333,17 @@ def event_search(
     q: str = Query(..., min_length=2, max_length=200),
     db: Session = Depends(get_db),
 ) -> list[SearchResult]:
-    """Public search endpoint for event guests. Searches Spotify first,
-    falls back to Beatport if the event owner has it linked and enabled."""
+    """Public search endpoint for event guests.
+
+    Priority: Tidal (primary) → Spotify (fallback) → Beatport (event toggle).
+    Results are filtered for junk, deduplicated by ISRC, and sorted by popularity.
+    """
     from app.services.beatport import search_beatport_tracks
-    from app.services.search_merge import merge_search_results
+    from app.services.intent_parser import parse_intent
+    from app.services.search_merge import build_search_results
     from app.services.spotify import search_songs
     from app.services.system_settings import get_system_settings
+    from app.services.tidal import search_tidal_tracks
 
     event_obj, lookup_result = get_event_by_code_with_status(db, code)
 
@@ -346,15 +354,21 @@ def event_search(
         raise HTTPException(status_code=410, detail="Event has expired")
 
     sys_settings = get_system_settings(db)
+    owner = event_obj.created_by
+    intent = parse_intent(q)
 
-    # Search Spotify if enabled
+    # Tidal primary: search if owner has Tidal linked
+    tidal_results = []
+    if owner and owner.tidal_access_token:
+        tidal_results = search_tidal_tracks(db, owner, q, limit=20)
+
+    # Spotify fallback: only if Tidal returned nothing AND Spotify is enabled
     spotify_results = []
-    if sys_settings.spotify_enabled:
+    if not tidal_results and sys_settings.spotify_enabled:
         spotify_results = search_songs(db, q)
 
-    # Check if owner has Beatport linked and sync enabled
+    # Beatport append: if owner has it linked and sync enabled for this event
     beatport_results = []
-    owner = event_obj.created_by
     if (
         sys_settings.beatport_enabled
         and owner
@@ -363,13 +377,20 @@ def event_search(
     ):
         beatport_results = search_beatport_tracks(db, owner, q, limit=10)
 
-    if not sys_settings.spotify_enabled and not sys_settings.beatport_enabled:
+    has_any_source = (
+        (owner and owner.tidal_access_token)
+        or sys_settings.spotify_enabled
+        or sys_settings.beatport_enabled
+    )
+    if not has_any_source:
         raise HTTPException(status_code=503, detail="Song search is currently unavailable")
 
-    if beatport_results:
-        return merge_search_results(spotify_results, beatport_results)
-
-    return spotify_results
+    return build_search_results(
+        tidal_results=tidal_results or None,
+        spotify_results=spotify_results or None,
+        beatport_results=beatport_results or None,
+        intent=intent,
+    )
 
 
 @router.patch("/{code}", response_model=EventOut)
@@ -398,6 +419,22 @@ def delete_event_endpoint(
 ) -> None:
     """Delete an event and all its requests."""
     delete_event(db, event)
+
+
+@router.post("/bulk-delete", response_model=BulkActionResponse)
+@limiter.limit("5/minute")
+def bulk_delete_events_endpoint(
+    request: Request,
+    body: BulkDeleteEventsRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> BulkActionResponse:
+    """Bulk delete multiple events owned by the current user."""
+    try:
+        count = bulk_delete_events(db, body.codes, user=current_user)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="One or more events not found")
+    return BulkActionResponse(status="ok", count=count)
 
 
 @router.post("/{code}/archive", response_model=EventOut)
@@ -659,12 +696,76 @@ def get_event_requests(
     status: RequestStatus | None = None,
     since: datetime | None = None,
     limit: int = Query(default=100, ge=1, le=500),
+    sort: Literal["chronological", "priority"] = "chronological",
     event: Event = Depends(get_owned_event),
     db: Session = Depends(get_db),
 ) -> list[RequestOut]:
     # Owner can view requests regardless of event status
     requests = get_requests_for_event(db, event, status, since, limit)
+
+    if sort == "priority":
+        return _apply_priority_sort(requests, event, db)
+
     return [_request_to_out(r) for r in requests]
+
+
+def _apply_priority_sort(
+    requests: list,
+    event: "Event",
+    db: Session,
+) -> list[RequestOut]:
+    """Score and sort requests by DJ priority, attaching scores to output."""
+    from app.services.now_playing import get_now_playing
+    from app.services.priority_scorer import (
+        RequestScoreInput,
+        rank_requests_by_priority,
+    )
+
+    # Get now-playing context (BPM/key from matched request)
+    now_playing_key: str | None = None
+    now_playing_bpm: float | None = None
+    np = get_now_playing(db, event.id)
+    if np and np.matched_request_id:
+        matched = np.matched_request
+        if matched:
+            now_playing_key = matched.musical_key
+            now_playing_bpm = matched.bpm
+
+    # Build scoring inputs
+    inputs = [
+        RequestScoreInput(
+            request_id=r.id,
+            vote_count=r.vote_count,
+            created_at=r.created_at,
+            musical_key=r.musical_key,
+            bpm=r.bpm,
+        )
+        for r in requests
+    ]
+
+    # Score and rank
+    scored = rank_requests_by_priority(
+        inputs,
+        now_playing_key=now_playing_key,
+        now_playing_bpm=now_playing_bpm,
+    )
+
+    # Build a lookup for scores by request_id
+    score_map = {s.request_id: s.score for s in scored}
+    # Build ordered ID list
+    ordered_ids = [s.request_id for s in scored]
+
+    # Sort requests to match scored order and attach priority_score
+    request_by_id = {r.id: r for r in requests}
+    result = []
+    for rid in ordered_ids:
+        r = request_by_id.get(rid)
+        if r:
+            out = _request_to_out(r)
+            out.priority_score = score_map.get(rid)
+            result.append(out)
+
+    return result
 
 
 @router.post("/{code}/recommendations", response_model=RecommendationResponse)

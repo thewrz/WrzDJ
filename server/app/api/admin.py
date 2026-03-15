@@ -13,7 +13,8 @@ from app.models.event import Event
 from app.models.request import Request
 from app.models.user import User, UserRole
 from app.schemas.ai_settings import AIModelInfo, AIModelsResponse, AISettingsOut, AISettingsUpdate
-from app.schemas.event import EventUpdate
+from app.schemas.common import BulkActionResponse
+from app.schemas.event import BulkDeleteEventsRequest, EventUpdate
 from app.schemas.integration_health import (
     IntegrationCheckResponse,
     IntegrationHealthResponse,
@@ -40,7 +41,7 @@ from app.services.admin import (
     update_user_admin,
 )
 from app.services.auth import get_user_by_username
-from app.services.event import delete_event, update_event
+from app.services.event import bulk_delete_events, delete_event, update_event
 from app.services.integration_health import (
     VALID_SERVICES,
     check_integration_health,
@@ -222,6 +223,22 @@ def admin_delete_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     delete_event(db, event)
+
+
+@router.post("/events/bulk-delete", response_model=BulkActionResponse)
+@limiter.limit("5/minute")
+def admin_bulk_delete_events(
+    request: FastAPIRequest,
+    body: BulkDeleteEventsRequest,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(get_current_admin),
+) -> BulkActionResponse:
+    """Admin can bulk delete events from any owner."""
+    try:
+        count = bulk_delete_events(db, body.codes, user=None)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="One or more events not found")
+    return BulkActionResponse(status="ok", count=count)
 
 
 @router.get("/settings", response_model=SystemSettingsOut)

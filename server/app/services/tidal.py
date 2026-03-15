@@ -208,6 +208,38 @@ def _track_to_result(track: tidalapi.Track) -> TidalSearchResult:
     except (TypeError, AttributeError):
         pass  # nosec B110
 
+    popularity = 0
+    try:
+        raw_pop = getattr(track, "popularity", None)
+        if isinstance(raw_pop, (int, float)):
+            popularity = int(raw_pop)
+    except (TypeError, ValueError):
+        pass  # nosec B110
+
+    isrc = None
+    try:
+        raw_isrc = getattr(track, "isrc", None)
+        if isinstance(raw_isrc, str) and raw_isrc:
+            isrc = raw_isrc
+    except (TypeError, AttributeError):
+        pass  # nosec B110
+
+    version = None
+    try:
+        raw_version = getattr(track, "version", None)
+        if isinstance(raw_version, str) and raw_version:
+            version = raw_version
+    except (TypeError, AttributeError):
+        pass  # nosec B110
+
+    explicit = False
+    try:
+        raw_explicit = getattr(track, "explicit", None)
+        if isinstance(raw_explicit, bool):
+            explicit = raw_explicit
+    except (TypeError, AttributeError):
+        pass  # nosec B110
+
     return TidalSearchResult(
         track_id=str(track.id),
         title=track.name or "Unknown",
@@ -218,6 +250,10 @@ def _track_to_result(track: tidalapi.Track) -> TidalSearchResult:
         duration_seconds=track.duration if track.duration else None,
         cover_url=cover_url,
         tidal_url=f"https://tidal.com/browse/track/{track.id}",
+        popularity=popularity,
+        isrc=isrc,
+        version=version,
+        explicit=explicit,
     )
 
 

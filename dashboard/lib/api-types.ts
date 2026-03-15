@@ -49,6 +49,8 @@ export interface SongRequest {
   musical_key: string | null;
   // Voting
   vote_count: number;
+  // Priority scoring (populated only when sort=priority)
+  priority_score: number | null;
 }
 
 export interface PublicRequestInfo {
@@ -117,11 +119,12 @@ export interface SearchResult {
   album_art: string | null;
   preview_url: string | null;
   url: string | null;
-  source: 'spotify' | 'beatport';
-  // Track metadata (from Beatport search results)
+  source: 'spotify' | 'beatport' | 'tidal';
+  // Track metadata (from Beatport/Tidal search results)
   genre: string | null;
   bpm: number | null;
   key: string | null;
+  isrc: string | null;
 }
 
 /** StageLinQ now-playing track info */

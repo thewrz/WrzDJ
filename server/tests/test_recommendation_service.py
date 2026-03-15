@@ -13,8 +13,11 @@ from app.services.recommendation.service import (
     _deduplicate_against_requests,
     _deduplicate_against_template,
     _deduplicate_candidates,
+    _enforce_artist_cap,
+    _filter_unverified_artists,
     _is_blocked_genre,
     _is_junk_candidate,
+    _is_stock_music_artist,
     _search_candidates,
     generate_recommendations,
 )
@@ -118,7 +121,7 @@ class TestBuildBeatportQueries:
 
 class TestBuildTidalQueries:
     def test_artist_from_requests(self):
-        """Builds queries from request artists, not genres."""
+        """Top artist gets 1 slot; remaining slots use genre discovery."""
         profile = EventProfile(
             dominant_genres=["Country", "Pop"],
             track_count=5,
@@ -129,14 +132,14 @@ class TestBuildTidalQueries:
             MagicMock(artist="Morgan Wallen"),
         ]
         queries = _build_tidal_queries(profile, requests=requests)
-        assert "Luke Bryan" in queries
-        assert "Morgan Wallen" in queries
-        # Genre strings should NOT be in Tidal queries
-        assert "Country" not in queries
-        assert "Pop" not in queries
+        # Top artist gets slot 1
+        assert queries[0] == "Luke Bryan"
+        # Remaining slots filled with genre discovery, not more queue artists
+        assert any("Country" in q for q in queries[1:])
+        assert len(queries) <= 3
 
     def test_artist_from_template_tracks(self):
-        """Builds queries from template track artists."""
+        """Top template artist gets slot 1; genre fills remaining slots."""
         profile = EventProfile(dominant_genres=["House"], track_count=3)
         template_tracks = [
             TrackProfile(title="Song 1", artist="deadmau5", bpm=128.0),
@@ -145,7 +148,8 @@ class TestBuildTidalQueries:
         ]
         queries = _build_tidal_queries(profile, template_tracks=template_tracks)
         assert queries[0] == "deadmau5"  # Most frequent first
-        assert "Zedd" in queries
+        # Slot 2 should be genre discovery, not another queue artist
+        assert any("House" in q for q in queries[1:])
 
     def test_skips_unknown_artists(self):
         profile = EventProfile(track_count=2)
@@ -171,15 +175,16 @@ class TestBuildTidalQueries:
         assert len(queries) <= 3
 
     def test_combines_requests_and_template(self):
-        """Artists from both requests and templates are merged."""
+        """Artists from both requests and templates contribute to artist pool."""
         profile = EventProfile(track_count=3)
         requests = [MagicMock(artist="Artist A")]
         template_tracks = [
             TrackProfile(title="Song", artist="Artist B", bpm=128.0),
         ]
         queries = _build_tidal_queries(profile, requests=requests, template_tracks=template_tracks)
-        assert "Artist A" in queries
-        assert "Artist B" in queries
+        # Top artist gets slot 1; remaining artist fills fallback slot (no genres)
+        assert "Artist A" in queries or "Artist B" in queries
+        assert len(queries) <= 3
 
 
 class TestDeduplicateAgainstTemplate:
@@ -238,10 +243,14 @@ class TestDeduplicateCandidates:
 
 
 class TestGenerateRecommendations:
+    @patch(
+        "app.services.recommendation.mb_verify.verify_artists_batch",
+        return_value={"DJ": True},
+    )
     @patch("app.services.recommendation.service._search_candidates")
     @patch("app.services.recommendation.service.enrich_event_tracks")
     @patch("app.services.recommendation.service._get_accepted_played_requests")
-    def test_full_pipeline(self, mock_requests, mock_enrich, mock_search):
+    def test_full_pipeline(self, mock_requests, mock_enrich, mock_search, mock_mb):
         mock_requests.return_value = [
             MagicMock(song_title="Song", artist="Artist", status="accepted"),
         ]
@@ -355,6 +364,30 @@ class TestIsBlockedGenre:
         assert _is_blocked_genre("Country") is False
         assert _is_blocked_genre("Tech House") is False
 
+    def test_meditation_genre(self):
+        assert _is_blocked_genre("Meditation") is True
+
+    def test_sleep_genre(self):
+        assert _is_blocked_genre("Sleep") is True
+
+    def test_white_noise_genre(self):
+        assert _is_blocked_genre("White Noise") is True
+
+    def test_nature_recordings_genre(self):
+        assert _is_blocked_genre("Nature Recordings") is True
+
+    def test_asmr_genre(self):
+        assert _is_blocked_genre("ASMR") is True
+
+    def test_binaural_genre(self):
+        assert _is_blocked_genre("Binaural") is True
+
+    def test_healing_genre(self):
+        assert _is_blocked_genre("Healing") is True
+
+    def test_spa_genre(self):
+        assert _is_blocked_genre("Spa") is True
+
 
 class TestCoverDetection:
     def test_cover_artist_filtered(self):
@@ -419,9 +452,9 @@ class TestArtistDiversity:
         # New Artist should rank first (no penalty)
         assert result[0].profile.artist == "New Artist"
         assert result[0].score == 0.90
-        # Luke Bryan gets SOURCE_ARTIST_PENALTY (0.70×)
+        # Luke Bryan gets SOURCE_ARTIST_PENALTY (0.50×)
         assert result[1].profile.artist == "Luke Bryan"
-        assert abs(result[1].score - 0.90 * 0.70) < 1e-9
+        assert abs(result[1].score - 0.90 * 0.50) < 1e-9
 
     def test_repeat_artist_penalized(self):
         """3rd occurrence of same artist ranks below 1st."""
@@ -478,9 +511,9 @@ class TestArtistDiversity:
         # Luke Bryan is in source AND will get source penalty
         result = _apply_artist_diversity(scored, {"luke bryan"})
 
-        # Luke Bryan: 0.95 * 0.70 = 0.665
+        # Luke Bryan: 0.95 * 0.50 = 0.475
         # New Artist: 0.80 (no penalty)
-        # New Artist now ranks higher since 0.80 > 0.665
+        # New Artist now ranks higher since 0.80 > 0.475
         assert result[0].profile.artist == "New Artist"
         # With a second Luke Bryan, it's even more penalized
         scored_with_repeat = [
@@ -489,8 +522,8 @@ class TestArtistDiversity:
             _make_scored("Fresh Track", "New Artist", 0.80),
         ]
         result2 = _apply_artist_diversity(scored_with_repeat, {"luke bryan"})
-        # 1st Luke Bryan: 0.95 * 0.70 = 0.665
-        # 2nd Luke Bryan: 0.90 * 0.70 (source) * 0.75 (repeat) = 0.4725
+        # 1st Luke Bryan: 0.95 * 0.50 = 0.475
+        # 2nd Luke Bryan: 0.90 * 0.50 (source) * 0.75 (repeat) = 0.3375
         # New Artist: 0.80 → ranks first
         assert result2[0].profile.artist == "New Artist"
         assert result2[2].profile.artist == "Luke Bryan"
@@ -675,12 +708,139 @@ class TestIsJunkCandidate:
     def test_drum_track_in_title(self):
         assert _is_junk_candidate("Funk Drum Track 120 BPM", "Drummer") is True
 
+    def test_music_bed_in_title(self):
+        assert _is_junk_candidate("Upbeat Music Bed - Corporate", "Stock Audio") is True
+
+    def test_cinematic_music_in_title(self):
+        assert _is_junk_candidate("Epic Cinematic Music", "Production Co") is True
+
+    def test_royalty_free_in_title(self):
+        assert _is_junk_candidate("Royalty Free Background", "Library") is True
+
+    def test_meditation_music_in_title(self):
+        assert _is_junk_candidate("Deep Meditation Music", "Zen") is True
+
+    def test_stock_music_for_trailer(self):
+        assert _is_junk_candidate("Trance Music for a Trailer", "Bobby Cole") is True
+
+    def test_stock_music_for_yoga(self):
+        assert _is_junk_candidate("Ambient Music for Yoga", "Relaxation Studio") is True
+
+    def test_real_song_not_caught(self):
+        assert _is_junk_candidate("Bad Guy", "Billie Eilish") is False
+
+    # Functional/wellness music
+    def test_relaxation_music(self):
+        assert _is_junk_candidate("Deep Relaxation Music", "Spa") is True
+
+    def test_healing_music(self):
+        assert _is_junk_candidate("Chakra Healing Music", "Wellness") is True
+
+    def test_yoga_music(self):
+        assert _is_junk_candidate("Morning Yoga Music Flow", "Zen") is True
+
+    def test_spa_music(self):
+        assert _is_junk_candidate("Spa Music Collection", "Relax") is True
+
+    def test_reiki_music(self):
+        assert _is_junk_candidate("Reiki Music Session", "Healer") is True
+
+    # Non-music audio content
+    def test_binaural_beats(self):
+        assert _is_junk_candidate("Alpha Binaural Beats 10Hz", "BrainWave") is True
+
+    def test_white_noise(self):
+        assert _is_junk_candidate("White Noise for Sleep", "Noise Co") is True
+
+    def test_pink_noise(self):
+        assert _is_junk_candidate("Pink Noise Generator", "Sleep Lab") is True
+
+    def test_rain_sounds(self):
+        assert _is_junk_candidate("Rain Sounds Thunderstorm", "Nature") is True
+
+    def test_ocean_waves(self):
+        assert _is_junk_candidate("Ocean Waves at Night", "Relaxation") is True
+
+    def test_nature_sounds(self):
+        assert _is_junk_candidate("Forest Nature Sounds", "Ambient") is True
+
+    def test_asmr(self):
+        assert _is_junk_candidate("ASMR Tapping Triggers", "WhisperASMR") is True
+
+    def test_solfeggio(self):
+        assert _is_junk_candidate("528Hz Solfeggio Frequency", "Healing") is True
+
+    def test_isochronic(self):
+        assert _is_junk_candidate("Isochronic Tones Theta", "BrainSync") is True
+
+    # Production format terms
+    def test_underscore(self):
+        assert _is_junk_candidate("Corporate Underscore", "Production") is True
+
+    def test_stinger(self):
+        assert _is_junk_candidate("News Stinger Dramatic", "Stock Audio") is True
+
+    def test_bumper(self):
+        assert _is_junk_candidate("Radio Bumper Jingle", "Station ID") is True
+
+    def test_audio_logo(self):
+        assert _is_junk_candidate("Tech Audio Logo", "Branding") is True
+
+    def test_seamless_loop(self):
+        assert _is_junk_candidate("Ambient Seamless Loop", "Loop Co") is True
+
+    # Practice/stripped track variants
+    def test_play_along(self):
+        assert _is_junk_candidate("Blues Play Along in E", "Guitar Lab") is True
+
+    def test_bassless(self):
+        assert _is_junk_candidate("Funk Groove Bassless", "Practice") is True
+
+    def test_guitarless(self):
+        assert _is_junk_candidate("Rock Guitarless Version", "Jam") is True
+
+    def test_no_vocals(self):
+        assert _is_junk_candidate("Pop Hit No Vocals", "Karaoke") is True
+
+    def test_no_drums(self):
+        assert _is_junk_candidate("Jazz No Drums Practice", "Band") is True
+
 
 class TestSearchCandidates:
     """Tests for _search_candidates including cascade behavior."""
 
-    def test_beatport_only(self):
-        """Beatport connected, Tidal not → only Beatport results."""
+    def test_beatport_structured_browse(self):
+        """Beatport connected with profile → uses structured browse."""
+        user = _make_user(tidal=False, beatport=True)
+        db = MagicMock()
+
+        from app.schemas.beatport import BeatportSearchResult
+
+        mock_result = BeatportSearchResult(
+            track_id="1",
+            title="Strobe",
+            artist="deadmau5",
+            bpm=128,
+            key="A min",
+            genre="Progressive House",
+            beatport_url="https://beatport.com/track/strobe/1",
+        )
+
+        with patch("app.services.beatport.browse_beatport_tracks", return_value=[mock_result]):
+            profile = EventProfile(
+                dominant_genres=["Progressive House"], avg_bpm=128, track_count=5
+            )
+            candidates, services, total = _search_candidates(
+                db, user, ["Progressive House"], profile=profile
+            )
+
+        assert len(candidates) == 1
+        assert candidates[0].source == "beatport"
+        assert "beatport" in services
+        assert "tidal" not in services
+
+    def test_beatport_text_fallback_no_profile(self):
+        """Beatport connected, no profile → falls back to text search."""
         user = _make_user(tidal=False, beatport=True)
         db = MagicMock()
 
@@ -701,12 +861,10 @@ class TestSearchCandidates:
 
         assert len(candidates) == 1
         assert candidates[0].source == "beatport"
-        assert "beatport" in services
-        assert "tidal" not in services
 
     @patch("app.services.tidal.search_tidal_tracks")
-    def test_tidal_text_fallback_when_no_soundcharts(self, mock_tidal_search):
-        """Tidal connected, no Soundcharts → falls back to text search."""
+    def test_tidal_text_fallback_when_no_lb_radio(self, mock_tidal_search):
+        """Tidal connected, LB Radio returns empty → falls back to text search."""
         user = _make_user(tidal=True, beatport=False)
         db = MagicMock()
 
@@ -723,9 +881,13 @@ class TestSearchCandidates:
 
         profile = EventProfile(dominant_genres=["House"], track_count=5)
 
-        with patch("app.core.config.get_settings") as mock_settings:
+        with (
+            patch("app.services.listenbrainz.lb_radio_discover", return_value=[]),
+            patch("app.core.config.get_settings") as mock_settings,
+        ):
             mock_settings.return_value.soundcharts_app_id = ""
             mock_settings.return_value.soundcharts_api_key = ""
+            mock_settings.return_value.listenbrainz_user_token = ""
             candidates, services, total = _search_candidates(
                 db, user, ["House"], profile=profile, tidal_queries=["deadmau5"]
             )
@@ -733,10 +895,9 @@ class TestSearchCandidates:
         assert len(candidates) == 1
         assert candidates[0].source == "tidal"
         assert "tidal" in services
-        mock_tidal_search.assert_called_once_with(db, user, "deadmau5", limit=10)
 
-    def test_beatport_failures_trigger_early_exit(self):
-        """2+ Beatport failures → stops trying remaining queries."""
+    def test_beatport_text_failures_trigger_early_exit(self):
+        """2+ Beatport text search failures → stops trying remaining queries."""
         user = _make_user(tidal=False, beatport=True)
         db = MagicMock()
 
@@ -856,25 +1017,28 @@ class TestSearchCandidates:
         assert services == []
         assert total == 0
 
-    @patch("app.services.tidal.search_tidal_tracks")
-    def test_all_services_fail_returns_empty(self, mock_tidal_search):
+    def test_all_services_fail_returns_empty(self):
         """Beatport fails + Tidal returns empty → empty candidates, no crash."""
         user = _make_user(tidal=True, beatport=True)
         db = MagicMock()
 
-        mock_tidal_search.return_value = []
-
-        with patch("app.services.beatport.search_beatport_tracks", return_value=[]):
-            with patch("app.core.config.get_settings") as mock_settings:
-                mock_settings.return_value.soundcharts_app_id = ""
-                mock_settings.return_value.soundcharts_api_key = ""
-                candidates, services, total = _search_candidates(
-                    db,
-                    user,
-                    ["House"],
-                    profile=EventProfile(dominant_genres=["House"], track_count=5),
-                    tidal_queries=["deadmau5"],
-                )
+        with (
+            patch("app.services.beatport.browse_beatport_tracks", return_value=[]),
+            patch("app.services.beatport.search_beatport_tracks", return_value=[]),
+            patch("app.services.listenbrainz.lb_radio_discover", return_value=[]),
+            patch("app.services.tidal.search_tidal_tracks", return_value=[]),
+            patch("app.core.config.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.soundcharts_app_id = ""
+            mock_settings.return_value.soundcharts_api_key = ""
+            mock_settings.return_value.listenbrainz_user_token = ""
+            candidates, services, total = _search_candidates(
+                db,
+                user,
+                ["House"],
+                profile=EventProfile(dominant_genres=["House"], track_count=5),
+                tidal_queries=["deadmau5"],
+            )
 
         assert candidates == []
 
@@ -900,9 +1064,13 @@ class TestSearchCandidates:
 
         profile = EventProfile(dominant_genres=["House"], track_count=5)
 
-        with patch("app.core.config.get_settings") as mock_settings:
+        with (
+            patch("app.services.listenbrainz.lb_radio_discover", return_value=[]),
+            patch("app.core.config.get_settings") as mock_settings,
+        ):
             mock_settings.return_value.soundcharts_app_id = "app_id"
             mock_settings.return_value.soundcharts_api_key = "api_key"
+            mock_settings.return_value.listenbrainz_user_token = ""
             candidates, services, total = _search_candidates(
                 db, user, ["House"], profile=profile, tidal_queries=["deadmau5"]
             )
@@ -937,3 +1105,274 @@ class TestCascadeGenerateRecommendations:
         result = generate_recommendations(db, user, event)
         assert result.suggestions == []
         assert result.total_candidates_searched == 0
+
+
+class TestEnforceArtistCap:
+    """Tests for _enforce_artist_cap hard limit on tracks per artist."""
+
+    def test_caps_at_max_per_artist(self):
+        """5 tracks by the same artist → only 2 survive (MAX_PER_ARTIST=2)."""
+        scored = [_make_scored(f"Hit {i}", "Luke Bryan", 0.90 - i * 0.01) for i in range(5)]
+        result = _enforce_artist_cap(scored, max_per_artist=2)
+        assert len(result) == 2
+        assert result[0].profile.title == "Hit 0"
+        assert result[1].profile.title == "Hit 1"
+
+    def test_fuzzy_artist_matching(self):
+        """Slight name variations are treated as the same artist."""
+        scored = [
+            _make_scored("Song A", "deadmau5", 0.90),
+            _make_scored("Song B", "Deadmau5", 0.85),
+            _make_scored("Song C", "deadmau5", 0.80),
+        ]
+        result = _enforce_artist_cap(scored, max_per_artist=2)
+        assert len(result) == 2
+
+    def test_preserves_score_ordering(self):
+        """Higher-scoring tracks from the same artist are kept."""
+        scored = [
+            _make_scored("Best", "Artist X", 0.95),
+            _make_scored("Good", "Artist X", 0.80),
+            _make_scored("Okay", "Artist X", 0.70),
+        ]
+        result = _enforce_artist_cap(scored, max_per_artist=2)
+        assert result[0].profile.title == "Best"
+        assert result[1].profile.title == "Good"
+
+    def test_empty_input(self):
+        result = _enforce_artist_cap([], max_per_artist=2)
+        assert result == []
+
+    def test_all_unique_artists_pass(self):
+        """When all artists are unique, nothing is filtered."""
+        scored = [
+            _make_scored("Song A", "deadmau5", 0.90),
+            _make_scored("Song B", "Zedd", 0.85),
+            _make_scored("Song C", "Tiësto", 0.80),
+        ]
+        result = _enforce_artist_cap(scored, max_per_artist=2)
+        assert len(result) == 3
+
+    def test_none_artist_not_capped(self):
+        """Tracks with no artist are always allowed through."""
+        scored = [_make_scored(f"Track {i}", None, 0.90 - i * 0.01) for i in range(5)]
+        result = _enforce_artist_cap(scored, max_per_artist=2)
+        assert len(result) == 5
+
+    def test_mixed_artists_with_cap(self):
+        """Multiple artists, some exceeding cap, some not."""
+        scored = [
+            _make_scored("LB 1", "Luke Bryan", 0.95),
+            _make_scored("MW 1", "Morgan Wallen", 0.93),
+            _make_scored("LB 2", "Luke Bryan", 0.91),
+            _make_scored("MW 2", "Morgan Wallen", 0.89),
+            _make_scored("LB 3", "Luke Bryan", 0.87),  # Should be capped
+            _make_scored("MW 3", "Morgan Wallen", 0.85),  # Should be capped
+            _make_scored("New 1", "New Artist", 0.83),
+        ]
+        result = _enforce_artist_cap(scored, max_per_artist=2)
+        artists = [r.profile.artist for r in result]
+        assert artists.count("Luke Bryan") == 2
+        assert artists.count("Morgan Wallen") == 2
+        assert artists.count("New Artist") == 1
+        assert len(result) == 5
+
+
+class TestDiversifiedTidalQueries:
+    """Tests for the diversified Tidal query builder."""
+
+    def test_genre_discovery_fills_remaining_slots(self):
+        """With genres available, only 1 artist + genre discovery queries."""
+        profile = EventProfile(
+            dominant_genres=["House", "Tech House"],
+            track_count=5,
+        )
+        requests = [
+            MagicMock(artist="deadmau5"),
+            MagicMock(artist="deadmau5"),
+            MagicMock(artist="Zedd"),
+        ]
+        queries = _build_tidal_queries(profile, requests=requests)
+        assert queries[0] == "deadmau5"
+        assert "House music" in queries
+        assert len(queries) == 3
+
+    def test_no_genres_falls_back_to_artists(self):
+        """Without genres, all slots use queue artists."""
+        profile = EventProfile(track_count=5)
+        requests = [
+            MagicMock(artist="Artist A"),
+            MagicMock(artist="Artist B"),
+            MagicMock(artist="Artist C"),
+        ]
+        queries = _build_tidal_queries(profile, requests=requests)
+        assert queries[0] == "Artist A"
+        assert "Artist B" in queries
+        assert "Artist C" in queries
+
+    def test_one_genre_one_fallback_artist(self):
+        """1 genre available → 1 artist + 1 genre + 1 fallback artist."""
+        profile = EventProfile(
+            dominant_genres=["Progressive House"],
+            track_count=5,
+        )
+        requests = [
+            MagicMock(artist="deadmau5"),
+            MagicMock(artist="Zedd"),
+            MagicMock(artist="Avicii"),
+        ]
+        queries = _build_tidal_queries(profile, requests=requests)
+        assert queries[0] == "deadmau5"
+        assert "Progressive House music" in queries
+        # Third slot falls back to next artist
+        assert "Zedd" in queries
+
+
+class TestIsStockMusicArtist:
+    """Tests for _is_stock_music_artist filter."""
+
+    def test_catches_music_zone_suffix(self):
+        assert _is_stock_music_artist("Ibiza Chill Out Music Zone") is True
+
+    def test_catches_music_bed_suffix(self):
+        assert _is_stock_music_artist("Ambient Music Bed") is True
+
+    def test_catches_music_group_suffix(self):
+        assert _is_stock_music_artist("Relaxation Music Group") is True
+
+    def test_catches_brainrot_keyword(self):
+        assert _is_stock_music_artist("Brainrot Italiano Music") is True
+        assert _is_stock_music_artist("bombombini gusini brainrot") is True
+
+    def test_catches_royalty_free_keyword(self):
+        assert _is_stock_music_artist("Royalty Free Music Co") is True
+        assert _is_stock_music_artist("Royalty-Free Beats") is True
+
+    def test_passes_real_artists(self):
+        assert _is_stock_music_artist("deadmau5") is False
+        assert _is_stock_music_artist("Field Music") is False
+        assert _is_stock_music_artist("Florence and the Machine") is False
+
+    def test_catches_beats_suffix(self):
+        assert _is_stock_music_artist("Chill Lo-Fi Beats") is True
+
+    def test_catches_sounds_suffix(self):
+        assert _is_stock_music_artist("Relaxing Nature Sounds") is True
+
+    def test_catches_music_ensemble_suffix(self):
+        assert _is_stock_music_artist("Calm Piano Music Ensemble") is True
+
+    def test_catches_relax_club_suffix(self):
+        assert _is_stock_music_artist("Deep Sleep Relax Club") is True
+
+    def test_catches_music_therapy_suffix(self):
+        assert _is_stock_music_artist("Healing Waves Music Therapy") is True
+
+    def test_catches_sound_effects_suffix(self):
+        assert _is_stock_music_artist("Nature Sound Effects") is True
+
+    def test_catches_noise_machine_suffix(self):
+        assert _is_stock_music_artist("White Noise Machine") is True
+
+    def test_catches_relaxation_suffix(self):
+        assert _is_stock_music_artist("Deep Relaxation") is True
+
+    def test_catches_meditation_suffix(self):
+        assert _is_stock_music_artist("Guided Meditation") is True
+
+    def test_catches_sleep_music_suffix(self):
+        assert _is_stock_music_artist("Baby Sleep Music") is True
+
+    def test_catches_white_noise_for_keyword(self):
+        assert _is_stock_music_artist("White Noise for Babies") is True
+
+    def test_catches_sleep_sound_keyword(self):
+        assert _is_stock_music_artist("Sleep Sound Lab") is True
+
+    def test_catches_rain_sounds_keyword(self):
+        assert _is_stock_music_artist("Rain Sounds Studio") is True
+
+    def test_catches_nature_sounds_keyword(self):
+        assert _is_stock_music_artist("Nature Sounds Orchestra") is True
+
+    def test_catches_lofi_sleep_keyword(self):
+        assert _is_stock_music_artist("Lofi Sleep Chill") is True
+
+    def test_catches_study_music_keyword(self):
+        assert _is_stock_music_artist("Study Music Project") is True
+
+    def test_catches_audio_suffix(self):
+        assert _is_stock_music_artist("Corporate Background Audio") is True
+
+    def test_catches_productions_suffix(self):
+        assert _is_stock_music_artist("Ambient Sleep Productions") is True
+
+    def test_real_artists_with_similar_names_pass(self):
+        # These real artists should NOT be caught by the new suffixes
+        assert _is_stock_music_artist("Roxy Music") is False
+        assert _is_stock_music_artist("Field Music") is False
+        assert _is_stock_music_artist("The Crystal Method") is False
+
+    def test_case_insensitive(self):
+        assert _is_stock_music_artist("BRAINROT BEATS") is True
+        assert _is_stock_music_artist("ibiza chill out music zone") is True
+
+
+class TestFilterUnverifiedArtists:
+    """Tests for _filter_unverified_artists."""
+
+    def test_removes_unverified_keeps_verified(self):
+        scored = [
+            _make_scored("Real Song", "deadmau5", 0.90),
+            _make_scored("Fake Song", "Electrofab Music", 0.85),
+        ]
+        db = MagicMock()
+
+        with patch(
+            "app.services.recommendation.mb_verify.verify_artists_batch",
+            return_value={"deadmau5": True, "Electrofab Music": False},
+        ) as mock_verify:
+            filtered, mb_verified = _filter_unverified_artists(db, scored)
+
+        assert len(filtered) == 1
+        assert filtered[0].profile.artist == "deadmau5"
+        assert mb_verified["deadmau5"] is True
+        assert mb_verified["Electrofab Music"] is False
+        mock_verify.assert_called_once()
+
+    def test_keeps_tracks_with_no_artist(self):
+        scored = [
+            _make_scored("Instrumental", None, 0.80),
+            _make_scored("Fake Song", "Stock Music", 0.75),
+        ]
+        db = MagicMock()
+
+        with patch(
+            "app.services.recommendation.mb_verify.verify_artists_batch",
+            return_value={"Stock Music": False},
+        ):
+            filtered, mb_verified = _filter_unverified_artists(db, scored)
+
+        assert len(filtered) == 1
+        assert filtered[0].profile.title == "Instrumental"
+
+    def test_empty_list(self):
+        db = MagicMock()
+        filtered, mb_verified = _filter_unverified_artists(db, [])
+        assert filtered == []
+        assert mb_verified == {}
+
+    def test_all_verified(self):
+        scored = [
+            _make_scored("Song A", "Artist A", 0.90),
+            _make_scored("Song B", "Artist B", 0.85),
+        ]
+        db = MagicMock()
+
+        with patch(
+            "app.services.recommendation.mb_verify.verify_artists_batch",
+            return_value={"Artist A": True, "Artist B": True},
+        ):
+            filtered, mb_verified = _filter_unverified_artists(db, scored)
+
+        assert len(filtered) == 2

@@ -336,25 +336,27 @@ describe('RecommendationsCard', () => {
 
   // AI Assist (LLM) tests
 
-  it('shows AI Assist button when llm_available is true', async () => {
+  it('enables AI Assist button when llm_available is true', async () => {
     vi.mocked(api.generateRecommendations).mockResolvedValue(
       makeResponse({ llm_available: true })
     );
 
     render(<RecommendationsCard {...defaultProps} />);
 
-    // Initially no AI Assist button
-    expect(screen.queryByText('AI Assist')).not.toBeInTheDocument();
+    // Initially AI Assist button is visible but disabled
+    const aiButton = screen.getByText('AI Assist');
+    expect(aiButton).toBeInTheDocument();
+    expect(aiButton).toBeDisabled();
 
     // Generate to get llm_available from response
     fireEvent.click(screen.getByText('Generate'));
 
     await waitFor(() => {
-      expect(screen.getByText('AI Assist')).toBeInTheDocument();
+      expect(screen.getByText('AI Assist')).not.toBeDisabled();
     });
   });
 
-  it('does not show AI Assist button when llm_available is false', async () => {
+  it('keeps AI Assist button disabled when llm_available is false', async () => {
     vi.mocked(api.generateRecommendations).mockResolvedValue(
       makeResponse({ llm_available: false })
     );
@@ -366,7 +368,8 @@ describe('RecommendationsCard', () => {
       expect(screen.getByText(/Test Artist/)).toBeInTheDocument();
     });
 
-    expect(screen.queryByText('AI Assist')).not.toBeInTheDocument();
+    const aiButton = screen.getByText('AI Assist');
+    expect(aiButton).toBeDisabled();
   });
 
   it('shows prompt input in AI Assist mode', async () => {

@@ -1180,10 +1180,36 @@ describe('ApiClient', () => {
         json: async () => [{ id: 1, status: 'new' }],
       });
 
-      await api.getRequests('ABC123', 'new');
+      await api.getRequests('ABC123', { status: 'new' });
 
       const [url] = mockFetch.mock.calls[0];
       expect(url).toContain('status=new');
+    });
+
+    it('appends sort parameter when specified', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 1, status: 'new', priority_score: 0.85 }],
+      });
+
+      await api.getRequests('ABC123', { sort: 'priority' });
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).toContain('sort=priority');
+    });
+
+    it('omits sort parameter by default', async () => {
+      api.setToken('test-token');
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      });
+
+      await api.getRequests('ABC123');
+
+      const [url] = mockFetch.mock.calls[0];
+      expect(url).not.toContain('sort=');
     });
   });
 
