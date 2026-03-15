@@ -97,6 +97,7 @@ BLOCKED_TITLE_KEYWORDS = [
     "royalty-free",
     "stock music",
     "library music",
+    "music for",  # "[Genre] Music for [Purpose]" = stock/library music pattern
     "cinematic music",
     "background music",
     "meditation music",
@@ -105,7 +106,15 @@ BLOCKED_TITLE_KEYWORDS = [
 ]
 
 # Suffixes/keywords that indicate stock music artist names
-_STOCK_ARTIST_SUFFIXES = [" music zone", " music bed", " music group"]
+_STOCK_ARTIST_SUFFIXES = [
+    " music zone",
+    " music bed",
+    " music group",
+    " beats",
+    " sounds",
+    " audio",
+    " productions",
+]
 _STOCK_ARTIST_KEYWORDS = ["brainrot", "royalty free", "royalty-free"]
 
 

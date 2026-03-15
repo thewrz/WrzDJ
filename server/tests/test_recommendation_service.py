@@ -696,6 +696,15 @@ class TestIsJunkCandidate:
     def test_meditation_music_in_title(self):
         assert _is_junk_candidate("Deep Meditation Music", "Zen") is True
 
+    def test_stock_music_for_trailer(self):
+        assert _is_junk_candidate("Trance Music for a Trailer", "Bobby Cole") is True
+
+    def test_stock_music_for_yoga(self):
+        assert _is_junk_candidate("Ambient Music for Yoga", "Relaxation Studio") is True
+
+    def test_real_song_not_caught(self):
+        assert _is_junk_candidate("Bad Guy", "Billie Eilish") is False
+
 
 class TestSearchCandidates:
     """Tests for _search_candidates including cascade behavior."""
@@ -1105,6 +1114,24 @@ class TestIsStockMusicArtist:
         assert _is_stock_music_artist("deadmau5") is False
         assert _is_stock_music_artist("Field Music") is False
         assert _is_stock_music_artist("Florence and the Machine") is False
+
+    def test_catches_beats_suffix(self):
+        assert _is_stock_music_artist("Chill Lo-Fi Beats") is True
+
+    def test_catches_sounds_suffix(self):
+        assert _is_stock_music_artist("Relaxing Nature Sounds") is True
+
+    def test_catches_audio_suffix(self):
+        assert _is_stock_music_artist("Corporate Background Audio") is True
+
+    def test_catches_productions_suffix(self):
+        assert _is_stock_music_artist("Ambient Sleep Productions") is True
+
+    def test_real_artists_with_similar_names_pass(self):
+        # These real artists should NOT be caught by the new suffixes
+        assert _is_stock_music_artist("Roxy Music") is False
+        assert _is_stock_music_artist("Field Music") is False
+        assert _is_stock_music_artist("The Crystal Method") is False
 
     def test_case_insensitive(self):
         assert _is_stock_music_artist("BRAINROT BEATS") is True
