@@ -265,6 +265,25 @@ def bulk_delete_requests(db: Session, event: Event, status: str | None = None) -
     return count
 
 
+def get_requests_by_fingerprint(
+    db: Session,
+    event_id: int,
+    fingerprint: str,
+    limit: int = 50,
+) -> list[Request]:
+    """Get all requests submitted by a specific client fingerprint for an event."""
+    return (
+        db.query(Request)
+        .filter(
+            Request.event_id == event_id,
+            Request.client_fingerprint == fingerprint,
+        )
+        .order_by(Request.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 def get_request_by_id(db: Session, request_id: int) -> Request | None:
     """Get a request by its ID."""
     return db.query(Request).filter(Request.id == request_id).first()

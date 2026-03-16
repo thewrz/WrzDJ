@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 interface EventStreamHandlers {
   onRequestCreated?: (data: { request_id: number; title: string; artist: string }) => void;
-  onRequestStatusChanged?: (data: { request_id: number; status: string }) => void;
+  onRequestStatusChanged?: (data: { request_id: number; status: string; title?: string; artist?: string }) => void;
   onNowPlayingChanged?: (data: { title: string; artist: string; source: string }) => void;
   onRequestsBulkUpdate?: (data: { action: string; count: number }) => void;
   onBridgeStatusChanged?: (data: { connected: boolean; device_name: string | null }) => void;
