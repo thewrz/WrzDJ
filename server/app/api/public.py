@@ -32,6 +32,7 @@ class PublicRequestInfo(BaseModel):
     title: str
     artist: str
     artwork_url: str | None
+    nickname: str | None = None
     vote_count: int = 0
 
 
@@ -120,6 +121,7 @@ def get_kiosk_display(
             title=r.song_title,
             artist=r.artist,
             artwork_url=r.artwork_url,
+            nickname=r.nickname,
             vote_count=r.vote_count,
         )
         for r in accepted_requests
@@ -136,6 +138,7 @@ def get_kiosk_display(
                 title=matched_req.song_title,
                 artist=matched_req.artist,
                 artwork_url=matched_req.artwork_url,
+                nickname=matched_req.nickname,
             )
 
     # Check if now playing should be hidden (using per-event timeout)
@@ -215,6 +218,7 @@ def get_public_requests(
                 title=r.song_title,
                 artist=r.artist,
                 artwork_url=r.artwork_url,
+                nickname=r.nickname,
                 vote_count=r.vote_count,
                 status=r.status,
             )

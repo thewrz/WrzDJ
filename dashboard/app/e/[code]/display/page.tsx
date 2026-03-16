@@ -523,6 +523,14 @@ export default function KioskDisplayPage() {
           overflow: hidden;
           text-overflow: ellipsis;
         }
+        .queue-item-nickname {
+          font-size: 0.8125rem;
+          color: #a78bfa;
+          margin-top: 0.125rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
         .vote-badge {
           background: rgba(59, 130, 246, 0.2);
           color: #60a5fa;
@@ -972,6 +980,9 @@ export default function KioskDisplayPage() {
                         <div className="queue-item-info">
                           <div className="queue-item-title">{item.title}</div>
                           <div className="queue-item-artist">{item.artist}</div>
+                          {item.nickname && (
+                            <div className="queue-item-nickname">Requested by {item.nickname}</div>
+                          )}
                         </div>
                         {item.vote_count > 0 && (
                           <span className="vote-badge">

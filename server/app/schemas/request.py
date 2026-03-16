@@ -13,6 +13,7 @@ class RequestCreate(BaseModel):
     artist: str = Field(..., min_length=1, max_length=255)
     title: str = Field(..., min_length=1, max_length=255)
     note: str | None = Field(default=None, max_length=500)
+    nickname: str | None = Field(default=None, max_length=30)
     source: RequestSource = RequestSource.MANUAL
     source_url: str | None = Field(default=None, max_length=500)
     artwork_url: str | None = Field(default=None, max_length=500)
@@ -32,6 +33,14 @@ class RequestCreate(BaseModel):
     @classmethod
     def normalize_note(cls, v: str | None) -> str | None:
         return normalize_text(v)
+
+    @field_validator("nickname")
+    @classmethod
+    def normalize_nickname(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        normalized = normalize_single_line(v)
+        return normalized if normalized else None
 
     @field_validator("raw_search_query")
     @classmethod
@@ -65,6 +74,7 @@ class RequestOut(BaseModel):
     source_url: str | None
     artwork_url: str | None
     note: str | None
+    nickname: str | None = None
     status: str
     created_at: datetime
     updated_at: datetime

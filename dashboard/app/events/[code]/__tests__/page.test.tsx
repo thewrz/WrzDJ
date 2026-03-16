@@ -195,7 +195,7 @@ function mockEvent(overrides = {}) {
 function mockRequest(overrides: Partial<SongRequest> = {}): SongRequest {
   return {
     id: 1, event_id: 1, song_title: 'Strobe', artist: 'deadmau5',
-    source: 'spotify', source_url: null, artwork_url: null, note: null,
+    source: 'spotify', source_url: null, artwork_url: null, note: null, nickname: null,
     status: 'new', created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z', raw_search_query: null,
     sync_results_json: null, genre: null, bpm: null, musical_key: null,

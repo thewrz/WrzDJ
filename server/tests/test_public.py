@@ -204,3 +204,163 @@ class TestKioskDisplay:
         data = response.json()
         assert test_event.code in data["qr_join_url"]
         assert "/join/" in data["qr_join_url"]
+
+    def test_kiosk_display_nickname_in_queue(
+        self, client: TestClient, test_event: Event, db: Session
+    ):
+        """Test that nickname appears in accepted queue items."""
+        request = Request(
+            event_id=test_event.id,
+            song_title="Party Song",
+            artist="DJ Artist",
+            source="manual",
+            status=RequestStatus.ACCEPTED.value,
+            dedupe_key="nickname_queue_test",
+            nickname="Sarah",
+        )
+        db.add(request)
+        db.commit()
+
+        response = client.get(f"/api/public/events/{test_event.code}/display")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["accepted_queue"]) == 1
+        assert data["accepted_queue"][0]["nickname"] == "Sarah"
+
+    def test_kiosk_display_null_nickname(self, client: TestClient, test_event: Event, db: Session):
+        """Test that nickname is null when not provided."""
+        request = Request(
+            event_id=test_event.id,
+            song_title="No Name Song",
+            artist="Anonymous",
+            source="manual",
+            status=RequestStatus.ACCEPTED.value,
+            dedupe_key="no_nickname_test",
+        )
+        db.add(request)
+        db.commit()
+
+        response = client.get(f"/api/public/events/{test_event.code}/display")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["accepted_queue"][0]["nickname"] is None
+
+
+class TestGuestRequestList:
+    """Tests for GET /api/public/events/{code}/requests endpoint."""
+
+    def test_nickname_in_guest_list(self, client: TestClient, test_event: Event, db: Session):
+        """Test that nicknames appear in guest request list."""
+        request = Request(
+            event_id=test_event.id,
+            song_title="My Jam",
+            artist="Cool Artist",
+            source="spotify",
+            status=RequestStatus.NEW.value,
+            dedupe_key="guest_nick_test",
+            nickname="Mike",
+        )
+        db.add(request)
+        db.commit()
+
+        response = client.get(f"/api/public/events/{test_event.code}/requests")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["requests"]) == 1
+        assert data["requests"][0]["nickname"] == "Mike"
+
+    def test_no_nickname_in_guest_list(self, client: TestClient, test_event: Event, db: Session):
+        """Test that nickname is null when not set."""
+        request = Request(
+            event_id=test_event.id,
+            song_title="Anonymous Song",
+            artist="Unknown",
+            source="spotify",
+            status=RequestStatus.ACCEPTED.value,
+            dedupe_key="guest_no_nick_test",
+        )
+        db.add(request)
+        db.commit()
+
+        response = client.get(f"/api/public/events/{test_event.code}/requests")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["requests"][0]["nickname"] is None
+
+
+class TestSubmitRequestNickname:
+    """Tests for nickname field in POST /api/events/{code}/requests."""
+
+    def test_submit_with_nickname(self, client: TestClient, test_event: Event, db: Session):
+        """Test submitting a request with a nickname."""
+        response = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={
+                "artist": "Test Artist",
+                "title": "Test Song",
+                "nickname": "Sarah",
+                "source": "manual",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["nickname"] == "Sarah"
+
+    def test_submit_without_nickname(self, client: TestClient, test_event: Event, db: Session):
+        """Test submitting a request without a nickname."""
+        response = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={
+                "artist": "Test Artist",
+                "title": "Test Song No Nick",
+                "source": "manual",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["nickname"] is None
+
+    def test_nickname_max_length(self, client: TestClient, test_event: Event, db: Session):
+        """Test that nickname rejects values over 30 chars."""
+        response = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={
+                "artist": "Test Artist",
+                "title": "Long Nick Song",
+                "nickname": "A" * 31,
+                "source": "manual",
+            },
+        )
+        assert response.status_code == 422
+
+    def test_nickname_whitespace_normalized(
+        self, client: TestClient, test_event: Event, db: Session
+    ):
+        """Test that nickname whitespace is normalized."""
+        response = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={
+                "artist": "Test Artist",
+                "title": "Whitespace Nick Song",
+                "nickname": "  Sarah  ",
+                "source": "manual",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["nickname"] == "Sarah"
+
+    def test_empty_nickname_becomes_null(self, client: TestClient, test_event: Event, db: Session):
+        """Test that empty string nickname becomes null."""
+        response = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={
+                "artist": "Test Artist",
+                "title": "Empty Nick Song",
+                "nickname": "   ",
+                "source": "manual",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["nickname"] is None

@@ -13,6 +13,7 @@ function makeRequest(overrides: Partial<SongRequest> = {}): SongRequest {
     source_url: null,
     artwork_url: null,
     note: null,
+    nickname: null,
     status: 'accepted',
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
