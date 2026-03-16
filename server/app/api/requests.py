@@ -88,6 +88,8 @@ def update_request(
         {
             "request_id": updated.id,
             "status": updated.status,
+            "title": updated.song_title,
+            "artist": updated.artist,
         },
     )
 

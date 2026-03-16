@@ -78,6 +78,20 @@ export interface GuestRequestListResponse {
   now_playing: GuestNowPlaying | null;
 }
 
+export interface MyRequestInfo {
+  id: number;
+  title: string;
+  artist: string;
+  artwork_url: string | null;
+  status: 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
+  vote_count: number;
+  created_at: string;
+}
+
+export interface MyRequestsResponse {
+  requests: MyRequestInfo[];
+}
+
 export interface HasRequestedResponse {
   has_requested: boolean;
 }
