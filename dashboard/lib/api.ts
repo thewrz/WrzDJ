@@ -11,6 +11,7 @@ import type {
   BeatportStatus,
   BridgeCommandResponse,
   DisplaySettingsResponse,
+  PublicBridgeStatus,
   Event,
   GuestRequestListResponse,
   HasRequestedResponse,
@@ -79,6 +80,7 @@ export type {
   PaginatedResponse,
   PlayHistoryItem,
   PlayHistoryResponse,
+  PublicBridgeStatus,
   PublicRequestInfo,
   RecommendationResponse,
   RecommendedTrack,
@@ -466,6 +468,13 @@ class ApiClient {
     }
     const data = await response.json();
     return data || null;
+  }
+
+  /**
+   * Get bridge connection status (independent of track data).
+   */
+  async getBridgeStatus(code: string): Promise<PublicBridgeStatus> {
+    return this.publicFetch(`${getApiUrl()}/api/public/e/${code}/bridge-status`);
   }
 
   /**

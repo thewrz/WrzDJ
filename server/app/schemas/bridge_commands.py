@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 class BridgeCommandRequest(BaseModel):
     """Request body for queuing a bridge command."""
 
-    command_type: Literal["reset_decks", "reconnect", "restart"] = Field(
+    command_type: Literal["ping", "reset_decks", "reconnect", "restart"] = Field(
         ..., description="The type of command to send to the bridge"
     )
 

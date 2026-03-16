@@ -61,6 +61,12 @@ const bridgeApi = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.BRIDGE_LOG, listener);
   },
 
+  onPing: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(IPC_CHANNELS.BRIDGE_PING, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.BRIDGE_PING, listener);
+  },
+
   onAuthChanged: (callback: (state: AuthState) => void): (() => void) => {
     const listener = (_event: IpcRendererEvent, state: AuthState) => callback(state);
     ipcRenderer.on(IPC_CHANNELS.AUTH_CHANGED, listener);

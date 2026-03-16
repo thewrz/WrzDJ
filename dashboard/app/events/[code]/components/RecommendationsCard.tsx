@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { api, ApiError } from '@/lib/api';
+import { Tooltip } from '@/components/Tooltip';
 import { KeyBadge, BpmBadge, GenreBadge } from '@/components/MusicBadges';
 import { PreviewPlayer } from '@/components/PreviewPlayer';
 import { computeBpmContext } from '@/lib/bpm-stats';
@@ -262,7 +263,7 @@ export function RecommendationsCard({
   });
 
   return (
-    <div className="card" style={{ marginBottom: '1rem', padding: '1rem' }}>
+    <div className="card" style={{ marginBottom: '1rem', padding: '1rem', overflow: 'visible' }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         marginBottom: '0.75rem',
@@ -289,14 +290,8 @@ export function RecommendationsCard({
               </button>
             </>
           )}
-          <button
-            className={`btn btn-primary btn-sm${
-              generateState === 'working' ? ' btn-generating' : ''
-            }${generateState === 'complete' ? ' btn-complete' : ''
-            }${generateState === 'idle' && !loading ? ' btn-complete-fade' : ''}`}
-            onClick={handleGenerate}
-            disabled={!canGenerate}
-            title={!canGenerate ? (
+          <Tooltip
+            description={!canGenerate ? (
               !hasConnectedServices ? 'Link Tidal or Beatport first'
                 : mode === 'requests' && !hasAcceptedRequests ? 'Accept some requests first'
                 : mode === 'template' && !selectedPlaylist ? 'Select a playlist first'
@@ -305,12 +300,21 @@ export function RecommendationsCard({
                 : undefined
             ) : undefined}
           >
-            {generateState === 'working'
-              ? 'Working...'
-              : generateState === 'complete'
-                ? 'Complete!'
-                : 'Generate'}
-          </button>
+            <button
+              className={`btn btn-primary btn-sm${
+                generateState === 'working' ? ' btn-generating' : ''
+              }${generateState === 'complete' ? ' btn-complete' : ''
+              }${generateState === 'idle' && !loading ? ' btn-complete-fade' : ''}`}
+              onClick={handleGenerate}
+              disabled={!canGenerate}
+            >
+              {generateState === 'working'
+                ? 'Working...'
+                : generateState === 'complete'
+                  ? 'Complete!'
+                  : 'Generate'}
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -329,17 +333,18 @@ export function RecommendationsCard({
           >
             From Playlist
           </button>
-          <button
-            style={{
-              ...modeButtonStyle(mode === 'llm'),
-              ...((!llmAvailable && mode !== 'llm') ? { opacity: 0.4, cursor: 'not-allowed' } : {}),
-            }}
-            onClick={() => llmAvailable && handleModeChange('llm')}
-            disabled={!llmAvailable && mode !== 'llm'}
-            title={!llmAvailable ? 'Generate suggestions first to unlock AI Assist' : undefined}
-          >
-            AI Assist
-          </button>
+          <Tooltip description={!llmAvailable ? 'Generate suggestions first to unlock AI Assist' : undefined}>
+            <button
+              style={{
+                ...modeButtonStyle(mode === 'llm'),
+                ...((!llmAvailable && mode !== 'llm') ? { opacity: 0.4, cursor: 'not-allowed' } : {}),
+              }}
+              onClick={() => llmAvailable && handleModeChange('llm')}
+              disabled={!llmAvailable && mode !== 'llm'}
+            >
+              AI Assist
+            </button>
+          </Tooltip>
         </div>
       )}
 
@@ -481,9 +486,11 @@ export function RecommendationsCard({
           {profile.dominant_genres.length > 0 && (
             <span>{profile.dominant_genres.join(', ')}</span>
           )}
-          <span title="Tracks with BPM, key, and genre metadata available for scoring">
-            {profile.enriched_count}/{profile.track_count} with metadata
-          </span>
+          <Tooltip description="Tracks with BPM, key, and genre metadata available for scoring" delay={100}>
+            <span style={{ cursor: 'help' }}>
+              {profile.enriched_count}/{profile.track_count} with metadata
+            </span>
+          </Tooltip>
         </div>
       )}
 
@@ -569,20 +576,26 @@ export function RecommendationsCard({
                       {track.source === 'beatport' ? 'BP' : track.source === 'tidal' ? 'TL' : 'SP'}
                     </span>
                     {/* Score indicator with component breakdown tooltip */}
-                    <span
-                      title={`Match: ${Math.round(track.score * 100)}%\nBPM: ${Math.round(track.bpm_score * 100)}%  Key: ${Math.round(track.key_score * 100)}%  Genre: ${Math.round(track.genre_score * 100)}%`}
-                      style={{
-                        background: track.score >= 0.8 ? '#10b98133' : track.score >= 0.6 ? '#f59e0b33' : '#6b728033',
-                        color: track.score >= 0.8 ? '#10b981' : track.score >= 0.6 ? '#f59e0b' : '#9ca3af',
-                        padding: '0.0625rem 0.375rem',
-                        borderRadius: '0.25rem',
-                        fontSize: '0.625rem',
-                        fontWeight: 600,
-                        cursor: 'help',
-                      }}
+                    <Tooltip
+                      title={`Match: ${Math.round(track.score * 100)}%`}
+                      description={`BPM: ${Math.round(track.bpm_score * 100)}%  |  Key: ${Math.round(track.key_score * 100)}%  |  Genre: ${Math.round(track.genre_score * 100)}%`}
+                      maxWidth={200}
+                      delay={100}
                     >
-                      {Math.round(track.score * 100)}%
-                    </span>
+                      <span
+                        style={{
+                          background: track.score >= 0.8 ? '#10b98133' : track.score >= 0.6 ? '#f59e0b33' : '#6b728033',
+                          color: track.score >= 0.8 ? '#10b981' : track.score >= 0.6 ? '#f59e0b' : '#9ca3af',
+                          padding: '0.0625rem 0.375rem',
+                          borderRadius: '0.25rem',
+                          fontSize: '0.625rem',
+                          fontWeight: 600,
+                          cursor: 'help',
+                        }}
+                      >
+                        {Math.round(track.score * 100)}%
+                      </span>
+                    </Tooltip>
                     {track.mb_verified && (
                       <span style={{
                         background: '#10b981',

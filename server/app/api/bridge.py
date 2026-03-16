@@ -16,6 +16,7 @@ from app.schemas.bridge_commands import (
 from app.schemas.common import BridgeApiKeyResponse, StatusResponse
 from app.schemas.now_playing import (
     BridgeStatusPayload,
+    BridgeStatusResponse,
     NowPlayingBridgePayload,
     NowPlayingResponse,
     PlayHistoryEntry,
@@ -192,6 +193,37 @@ def get_public_now_playing(
         return None
 
     return NowPlayingResponse.model_validate(now_playing)
+
+
+@router.get("/public/e/{code}/bridge-status", response_model=BridgeStatusResponse)
+@limiter.limit("180/minute")
+def get_public_bridge_status(
+    request: Request,
+    code: str,
+    db: Session = Depends(get_db),
+) -> BridgeStatusResponse:
+    """
+    Get bridge connection status for public display.
+
+    Independent of track data — returns bridge connectivity even when
+    no track is currently playing.
+    """
+    event, lookup_result = get_event_by_code_with_status(db, code)
+
+    if lookup_result == EventLookupResult.NOT_FOUND:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if lookup_result in (EventLookupResult.EXPIRED, EventLookupResult.ARCHIVED):
+        raise HTTPException(status_code=410, detail="Event has expired")
+
+    now_playing = get_now_playing(db, event.id)
+    if not now_playing:
+        return BridgeStatusResponse()
+
+    return BridgeStatusResponse(
+        connected=now_playing.bridge_connected,
+        device_name=now_playing.bridge_device_name,
+        last_seen=now_playing.bridge_last_seen,
+    )
 
 
 @router.get("/public/e/{code}/history", response_model=PlayHistoryResponse)

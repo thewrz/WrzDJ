@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { SongRequest } from '@/lib/api';
+import { Tooltip } from '@/components/Tooltip';
 import { StatusFilter } from './types';
 import { SyncStatusBadges } from './SyncStatusBadges';
 import { KeyBadge, BpmBadge, GenreBadge } from '@/components/MusicBadges';
@@ -322,19 +323,21 @@ export function RequestQueueSection({
                     </span>
                   )}
                   {sortMode === 'priority' && request.priority_score != null && (
-                    <span
-                      style={{
-                        background: getPriorityScoreColor(request.priority_score),
-                        color: '#fff',
-                        padding: '0.125rem 0.5rem',
-                        borderRadius: '1rem',
-                        fontSize: '0.7rem',
-                        fontWeight: 600,
-                      }}
-                      title="Priority score: votes + wait time + harmonic fit + BPM energy"
-                    >
-                      {formatPriorityScore(request.priority_score)}
-                    </span>
+                    <Tooltip description="Combines votes, wait time, harmonic compatibility, and BPM energy match" delay={100}>
+                      <span
+                        style={{
+                          background: getPriorityScoreColor(request.priority_score),
+                          color: '#fff',
+                          padding: '0.125rem 0.5rem',
+                          borderRadius: '1rem',
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                          cursor: 'help',
+                        }}
+                      >
+                        {formatPriorityScore(request.priority_score)}
+                      </span>
+                    </Tooltip>
                   )}
                 </div>
               </div>
@@ -399,15 +402,16 @@ export function RequestQueueSection({
                     )}
                     {advancedMode && (
                       <>
-                        <button
-                          className="btn btn-sm"
-                          style={{ background: '#374151', fontSize: '0.7rem' }}
-                          onClick={() => onRefreshMetadata?.(request.id)}
-                          disabled={refreshingRequest === request.id}
-                          title="Re-fetch BPM, key, and genre from external services"
-                        >
-                          {refreshingRequest === request.id ? '...' : 'Refresh'}
-                        </button>
+                        <Tooltip description="Re-fetch BPM, key, and genre from external services">
+                          <button
+                            className="btn btn-sm"
+                            style={{ background: '#374151', fontSize: '0.7rem' }}
+                            onClick={() => onRefreshMetadata?.(request.id)}
+                            disabled={refreshingRequest === request.id}
+                          >
+                            {refreshingRequest === request.id ? '...' : 'Refresh'}
+                          </button>
+                        </Tooltip>
                         <button
                           className="btn btn-sm"
                           style={{ background: '#991b1b', fontSize: '0.7rem' }}

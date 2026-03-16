@@ -106,7 +106,7 @@ describe("CommandPoller", () => {
 
   describe("command dispatch", () => {
     it("emits command events for each command returned", async () => {
-      const commands = [{ type: "reset_decks" }, { type: "reconnect" }];
+      const commands = [{ command_id: "1", command_type: "reset_decks" }, { command_id: "2", command_type: "reconnect" }];
       mockFetch.mockResolvedValue(createMockResponse(200, { commands }));
 
       const received: string[] = [];
@@ -180,7 +180,7 @@ describe("CommandPoller", () => {
 
       // Circuit breaker opens
       allowFn.mockReturnValue(true);
-      mockFetch.mockResolvedValue(createMockResponse(200, { commands: [{ type: "restart" }] }));
+      mockFetch.mockResolvedValue(createMockResponse(200, { commands: [{ command_id: "3", command_type: "restart" }] }));
 
       const received: string[] = [];
       poller.on("command", (type: string) => received.push(type));
@@ -224,7 +224,7 @@ describe("CommandPoller", () => {
     it("continues polling after error", async () => {
       mockFetch
         .mockRejectedValueOnce(new Error("Network error"))
-        .mockResolvedValueOnce(createMockResponse(200, { commands: [{ type: "reset_decks" }] }));
+        .mockResolvedValueOnce(createMockResponse(200, { commands: [{ command_id: "1", command_type: "reset_decks" }] }));
 
       const received: string[] = [];
       poller.on("command", (type: string) => received.push(type));
@@ -254,9 +254,9 @@ describe("CommandPoller", () => {
   describe("multiple commands", () => {
     it("emits all commands from a single poll response", async () => {
       const commands = [
-        { type: "reset_decks" },
-        { type: "reconnect" },
-        { type: "restart" },
+        { command_id: "1", command_type: "reset_decks" },
+        { command_id: "2", command_type: "reconnect" },
+        { command_id: "3", command_type: "restart" },
       ];
       mockFetch.mockResolvedValue(createMockResponse(200, { commands }));
 
@@ -271,8 +271,8 @@ describe("CommandPoller", () => {
 
     it("handles commands across multiple poll cycles", async () => {
       mockFetch
-        .mockResolvedValueOnce(createMockResponse(200, { commands: [{ type: "reset_decks" }] }))
-        .mockResolvedValueOnce(createMockResponse(200, { commands: [{ type: "restart" }] }));
+        .mockResolvedValueOnce(createMockResponse(200, { commands: [{ command_id: "1", command_type: "reset_decks" }] }))
+        .mockResolvedValueOnce(createMockResponse(200, { commands: [{ command_id: "3", command_type: "restart" }] }));
 
       const received: string[] = [];
       poller.on("command", (type: string) => received.push(type));

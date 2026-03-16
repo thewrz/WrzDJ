@@ -2,6 +2,7 @@
 
 import { useMemo, useEffect, useRef } from 'react';
 import type { SongRequest, SyncResultEntry } from '@/lib/api-types';
+import { Tooltip } from '@/components/Tooltip';
 
 interface SyncReportPanelProps {
   requests: SongRequest[];
@@ -224,15 +225,16 @@ function ServiceStatusCell({
     const confidence = entry.confidence ? ` (${Math.round(entry.confidence * 100)}%)` : '';
     if (entry.url) {
       return (
-        <a
-          href={entry.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ color: '#10b981', fontSize: '0.75rem', minWidth: '80px', textAlign: 'center', textDecoration: 'none' }}
-          title={`View on ${label}`}
-        >
-          {label}: Synced{confidence}
-        </a>
+        <Tooltip description={`View on ${label}`} delay={100}>
+          <a
+            href={entry.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: '#10b981', fontSize: '0.75rem', minWidth: '80px', textAlign: 'center', textDecoration: 'none' }}
+          >
+            {label}: Synced{confidence}
+          </a>
+        </Tooltip>
       );
     }
     return (
@@ -244,45 +246,47 @@ function ServiceStatusCell({
 
   if (entry.status === 'not_found') {
     return (
-      <button
-        onClick={() => onLink(requestId)}
-        style={{
-          background: '#78350f',
-          color: '#fde68a',
-          border: 'none',
-          padding: '0.125rem 0.5rem',
-          borderRadius: '4px',
-          fontSize: '0.7rem',
-          cursor: 'pointer',
-          minWidth: '80px',
-          textAlign: 'center',
-        }}
-        title={`Click to link manually on ${label}`}
-      >
-        {label}: Missing
-      </button>
+      <Tooltip description={`Click to link manually on ${label}`} delay={100}>
+        <button
+          onClick={() => onLink(requestId)}
+          style={{
+            background: '#78350f',
+            color: '#fde68a',
+            border: 'none',
+            padding: '0.125rem 0.5rem',
+            borderRadius: '4px',
+            fontSize: '0.7rem',
+            cursor: 'pointer',
+            minWidth: '80px',
+            textAlign: 'center',
+          }}
+        >
+          {label}: Missing
+        </button>
+      </Tooltip>
     );
   }
 
   if (entry.status === 'error') {
     return (
-      <button
-        onClick={() => onRetry(requestId)}
-        style={{
-          background: '#7f1d1d',
-          color: '#fca5a5',
-          border: 'none',
-          padding: '0.125rem 0.5rem',
-          borderRadius: '4px',
-          fontSize: '0.7rem',
-          cursor: 'pointer',
-          minWidth: '80px',
-          textAlign: 'center',
-        }}
-        title={`${label}: ${entry.error || 'Unknown error'} - click to retry`}
-      >
-        {label}: Error
-      </button>
+      <Tooltip description={`${label}: ${entry.error || 'Unknown error'} — click to retry`} delay={100}>
+        <button
+          onClick={() => onRetry(requestId)}
+          style={{
+            background: '#7f1d1d',
+            color: '#fca5a5',
+            border: 'none',
+            padding: '0.125rem 0.5rem',
+            borderRadius: '4px',
+            fontSize: '0.7rem',
+            cursor: 'pointer',
+            minWidth: '80px',
+            textAlign: 'center',
+          }}
+        >
+          {label}: Error
+        </button>
+      </Tooltip>
     );
   }
 

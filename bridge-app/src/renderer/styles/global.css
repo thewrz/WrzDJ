@@ -484,3 +484,27 @@ body {
   height: 100vh;
   color: #9ca3af;
 }
+
+.ping-toast {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #10b981;
+  color: #fff;
+  padding: 0.5rem 1.25rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  z-index: 100;
+  animation: ping-fade 3s ease-in-out;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+@keyframes ping-fade {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+  10% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}

@@ -16,7 +16,8 @@ const POLL_INTERVAL_MS = 5_000;
 const FETCH_TIMEOUT_MS = 10_000;
 
 export interface BridgeCommand {
-  readonly type: string;
+  readonly command_id: string;
+  readonly command_type: string;
 }
 
 /**
@@ -97,8 +98,8 @@ export class CommandPoller extends EventEmitter {
 
         const body = (await response.json()) as { commands: BridgeCommand[] };
         for (const cmd of body.commands) {
-          this.log.info(`Received command: ${cmd.type}`);
-          this.emit("command", cmd.type);
+          this.log.info(`Received command: ${cmd.command_type}`);
+          this.emit("command", cmd.command_type);
         }
       } finally {
         clearTimeout(timeoutId);

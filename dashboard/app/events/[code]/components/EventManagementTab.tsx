@@ -91,7 +91,7 @@ export function EventManagementTab(props: EventManagementTabProps) {
         <StreamOverlayCard code={props.code} />
       </HelpSpot>
 
-      <HelpSpot spotId="event-bridge" page="event-manage" order={4} title="Bridge Status" description="Shows whether the Bridge App is connected for automatic now-playing detection.">
+      <HelpSpot spotId="event-bridge" page="event-manage" order={4} title="Bridge Status" description="Shows Bridge App connection status with live diagnostics. When connected, use Ping to test responsiveness, Reset Decks to clear stale track state, Reconnect to re-establish equipment detection, or Restart for a full bridge reset.">
         <BridgeStatusCard
           eventCode={props.code}
           bridgeConnected={props.bridgeConnected}

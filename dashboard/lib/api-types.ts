@@ -422,6 +422,17 @@ export interface BridgeEnrichedStatus {
   uptime_seconds: number | null;
 }
 
+export interface PublicBridgeStatus {
+  connected: boolean;
+  device_name: string | null;
+  last_seen: string | null;
+  circuit_breaker_state: string | null;
+  buffer_size: number | null;
+  plugin_id: string | null;
+  deck_count: number | null;
+  uptime_seconds: number | null;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;

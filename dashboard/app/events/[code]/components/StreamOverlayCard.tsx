@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Tooltip } from '@/components/Tooltip';
 
 interface StreamOverlayCardProps {
   code: string;
@@ -39,17 +40,18 @@ export function StreamOverlayCard({ code }: StreamOverlayCardProps) {
           >
             Stream Overlay
           </a>
-          <button
-            className="btn btn-sm"
-            style={{
-              background: copied ? '#22c55e' : '#333',
-              transition: 'background 0.2s',
-            }}
-            onClick={handleCopy}
-            title="Copy overlay URL for OBS"
-          >
-            {copied ? 'Copied!' : 'Copy URL'}
-          </button>
+          <Tooltip description="Copy overlay URL for OBS browser source">
+            <button
+              className="btn btn-sm"
+              style={{
+                background: copied ? '#22c55e' : '#333',
+                transition: 'background 0.2s',
+              }}
+              onClick={handleCopy}
+            >
+              {copied ? 'Copied!' : 'Copy URL'}
+            </button>
+          </Tooltip>
         </div>
       </div>
     </div>

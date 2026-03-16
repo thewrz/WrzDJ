@@ -174,6 +174,10 @@ async function main(): Promise<void> {
 
   // Start the plugin bridge
   await pluginBridge.start();
+
+  // Immediate handshake — tell the backend we're online and listening
+  log.info("Bridge online — sending initial status to backend");
+  await postBridgeStatus(true, undefined, buildEnrichedStatus());
 }
 
 // Run the bridge

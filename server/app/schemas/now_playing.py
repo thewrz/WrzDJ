@@ -56,6 +56,26 @@ class NowPlayingResponse(BaseModel):
         return dt.isoformat() + "Z"
 
 
+class BridgeStatusResponse(BaseModel):
+    """Public response for bridge connection status (independent of track data)."""
+
+    connected: bool = False
+    device_name: str | None = None
+    last_seen: datetime | None = None
+    # Enriched fields (populated from most recent SSE event, not persisted)
+    circuit_breaker_state: str | None = None
+    buffer_size: int | None = None
+    plugin_id: str | None = None
+    deck_count: int | None = None
+    uptime_seconds: int | None = None
+
+    @field_serializer("last_seen")
+    def serialize_last_seen(self, dt: datetime | None) -> str | None:
+        if dt is None:
+            return None
+        return dt.isoformat() + "Z"
+
+
 class PlayHistoryEntry(BaseModel):
     """Single entry in play history."""
 

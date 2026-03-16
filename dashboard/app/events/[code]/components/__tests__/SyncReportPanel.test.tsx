@@ -216,7 +216,7 @@ describe('SyncReportPanel', () => {
       }),
     ];
     render(<SyncReportPanel {...defaultProps} expanded={true} requests={requests} />);
-    const link = screen.getByTitle('View on Beatport');
+    const link = screen.getByText(/Beatport: Synced/);
     expect(link.tagName).toBe('A');
     expect(link.getAttribute('href')).toBe('https://beatport.com/track/123');
   });

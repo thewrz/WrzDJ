@@ -134,6 +134,7 @@ export const IPC_CHANNELS = {
   BRIDGE_RESET_DECKS: 'bridge:resetDecks',
   BRIDGE_RECONNECT: 'bridge:reconnect',
   BRIDGE_RESTART: 'bridge:restart',
+  BRIDGE_PING: 'bridge:ping',
 } as const;
 
 /** Default bridge settings (fader off for 3rd-party mixer compat, master deck priority off) */

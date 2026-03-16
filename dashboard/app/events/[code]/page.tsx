@@ -236,7 +236,7 @@ export default function EventQueuePage() {
 
   const loadData = useCallback(async (): Promise<boolean> => {
     try {
-      const [eventData, requestsData, historyData, displaySettings, tidalStatusData, beatportStatusData, nowPlayingData] = await Promise.all([
+      const [eventData, requestsData, historyData, displaySettings, tidalStatusData, beatportStatusData, nowPlayingData, bridgeStatusData] = await Promise.all([
         api.getEvent(code),
         api.getRequests(code, { sort: sortModeRef.current }),
         api.getPlayHistory(code).catch((): undefined => undefined),
@@ -244,6 +244,7 @@ export default function EventQueuePage() {
         api.getTidalStatus().catch(() => ({ linked: false, user_id: null, expires_at: null, integration_enabled: true })),
         api.getBeatportStatus().catch(() => ({ linked: false, expires_at: null, configured: false, subscription: null, integration_enabled: true })),
         api.getNowPlaying(code).catch((): undefined => undefined),
+        api.getBridgeStatus(code).catch(() => ({ connected: false, device_name: null, last_seen: null, circuit_breaker_state: null, buffer_size: null, plugin_id: null, deck_count: null, uptime_seconds: null })),
       ]);
       setEvent(eventData);
       setRequests(requestsData);
@@ -264,9 +265,16 @@ export default function EventQueuePage() {
       setBeatportStatus(beatportStatusData);
       setBeatportSyncEnabled(eventData.beatport_sync_enabled ?? false);
       if (nowPlayingData !== undefined) {
-        setBridgeConnected(nowPlayingData?.bridge_connected ?? false);
         setNowPlaying(nowPlayingData ?? null);
       }
+      setBridgeConnected(bridgeStatusData.connected);
+      setBridgeDetails({
+        circuitBreakerState: bridgeStatusData.circuit_breaker_state,
+        bufferSize: bridgeStatusData.buffer_size,
+        pluginId: bridgeStatusData.plugin_id,
+        deckCount: bridgeStatusData.deck_count,
+        uptimeSeconds: bridgeStatusData.uptime_seconds,
+      });
       setEventStatus('active');
       setError(null);
       hasLoadedRef.current = true;

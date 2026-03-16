@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { Tooltip } from '@/components/Tooltip';
 
 interface BridgeDetails {
   circuitBreakerState: string | null;
@@ -41,7 +42,7 @@ function circuitBreakerColor(state: string | null): string {
   }
 }
 
-type CommandType = 'reset_decks' | 'reconnect' | 'restart';
+type CommandType = 'ping' | 'reset_decks' | 'reconnect' | 'restart';
 
 export function BridgeStatusCard({ eventCode, bridgeConnected, bridgeDetails }: BridgeStatusCardProps) {
   const [loadingCommand, setLoadingCommand] = useState<CommandType | null>(null);
@@ -107,7 +108,7 @@ export function BridgeStatusCard({ eventCode, bridgeConnected, bridgeDetails }: 
   const hasDetails = bridgeConnected && bridgeDetails;
 
   return (
-    <div className="card" style={{ marginBottom: '1rem', padding: '1rem' }}>
+    <div className="card" style={{ marginBottom: '1rem', padding: '1rem', overflow: 'visible' }}>
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
@@ -191,33 +192,47 @@ export function BridgeStatusCard({ eventCode, bridgeConnected, bridgeDetails }: 
           flexWrap: 'wrap',
         }}
       >
-        <button
-          style={buttonStyle(!bridgeConnected || loadingCommand !== null)}
-          disabled={!bridgeConnected || loadingCommand !== null}
-          onClick={() => sendCommand('reset_decks')}
-          title="Clears stale deck state"
-        >
-          {loadingCommand === 'reset_decks' && <Spinner />}
-          Reset Decks
-        </button>
-        <button
-          style={buttonStyle(!bridgeConnected || loadingCommand !== null)}
-          disabled={!bridgeConnected || loadingCommand !== null}
-          onClick={() => sendCommand('reconnect')}
-          title="Re-establishes equipment connection"
-        >
-          {loadingCommand === 'reconnect' && <Spinner />}
-          Reconnect
-        </button>
-        <button
-          style={buttonStyle(!bridgeConnected || loadingCommand !== null)}
-          disabled={!bridgeConnected || loadingCommand !== null}
-          onClick={() => setShowRestartConfirm(true)}
-          title="Full stop and restart"
-        >
-          {loadingCommand === 'restart' && <Spinner />}
-          Restart
-        </button>
+        <Tooltip title="Ping Bridge" description="Sends a test ping to verify the Bridge App is responding. A green notification appears in the Bridge App when received.">
+          <button
+            style={buttonStyle(!bridgeConnected || loadingCommand !== null)}
+            disabled={!bridgeConnected || loadingCommand !== null}
+            onClick={() => sendCommand('ping')}
+          >
+            {loadingCommand === 'ping' && <Spinner />}
+            Ping
+          </button>
+        </Tooltip>
+        <span style={{ width: '1px', height: '16px', background: '#333', display: 'inline-block' }} />
+        <Tooltip title="Reset Decks" description="Clears all tracked deck state. Use when the bridge shows phantom tracks that aren't actually on the decks. Lowest impact — doesn't touch the equipment connection.">
+          <button
+            style={buttonStyle(!bridgeConnected || loadingCommand !== null)}
+            disabled={!bridgeConnected || loadingCommand !== null}
+            onClick={() => sendCommand('reset_decks')}
+          >
+            {loadingCommand === 'reset_decks' && <Spinner />}
+            Reset Decks
+          </button>
+        </Tooltip>
+        <Tooltip title="Reconnect" description="Tears down and re-establishes the connection to your DJ equipment. Use when the bridge is connected but stopped receiving track updates.">
+          <button
+            style={buttonStyle(!bridgeConnected || loadingCommand !== null)}
+            disabled={!bridgeConnected || loadingCommand !== null}
+            onClick={() => sendCommand('reconnect')}
+          >
+            {loadingCommand === 'reconnect' && <Spinner />}
+            Reconnect
+          </button>
+        </Tooltip>
+        <Tooltip title="Restart Bridge" description="Full stop and restart of the bridge. Use as a last resort when other options don't fix the issue. Briefly disconnects from your equipment.">
+          <button
+            style={buttonStyle(!bridgeConnected || loadingCommand !== null)}
+            disabled={!bridgeConnected || loadingCommand !== null}
+            onClick={() => setShowRestartConfirm(true)}
+          >
+            {loadingCommand === 'restart' && <Spinner />}
+            Restart
+          </button>
+        </Tooltip>
 
         {commandError && (
           <span style={{ color: '#ef4444', fontSize: '0.75rem', marginLeft: '0.25rem' }}>

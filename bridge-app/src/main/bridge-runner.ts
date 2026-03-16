@@ -129,6 +129,10 @@ export class BridgeRunner extends EventEmitter {
       this.log('Plugin started, listening for DJ equipment...');
       this.startHealthCheck();
       this.startCommandPoller();
+
+      // Immediate handshake — tell the backend we're online and listening
+      this.log('Bridge online — sending initial status to backend');
+      await this.postBridgeStatus(true);
     } catch (err) {
       this.running = false;
       this.pluginBridge = null;
@@ -604,6 +608,10 @@ export class BridgeRunner extends EventEmitter {
 
   private handleCommand(type: string): void {
     switch (type) {
+      case 'ping':
+        this.log('Ping received from dashboard');
+        this.emit('ping');
+        break;
       case 'reset_decks':
         this.resetDecks();
         break;

@@ -65,6 +65,13 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     }
   });
 
+  // Forward ping events to renderer
+  bridgeRunner.on('ping', () => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC_CHANNELS.BRIDGE_PING);
+    }
+  });
+
   // Forward bridge log messages to renderer and persist to file
   bridgeRunner.on('log', (logMessage: IpcLogMessage) => {
     logFileWriter.write(logMessage.level, logMessage.message);
