@@ -34,7 +34,7 @@ def _normalize(name: str) -> str:
     return name.lower().strip()
 
 
-def _backfill_lb_popularity(db: Session, normalized_map: dict[str, list[str]]) -> None:
+def _backfill_lb_popularity(db: Session, normalized_map: dict[str, list[str]]) -> None:  # noqa: E501
     """Backfill ListenBrainz popularity for verified artists missing LB data.
 
     Queries cache for rows where verified=True, mbid is not None,
@@ -73,7 +73,7 @@ def _backfill_lb_popularity(db: Session, normalized_map: dict[str, list[str]]) -
     for mbid, rows in mbid_to_rows.items():
         popularity = lb_data.get(mbid)
         for row in rows:
-            if popularity:
+            if popularity is not None:
                 row.lb_listen_count = popularity.get("total_listen_count")
                 row.lb_user_count = popularity.get("total_user_count")
             else:

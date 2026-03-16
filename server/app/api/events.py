@@ -212,7 +212,10 @@ def _event_to_out(
     event_status = compute_event_status(event) if include_status else None
 
     banner_url, banner_kiosk_url = _get_banner_urls(event, request)
-    banner_colors = json.loads(event.banner_colors) if event.banner_colors else None
+    try:
+        banner_colors = json.loads(event.banner_colors) if event.banner_colors else None
+    except (json.JSONDecodeError, TypeError):
+        banner_colors = None
 
     return EventOut(
         id=event.id,

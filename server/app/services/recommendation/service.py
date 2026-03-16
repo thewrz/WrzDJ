@@ -35,13 +35,6 @@ from app.services.version_filter import is_unwanted_version
 
 logger = logging.getLogger(__name__)
 
-# Re-export for backward compatibility (tests import these from service.py)
-_deduplicate_against_requests = deduplicate_against_requests  # noqa: F841
-_deduplicate_against_template = deduplicate_against_template  # noqa: F841
-_deduplicate_candidates = deduplicate_candidates  # noqa: F841
-_build_beatport_queries = build_beatport_queries  # noqa: F841
-_build_tidal_queries = build_tidal_queries  # noqa: F841
-
 # Maximum results per search query
 SEARCH_LIMIT = 10
 
@@ -606,7 +599,7 @@ def _search_tidal_via_lb_radio(
     seen_tracks: set[str] = set()  # deduplicate across prompts
 
     # Cap Tidal lookups per prompt to avoid timeout (each is ~1s)
-    max_lookups_per_prompt = 10
+    max_lookups_per_prompt = 7
 
     for prompt in prompts:
         lb_tracks = lb_radio_discover(prompt)
