@@ -409,6 +409,19 @@ export interface KioskInfo {
   last_seen_at: string | null;
 }
 
+export interface BridgeCommandResponse {
+  command_id: string;
+  command_type: string;
+}
+
+export interface BridgeEnrichedStatus {
+  circuit_breaker_state: string | null;
+  buffer_size: number | null;
+  plugin_id: string | null;
+  deck_count: number | null;
+  uptime_seconds: number | null;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;

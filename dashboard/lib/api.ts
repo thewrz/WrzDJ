@@ -9,6 +9,7 @@ import type {
   BeatportEventSettings,
   BeatportSearchResult,
   BeatportStatus,
+  BridgeCommandResponse,
   DisplaySettingsResponse,
   Event,
   GuestRequestListResponse,
@@ -51,6 +52,8 @@ export type {
   BeatportEventSettings,
   BeatportSearchResult,
   BeatportStatus,
+  BridgeCommandResponse,
+  BridgeEnrichedStatus,
   CapabilityStatus,
   DisplaySettingsResponse,
   Event,
@@ -879,6 +882,15 @@ class ApiClient {
 
   async deleteKiosk(kioskId: number): Promise<void> {
     return this.fetch(`/api/kiosk/${kioskId}`, { method: 'DELETE' });
+  }
+
+  // ========== Bridge Commands ==========
+
+  async sendBridgeCommand(eventCode: string, command: string): Promise<BridgeCommandResponse> {
+    return this.fetch<BridgeCommandResponse>(`/api/bridge/commands/${eventCode}`, {
+      method: 'POST',
+      body: JSON.stringify({ command_type: command }),
+    });
   }
 
   // ========== Activity Log ==========

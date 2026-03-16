@@ -117,6 +117,24 @@ export class PluginBridge extends EventEmitter {
     this.cleanup();
   }
 
+  /** Reset all deck state and clear now-playing. */
+  resetDecks(): void {
+    this.deckManager.reset();
+    this.emit("clearNowPlaying");
+  }
+
+  /** Cancel any pending reconnect timer and reconnect immediately. */
+  async reconnect(): Promise<void> {
+    this.cancelReconnect();
+    await this.attemptReconnect();
+  }
+
+  /** Full restart: stop the bridge and start it again with optional new config. */
+  async restart(pluginConfig?: Record<string, unknown>): Promise<void> {
+    await this.stop();
+    await this.start(pluginConfig ?? this.pluginConfig);
+  }
+
   private cleanup(): void {
     this.cancelReconnect();
     this.stopHeartbeat();

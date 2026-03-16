@@ -12,6 +12,7 @@ import { EventEmitter } from 'events';
 import { PluginBridge } from '@bridge/plugin-bridge.js';
 import { getPlugin } from '@bridge/plugin-registry.js';
 import { CircuitBreaker } from '@bridge/circuit-breaker.js';
+import { CommandPoller } from '@bridge/command-poller.js';
 import { Logger, type LogLevel } from '@bridge/logger.js';
 import { TrackHistoryBuffer } from '@bridge/track-history-buffer.js';
 import type { DeckLiveEvent, DeckState } from '@bridge/deck-state.js';
@@ -50,7 +51,9 @@ export class BridgeRunner extends EventEmitter {
   private stopReason: string | null = null;
   private networkWarnings: string[] = [];
   private backendReachable = true;
+  private startedAt: number | null = null;
   private circuitBreaker = new CircuitBreaker({ failureThreshold: 3, cooldownMs: 60_000 });
+  private commandPoller: CommandPoller | null = null;
   private readonly logger = new Logger('Bridge');
   private readonly trackBuffer = new TrackHistoryBuffer();
 
@@ -70,6 +73,7 @@ export class BridgeRunner extends EventEmitter {
 
     this.config = config;
     this.running = true;
+    this.startedAt = Date.now();
     this.lastTrackKey = null;
     this.lastPostTime = 0;
     this.currentTrack = null;
@@ -124,6 +128,7 @@ export class BridgeRunner extends EventEmitter {
       await this.pluginBridge.start(config.settings.pluginConfig);
       this.log('Plugin started, listening for DJ equipment...');
       this.startHealthCheck();
+      this.startCommandPoller();
     } catch (err) {
       this.running = false;
       this.pluginBridge = null;
@@ -138,6 +143,7 @@ export class BridgeRunner extends EventEmitter {
     if (!this.running) return;
 
     this.stopHealthCheck();
+    this.stopCommandPoller();
 
     if (reason) {
       this.stopReason = reason;
@@ -196,6 +202,11 @@ export class BridgeRunner extends EventEmitter {
       backendReachable: this.backendReachable,
       stopReason: this.stopReason,
       networkWarnings: this.networkWarnings,
+      circuitBreakerState: this.circuitBreaker.getState(),
+      bufferSize: this.trackBuffer.size,
+      deckCount: deckStates.length,
+      uptimeSeconds: this.startedAt !== null ? Math.floor((Date.now() - this.startedAt) / 1000) : 0,
+      pluginId: this.pluginBridge?.pluginId ?? null,
     };
   }
 
@@ -431,10 +442,21 @@ export class BridgeRunner extends EventEmitter {
   private async postBridgeStatus(connected: boolean, deviceName?: string): Promise<void> {
     if (!this.config) return;
 
+    const deckCount = this.pluginBridge
+      ? this.pluginBridge.manager.getDeckIds().length
+      : 0;
+
     const payload: BridgeStatusPayload = {
       event_code: this.config.eventCode,
       connected,
       device_name: deviceName ?? null,
+      circuit_breaker_state: this.circuitBreaker.getState(),
+      buffer_size: this.trackBuffer.size,
+      plugin_id: this.pluginBridge?.pluginId ?? null,
+      deck_count: deckCount,
+      uptime_seconds: this.startedAt !== null
+        ? Math.floor((Date.now() - this.startedAt) / 1000)
+        : null,
     };
 
     await this.postWithRetry('/api/bridge/status', payload);
@@ -528,6 +550,72 @@ export class BridgeRunner extends EventEmitter {
         this.log(`Replayed: "${payload.title}" by ${payload.artist}`);
       }
     })();
+  }
+
+  // --- Admin commands ---
+
+  async resetDecks(): Promise<void> {
+    if (!this.running || !this.pluginBridge) {
+      this.log('Cannot reset decks — bridge is not running', 'warn');
+      return;
+    }
+    this.log('Resetting deck states...');
+    this.pluginBridge.resetDecks();
+    this.emitStatus();
+  }
+
+  async reconnect(): Promise<void> {
+    if (!this.running || !this.pluginBridge) {
+      this.log('Cannot reconnect — bridge is not running', 'warn');
+      return;
+    }
+    this.log('Reconnecting to DJ equipment...');
+    await this.pluginBridge.reconnect();
+  }
+
+  async restartBridge(): Promise<void> {
+    if (!this.config) {
+      this.log('Cannot restart — no config available', 'warn');
+      return;
+    }
+    this.log('Restarting bridge...');
+    const config = this.config;
+    await this.stop();
+    await this.start(config);
+  }
+
+  // --- Command poller ---
+
+  private startCommandPoller(): void {
+    if (!this.config) return;
+    this.commandPoller = new CommandPoller(this.circuitBreaker, this.logger);
+    this.commandPoller.on('command', (type: string) => {
+      this.handleCommand(type);
+    });
+    this.commandPoller.start(this.config.apiUrl, this.config.apiKey, this.config.eventCode);
+  }
+
+  private stopCommandPoller(): void {
+    if (this.commandPoller) {
+      this.commandPoller.stop();
+      this.commandPoller = null;
+    }
+  }
+
+  private handleCommand(type: string): void {
+    switch (type) {
+      case 'reset_decks':
+        this.resetDecks();
+        break;
+      case 'reconnect':
+        this.reconnect();
+        break;
+      case 'restart':
+        this.restartBridge();
+        break;
+      default:
+        this.log(`Unknown command: ${type}`, 'warn');
+    }
   }
 
   // --- Status emission ---

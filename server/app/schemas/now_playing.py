@@ -24,6 +24,12 @@ class BridgeStatusPayload(BaseModel):
     event_code: str = Field(..., min_length=1, max_length=10)
     connected: bool
     device_name: str | None = Field(default=None, max_length=100)
+    # Optional enriched fields (backward compatible — bridge may omit all of these)
+    circuit_breaker_state: str | None = Field(default=None, max_length=20)
+    buffer_size: int | None = Field(default=None, ge=0)
+    plugin_id: str | None = Field(default=None, max_length=50)
+    deck_count: int | None = Field(default=None, ge=0)
+    uptime_seconds: int | None = Field(default=None, ge=0)
 
 
 # --- Public Outbound Responses ---

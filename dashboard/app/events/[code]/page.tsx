@@ -75,6 +75,13 @@ export default function EventQueuePage() {
   // Bridge / now-playing state
   const [bridgeConnected, setBridgeConnected] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<NowPlayingInfo | null>(null);
+  const [bridgeDetails, setBridgeDetails] = useState<{
+    circuitBreakerState: string | null;
+    bufferSize: number | null;
+    pluginId: string | null;
+    deckCount: number | null;
+    uptimeSeconds: number | null;
+  } | null>(null);
 
   // Tidal sync state
   const [tidalStatus, setTidalStatus] = useState<TidalStatus | null>(null);
@@ -342,7 +349,17 @@ export default function EventQueuePage() {
   useEventStream(isAuthenticated ? code : null, {
     onRequestCreated: () => { loadDataRef.current(); },
     onNowPlayingChanged: () => { loadDataRef.current(); },
-    onBridgeStatusChanged: () => { loadDataRef.current(); },
+    onBridgeStatusChanged: (data) => {
+      setBridgeConnected(data.connected);
+      setBridgeDetails({
+        circuitBreakerState: data.circuit_breaker_state ?? null,
+        bufferSize: data.buffer_size ?? null,
+        pluginId: data.plugin_id ?? null,
+        deckCount: data.deck_count ?? null,
+        uptimeSeconds: data.uptime_seconds ?? null,
+      });
+      loadDataRef.current();
+    },
   });
 
   const updateStatus = async (requestId: number, status: string) => {
@@ -1039,6 +1056,7 @@ export default function EventQueuePage() {
               code={code}
               event={event}
               bridgeConnected={bridgeConnected}
+              bridgeDetails={bridgeDetails}
               requestsOpen={requestsOpen}
               togglingRequests={togglingRequests}
               onToggleRequests={handleToggleRequests}

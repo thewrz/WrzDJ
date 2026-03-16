@@ -166,6 +166,20 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     await bridgeRunner.stop();
   });
 
+  // --- Bridge admin commands ---
+
+  ipcMain.handle(IPC_CHANNELS.BRIDGE_RESET_DECKS, async () => {
+    await bridgeRunner.resetDecks();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.BRIDGE_RECONNECT, async () => {
+    await bridgeRunner.reconnect();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.BRIDGE_RESTART, async () => {
+    await bridgeRunner.restartBridge();
+  });
+
   // --- Settings ---
 
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, () => {

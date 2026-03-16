@@ -28,6 +28,15 @@ const bridgeApi = {
   stopBridge: (): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.BRIDGE_STOP),
 
+  resetDecks: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.BRIDGE_RESET_DECKS),
+
+  reconnect: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.BRIDGE_RECONNECT),
+
+  restartBridge: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.BRIDGE_RESTART),
+
   // Settings
   getSettings: (): Promise<BridgeSettings> =>
     ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),

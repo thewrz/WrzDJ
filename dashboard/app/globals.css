@@ -1386,3 +1386,9 @@ h1, .display-heading {
 .compact .scrollable-list {
   max-height: 900px;
 }
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

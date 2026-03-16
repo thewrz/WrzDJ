@@ -36,6 +36,7 @@ const baseProps = {
   code: 'ABC123',
   event: { id: 1, name: 'Test', code: 'ABC123', is_active: true, expires_at: '', created_at: '', requests_open: true, now_playing_hidden: false, auto_hide_minutes: 10 } as never,
   bridgeConnected: false,
+  bridgeDetails: null,
   requestsOpen: true,
   togglingRequests: false,
   onToggleRequests: vi.fn(),

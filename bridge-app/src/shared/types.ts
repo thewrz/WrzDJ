@@ -19,6 +19,16 @@ export interface BridgeStatus {
   readonly backendReachable: boolean;
   /** Network warnings (e.g. subnet conflicts) detected at bridge start */
   readonly networkWarnings: readonly string[];
+  /** Circuit breaker state (CLOSED, OPEN, HALF_OPEN) */
+  readonly circuitBreakerState: string;
+  /** Number of tracks buffered for replay */
+  readonly bufferSize: number;
+  /** Number of active decks */
+  readonly deckCount: number;
+  /** Seconds since bridge was started */
+  readonly uptimeSeconds: number;
+  /** Active plugin ID (e.g. 'stagelinq', 'pioneer') */
+  readonly pluginId: string | null;
 }
 
 /** Track info for display in the GUI */
@@ -121,6 +131,9 @@ export const IPC_CHANNELS = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_UPDATE: 'settings:update',
   BRIDGE_EXPORT_DEBUG_REPORT: 'bridge:exportDebugReport',
+  BRIDGE_RESET_DECKS: 'bridge:resetDecks',
+  BRIDGE_RECONNECT: 'bridge:reconnect',
+  BRIDGE_RESTART: 'bridge:restart',
 } as const;
 
 /** Default bridge settings (fader off for 3rd-party mixer compat, master deck priority off) */

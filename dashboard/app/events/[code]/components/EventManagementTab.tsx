@@ -9,10 +9,19 @@ import { CloudProvidersCard } from './CloudProvidersCard';
 import { EventCustomizationCard } from './EventCustomizationCard';
 import { HelpSpot } from '@/components/help/HelpSpot';
 
+interface BridgeDetails {
+  circuitBreakerState: string | null;
+  bufferSize: number | null;
+  pluginId: string | null;
+  deckCount: number | null;
+  uptimeSeconds: number | null;
+}
+
 interface EventManagementTabProps {
   code: string;
   event: Event | ArchivedEvent;
   bridgeConnected: boolean;
+  bridgeDetails?: BridgeDetails | null;
   requestsOpen: boolean;
   togglingRequests: boolean;
   onToggleRequests: () => void;
@@ -83,7 +92,11 @@ export function EventManagementTab(props: EventManagementTabProps) {
       </HelpSpot>
 
       <HelpSpot spotId="event-bridge" page="event-manage" order={4} title="Bridge Status" description="Shows whether the Bridge App is connected for automatic now-playing detection.">
-        <BridgeStatusCard bridgeConnected={props.bridgeConnected} />
+        <BridgeStatusCard
+          eventCode={props.code}
+          bridgeConnected={props.bridgeConnected}
+          bridgeDetails={props.bridgeDetails}
+        />
       </HelpSpot>
 
       <HelpSpot spotId="event-cloud" page="event-manage" order={5} title="Cloud Providers" description="Connect Tidal and Beatport to sync accepted requests to your streaming playlists.">

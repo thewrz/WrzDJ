@@ -12,6 +12,11 @@ const INITIAL_STATUS: BridgeStatus = {
   backendReachable: true,
   stopReason: null,
   networkWarnings: [],
+  circuitBreakerState: 'CLOSED',
+  bufferSize: 0,
+  deckCount: 0,
+  uptimeSeconds: 0,
+  pluginId: null,
 };
 
 export function useBridgeStatus() {
