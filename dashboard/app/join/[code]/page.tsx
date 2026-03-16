@@ -4,6 +4,9 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { api, ApiError, Event, GuestNowPlaying, GuestRequestInfo, SearchResult } from '@/lib/api';
 import { useEventStream } from '@/lib/use-event-stream';
+import MyRequestsTracker from './components/MyRequestsTracker';
+import CelebrationOverlay from './components/CelebrationOverlay';
+import Toast from './components/Toast';
 
 const CONFIRMATION_DISPLAY_MS = 3000;
 const FADE_ANIMATION_MS = 500;
@@ -39,6 +42,16 @@ export default function JoinEventPage() {
   const [votingId, setVotingId] = useState<number | null>(null);
   const [votedIds, setVotedIds] = useState<Set<number>>(new Set());
   const [nowPlaying, setNowPlaying] = useState<GuestNowPlaying | null>(null);
+
+  // My Requests tracking
+  const [myRequestIds, setMyRequestIds] = useState<Set<number>>(new Set());
+  const [myRequestsRefreshKey, setMyRequestsRefreshKey] = useState(0);
+  const [celebrationSong, setCelebrationSong] = useState<{
+    title: string; artist: string; artwork_url?: string | null;
+  } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string; type: 'success' | 'info' | 'warning';
+  } | null>(null);
 
   const loadEvent = useCallback(async () => {
     try {
@@ -111,12 +124,48 @@ export default function JoinEventPage() {
     return () => clearInterval(intervalId);
   }, [showRequestList, loadRequests, pollInterval]);
 
+  // Stable callback for MyRequestsTracker to report loaded IDs
+  const handleMyRequestIdsLoaded = useCallback((ids: Set<number>) => {
+    setMyRequestIds(ids);
+  }, []);
+
+  // Track my request IDs in a ref so SSE handler always has latest
+  const myRequestIdsRef = useRef(myRequestIds);
+  myRequestIdsRef.current = myRequestIds;
+
   // SSE: trigger immediate refresh on relevant events
   const loadRequestsRef = useRef(loadRequests);
   loadRequestsRef.current = loadRequests;
   useEventStream(showRequestList ? code : null, {
     onRequestCreated: () => { loadRequestsRef.current(); },
-    onRequestStatusChanged: () => { loadRequestsRef.current(); },
+    onRequestStatusChanged: (data) => {
+      loadRequestsRef.current();
+      // If this is one of our requests, show toast + maybe celebration
+      if (myRequestIdsRef.current.has(data.request_id)) {
+        const songName = data.title ?? 'Your song';
+        switch (data.status) {
+          case 'accepted':
+            setToast({ message: `"${songName}" was accepted!`, type: 'success' });
+            break;
+          case 'playing':
+            setToast({ message: `"${songName}" is playing now!`, type: 'success' });
+            setCelebrationSong({
+              title: data.title ?? 'Your Song',
+              artist: data.artist ?? '',
+              artwork_url: null, // SSE doesn't carry artwork — celebration still looks great
+            });
+            break;
+          case 'played':
+            setToast({ message: `"${songName}" was played!`, type: 'info' });
+            break;
+          case 'rejected':
+            setToast({ message: `"${songName}" was declined`, type: 'warning' });
+            break;
+        }
+        // Trigger re-fetch of my requests to update badges
+        setMyRequestsRefreshKey((k) => k + 1);
+      }
+    },
     onNowPlayingChanged: () => { loadRequestsRef.current(); },
     onRequestsBulkUpdate: () => { loadRequestsRef.current(); },
   });
@@ -168,6 +217,8 @@ export default function JoinEventPage() {
       setSubmitted(true);
       setSubmitIsDuplicate(result.is_duplicate ?? false);
       setSubmitVoteCount(result.vote_count);
+      setMyRequestIds((prev) => new Set([...prev, result.id]));
+      setMyRequestsRefreshKey((k) => k + 1);
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         setEvent((prev) => prev ? { ...prev, requests_open: false } : prev);
@@ -248,6 +299,17 @@ export default function JoinEventPage() {
   if (showRequestList) {
     return (
       <div className="guest-request-list-container">
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onDismiss={() => setToast(null)}
+          />
+        )}
+        <CelebrationOverlay
+          song={celebrationSong}
+          onClose={() => setCelebrationSong(null)}
+        />
         {event.banner_url && (
           <div className="join-banner-bg">
             <img src={event.banner_url} alt="" />
@@ -258,6 +320,12 @@ export default function JoinEventPage() {
           <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
             {guestRequests.length} {guestRequests.length === 1 ? 'request' : 'requests'}
           </p>
+
+          <MyRequestsTracker
+            eventCode={code}
+            refreshKey={myRequestsRefreshKey}
+            onRequestIdsLoaded={handleMyRequestIdsLoaded}
+          />
 
           {nowPlaying && (
             <div style={{
@@ -362,16 +430,20 @@ export default function JoinEventPage() {
                     </span>
                     <button
                       onClick={() => handleVote(req.id)}
-                      disabled={votingId === req.id || votedIds.has(req.id)}
+                      disabled={votingId === req.id || votedIds.has(req.id) || myRequestIds.has(req.id)}
                       style={{
-                        background: votedIds.has(req.id) ? 'rgba(34, 197, 94, 0.2)' : 'rgba(59, 130, 246, 0.2)',
-                        color: votedIds.has(req.id) ? '#4ade80' : '#60a5fa',
+                        background: votedIds.has(req.id) ? 'rgba(34, 197, 94, 0.2)'
+                          : myRequestIds.has(req.id) ? 'rgba(107, 114, 128, 0.15)'
+                          : 'rgba(59, 130, 246, 0.2)',
+                        color: votedIds.has(req.id) ? '#4ade80'
+                          : myRequestIds.has(req.id) ? '#6b7280'
+                          : '#60a5fa',
                         border: 'none',
                         borderRadius: '1rem',
                         padding: '0.3rem 0.625rem',
                         fontSize: '0.8rem',
                         fontWeight: 600,
-                        cursor: votedIds.has(req.id) ? 'default' : 'pointer',
+                        cursor: (votedIds.has(req.id) || myRequestIds.has(req.id)) ? 'default' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '0.25rem',
@@ -379,6 +451,7 @@ export default function JoinEventPage() {
                         opacity: votingId === req.id ? 0.6 : 1,
                         transition: 'background 0.2s, color 0.2s',
                       }}
+                      title={myRequestIds.has(req.id) ? 'This is your request' : undefined}
                     >
                       <span>{votedIds.has(req.id) ? '\u2714' : '\u25B2'}</span>
                       {req.vote_count > 0 ? req.vote_count : ''}

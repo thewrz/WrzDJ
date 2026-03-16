@@ -22,6 +22,7 @@ import type {
   KioskPairStatusResponse,
   KioskSessionResponse,
   LLMRecommendationResponse,
+  MyRequestsResponse,
   NowPlayingInfo,
   PaginatedResponse,
   PlayHistoryResponse,
@@ -69,6 +70,8 @@ export type {
   KioskSessionResponse,
   LLMQueryInfo,
   LLMRecommendationResponse,
+  MyRequestInfo,
+  MyRequestsResponse,
   NowPlayingInfo,
   PaginatedResponse,
   PlayHistoryItem,
@@ -432,6 +435,10 @@ class ApiClient {
 
   async checkHasRequested(code: string): Promise<HasRequestedResponse> {
     return this.publicFetch(`${getApiUrl()}/api/public/events/${code}/has-requested`);
+  }
+
+  async getMyRequests(code: string): Promise<MyRequestsResponse> {
+    return this.publicFetch(`${getApiUrl()}/api/public/events/${code}/my-requests`);
   }
 
   async getPublicRequests(code: string): Promise<GuestRequestListResponse> {

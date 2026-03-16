@@ -16,7 +16,7 @@ from app.models.request import Request as SongRequest
 from app.models.request import RequestStatus
 from app.services.event import EventLookupResult, get_event_by_code_with_status
 from app.services.now_playing import get_now_playing, is_now_playing_hidden
-from app.services.request import get_guest_visible_requests
+from app.services.request import get_guest_visible_requests, get_requests_by_fingerprint
 
 router = APIRouter()
 settings = get_settings()
@@ -51,6 +51,20 @@ class GuestRequestListResponse(BaseModel):
     event: PublicEventInfo
     requests: list[GuestRequestInfo]
     now_playing: GuestNowPlaying | None = None
+
+
+class MyRequestInfo(BaseModel):
+    id: int
+    title: str
+    artist: str
+    artwork_url: str | None
+    status: Literal["new", "accepted", "playing", "played", "rejected"]
+    vote_count: int = 0
+    created_at: datetime
+
+
+class MyRequestsResponse(BaseModel):
+    requests: list[MyRequestInfo]
 
 
 class HasRequestedResponse(BaseModel):
@@ -246,3 +260,41 @@ def check_has_requested(
     )
 
     return HasRequestedResponse(has_requested=has_requested)
+
+
+@router.get("/events/{code}/my-requests", response_model=MyRequestsResponse)
+@limiter.limit("30/minute")
+def get_my_requests(
+    code: str,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> MyRequestsResponse:
+    """Get all requests submitted by the current client for this event."""
+    event, lookup_result = get_event_by_code_with_status(db, code)
+
+    if lookup_result == EventLookupResult.NOT_FOUND:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if lookup_result == EventLookupResult.EXPIRED:
+        raise HTTPException(status_code=410, detail="Event has expired")
+
+    if lookup_result == EventLookupResult.ARCHIVED:
+        raise HTTPException(status_code=410, detail="Event has been archived")
+
+    fingerprint = get_client_fingerprint(request)
+    requests_list = get_requests_by_fingerprint(db, event.id, fingerprint)
+
+    return MyRequestsResponse(
+        requests=[
+            MyRequestInfo(
+                id=r.id,
+                title=r.song_title,
+                artist=r.artist,
+                artwork_url=r.artwork_url,
+                status=r.status,
+                vote_count=r.vote_count,
+                created_at=r.created_at,
+            )
+            for r in requests_list
+        ]
+    )
