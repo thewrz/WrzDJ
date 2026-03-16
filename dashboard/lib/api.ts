@@ -365,6 +365,7 @@ class ApiClient {
     rawSearchQuery?: string,
     metadata?: { source?: string; genre?: string; bpm?: number; musical_key?: string },
     source?: string,
+    nickname?: string,
   ): Promise<SongRequest> {
     return this.fetch(`/api/events/${code}/requests`, {
       method: 'POST',
@@ -372,6 +373,7 @@ class ApiClient {
         artist,
         title,
         note,
+        nickname,
         source: metadata?.source ?? source ?? 'spotify',
         source_url: sourceUrl,
         artwork_url: artworkUrl,

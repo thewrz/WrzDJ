@@ -293,6 +293,11 @@ export function RequestQueueSection({
                     <GenreBadge genre={request.genre} />
                   </div>
                 )}
+                {request.nickname && (
+                  <div className="request-nickname">
+                    <span className="nickname-icon">&#128100;</span> {request.nickname}
+                  </div>
+                )}
                 {request.note && <div className="note">{request.note}</div>}
                 <PreviewPlayer data={{
                   source: request.source,

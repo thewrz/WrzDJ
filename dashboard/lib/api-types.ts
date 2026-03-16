@@ -35,6 +35,7 @@ export interface SongRequest {
   source_url: string | null;
   artwork_url: string | null;
   note: string | null;
+  nickname: string | null;
   status: 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
   created_at: string;
   updated_at: string;
@@ -58,6 +59,7 @@ export interface PublicRequestInfo {
   title: string;
   artist: string;
   artwork_url: string | null;
+  nickname: string | null;
   vote_count: number;
 }
 

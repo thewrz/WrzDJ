@@ -67,6 +67,7 @@ REQUEST_OUT_KEYS = {
     "source_url",
     "artwork_url",
     "note",
+    "nickname",
     "status",
     "created_at",
     "updated_at",
@@ -133,7 +134,7 @@ KIOSK_DISPLAY_KEYS = {
 
 PUBLIC_EVENT_INFO_KEYS = {"code", "name"}
 
-PUBLIC_REQUEST_INFO_KEYS = {"id", "title", "artist", "artwork_url", "vote_count"}
+PUBLIC_REQUEST_INFO_KEYS = {"id", "title", "artist", "artwork_url", "nickname", "vote_count"}
 
 GUEST_REQUEST_INFO_KEYS = PUBLIC_REQUEST_INFO_KEYS | {"status"}
 

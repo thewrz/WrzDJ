@@ -209,6 +209,16 @@ a {
   text-overflow: ellipsis;
 }
 
+.request-nickname {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: #a78bfa;
+}
+
+.request-nickname .nickname-icon {
+  font-style: normal;
+}
+
 .request-info .note {
   margin-top: 0.5rem;
   padding: 0.5rem;
@@ -403,6 +413,15 @@ a {
 .guest-request-item-artist {
   color: var(--text-secondary);
   font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guest-request-item-nickname {
+  font-size: 0.75rem;
+  color: #a78bfa;
+  margin-top: 0.125rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

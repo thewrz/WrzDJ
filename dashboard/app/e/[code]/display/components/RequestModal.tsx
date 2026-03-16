@@ -20,6 +20,7 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
   const [searching, setSearching] = useState(false);
   const [selectedSong, setSelectedSong] = useState<SearchResult | null>(null);
   const [note, setNote] = useState('');
+  const [nickname, setNickname] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitIsDuplicate, setSubmitIsDuplicate] = useState(false);
@@ -43,7 +44,7 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
 
   // Virtual keyboard state (touch devices only)
   const [showKeyboard, setShowKeyboard] = useState(false);
-  const [activeInput, setActiveInput] = useState<'search' | 'note' | null>(null);
+  const [activeInput, setActiveInput] = useState<'search' | 'note' | 'nickname' | null>(null);
   const submitButtonRef = useRef<HTMLButtonElement>(null);
 
   // Auto-show keyboard when modal opens on kiosk/touch devices, and
@@ -52,7 +53,7 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
   useEffect(() => {
     if (isTouch && !submitted) {
       if (selectedSong) {
-        setActiveInput('note');
+        setActiveInput('nickname');
       } else {
         setActiveInput('search');
       }
@@ -126,7 +127,11 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
         selectedSong.title,
         note || undefined,
         selectedSong.url || undefined,
-        selectedSong.album_art || undefined
+        selectedSong.album_art || undefined,
+        undefined,
+        undefined,
+        undefined,
+        nickname || undefined,
       );
       setSubmitted(true);
       setSubmitIsDuplicate(result.is_duplicate ?? false);
@@ -155,7 +160,7 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
   }, []);
 
   const handleInputFocus = useCallback(
-    (input: 'search' | 'note') => {
+    (input: 'search' | 'nickname' | 'note') => {
       if (!isTouch) return;
       setActiveInput(input);
       setShowKeyboard(true);
@@ -167,6 +172,8 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
     (value: string) => {
       if (activeInput === 'search') {
         setSearchQuery(value.slice(0, MAX_SEARCH_LENGTH));
+      } else if (activeInput === 'nickname') {
+        setNickname(value.slice(0, 30));
       } else if (activeInput === 'note') {
         setNote(value.slice(0, MAX_NOTE_LENGTH));
       }
@@ -180,6 +187,9 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
       // Hiding here causes a touch-through: the synthesized click lands on the
       // overlay (behind the now-gone fixed keyboard) and closes the modal.
       handleSearchRef.current();
+    } else if (activeInput === 'nickname') {
+      // Advance to note input
+      setActiveInput('note');
     } else if (activeInput === 'note') {
       handleSubmitRef.current();
     }
@@ -198,7 +208,7 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
     hideKeyboard();
   }, [hideKeyboard]);
 
-  const keyboardInputValue = activeInput === 'search' ? searchQuery : activeInput === 'note' ? note : '';
+  const keyboardInputValue = activeInput === 'search' ? searchQuery : activeInput === 'nickname' ? nickname : activeInput === 'note' ? note : '';
   const keyboardDoneLabel = activeInput === 'search' ? 'Search' : 'Submit';
 
   return (
@@ -239,6 +249,16 @@ export function RequestModal({ code, onClose, onRequestsClosed }: RequestModalPr
               <h3 className="confirm-title">{selectedSong.title}</h3>
               <p className="confirm-artist">{selectedSong.artist}</p>
             </div>
+            <input
+              type="text"
+              className="note-input"
+              placeholder="Your name (optional)"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              onFocus={() => handleInputFocus('nickname')}
+              readOnly={isTouch}
+              maxLength={30}
+            />
             <input
               type="text"
               className="note-input"

@@ -24,6 +24,7 @@ export default function JoinEventPage() {
 
   const [selectedSong, setSelectedSong] = useState<SearchResult | null>(null);
   const [note, setNote] = useState('');
+  const [nickname, setNickname] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -162,6 +163,7 @@ export default function JoinEventPage() {
           musical_key: selectedSong.key ?? undefined,
         },
         selectedSong.source,
+        nickname || undefined,
       );
       setSubmitted(true);
       setSubmitIsDuplicate(result.is_duplicate ?? false);
@@ -205,6 +207,7 @@ export default function JoinEventPage() {
     setSearchResults([]);
     setSelectedSong(null);
     setNote('');
+    setNickname('');
     setSubmitted(false);
     setSubmitIsDuplicate(false);
     setSubmitVoteCount(0);
@@ -349,6 +352,9 @@ export default function JoinEventPage() {
                   <div className="guest-request-item-info">
                     <div className="guest-request-item-title">{req.title}</div>
                     <div className="guest-request-item-artist">{req.artist}</div>
+                    {req.nickname && (
+                      <div className="guest-request-item-nickname">Requested by {req.nickname}</div>
+                    )}
                   </div>
                   <div className="guest-request-item-meta">
                     <span className={`badge ${req.status === 'accepted' ? 'badge-accepted-guest' : 'badge-pending'}`}>
@@ -446,6 +452,18 @@ export default function JoinEventPage() {
                 <p style={{ color: 'var(--text-tertiary)', margin: '0.25rem 0 0 0', fontSize: '0.875rem' }}>{selectedSong.album}</p>
               )}
             </div>
+          </div>
+          <div className="form-group">
+            <label htmlFor="nickname">Your name (optional)</label>
+            <input
+              id="nickname"
+              type="text"
+              className="input"
+              placeholder="e.g., Sarah"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              maxLength={30}
+            />
           </div>
           <div className="form-group">
             <label htmlFor="note">Add a note (optional)</label>

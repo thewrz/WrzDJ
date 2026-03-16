@@ -35,6 +35,7 @@ def _request_to_out(r) -> RequestOut:
         source_url=r.source_url,
         artwork_url=r.artwork_url,
         note=r.note,
+        nickname=r.nickname,
         status=r.status,
         created_at=r.created_at,
         updated_at=r.updated_at,
