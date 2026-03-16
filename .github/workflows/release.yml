@@ -27,27 +27,39 @@ jobs:
           - os: windows-latest
             platform: win32
     runs-on: ${{ matrix.os }}
-    if: >-
-      github.event_name == 'push' ||
-      inputs.platforms == 'all' ||
-      contains(inputs.platforms, matrix.platform)
     steps:
+      - name: Check platform filter
+        id: filter
+        shell: bash
+        run: |
+          PLATFORMS="${{ inputs.platforms || 'all' }}"
+          if [[ "$PLATFORMS" == "all" || "$PLATFORMS" == *"${{ matrix.platform }}"* ]]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Skipping ${{ matrix.platform }} (not in: $PLATFORMS)"
+          fi
+
       - uses: actions/checkout@v6
+        if: steps.filter.outputs.skip != 'true'
 
       - name: Set up Node.js
+        if: steps.filter.outputs.skip != 'true'
         uses: actions/setup-node@v6
         with:
           node-version: "22"
 
       - name: Install AppImage dependencies
-        if: matrix.platform == 'linux'
+        if: steps.filter.outputs.skip != 'true' && matrix.platform == 'linux'
         run: sudo apt-get update && sudo apt-get install -y libfuse2
 
       - name: Install bridge-app dependencies
+        if: steps.filter.outputs.skip != 'true'
         working-directory: bridge-app
         run: npm ci
 
       - name: Set version from tag
+        if: steps.filter.outputs.skip != 'true'
         working-directory: bridge-app
         shell: bash
         run: |
@@ -66,11 +78,12 @@ jobs:
           npm version "$SEMVER" --no-git-tag-version --allow-same-version
 
       - name: Build installers
+        if: steps.filter.outputs.skip != 'true'
         working-directory: bridge-app
         run: npm run make ${{ matrix.arch && format('-- --arch {0}', matrix.arch) || '' }}
 
       - name: Verify silent install (Windows)
-        if: matrix.platform == 'win32'
+        if: steps.filter.outputs.skip != 'true' && matrix.platform == 'win32'
         shell: pwsh
         run: |
           $exe = Get-ChildItem -Path "bridge-app/out/make/squirrel.windows/x64/WrzDJ-Bridge.exe" -ErrorAction Stop
@@ -100,6 +113,7 @@ jobs:
           }
 
       - name: Upload build artifacts
+        if: steps.filter.outputs.skip != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: bridge-app-${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}
