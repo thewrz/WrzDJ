@@ -424,16 +424,20 @@ export default function JoinEventPage() {
                     </span>
                     <button
                       onClick={() => handleVote(req.id)}
-                      disabled={votingId === req.id || votedIds.has(req.id)}
+                      disabled={votingId === req.id || votedIds.has(req.id) || myRequestIds.has(req.id)}
                       style={{
-                        background: votedIds.has(req.id) ? 'rgba(34, 197, 94, 0.2)' : 'rgba(59, 130, 246, 0.2)',
-                        color: votedIds.has(req.id) ? '#4ade80' : '#60a5fa',
+                        background: votedIds.has(req.id) ? 'rgba(34, 197, 94, 0.2)'
+                          : myRequestIds.has(req.id) ? 'rgba(107, 114, 128, 0.15)'
+                          : 'rgba(59, 130, 246, 0.2)',
+                        color: votedIds.has(req.id) ? '#4ade80'
+                          : myRequestIds.has(req.id) ? '#6b7280'
+                          : '#60a5fa',
                         border: 'none',
                         borderRadius: '1rem',
                         padding: '0.3rem 0.625rem',
                         fontSize: '0.8rem',
                         fontWeight: 600,
-                        cursor: votedIds.has(req.id) ? 'default' : 'pointer',
+                        cursor: (votedIds.has(req.id) || myRequestIds.has(req.id)) ? 'default' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '0.25rem',
@@ -441,6 +445,7 @@ export default function JoinEventPage() {
                         opacity: votingId === req.id ? 0.6 : 1,
                         transition: 'background 0.2s, color 0.2s',
                       }}
+                      title={myRequestIds.has(req.id) ? 'This is your request' : undefined}
                     >
                       <span>{votedIds.has(req.id) ? '\u2714' : '\u25B2'}</span>
                       {req.vote_count > 0 ? req.vote_count : ''}
