@@ -166,6 +166,8 @@ vi.mock('@/lib/api', () => ({
     refreshRequestMetadata: vi.fn(),
     rejectAllRequests: vi.fn(),
     bulkDeleteRequests: vi.fn(),
+    getBridgeStatus: vi.fn(),
+    sendBridgeCommand: vi.fn(),
   },
   ApiError: class ApiError extends Error {
     status: number;
@@ -218,6 +220,12 @@ function setupDefaultMocks() {
     linked: false, expires_at: null, configured: false, subscription: null, integration_enabled: true,
   });
   vi.mocked(api.getNowPlaying).mockResolvedValue(null);
+  vi.mocked(api.getBridgeStatus).mockResolvedValue({
+    connected: false, device_name: null, last_seen: null,
+    circuit_breaker_state: null, buffer_size: null, plugin_id: null,
+    deck_count: null, uptime_seconds: null,
+  });
+  vi.mocked(api.sendBridgeCommand).mockResolvedValue(undefined);
 }
 
 describe('EventQueuePage', () => {
