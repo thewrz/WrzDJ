@@ -104,12 +104,22 @@ test.describe('Authenticated pages', () => {
     await capture(page, 'events-list');
   });
 
-  test('Event Management', async ({ page }) => {
+  test('Event Management — Song Tab', async ({ page }) => {
     await setupAuth(page);
     await page.goto(`/events/${eventCode}`);
     await waitForPage(page);
     await ensureCleanUI(page);
     await capture(page, 'event-management');
+  });
+
+  test('Event Management — Manage Tab', async ({ page }) => {
+    await setupAuth(page);
+    await page.goto(`/events/${eventCode}`);
+    await waitForPage(page);
+    await ensureCleanUI(page);
+    await page.click('.event-tab:has-text("Event Management")');
+    await page.waitForTimeout(500);
+    await capture(page, 'event-management-tab');
   });
 
   test('Admin Overview', async ({ page }) => {
@@ -150,7 +160,7 @@ test.describe('Authenticated pages', () => {
 test.describe('Public pages', () => {
   test('Guest Join (mobile)', async ({ browser }) => {
     const ctx = await browser.newContext({
-      viewport: { width: 390, height: 844 },
+      viewport: { width: 430, height: 844 },
       ignoreHTTPSErrors: true,
     });
     const page = await ctx.newPage();
