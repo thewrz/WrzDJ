@@ -11,7 +11,7 @@ import { config } from "./config.js";
 import { CircuitBreaker } from "./circuit-breaker.js";
 import { Logger } from "./logger.js";
 import { TrackHistoryBuffer } from "./track-history-buffer.js";
-import type { BridgeStatusPayload, NowPlayingPayload } from "./types.js";
+import type { BridgeStatusPayload, DetailedBridgeStatus, NowPlayingPayload } from "./types.js";
 
 const log = new Logger("Bridge");
 
@@ -20,6 +20,9 @@ const INITIAL_BACKOFF_MS = 2000;
 const FETCH_TIMEOUT_MS = 10_000;
 const DELETE_MAX_RETRIES = 2;
 const DELETE_BACKOFF_MS = 1000;
+
+/** Module start time for uptime calculation */
+const startTime = Date.now();
 
 /** Track key for deduplication (artist::title, lowercase) */
 let lastTrackKey: string | null = null;
@@ -47,6 +50,15 @@ circuitBreaker.on("stateChange", ({ from, to }: { from: string; to: string }) =>
 /** Get the circuit breaker instance (for external monitoring). */
 export function getCircuitBreaker(): CircuitBreaker {
   return circuitBreaker;
+}
+
+/** Get enriched bridge status for backend reporting. */
+export function getDetailedStatus(): DetailedBridgeStatus {
+  return {
+    circuit_breaker_state: circuitBreaker.getState(),
+    buffer_size: trackBuffer.size,
+    uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
+  };
 }
 
 /**
@@ -247,15 +259,22 @@ export async function clearNowPlaying(): Promise<void> {
 /**
  * Post bridge connection status to the backend.
  * Returns true if the backend acknowledged the status update.
+ * Accepts optional enriched fields for detailed monitoring.
  */
 export async function postBridgeStatus(
   connected: boolean,
   deviceName?: string,
+  enriched?: Partial<DetailedBridgeStatus> & { plugin_id?: string; deck_count?: number },
 ): Promise<boolean> {
   const payload: BridgeStatusPayload = {
     event_code: config.eventCode,
     connected,
     device_name: deviceName ?? null,
+    circuit_breaker_state: enriched?.circuit_breaker_state ?? null,
+    buffer_size: enriched?.buffer_size ?? null,
+    plugin_id: enriched?.plugin_id ?? null,
+    deck_count: enriched?.deck_count ?? null,
+    uptime_seconds: enriched?.uptime_seconds ?? null,
   };
 
   log.info(

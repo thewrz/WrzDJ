@@ -80,6 +80,12 @@ vi.mock('@/lib/api', () => ({
     getTidalStatus: vi.fn().mockResolvedValue({ linked: false, user_id: null, expires_at: null, integration_enabled: true }),
     getBeatportStatus: vi.fn().mockResolvedValue({ linked: false, expires_at: null, configured: false, subscription: null, integration_enabled: true }),
     getNowPlaying: vi.fn().mockResolvedValue(null),
+    getBridgeStatus: vi.fn().mockResolvedValue({
+      connected: false, device_name: null, last_seen: null,
+      circuit_breaker_state: null, buffer_size: null, plugin_id: null,
+      deck_count: null, uptime_seconds: null,
+    }),
+    sendBridgeCommand: vi.fn().mockResolvedValue(undefined),
   },
   ApiError: class extends Error { status: number; constructor(m: string, s: number) { super(m); this.status = s; } },
 }));

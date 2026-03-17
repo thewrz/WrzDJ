@@ -9,7 +9,9 @@ import type {
   BeatportEventSettings,
   BeatportSearchResult,
   BeatportStatus,
+  BridgeCommandResponse,
   DisplaySettingsResponse,
+  PublicBridgeStatus,
   Event,
   GuestRequestListResponse,
   HasRequestedResponse,
@@ -51,6 +53,8 @@ export type {
   BeatportEventSettings,
   BeatportSearchResult,
   BeatportStatus,
+  BridgeCommandResponse,
+  BridgeEnrichedStatus,
   CapabilityStatus,
   DisplaySettingsResponse,
   Event,
@@ -76,6 +80,7 @@ export type {
   PaginatedResponse,
   PlayHistoryItem,
   PlayHistoryResponse,
+  PublicBridgeStatus,
   PublicRequestInfo,
   RecommendationResponse,
   RecommendedTrack,
@@ -463,6 +468,13 @@ class ApiClient {
     }
     const data = await response.json();
     return data || null;
+  }
+
+  /**
+   * Get bridge connection status (independent of track data).
+   */
+  async getBridgeStatus(code: string): Promise<PublicBridgeStatus> {
+    return this.publicFetch(`${getApiUrl()}/api/public/e/${code}/bridge-status`);
   }
 
   /**
@@ -879,6 +891,15 @@ class ApiClient {
 
   async deleteKiosk(kioskId: number): Promise<void> {
     return this.fetch(`/api/kiosk/${kioskId}`, { method: 'DELETE' });
+  }
+
+  // ========== Bridge Commands ==========
+
+  async sendBridgeCommand(eventCode: string, command: string): Promise<BridgeCommandResponse> {
+    return this.fetch<BridgeCommandResponse>(`/api/bridge/commands/${eventCode}`, {
+      method: 'POST',
+      body: JSON.stringify({ command_type: command }),
+    });
   }
 
   // ========== Activity Log ==========

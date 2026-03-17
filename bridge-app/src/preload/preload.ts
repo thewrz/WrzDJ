@@ -28,6 +28,15 @@ const bridgeApi = {
   stopBridge: (): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.BRIDGE_STOP),
 
+  resetDecks: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.BRIDGE_RESET_DECKS),
+
+  reconnect: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.BRIDGE_RECONNECT),
+
+  restartBridge: (): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.BRIDGE_RESTART),
+
   // Settings
   getSettings: (): Promise<BridgeSettings> =>
     ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),
@@ -50,6 +59,12 @@ const bridgeApi = {
     const listener = (_event: IpcRendererEvent, logMessage: IpcLogMessage) => callback(logMessage);
     ipcRenderer.on(IPC_CHANNELS.BRIDGE_LOG, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.BRIDGE_LOG, listener);
+  },
+
+  onPing: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(IPC_CHANNELS.BRIDGE_PING, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.BRIDGE_PING, listener);
   },
 
   onAuthChanged: (callback: (state: AuthState) => void): (() => void) => {

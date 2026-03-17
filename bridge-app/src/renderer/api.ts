@@ -13,9 +13,13 @@ export interface BridgeApi {
   stopBridge(): Promise<void>;
   getSettings(): Promise<BridgeSettings>;
   updateSettings(settings: Partial<BridgeSettings>): Promise<BridgeSettings>;
+  resetDecks(): Promise<void>;
+  reconnect(): Promise<void>;
+  restartBridge(): Promise<void>;
   exportDebugReport(): Promise<string | null>;
   onBridgeStatus(callback: (status: BridgeStatus) => void): () => void;
   onBridgeLog(callback: (logMessage: IpcLogMessage) => void): () => void;
+  onPing(callback: () => void): () => void;
   onAuthChanged(callback: (state: AuthState) => void): () => void;
 }
 

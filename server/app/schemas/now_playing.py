@@ -24,6 +24,12 @@ class BridgeStatusPayload(BaseModel):
     event_code: str = Field(..., min_length=1, max_length=10)
     connected: bool
     device_name: str | None = Field(default=None, max_length=100)
+    # Optional enriched fields (backward compatible — bridge may omit all of these)
+    circuit_breaker_state: str | None = Field(default=None, max_length=20)
+    buffer_size: int | None = Field(default=None, ge=0)
+    plugin_id: str | None = Field(default=None, max_length=50)
+    deck_count: int | None = Field(default=None, ge=0)
+    uptime_seconds: int | None = Field(default=None, ge=0)
 
 
 # --- Public Outbound Responses ---
@@ -47,6 +53,26 @@ class NowPlayingResponse(BaseModel):
 
     @field_serializer("started_at")
     def serialize_datetime(self, dt: datetime) -> str:
+        return dt.isoformat() + "Z"
+
+
+class BridgeStatusResponse(BaseModel):
+    """Public response for bridge connection status (independent of track data)."""
+
+    connected: bool = False
+    device_name: str | None = None
+    last_seen: datetime | None = None
+    # Enriched fields (populated from most recent SSE event, not persisted)
+    circuit_breaker_state: str | None = None
+    buffer_size: int | None = None
+    plugin_id: str | None = None
+    deck_count: int | None = None
+    uptime_seconds: int | None = None
+
+    @field_serializer("last_seen")
+    def serialize_last_seen(self, dt: datetime | None) -> str | None:
+        if dt is None:
+            return None
         return dt.isoformat() + "Z"
 
 

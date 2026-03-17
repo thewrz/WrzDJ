@@ -5,7 +5,15 @@ interface EventStreamHandlers {
   onRequestStatusChanged?: (data: { request_id: number; status: string; title?: string; artist?: string }) => void;
   onNowPlayingChanged?: (data: { title: string; artist: string; source: string }) => void;
   onRequestsBulkUpdate?: (data: { action: string; count: number }) => void;
-  onBridgeStatusChanged?: (data: { connected: boolean; device_name: string | null }) => void;
+  onBridgeStatusChanged?: (data: {
+    connected: boolean;
+    device_name: string | null;
+    circuit_breaker_state?: string | null;
+    buffer_size?: number | null;
+    plugin_id?: string | null;
+    deck_count?: number | null;
+    uptime_seconds?: number | null;
+  }) => void;
 }
 
 const INITIAL_RETRY_MS = 1000;

@@ -256,6 +256,11 @@ describe("bridge.ts", () => {
         event_code: "TEST123",
         connected: true,
         device_name: "CDJ-2000",
+        circuit_breaker_state: null,
+        buffer_size: null,
+        plugin_id: null,
+        deck_count: null,
+        uptime_seconds: null,
       });
     });
 

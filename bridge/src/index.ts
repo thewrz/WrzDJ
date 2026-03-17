@@ -18,11 +18,14 @@
 import { config, validateConfig } from "./config.js";
 import {
   clearNowPlaying,
+  getCircuitBreaker,
+  getDetailedStatus,
   postBridgeStatus,
   postNowPlaying,
   shouldSkipTrack,
   updateLastTrack,
 } from "./bridge.js";
+import { CommandPoller } from "./command-poller.js";
 import type { DeckLiveEvent } from "./deck-state.js";
 import { Logger } from "./logger.js";
 import { getPlugin } from "./plugin-registry.js";
@@ -35,6 +38,20 @@ const log = new Logger("Bridge");
 import "./plugins/index.js";
 
 let pluginBridge: PluginBridge | null = null;
+let commandPoller: CommandPoller | null = null;
+
+/** Build enriched status fields for heartbeat/status posts. */
+function buildEnrichedStatus(): ReturnType<typeof getDetailedStatus> & {
+  plugin_id?: string;
+  deck_count?: number;
+} {
+  const detailed = getDetailedStatus();
+  return {
+    ...detailed,
+    plugin_id: pluginBridge?.pluginId,
+    deck_count: pluginBridge?.manager.getDeckIds().length,
+  };
+}
 
 async function main(): Promise<void> {
   log.info("WrzDJ Bridge starting...");
@@ -89,7 +106,7 @@ async function main(): Promise<void> {
 
   // Handle heartbeat — keep bridge_last_seen fresh on the backend
   pluginBridge.on("heartbeat", async () => {
-    await postBridgeStatus(true);
+    await postBridgeStatus(true, undefined, buildEnrichedStatus());
   });
 
   // Handle authoritative now-playing clear
@@ -101,16 +118,49 @@ async function main(): Promise<void> {
   pluginBridge.on("connection", async (event: PluginConnectionEvent) => {
     if (event.connected) {
       log.info(`Device connected: ${event.deviceName}`);
-      await postBridgeStatus(true, event.deviceName);
+      await postBridgeStatus(true, event.deviceName, buildEnrichedStatus());
     } else {
       log.info("Device disconnected");
       await postBridgeStatus(false);
     }
   });
 
+  // Start command poller
+  const cmdLog = log.child("CommandPoller");
+  commandPoller = new CommandPoller(getCircuitBreaker(), cmdLog);
+
+  commandPoller.on("command", async (commandType: string) => {
+    if (!pluginBridge) return;
+
+    cmdLog.info(`Executing command: ${commandType}`);
+    try {
+      switch (commandType) {
+        case "reset_decks":
+          pluginBridge.resetDecks();
+          break;
+        case "reconnect":
+          await pluginBridge.reconnect();
+          break;
+        case "restart":
+          await pluginBridge.restart();
+          break;
+        default:
+          cmdLog.warn(`Unknown command type: ${commandType}`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      cmdLog.error(`Command "${commandType}" failed: ${message}`);
+    }
+  });
+
+  commandPoller.start(config.apiUrl, config.apiKey, config.eventCode);
+
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {
     log.info(`Received ${signal}, shutting down...`);
+    if (commandPoller) {
+      commandPoller.stop();
+    }
     if (pluginBridge) {
       await pluginBridge.stop();
     }
@@ -124,11 +174,18 @@ async function main(): Promise<void> {
 
   // Start the plugin bridge
   await pluginBridge.start();
+
+  // Immediate handshake — tell the backend we're online and listening
+  log.info("Bridge online — sending initial status to backend");
+  await postBridgeStatus(true, undefined, buildEnrichedStatus());
 }
 
 // Run the bridge
 main().catch((err: Error) => {
   log.error(`Fatal error: ${err.message}`);
+  if (commandPoller) {
+    commandPoller.stop();
+  }
   if (pluginBridge) {
     pluginBridge.stop().catch(() => {});
   }

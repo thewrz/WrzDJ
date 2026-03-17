@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from './hooks/useAuth.js';
 import { useBridgeStatus } from './hooks/useBridgeStatus.js';
 import { useBridgeLog } from './hooks/useBridgeLog.js';
@@ -15,6 +15,15 @@ export function App() {
   const bridgeStatus = useBridgeStatus();
   const { entries: logEntries, clear: clearLog } = useBridgeLog();
   const [selectedEvent, setSelectedEvent] = useState<EventInfo | null>(null);
+  const [pingVisible, setPingVisible] = useState(false);
+
+  useEffect(() => {
+    const cleanup = window.bridgeApi.onPing(() => {
+      setPingVisible(true);
+      setTimeout(() => setPingVisible(false), 3000);
+    });
+    return cleanup;
+  }, []);
 
   const handleEventSelect = useCallback((event: EventInfo) => {
     setSelectedEvent(event);
@@ -37,6 +46,11 @@ export function App() {
   // Authenticated - show main UI
   return (
     <div className="app">
+      {pingVisible && (
+        <div className="ping-toast">
+          Ping received from WrzDJ dashboard
+        </div>
+      )}
       <div className="app-header">
         <h1>WrzDJ Bridge</h1>
         <div className="app-header-user">

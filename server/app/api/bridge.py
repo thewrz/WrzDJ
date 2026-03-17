@@ -3,20 +3,31 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_admin, get_db
+from app.api.deps import get_current_active_user, get_current_admin, get_db
 from app.core.bridge_auth import verify_bridge_api_key
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.schemas.bridge_commands import (
+    BridgeCommandRequest,
+    BridgeCommandResponse,
+    BridgeCommandsPollResponse,
+)
 from app.schemas.common import BridgeApiKeyResponse, StatusResponse
 from app.schemas.now_playing import (
     BridgeStatusPayload,
+    BridgeStatusResponse,
     NowPlayingBridgePayload,
     NowPlayingResponse,
     PlayHistoryEntry,
     PlayHistoryResponse,
 )
-from app.services.event import EventLookupResult, get_event_by_code_with_status
+from app.services.bridge_commands import poll_commands, queue_command
+from app.services.event import (
+    EventLookupResult,
+    get_event_by_code_for_owner,
+    get_event_by_code_with_status,
+)
 from app.services.event_bus import publish_event
 from app.services.now_playing import (
     clear_now_playing,
@@ -113,14 +124,22 @@ def post_bridge_status(
     success = update_bridge_status(db, payload.event_code, payload.connected, payload.device_name)
     if not success:
         raise HTTPException(status_code=404, detail="Event not found")
-    publish_event(
-        payload.event_code,
-        "bridge_status_changed",
-        {
-            "connected": payload.connected,
-            "device_name": payload.device_name,
-        },
-    )
+    sse_data: dict = {
+        "connected": payload.connected,
+        "device_name": payload.device_name,
+    }
+    # Include enriched fields when present (backward compatible)
+    if payload.circuit_breaker_state is not None:
+        sse_data["circuit_breaker_state"] = payload.circuit_breaker_state
+    if payload.buffer_size is not None:
+        sse_data["buffer_size"] = payload.buffer_size
+    if payload.plugin_id is not None:
+        sse_data["plugin_id"] = payload.plugin_id
+    if payload.deck_count is not None:
+        sse_data["deck_count"] = payload.deck_count
+    if payload.uptime_seconds is not None:
+        sse_data["uptime_seconds"] = payload.uptime_seconds
+    publish_event(payload.event_code, "bridge_status_changed", sse_data)
     return StatusResponse(status="ok")
 
 
@@ -176,6 +195,37 @@ def get_public_now_playing(
     return NowPlayingResponse.model_validate(now_playing)
 
 
+@router.get("/public/e/{code}/bridge-status", response_model=BridgeStatusResponse)
+@limiter.limit("180/minute")
+def get_public_bridge_status(
+    request: Request,
+    code: str,
+    db: Session = Depends(get_db),
+) -> BridgeStatusResponse:
+    """
+    Get bridge connection status for public display.
+
+    Independent of track data — returns bridge connectivity even when
+    no track is currently playing.
+    """
+    event, lookup_result = get_event_by_code_with_status(db, code)
+
+    if lookup_result == EventLookupResult.NOT_FOUND:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if lookup_result in (EventLookupResult.EXPIRED, EventLookupResult.ARCHIVED):
+        raise HTTPException(status_code=410, detail="Event has expired")
+
+    now_playing = get_now_playing(db, event.id)
+    if not now_playing:
+        return BridgeStatusResponse()
+
+    return BridgeStatusResponse(
+        connected=now_playing.bridge_connected,
+        device_name=now_playing.bridge_device_name,
+        last_seen=now_playing.bridge_last_seen,
+    )
+
+
 @router.get("/public/e/{code}/history", response_model=PlayHistoryResponse)
 @limiter.limit("180/minute")
 def get_public_history(
@@ -201,4 +251,60 @@ def get_public_history(
     return PlayHistoryResponse(
         items=[PlayHistoryEntry.model_validate(item) for item in items],
         total=total,
+    )
+
+
+# --- Bridge Command Endpoints ---
+
+
+@router.post("/bridge/commands/{code}", response_model=BridgeCommandResponse)
+@limiter.limit("10/minute")
+def post_bridge_command(
+    request: Request,
+    payload: BridgeCommandRequest,
+    code: str = Path(..., min_length=1, max_length=10),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+) -> BridgeCommandResponse:
+    """
+    Queue a command for the bridge to pick up.
+
+    Requires JWT auth. The user must own the event or be an admin.
+    Rate limited to 10 requests per minute.
+    """
+    # Check ownership or admin role
+    event = get_event_by_code_for_owner(db, code, current_user)
+    if not event and current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(status_code=404, detail="Event not found")
+    # Admin who doesn't own the event — verify it exists
+    if not event:
+        found_event, lookup_result = get_event_by_code_with_status(db, code)
+        if lookup_result == EventLookupResult.NOT_FOUND:
+            raise HTTPException(status_code=404, detail="Event not found")
+    command_id = queue_command(code.upper(), payload.command_type)
+    return BridgeCommandResponse(
+        command_id=command_id,
+        command_type=payload.command_type,
+    )
+
+
+@router.get("/bridge/commands/{code}", response_model=BridgeCommandsPollResponse)
+@limiter.limit("30/minute")
+def get_bridge_commands(
+    request: Request,
+    code: str = Path(..., min_length=1, max_length=10),
+    _: None = Depends(verify_bridge_api_key),
+) -> BridgeCommandsPollResponse:
+    """
+    Poll and clear pending commands for the bridge.
+
+    Requires bridge API key auth. Returns all pending commands and clears the queue.
+    Rate limited to 30 requests per minute.
+    """
+    commands = poll_commands(code.upper())
+    return BridgeCommandsPollResponse(
+        commands=[
+            BridgeCommandResponse(command_id=cmd["id"], command_type=cmd["type"])
+            for cmd in commands
+        ]
     )

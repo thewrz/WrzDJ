@@ -1,6 +1,7 @@
 'use client';
 
 import type { BeatportStatus, TidalStatus } from '@/lib/api';
+import { Tooltip } from '@/components/Tooltip';
 
 interface CloudProvidersCardProps {
   tidalStatus: TidalStatus | null;
@@ -95,14 +96,15 @@ export function CloudProvidersCard({
               >
                 {togglingTidalSync ? '...' : tidalSyncEnabled ? 'Enabled' : 'Disabled'}
               </button>
-              <button
-                className="btn btn-sm"
-                style={{ background: '#666', minWidth: '90px' }}
-                onClick={onDisconnectTidal}
-                title="Disconnect Tidal account"
-              >
-                Disconnect
-              </button>
+              <Tooltip description="Disconnect Tidal account and remove saved tokens">
+                <button
+                  className="btn btn-sm"
+                  style={{ background: '#666', minWidth: '90px' }}
+                  onClick={onDisconnectTidal}
+                >
+                  Disconnect
+                </button>
+              </Tooltip>
             </>
           ) : (
             <button
@@ -158,14 +160,15 @@ export function CloudProvidersCard({
               >
                 {togglingBeatportSync ? '...' : beatportSyncEnabled ? 'Enabled' : 'Disabled'}
               </button>
-              <button
-                className="btn btn-sm"
-                style={{ background: '#666', minWidth: '90px' }}
-                onClick={onDisconnectBeatport}
-                title="Disconnect Beatport account"
-              >
-                Disconnect
-              </button>
+              <Tooltip description="Disconnect Beatport account and remove saved tokens">
+                <button
+                  className="btn btn-sm"
+                  style={{ background: '#666', minWidth: '90px' }}
+                  onClick={onDisconnectBeatport}
+                >
+                  Disconnect
+                </button>
+              </Tooltip>
             </>
           ) : (
             <button

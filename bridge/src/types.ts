@@ -20,4 +20,17 @@ export interface BridgeStatusPayload {
   event_code: string;
   connected: boolean;
   device_name?: string | null;
+  /** Enriched status fields (optional, backward compatible) */
+  circuit_breaker_state?: string | null;
+  buffer_size?: number | null;
+  plugin_id?: string | null;
+  deck_count?: number | null;
+  uptime_seconds?: number | null;
+}
+
+/** Enriched bridge status for detailed monitoring. */
+export interface DetailedBridgeStatus {
+  circuit_breaker_state: string;
+  buffer_size: number;
+  uptime_seconds: number;
 }

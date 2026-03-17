@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Platforms to build (comma-separated: linux,darwin,win32 or "all")'
+        required: false
+        default: 'all'
 
 jobs:
   build-bridge-app:
@@ -22,39 +28,62 @@ jobs:
             platform: win32
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Check platform filter
+        id: filter
+        shell: bash
+        run: |
+          PLATFORMS="${{ inputs.platforms || 'all' }}"
+          if [[ "$PLATFORMS" == "all" || "$PLATFORMS" == *"${{ matrix.platform }}"* ]]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Skipping ${{ matrix.platform }} (not in: $PLATFORMS)"
+          fi
+
       - uses: actions/checkout@v6
+        if: steps.filter.outputs.skip != 'true'
 
       - name: Set up Node.js
+        if: steps.filter.outputs.skip != 'true'
         uses: actions/setup-node@v6
         with:
           node-version: "22"
 
       - name: Install AppImage dependencies
-        if: matrix.platform == 'linux'
+        if: steps.filter.outputs.skip != 'true' && matrix.platform == 'linux'
         run: sudo apt-get update && sudo apt-get install -y libfuse2
 
       - name: Install bridge-app dependencies
+        if: steps.filter.outputs.skip != 'true'
         working-directory: bridge-app
         run: npm ci
 
       - name: Set version from tag
+        if: steps.filter.outputs.skip != 'true'
         working-directory: bridge-app
         shell: bash
         run: |
-          # Convert date tag (2026.02.08.12) to valid semver (2026.208.12)
-          # NuGet/Squirrel requires 3-part semver, not 4-part date versions
-          TAG="${GITHUB_REF_NAME#v}"
-          IFS='.' read -r Y M D R <<< "$TAG"
-          SEMVER="${Y}.$((10#${M} * 100 + 10#${D})).${R:-0}"
-          echo "Tag $TAG → semver $SEMVER"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            # Convert date tag (2026.02.08.12) to valid semver (2026.208.12)
+            # NuGet/Squirrel requires 3-part semver, not 4-part date versions
+            TAG="${GITHUB_REF_NAME#v}"
+            IFS='.' read -r Y M D R <<< "$TAG"
+            SEMVER="${Y}.$((10#${M} * 100 + 10#${D})).${R:-0}"
+            echo "Tag $TAG → semver $SEMVER"
+          else
+            # Manual dispatch — use dev version with short SHA
+            SEMVER="0.0.0-dev.${GITHUB_SHA::7}"
+            echo "No tag — using dev version $SEMVER"
+          fi
           npm version "$SEMVER" --no-git-tag-version --allow-same-version
 
       - name: Build installers
+        if: steps.filter.outputs.skip != 'true'
         working-directory: bridge-app
         run: npm run make ${{ matrix.arch && format('-- --arch {0}', matrix.arch) || '' }}
 
       - name: Verify silent install (Windows)
-        if: matrix.platform == 'win32'
+        if: steps.filter.outputs.skip != 'true' && matrix.platform == 'win32'
         shell: pwsh
         run: |
           $exe = Get-ChildItem -Path "bridge-app/out/make/squirrel.windows/x64/WrzDJ-Bridge.exe" -ErrorAction Stop
@@ -84,6 +113,7 @@ jobs:
           }
 
       - name: Upload build artifacts
+        if: steps.filter.outputs.skip != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: bridge-app-${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }}
@@ -114,6 +144,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [build-bridge-app, bundle-deploy-scripts]
     runs-on: ubuntu-latest
     permissions:
@@ -168,6 +199,7 @@ jobs:
 
   update-winget:
     name: Update winget manifest
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [create-release]
     runs-on: windows-latest
     steps:

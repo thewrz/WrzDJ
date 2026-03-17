@@ -75,6 +75,13 @@ export default function EventQueuePage() {
   // Bridge / now-playing state
   const [bridgeConnected, setBridgeConnected] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<NowPlayingInfo | null>(null);
+  const [bridgeDetails, setBridgeDetails] = useState<{
+    circuitBreakerState: string | null;
+    bufferSize: number | null;
+    pluginId: string | null;
+    deckCount: number | null;
+    uptimeSeconds: number | null;
+  } | null>(null);
 
   // Tidal sync state
   const [tidalStatus, setTidalStatus] = useState<TidalStatus | null>(null);
@@ -229,7 +236,7 @@ export default function EventQueuePage() {
 
   const loadData = useCallback(async (): Promise<boolean> => {
     try {
-      const [eventData, requestsData, historyData, displaySettings, tidalStatusData, beatportStatusData, nowPlayingData] = await Promise.all([
+      const [eventData, requestsData, historyData, displaySettings, tidalStatusData, beatportStatusData, nowPlayingData, bridgeStatusData] = await Promise.all([
         api.getEvent(code),
         api.getRequests(code, { sort: sortModeRef.current }),
         api.getPlayHistory(code).catch((): undefined => undefined),
@@ -237,6 +244,7 @@ export default function EventQueuePage() {
         api.getTidalStatus().catch(() => ({ linked: false, user_id: null, expires_at: null, integration_enabled: true })),
         api.getBeatportStatus().catch(() => ({ linked: false, expires_at: null, configured: false, subscription: null, integration_enabled: true })),
         api.getNowPlaying(code).catch((): undefined => undefined),
+        api.getBridgeStatus(code).catch(() => ({ connected: false, device_name: null, last_seen: null, circuit_breaker_state: null, buffer_size: null, plugin_id: null, deck_count: null, uptime_seconds: null })),
       ]);
       setEvent(eventData);
       setRequests(requestsData);
@@ -257,9 +265,16 @@ export default function EventQueuePage() {
       setBeatportStatus(beatportStatusData);
       setBeatportSyncEnabled(eventData.beatport_sync_enabled ?? false);
       if (nowPlayingData !== undefined) {
-        setBridgeConnected(nowPlayingData?.bridge_connected ?? false);
         setNowPlaying(nowPlayingData ?? null);
       }
+      setBridgeConnected(bridgeStatusData.connected);
+      setBridgeDetails({
+        circuitBreakerState: bridgeStatusData.circuit_breaker_state,
+        bufferSize: bridgeStatusData.buffer_size,
+        pluginId: bridgeStatusData.plugin_id,
+        deckCount: bridgeStatusData.deck_count,
+        uptimeSeconds: bridgeStatusData.uptime_seconds,
+      });
       setEventStatus('active');
       setError(null);
       hasLoadedRef.current = true;
@@ -342,7 +357,17 @@ export default function EventQueuePage() {
   useEventStream(isAuthenticated ? code : null, {
     onRequestCreated: () => { loadDataRef.current(); },
     onNowPlayingChanged: () => { loadDataRef.current(); },
-    onBridgeStatusChanged: () => { loadDataRef.current(); },
+    onBridgeStatusChanged: (data) => {
+      setBridgeConnected(data.connected);
+      setBridgeDetails({
+        circuitBreakerState: data.circuit_breaker_state ?? null,
+        bufferSize: data.buffer_size ?? null,
+        pluginId: data.plugin_id ?? null,
+        deckCount: data.deck_count ?? null,
+        uptimeSeconds: data.uptime_seconds ?? null,
+      });
+      loadDataRef.current();
+    },
   });
 
   const updateStatus = async (requestId: number, status: string) => {
@@ -1039,6 +1064,7 @@ export default function EventQueuePage() {
               code={code}
               event={event}
               bridgeConnected={bridgeConnected}
+              bridgeDetails={bridgeDetails}
               requestsOpen={requestsOpen}
               togglingRequests={togglingRequests}
               onToggleRequests={handleToggleRequests}
