@@ -2,6 +2,13 @@ import started from 'electron-squirrel-startup';
 if (started) process.exit();
 
 import { app, BrowserWindow, session } from 'electron';
+
+// Squirrel auto-launches the app with --squirrel-firstrun after install completes.
+// Exit immediately so the installer process tree terminates cleanly.
+// Without this, winget validation times out waiting for the app to close (E_ABORT).
+if (process.argv.includes('--squirrel-firstrun')) {
+  app.exit(0);
+}
 import path from 'path';
 import { registerIpcHandlers, getBridgeRunner } from './ipc-handlers.js';
 
