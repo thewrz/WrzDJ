@@ -97,10 +97,15 @@ class TestExportRequestsToCsv:
         assert "Request ID" in csv_content
         assert "Song Title" in csv_content
         assert "Artist" in csv_content
+        assert "Genre" in csv_content
+        assert "BPM" in csv_content
+        assert "Key" in csv_content
+        assert "Votes" in csv_content
         assert "Status" in csv_content
         assert "Note" in csv_content
         assert "Source" in csv_content
         assert "Source URL" in csv_content
+        assert "Artwork URL" in csv_content
         assert "Created At" in csv_content
         assert "Updated At" in csv_content
 
@@ -120,10 +125,15 @@ class TestExportRequestsToCsv:
         request.id = 42
         request.song_title = "Test Song"
         request.artist = "Test Artist"
+        request.genre = "House"
+        request.bpm = 128.0
+        request.musical_key = "8A"
+        request.vote_count = 5
         request.status = "accepted"
         request.note = "Great song!"
         request.source = "spotify"
         request.source_url = "https://spotify.com/track/123"
+        request.artwork_url = "https://i.scdn.co/image/abc123"
         request.created_at = datetime(2026, 1, 15, 12, 0, 0)
         request.updated_at = datetime(2026, 1, 15, 12, 30, 0)
 
@@ -132,10 +142,15 @@ class TestExportRequestsToCsv:
         assert "42" in csv_content
         assert "Test Song" in csv_content
         assert "Test Artist" in csv_content
+        assert "House" in csv_content
+        assert "128.0" in csv_content
+        assert "8A" in csv_content
+        assert "5" in csv_content
         assert "accepted" in csv_content
         assert "Great song!" in csv_content
         assert "spotify" in csv_content
         assert "https://spotify.com/track/123" in csv_content
+        assert "https://i.scdn.co/image/abc123" in csv_content
         assert "2026-01-15" in csv_content
 
     def test_handles_none_values(self):
@@ -146,10 +161,15 @@ class TestExportRequestsToCsv:
         request.id = 1
         request.song_title = "Song"
         request.artist = "Artist"
+        request.genre = None
+        request.bpm = None
+        request.musical_key = None
+        request.vote_count = 0
         request.status = "new"
         request.note = None
         request.source = None
         request.source_url = None
+        request.artwork_url = None
         request.created_at = None
         request.updated_at = None
 
@@ -167,10 +187,15 @@ class TestExportRequestsToCsv:
             req.id = i
             req.song_title = f"Song {i}"
             req.artist = f"Artist {i}"
+            req.genre = None
+            req.bpm = None
+            req.musical_key = None
+            req.vote_count = 0
             req.status = "new"
             req.note = None
             req.source = "manual"
             req.source_url = None
+            req.artwork_url = None
             req.created_at = datetime(2026, 1, 15, 12, 0, 0)
             req.updated_at = datetime(2026, 1, 15, 12, 0, 0)
             requests.append(req)
@@ -188,16 +213,77 @@ class TestExportRequestsToCsv:
         request.id = 1
         request.song_title = 'Song with "quotes" and, commas'
         request.artist = "Artist\nwith\nnewlines"
+        request.genre = None
+        request.bpm = None
+        request.musical_key = None
+        request.vote_count = 0
         request.status = "new"
         request.note = None
         request.source = "manual"
         request.source_url = None
+        request.artwork_url = None
         request.created_at = datetime(2026, 1, 15, 12, 0, 0)
         request.updated_at = datetime(2026, 1, 15, 12, 0, 0)
 
         # Should not raise and should produce valid CSV
         csv_content = export_requests_to_csv(event, [request])
         assert "Song with" in csv_content
+
+    def test_includes_enriched_metadata(self):
+        """Test that CSV includes genre, BPM, key, votes, and artwork URL."""
+        event = MagicMock()
+
+        request = MagicMock()
+        request.id = 10
+        request.song_title = "Strobe"
+        request.artist = "Deadmau5"
+        request.genre = "Progressive House"
+        request.bpm = 128.0
+        request.musical_key = "2A"
+        request.vote_count = 12
+        request.status = "accepted"
+        request.note = None
+        request.source = "beatport"
+        request.source_url = "https://www.beatport.com/track/strobe/123"
+        request.artwork_url = "https://geo-media.beatport.com/image/abc.jpg"
+        request.created_at = datetime(2026, 3, 20, 22, 0, 0)
+        request.updated_at = datetime(2026, 3, 20, 22, 5, 0)
+
+        csv_content = export_requests_to_csv(event, [request])
+
+        lines = csv_content.strip().split("\n")
+        assert len(lines) == 2  # Header + 1 data row
+        data_line = lines[1]
+        assert "Progressive House" in data_line
+        assert "128.0" in data_line
+        assert "2A" in data_line
+        assert "12" in data_line
+        assert "geo-media.beatport.com" in data_line
+
+    def test_none_metadata_produces_empty_cells(self):
+        """Test that missing enrichment data produces empty CSV cells, not 'None'."""
+        event = MagicMock()
+
+        request = MagicMock()
+        request.id = 1
+        request.song_title = "Unknown Track"
+        request.artist = "Unknown Artist"
+        request.genre = None
+        request.bpm = None
+        request.musical_key = None
+        request.vote_count = None
+        request.status = "new"
+        request.note = None
+        request.source = "manual"
+        request.source_url = None
+        request.artwork_url = None
+        request.created_at = datetime(2026, 3, 20, 22, 0, 0)
+        request.updated_at = datetime(2026, 3, 20, 22, 0, 0)
+
+        csv_content = export_requests_to_csv(event, [request])
+
+        # "None" should never appear as literal text in the CSV
+        assert "None" not in csv_content
 
 
 class TestSanitizeCsvValue:
@@ -256,10 +342,15 @@ class TestSanitizeCsvValue:
         request.id = 1
         request.song_title = '=HYPERLINK("http://evil.com","Click")'
         request.artist = "+cmd|' /C calc'!A0"
+        request.genre = None
+        request.bpm = None
+        request.musical_key = None
+        request.vote_count = 0
         request.status = "new"
         request.note = "-2+3+cmd"
         request.source = "@SUM(1+1)"
         request.source_url = None
+        request.artwork_url = None
         request.created_at = datetime(2026, 1, 15, 12, 0, 0)
         request.updated_at = datetime(2026, 1, 15, 12, 0, 0)
 
