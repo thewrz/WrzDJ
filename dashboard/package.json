@@ -13,11 +13,11 @@
     "e2e": "playwright test --config playwright-e2e.config.ts"
   },
   "dependencies": {
-    "next": "^16.1.7",
+    "next": "^16.2.1",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "simple-keyboard": "^3.8.121"
+    "simple-keyboard": "^3.8.122"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
@@ -27,14 +27,14 @@
     "@types/node": "^25",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@typescript-eslint/eslint-plugin": "^8.57.1",
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
     "@typescript-eslint/parser": "^8.54.0",
-    "@vitest/coverage-v8": "^4.1.0",
+    "@vitest/coverage-v8": "^4.1.1",
     "eslint": "^9.39.4",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^17.4.0",
-    "jsdom": "^29.0.0",
+    "jsdom": "^29.0.1",
     "typescript": "^5",
     "vitest": "^4.0.18"
   }
