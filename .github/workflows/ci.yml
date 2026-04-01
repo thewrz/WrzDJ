@@ -73,7 +73,7 @@ jobs:
         run: alembic upgrade head && alembic check
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: server/coverage.xml
           flags: backend
