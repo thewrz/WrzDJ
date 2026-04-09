@@ -9,7 +9,9 @@ services:
       POSTGRES_PASSWORD: wrzdj
       POSTGRES_DB: wrzdj
     ports:
-      - "5432:5432"
+      # SECURITY (H-I6): bind to localhost only — prevents LAN exposure
+      # on public WiFi with hardcoded dev credentials.
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
