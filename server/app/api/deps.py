@@ -36,6 +36,9 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
         raise credentials_exception
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+    # CRIT-2: reject tokens whose version doesn't match the user's current version
+    if token_data.token_version != user.token_version:
+        raise credentials_exception
     return user
 
 

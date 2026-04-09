@@ -5,9 +5,13 @@ import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
+from app.api.deps import get_db
+from app.core.rate_limit import limiter
+from app.services.event import EventLookupResult, get_event_by_code_with_status
 from app.services.event_bus import get_event_bus
 
 logger = logging.getLogger(__name__)
@@ -46,8 +50,18 @@ async def _event_generator(
 
 
 @router.get("/events/{code}/stream")
-async def event_stream(code: str, request: Request) -> EventSourceResponse:
+@limiter.limit("10/minute")
+async def event_stream(
+    code: str,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> EventSourceResponse:
     """Public SSE endpoint for real-time event updates.
+
+    SECURITY (CRIT-5): rate-limited and existence-checked. Before this fix,
+    the endpoint had no rate limit and no existence check, allowing
+    unauthenticated DoS (unlimited long-lived connections exhausting FDs)
+    and passive eavesdropping via 6-char event-code brute force.
 
     Event types:
     - request_created: New request submitted
@@ -56,8 +70,16 @@ async def event_stream(code: str, request: Request) -> EventSourceResponse:
     - requests_bulk_update: Batch accept/reject
     - bridge_status_changed: Bridge connect/disconnect
     """
+    event, result = get_event_by_code_with_status(db, code)
+    if result == EventLookupResult.NOT_FOUND:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if result == EventLookupResult.ARCHIVED:
+        raise HTTPException(status_code=410, detail="Event has been archived")
+    if result == EventLookupResult.EXPIRED:
+        raise HTTPException(status_code=410, detail="Event has expired")
+
     return EventSourceResponse(
-        _event_generator(request, code),
+        _event_generator(request, event.code),
         media_type="text/event-stream",
         headers={"X-Accel-Buffering": "no"},
     )

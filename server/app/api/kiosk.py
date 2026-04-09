@@ -45,6 +45,19 @@ def _resolve_event_name(db: Session, event_code: str | None) -> str | None:
     return event.name if event else None
 
 
+def _assert_caller_owns_event(event: Event, user: User) -> None:
+    """Enforce that the caller owns the target event (or is an admin).
+
+    SECURITY (CRIT-3, CRIT-4): before this check, any DJ could pair or
+    reassign a kiosk to an event owned by another DJ by supplying the
+    victim's event code. See docs/security/audit-2026-04-08.md.
+    """
+    if user.role == "admin":
+        return
+    if event.created_by_user_id != user.id:
+        raise HTTPException(status_code=403, detail="You do not own this event")
+
+
 # ── Public endpoints ───────────────────────────────────────────────────
 
 
@@ -134,6 +147,9 @@ def complete_kiosk_pairing(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
+    # CRIT-3: caller must own the target event (or be admin)
+    _assert_caller_owns_event(event, current_user)
+
     try:
         complete_pairing(db, kiosk, event.code, current_user.id)
     except ValueError as e:
@@ -203,6 +219,9 @@ def assign_kiosk(
     event = db.query(Event).filter(Event.code == body.event_code.upper()).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+
+    # CRIT-4: caller must own the target event (or be admin)
+    _assert_caller_owns_event(event, current_user)
 
     assign_kiosk_event(db, kiosk, event.code)
     return KioskOut(

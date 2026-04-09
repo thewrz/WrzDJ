@@ -420,3 +420,118 @@ class TestDeleteKiosk:
     def test_404_nonexistent(self, client: TestClient, auth_headers: dict):
         resp = client.delete("/api/kiosk/99999", headers=auth_headers)
         assert resp.status_code == 404
+
+
+class TestKioskIdor:
+    """TDD guard for CRIT-3 and CRIT-4 — kiosk pairing/reassignment IDOR.
+
+    Before the fix, any authenticated DJ could pair or reassign a kiosk
+    to an event owned by another DJ, simply by knowing (or brute-forcing)
+    the target event code. The fix enforces that the caller owns the
+    target event (or is an admin).
+
+    See docs/security/audit-2026-04-08.md CRIT-3 and CRIT-4.
+    """
+
+    @staticmethod
+    def _make_victim_event(db: Session, owner: User, code: str = "VICTIM") -> Event:
+        evt = Event(
+            code=code,
+            name="Victim Event",
+            created_by_user_id=owner.id,
+            expires_at=utcnow() + timedelta(hours=6),
+        )
+        db.add(evt)
+        db.commit()
+        db.refresh(evt)
+        return evt
+
+    def test_complete_pairing_rejects_non_owned_event(
+        self,
+        client: TestClient,
+        db: Session,
+        auth_headers: dict,
+        admin_user: User,
+    ):
+        """CRIT-3: a DJ must not be able to pair a kiosk to someone else's event."""
+        victim_event = self._make_victim_event(db, admin_user)
+        kiosk = create_kiosk(db)
+
+        resp = client.post(
+            f"/api/kiosk/pair/{kiosk.pair_code}/complete",
+            json={"event_code": victim_event.code},
+            headers=auth_headers,  # test_user, NOT the victim (admin_user)
+        )
+        assert resp.status_code == 403
+        # Kiosk must still be in 'pairing' state — not silently paired
+        db.refresh(kiosk)
+        assert kiosk.status == "pairing"
+        assert kiosk.event_code is None
+
+    def test_assign_kiosk_rejects_non_owned_event(
+        self,
+        client: TestClient,
+        db: Session,
+        auth_headers: dict,
+        test_user: User,
+        test_event: Event,
+        admin_user: User,
+    ):
+        """CRIT-4: a DJ must not be able to reassign their own kiosk to someone else's event."""
+        kiosk = create_kiosk(db)
+        complete_pairing(db, kiosk, test_event.code, test_user.id)
+        victim_event = self._make_victim_event(db, admin_user)
+
+        resp = client.patch(
+            f"/api/kiosk/{kiosk.id}/assign",
+            json={"event_code": victim_event.code},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 403
+        # Kiosk still pointing at the original event
+        db.refresh(kiosk)
+        assert kiosk.event_code == test_event.code
+
+    def test_admin_can_pair_kiosk_to_any_event(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict,
+        test_user: User,
+        test_event: Event,
+    ):
+        """Admin bypass must still work — admins can manage any event's kiosks."""
+        kiosk = create_kiosk(db)
+        resp = client.post(
+            f"/api/kiosk/pair/{kiosk.pair_code}/complete",
+            json={"event_code": test_event.code},  # owned by test_user, not admin
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "active"
+        assert data["event_code"] == test_event.code
+
+    def test_admin_can_reassign_any_kiosk_to_any_event(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict,
+        admin_user: User,
+        test_user: User,
+        test_event: Event,
+    ):
+        """Admin bypass for reassignment."""
+        # Admin owns a kiosk (paired by admin to their own event)
+        admin_event = self._make_victim_event(db, admin_user, code="ADMIN1")
+        kiosk = create_kiosk(db)
+        complete_pairing(db, kiosk, admin_event.code, admin_user.id)
+
+        # Admin reassigns their kiosk to test_user's event
+        resp = client.patch(
+            f"/api/kiosk/{kiosk.id}/assign",
+            json={"event_code": test_event.code},
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["event_code"] == test_event.code
