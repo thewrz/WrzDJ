@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedText
@@ -26,6 +26,12 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default=UserRole.DJ.value, index=True)
     email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    # SECURITY (CRIT-2): JWT revocation — bumped on logout or admin force-revoke.
+    # Every JWT carries a `tv` claim that must match this value on decode.
+    token_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
 
     # Tidal OAuth tokens (encrypted at rest via Fernet)
     tidal_access_token: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)

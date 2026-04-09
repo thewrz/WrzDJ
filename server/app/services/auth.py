@@ -41,7 +41,10 @@ def decode_token(token: str) -> TokenData | None:
         username: str = payload.get("sub")
         if username is None:
             return None
-        return TokenData(username=username)
+        # CRIT-2: reject tokens without the tv claim (legacy pre-fix tokens)
+        if "tv" not in payload:
+            return None
+        return TokenData(username=username, token_version=payload["tv"])
     except jwt.PyJWTError:
         return None
 

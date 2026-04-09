@@ -32,13 +32,13 @@ class TestJwtAlgorithmHardcoded:
         """Even if settings.jwt_algorithm is mutated at runtime to an
         insecure value, encode must still emit HS256."""
         monkeypatch.setattr(settings, "jwt_algorithm", "none", raising=False)
-        token = create_access_token({"sub": "alice"})
+        token = create_access_token({"sub": "alice", "tv": 0})
         header = jwt.get_unverified_header(token)
         assert header["alg"] == "HS256"
 
     def test_decode_accepts_valid_hs256(self):
         """Sanity: a legitimate HS256 token still decodes."""
-        token = create_access_token({"sub": "alice"})
+        token = create_access_token({"sub": "alice", "tv": 0})
         td = decode_token(token)
         assert td is not None
         assert td.username == "alice"

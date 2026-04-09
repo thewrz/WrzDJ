@@ -66,8 +66,25 @@ def login(
     if settings.is_lockout_enabled:
         lockout_manager.record_success(client_ip, username)
 
-    access_token = create_access_token(data={"sub": user.username})
+    access_token = create_access_token(data={"sub": user.username, "tv": user.token_version})
     return Token(access_token=access_token)
+
+
+@router.post("/logout", response_model=StatusMessageResponse)
+@limiter.limit("30/minute")
+def logout(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StatusMessageResponse:
+    """Invalidate all outstanding JWTs for the current user.
+
+    SECURITY (CRIT-2): bumps token_version so every previously-issued JWT
+    for this user fails the version check in get_current_user.
+    """
+    current_user.token_version += 1
+    db.commit()
+    return StatusMessageResponse(status="ok", message="Logged out")
 
 
 @router.get("/me", response_model=UserOut)
