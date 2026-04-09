@@ -13,6 +13,17 @@ from cryptography.fernet import Fernet, InvalidToken
 
 logger = logging.getLogger(__name__)
 
+
+class DecryptionError(Exception):
+    """Raised when Fernet decryption fails (wrong key, corrupted ciphertext).
+
+    SECURITY (H-C2): prior to this change, decrypt_value silently returned
+    the raw ciphertext on failure, which could then be sent to upstream
+    APIs (Beatport, Tidal) as a bearer token. Raising instead makes key
+    rotation failures loud and prevents ciphertext leakage.
+    """
+
+
 # Module-level Fernet instance, lazily initialised on first use.
 _fernet: Fernet | None = None
 
@@ -50,20 +61,32 @@ def encrypt_value(plaintext: str | None) -> str | None:
 def decrypt_value(ciphertext: str | None) -> str | None:
     """Decrypt a Fernet-encrypted value.
 
-    If the value does not look like Fernet ciphertext (e.g. legacy plaintext),
-    it is returned as-is so that pre-migration data still works.
+    SECURITY (H-C2): raises DecryptionError on InvalidToken instead of
+    silently returning ciphertext. This prevents botched key rotations
+    from leaking Fernet ciphertext to upstream APIs.
+
+    SECURITY (H-C3): the legacy plaintext passthrough is gated behind
+    ALLOW_LEGACY_PLAINTEXT_TOKENS (default: True for backward compat
+    during migration window). Set to False once all rows are encrypted.
     """
     if ciphertext is None:
         return None
 
     if not ciphertext.startswith(_FERNET_PREFIX):
-        return ciphertext
+        # Legacy plaintext — only allowed if feature flag is set
+        from app.core.config import get_settings
+
+        if get_settings().allow_legacy_plaintext_tokens:
+            return ciphertext
+        raise DecryptionError(
+            "Value does not look like Fernet ciphertext and "
+            "ALLOW_LEGACY_PLAINTEXT_TOKENS is disabled"
+        )
 
     try:
         return _get_fernet().decrypt(ciphertext.encode()).decode()
-    except InvalidToken:
-        logger.error("Failed to decrypt value — returning as-is")
-        return ciphertext
+    except InvalidToken as exc:
+        raise DecryptionError("Failed to decrypt value — wrong key or corrupted data") from exc
 
 
 def reset_fernet() -> None:

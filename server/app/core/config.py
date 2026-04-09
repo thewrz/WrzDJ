@@ -102,6 +102,11 @@ class Settings(BaseSettings):
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key()...)"
     token_encryption_key: str = ""
 
+    # SECURITY (H-C3): legacy plaintext passthrough in EncryptedText.
+    # Set to False once all OAuth tokens are encrypted (post-migration).
+    # When False, decrypt_value raises DecryptionError on non-Fernet values.
+    allow_legacy_plaintext_tokens: bool = True
+
     # Soundcharts API (song discovery for recommendations)
     soundcharts_app_id: str = ""
     soundcharts_api_key: str = ""
