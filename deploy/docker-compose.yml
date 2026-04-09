@@ -63,6 +63,16 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    # SECURITY (H-I4): container hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 200
+    mem_limit: 1g
+    read_only: true
+    tmpfs:
+      - /tmp
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -82,6 +92,16 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
+    # SECURITY (H-I4): container hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 100
+    mem_limit: 512m
+    read_only: true
+    tmpfs:
+      - /tmp
 
 volumes:
   postgres_data:
