@@ -6,6 +6,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { KeyBadge, BpmBadge, GenreBadge } from '@/components/MusicBadges';
 import { PreviewPlayer } from '@/components/PreviewPlayer';
 import { computeBpmContext } from '@/lib/bpm-stats';
+import { safeExternalUrl } from '@/lib/safe-url';
 import type {
   RecommendedTrack,
   EventMusicProfile,
@@ -541,9 +542,9 @@ export function RecommendationsCard({
                     }}>
                       {track.artist} &mdash; {track.title}
                     </span>
-                    {track.url && (
+                    {safeExternalUrl(track.url) && (
                       <a
-                        href={track.url}
+                        href={safeExternalUrl(track.url)}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ fontSize: '0.75rem', flexShrink: 0 }}

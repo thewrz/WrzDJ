@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { canEmbed, getEmbedUrl, getPreviewSource, type PreviewData } from '@/lib/preview-embed';
+import { safeExternalUrl } from '@/lib/safe-url';
 
 /**
  * Embeddable audio preview player for song cards.
@@ -19,7 +20,7 @@ export function PreviewPlayer({ data }: { data: PreviewData }) {
   if (source === 'beatport' && data.sourceUrl && /^https?:\/\//.test(data.sourceUrl)) {
     return (
       <a
-        href={data.sourceUrl}
+        href={safeExternalUrl(data.sourceUrl) ?? '#'}
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Open in Beatport (opens in new tab)"

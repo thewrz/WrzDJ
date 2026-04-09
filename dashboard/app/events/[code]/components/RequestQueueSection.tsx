@@ -9,6 +9,7 @@ import { KeyBadge, BpmBadge, GenreBadge } from '@/components/MusicBadges';
 import { PreviewPlayer } from '@/components/PreviewPlayer';
 import { computeBpmContext } from '@/lib/bpm-stats';
 import { getRequestEmphasisStyle } from '@/lib/request-emphasis';
+import { safeExternalUrl } from '@/lib/safe-url';
 import { getVoteHeatStyle } from '@/lib/vote-heat';
 import { formatPriorityScore, getPriorityScoreColor } from '@/lib/priority-score';
 import type { SortMode } from '@/lib/priority-score';
@@ -268,9 +269,9 @@ export function RequestQueueSection({
                   <h3 style={{ margin: 0 }}>
                     {request.song_title}
                   </h3>
-                  {request.source_url && (
+                  {safeExternalUrl(request.source_url) && (
                     <a
-                      href={request.source_url}
+                      href={safeExternalUrl(request.source_url)}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{ fontSize: '0.75rem', flexShrink: 0 }}
