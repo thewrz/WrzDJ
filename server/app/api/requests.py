@@ -1,7 +1,8 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db
+from app.core.rate_limit import limiter
 from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.request import RequestOut, RequestUpdate
@@ -49,9 +50,11 @@ def _request_to_out(r) -> RequestOut:
 
 
 @router.patch("/{request_id}", response_model=RequestOut)
+@limiter.limit("30/minute")
 def update_request(
     request_id: int,
     update_data: RequestUpdate,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -98,38 +101,42 @@ def update_request(
 
 
 @router.delete("/{request_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
 def delete_request_endpoint(
     request_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> None:
     """Delete a single request. Ownership verified via event."""
-    request = get_request_by_id(db, request_id)
-    if not request:
+    song_request = get_request_by_id(db, request_id)
+    if not song_request:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    if request.event.created_by_user_id != current_user.id:
+    if song_request.event.created_by_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this request")
 
-    delete_request(db, request)
+    delete_request(db, song_request)
 
 
 @router.post("/{request_id}/refresh-metadata", response_model=RequestOut)
+@limiter.limit("10/minute")
 def refresh_request_metadata(
     request_id: int,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ) -> RequestOut:
     """Clear existing metadata and re-enrich from external services."""
-    request = get_request_by_id(db, request_id)
-    if not request:
+    song_request = get_request_by_id(db, request_id)
+    if not song_request:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    if request.event.created_by_user_id != current_user.id:
+    if song_request.event.created_by_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this request")
 
-    cleared = clear_request_metadata(db, request)
+    cleared = clear_request_metadata(db, song_request)
     background_tasks.add_task(enrich_request_metadata, db, cleared.id)
 
     return _request_to_out(cleared)

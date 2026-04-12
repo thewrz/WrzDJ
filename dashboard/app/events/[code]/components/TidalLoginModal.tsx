@@ -1,5 +1,7 @@
 'use client';
 
+import { safeExternalUrl } from '@/lib/safe-url';
+
 interface TidalLoginModalProps {
   loginUrl: string;
   userCode: string;
@@ -38,7 +40,7 @@ export function TidalLoginModal({
           Visit the link below and enter the code to connect your Tidal account:
         </p>
         <a
-          href={loginUrl}
+          href={safeExternalUrl(loginUrl) ?? '#'}
           target="_blank"
           rel="noopener noreferrer"
           style={{

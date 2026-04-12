@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import type { SongRequest, SyncResultEntry } from '@/lib/api-types';
+import { safeExternalUrl } from '@/lib/safe-url';
 
 interface SyncStatusBadgesProps {
   request: SongRequest;
@@ -77,7 +78,7 @@ function TidalBadge({
     if (url) {
       return (
         <a
-          href={url}
+          href={safeExternalUrl(url) ?? '#'}
           target="_blank"
           rel="noopener noreferrer"
           title="Synced to Tidal - click to view"
@@ -151,7 +152,7 @@ function BeatportBadge({
     if (url) {
       return (
         <a
-          href={url}
+          href={safeExternalUrl(url) ?? '#'}
           target="_blank"
           rel="noopener noreferrer"
           title="Available on Beatport - click to view"

@@ -39,7 +39,9 @@ router = APIRouter()
 
 
 @router.post("/auth/start", response_model=TidalAuthStartResponse)
+@limiter.limit("10/minute")
 def start_auth(
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> TidalAuthStartResponse:
@@ -63,7 +65,9 @@ def start_auth(
 
 
 @router.get("/auth/check", response_model=TidalAuthCheckResponse)
+@limiter.limit("30/minute")
 def check_auth(
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -78,7 +82,9 @@ def check_auth(
 
 
 @router.post("/auth/cancel", response_model=StatusMessageResponse)
+@limiter.limit("30/minute")
 def cancel_auth(
+    request: Request,
     current_user: User = Depends(get_current_active_user),
 ) -> StatusMessageResponse:
     """Cancel pending device login."""
@@ -111,7 +117,9 @@ def get_status(
 
 
 @router.post("/disconnect", response_model=StatusMessageResponse)
+@limiter.limit("10/minute")
 def disconnect(
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> StatusMessageResponse:
@@ -182,7 +190,9 @@ def update_event_settings(
 
 
 @router.post("/requests/{request_id}/sync", response_model=TidalSyncResult)
+@limiter.limit("10/minute")
 def sync_request(
+    request: Request,
     background_tasks: BackgroundTasks,
     song_request: SongRequest = Depends(get_owned_request),
     db: Session = Depends(get_db),
@@ -198,7 +208,9 @@ def sync_request(
 
 
 @router.post("/requests/{request_id}/link", response_model=TidalSyncResult)
+@limiter.limit("10/minute")
 def link_track(
+    request: Request,
     link_data: TidalManualLink,
     song_request: SongRequest = Depends(get_owned_request),
     db: Session = Depends(get_db),

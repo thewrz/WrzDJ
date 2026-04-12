@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 from app.core.encryption import (
     _FERNET_PREFIX,
+    DecryptionError,
     EncryptedText,
     decrypt_value,
     encrypt_value,
@@ -49,10 +50,30 @@ class TestEncryptDecrypt:
         assert encrypt_value(None) is None
         assert decrypt_value(None) is None
 
-    def test_plaintext_fallback(self):
-        """Legacy plaintext that doesn't start with the Fernet prefix is returned as-is."""
-        legacy = "some-old-plaintext-token"
-        assert decrypt_value(legacy) == legacy
+    def test_plaintext_fallback_allowed_when_flag_true(self):
+        """Legacy plaintext is returned as-is when ALLOW_LEGACY_PLAINTEXT_TOKENS=True."""
+        with patch("app.core.config.get_settings") as mock_settings:
+            mock_settings.return_value.allow_legacy_plaintext_tokens = True
+            legacy = "some-old-plaintext-token"
+            assert decrypt_value(legacy) == legacy
+
+    def test_plaintext_fallback_raises_when_flag_false(self):
+        """H-C3: legacy plaintext raises DecryptionError when flag is False."""
+        with patch("app.core.config.get_settings") as mock_settings:
+            mock_settings.return_value.allow_legacy_plaintext_tokens = False
+            with pytest.raises(DecryptionError, match="ALLOW_LEGACY_PLAINTEXT_TOKENS"):
+                decrypt_value("some-old-plaintext-token")
+
+    def test_invalid_token_raises_decryption_error(self):
+        """H-C2: Fernet InvalidToken must raise DecryptionError, not return ciphertext."""
+        # Create a valid-looking Fernet ciphertext with a DIFFERENT key
+        other_key = Fernet.generate_key()
+        other_fernet = Fernet(other_key)
+        wrong_ciphertext = other_fernet.encrypt(b"secret").decode()
+        assert wrong_ciphertext.startswith(_FERNET_PREFIX)
+
+        with pytest.raises(DecryptionError, match="wrong key"):
+            decrypt_value(wrong_ciphertext)
 
     def test_empty_string(self):
         encrypted = encrypt_value("")

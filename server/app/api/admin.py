@@ -89,8 +89,10 @@ def admin_list_users(
 
 
 @router.post("/users", response_model=AdminUserOut, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
 def admin_create_user(
     user_data: AdminUserCreate,
+    request: FastAPIRequest,
     db: Session = Depends(get_db),
     _admin: User = Depends(get_current_admin),
 ) -> AdminUserOut:
@@ -111,9 +113,11 @@ def admin_create_user(
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserOut)
+@limiter.limit("30/minute")
 def admin_update_user(
     user_id: int,
     update_data: AdminUserUpdate,
+    request: FastAPIRequest,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ) -> AdminUserOut:
@@ -153,8 +157,10 @@ def admin_update_user(
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
 def admin_delete_user(
     user_id: int,
+    request: FastAPIRequest,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ) -> None:
@@ -182,9 +188,11 @@ def admin_list_events(
 
 
 @router.patch("/events/{code}", response_model=AdminEventOut)
+@limiter.limit("30/minute")
 def admin_update_event(
     code: str,
     event_data: EventUpdate,
+    request: FastAPIRequest,
     db: Session = Depends(get_db),
     _admin: User = Depends(get_current_admin),
 ) -> AdminEventOut:
@@ -214,8 +222,10 @@ def admin_update_event(
 
 
 @router.delete("/events/{code}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
 def admin_delete_event(
     code: str,
+    request: FastAPIRequest,
     db: Session = Depends(get_db),
     _admin: User = Depends(get_current_admin),
 ) -> None:
@@ -254,8 +264,10 @@ def admin_get_settings(
 
 
 @router.patch("/settings", response_model=SystemSettingsOut)
+@limiter.limit("30/minute")
 def admin_update_settings(
     update_data: SystemSettingsUpdate,
+    request: FastAPIRequest,
     db: Session = Depends(get_db),
     _admin: User = Depends(get_current_admin),
 ) -> SystemSettingsOut:
@@ -287,9 +299,11 @@ def admin_get_integrations(
 
 
 @router.patch("/integrations/{service}", response_model=IntegrationToggleResponse)
+@limiter.limit("30/minute")
 def admin_toggle_integration(
     service: str,
     toggle: IntegrationToggleRequest,
+    request: FastAPIRequest,
     db: Session = Depends(get_db),
     _admin: User = Depends(get_current_admin),
 ) -> IntegrationToggleResponse:
@@ -391,8 +405,10 @@ def admin_get_ai_settings(
 
 
 @router.put("/ai/settings", response_model=AISettingsOut)
+@limiter.limit("30/minute")
 def admin_update_ai_settings(
     update_data: AISettingsUpdate,
+    request: FastAPIRequest,
     db: Session = Depends(get_db),
     _admin: User = Depends(get_current_admin),
 ) -> AISettingsOut:

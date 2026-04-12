@@ -1,10 +1,18 @@
 """Cloudflare Turnstile CAPTCHA verification."""
 
+import logging
+
 import httpx
 
 from app.core.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+
+# SECURITY (H-A6): explicit timeout prevents Cloudflare outages from
+# hanging uvicorn workers indefinitely.
+TURNSTILE_TIMEOUT_SECONDS = 10.0
 
 
 async def verify_turnstile_token(token: str, remote_ip: str | None = None) -> bool:
@@ -29,8 +37,15 @@ async def verify_turnstile_token(token: str, remote_ip: str | None = None) -> bo
     if remote_ip:
         data["remoteip"] = remote_ip
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(VERIFY_URL, data=data)
-        result = resp.json()
+    try:
+        async with httpx.AsyncClient(timeout=TURNSTILE_TIMEOUT_SECONDS) as client:
+            resp = await client.post(VERIFY_URL, data=data)
+            result = resp.json()
+    except (httpx.TimeoutException, httpx.HTTPError) as exc:
+        logger.warning("Turnstile verification failed: %s", type(exc).__name__)
+        return False
+    except (ValueError, KeyError):
+        logger.warning("Turnstile returned malformed response")
+        return False
 
     return result.get("success", False)

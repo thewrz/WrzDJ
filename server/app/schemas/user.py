@@ -29,14 +29,14 @@ class UserOut(BaseModel):
 
 class AdminUserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=8, max_length=128)
     role: str = "dj"
 
 
 class AdminUserUpdate(BaseModel):
     role: str | None = None
     is_active: bool | None = None
-    password: str | None = Field(None, min_length=8)
+    password: str | None = Field(None, min_length=8, max_length=128)
 
 
 class AdminUserOut(BaseModel):
@@ -85,7 +85,7 @@ class PaginatedResponse(BaseModel):
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=8, max_length=128)
     confirm_password: str
     turnstile_token: str = Field("", max_length=4096)
 

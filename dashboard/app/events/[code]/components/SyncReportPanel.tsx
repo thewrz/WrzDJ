@@ -3,6 +3,7 @@
 import { useMemo, useEffect, useRef } from 'react';
 import type { SongRequest, SyncResultEntry } from '@/lib/api-types';
 import { Tooltip } from '@/components/Tooltip';
+import { safeExternalUrl } from '@/lib/safe-url';
 
 interface SyncReportPanelProps {
   requests: SongRequest[];
@@ -227,7 +228,7 @@ function ServiceStatusCell({
       return (
         <Tooltip description={`View on ${label}`} delay={100}>
           <a
-            href={entry.url}
+            href={safeExternalUrl(entry.url) ?? '#'}
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: '#10b981', fontSize: '0.75rem', minWidth: '80px', textAlign: 'center', textDecoration: 'none' }}
