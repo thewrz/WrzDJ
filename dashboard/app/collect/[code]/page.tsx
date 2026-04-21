@@ -8,6 +8,7 @@ import {
   CollectLeaderboardResponse,
   CollectMyPicksResponse,
 } from "../../../lib/api";
+import FeatureOptInPanel from "./components/FeatureOptInPanel";
 
 const POLL_MS = 5000;
 
@@ -22,6 +23,12 @@ export default function CollectPage() {
   const [myPicks, setMyPicks] = useState<CollectMyPicksResponse | null>(null);
   const [tab, setTab] = useState<"trending" | "all">("trending");
   const [error, setError] = useState<string | null>(null);
+  const [hasEmail, setHasEmail] = useState(false);
+
+  const saveEmail = async (email: string) => {
+    const resp = await apiClient.setCollectProfile(code, { email });
+    setHasEmail(resp.has_email);
+  };
 
   const redirectToJoin = () => {
     sessionStorage.setItem(`wrzdj_live_splash_${code}`, "1");
@@ -98,6 +105,7 @@ export default function CollectPage() {
         )}{" "}
         until the event goes live
       </p>
+      <FeatureOptInPanel hasEmail={hasEmail} onSave={saveEmail} />
       <div style={{ marginTop: 16 }}>
         <button onClick={() => setTab("trending")} aria-pressed={tab === "trending"}>
           Trending
