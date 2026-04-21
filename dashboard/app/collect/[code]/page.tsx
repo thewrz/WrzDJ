@@ -10,6 +10,7 @@ import {
 } from "../../../lib/api";
 import FeatureOptInPanel from "./components/FeatureOptInPanel";
 import LeaderboardTabs from "./components/LeaderboardTabs";
+import MyPicksPanel from "./components/MyPicksPanel";
 
 const POLL_MS = 5000;
 
@@ -113,25 +114,7 @@ export default function CollectPage() {
         onTabChange={setTab}
         onVote={(id) => apiClient.voteCollectRequest(code, id)}
       />
-      <section>
-        <h2>My Picks</h2>
-        {myPicks?.submitted.length === 0 && myPicks?.upvoted.length === 0 ? (
-          <p>No picks yet — search for a song below!</p>
-        ) : (
-          <ul>
-            {myPicks?.submitted.map((r) => (
-              <li key={`s-${r.id}`}>
-                {r.title} — {r.artist} [{r.status}]
-              </li>
-            ))}
-            {myPicks?.upvoted.map((r) => (
-              <li key={`u-${r.id}`}>
-                {r.title} — {r.artist} (upvoted)
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {myPicks && <MyPicksPanel picks={myPicks} />}
     </main>
   );
 }
