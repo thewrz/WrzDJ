@@ -102,6 +102,11 @@ class Settings(BaseSettings):
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key()...)"
     token_encryption_key: str = ""
 
+    # SECURITY (H-C1): MultiFernet key rotation support.
+    # Comma-separated Fernet keys; first encrypts, all decrypt. Falls back
+    # to token_encryption_key if empty. Rotation procedure in encryption.py.
+    token_encryption_keys: str = ""
+
     # SECURITY (H-C3): legacy plaintext passthrough in EncryptedText.
     # Set to False once all OAuth tokens are encrypted (post-migration).
     # When False, decrypt_value raises DecryptionError on non-Fernet values.

@@ -3,7 +3,7 @@
 from unittest.mock import patch
 
 import pytest
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, MultiFernet
 from sqlalchemy import Column, Integer, create_engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -83,6 +83,91 @@ class TestEncryptDecrypt:
     def test_unicode_round_trip(self):
         text = "token-with-unicode-\u00e9\u00e8\u00ea"
         assert decrypt_value(encrypt_value(text)) == text
+
+
+class TestMultiFernetRotation:
+    """H-C1 guard: MultiFernet supports key rotation without data migration.
+
+    Rotation model:
+    - TOKEN_ENCRYPTION_KEYS="new,old" during rotation window
+    - First key in list encrypts new data
+    - All keys tried in order for decryption
+    - Ciphertext from old key still decrypts; re-encrypting under new key
+      is an explicit backfill step, not automatic
+
+    These tests install their own _get_fernet override (inner patch) to
+    supersede the outer autouse fixture, returning a MultiFernet with the
+    configured key list.
+    """
+
+    def test_single_key_via_new_plural_field(self):
+        """MultiFernet with one key behaves like old single-key setup."""
+        key = Fernet.generate_key()
+        mf = MultiFernet([Fernet(key)])
+        with patch("app.core.encryption._get_fernet", return_value=mf):
+            ct = encrypt_value("hello")
+            assert decrypt_value(ct) == "hello"
+
+    def test_rotation_old_ciphertext_decrypts_after_rotation(self):
+        """Ciphertext encrypted under key A still decrypts when keys=[B, A]."""
+        key_a = Fernet.generate_key()
+        key_b = Fernet.generate_key()
+
+        # Encrypt under key A only
+        mf_a = MultiFernet([Fernet(key_a)])
+        with patch("app.core.encryption._get_fernet", return_value=mf_a):
+            ciphertext_a = encrypt_value("secret-payload")
+            assert ciphertext_a is not None
+
+        # Rotate: [B, A] — B encrypts new, A still decrypts old
+        mf_rotated = MultiFernet([Fernet(key_b), Fernet(key_a)])
+        with patch("app.core.encryption._get_fernet", return_value=mf_rotated):
+            assert decrypt_value(ciphertext_a) == "secret-payload"
+            new_ct = encrypt_value("new-payload")
+            assert new_ct != ciphertext_a
+            assert decrypt_value(new_ct) == "new-payload"
+
+    def test_old_ciphertext_fails_after_key_removed(self):
+        """Removing the old key from rotation makes old ciphertext undecryptable."""
+        key_a = Fernet.generate_key()
+        key_b = Fernet.generate_key()
+
+        mf_a = MultiFernet([Fernet(key_a)])
+        with patch("app.core.encryption._get_fernet", return_value=mf_a):
+            ciphertext_a = encrypt_value("secret-payload")
+
+        # Key A removed — only B remains
+        mf_b = MultiFernet([Fernet(key_b)])
+        with patch("app.core.encryption._get_fernet", return_value=mf_b):
+            with pytest.raises(DecryptionError):
+                decrypt_value(ciphertext_a)
+
+    def test_rotate_method_reencrypts_under_first_key(self):
+        """MultiFernet.rotate() re-encrypts ciphertext under the first key.
+        This is what a backfill migration would use."""
+        key_a = Fernet.generate_key()
+        key_b = Fernet.generate_key()
+
+        mf_a = MultiFernet([Fernet(key_a)])
+        with patch("app.core.encryption._get_fernet", return_value=mf_a):
+            old_ct = encrypt_value("payload")
+
+        # Rotate: [B, A]
+        mf_rotated = MultiFernet([Fernet(key_b), Fernet(key_a)])
+        with patch("app.core.encryption._get_fernet", return_value=mf_rotated):
+            # Re-encrypt under new primary key (backfill step)
+            new_ct = mf_rotated.rotate(old_ct.encode()).decode()
+            assert new_ct != old_ct
+            # Both still decrypt to original plaintext
+            assert decrypt_value(old_ct) == "payload"
+            assert decrypt_value(new_ct) == "payload"
+
+        # Key A removed — new_ct still works, old_ct does not
+        mf_b = MultiFernet([Fernet(key_b)])
+        with patch("app.core.encryption._get_fernet", return_value=mf_b):
+            assert decrypt_value(new_ct) == "payload"
+            with pytest.raises(DecryptionError):
+                decrypt_value(old_ct)
 
 
 class TestEncryptedTextTypeDecorator:

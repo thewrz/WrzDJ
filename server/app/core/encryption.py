@@ -1,15 +1,22 @@
 """Fernet encryption for OAuth tokens stored in the database.
 
 Provides transparent encrypt-on-write / decrypt-on-read via a SQLAlchemy
-TypeDecorator.  The encryption key comes from the TOKEN_ENCRYPTION_KEY env var.
-In development, a key is auto-generated if not set.  In production, a missing
-key is a fatal startup error (enforced in config.py).
+TypeDecorator.  The encryption key(s) come from TOKEN_ENCRYPTION_KEYS
+(comma-separated for rotation) or TOKEN_ENCRYPTION_KEY (single key, legacy).
+In development, a key is auto-generated if none set.  In production, a
+missing key is a fatal startup error (enforced in config.py).
+
+SECURITY (H-C1): uses MultiFernet so key rotation is a config change, not
+a data migration. The first key encrypts; all keys are tried for decrypt.
+Rotation procedure: set TOKEN_ENCRYPTION_KEYS=<new>,<old>, deploy, run a
+backfill that re-encrypts existing ciphertext under the new key, then
+remove the old key from the env.
 """
 
 import logging
 
 import sqlalchemy as sa
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +31,20 @@ class DecryptionError(Exception):
     """
 
 
-# Module-level Fernet instance, lazily initialised on first use.
-_fernet: Fernet | None = None
+# Module-level MultiFernet instance, lazily initialised on first use.
+_fernet: MultiFernet | None = None
 
 # Fernet ciphertexts always start with this prefix (base64 version byte).
 _FERNET_PREFIX = "gAAAAA"
 
 
-def _get_fernet() -> Fernet:
-    """Return (or create) the module-level Fernet instance."""
+def _get_fernet() -> MultiFernet:
+    """Return (or create) the module-level MultiFernet instance.
+
+    Reads keys from settings.token_encryption_keys (comma-separated) with
+    fallback to the legacy single settings.token_encryption_key. The first
+    key encrypts new data; all keys are tried for decryption.
+    """
     global _fernet  # noqa: PLW0603
     if _fernet is not None:
         return _fernet
@@ -40,14 +52,20 @@ def _get_fernet() -> Fernet:
     from app.core.config import get_settings
 
     settings = get_settings()
-    key = settings.token_encryption_key
+    keys_str = settings.token_encryption_keys or settings.token_encryption_key
 
-    if not key:
+    if not keys_str:
         # Dev/test fallback — generate an ephemeral key.
-        key = Fernet.generate_key().decode()
-        logger.warning("TOKEN_ENCRYPTION_KEY not set — using auto-generated ephemeral key")
+        keys_str = Fernet.generate_key().decode()
+        logger.warning("TOKEN_ENCRYPTION_KEYS not set — using auto-generated ephemeral key")
 
-    _fernet = Fernet(key.encode() if isinstance(key, str) else key)
+    # Parse comma-separated keys (rotation support). Strip whitespace, drop empties.
+    key_list = [k.strip() for k in keys_str.split(",") if k.strip()]
+    if not key_list:
+        raise ValueError("TOKEN_ENCRYPTION_KEYS contains no valid keys")
+
+    fernets = [Fernet(k.encode() if isinstance(k, str) else k) for k in key_list]
+    _fernet = MultiFernet(fernets)
     return _fernet
 
 
