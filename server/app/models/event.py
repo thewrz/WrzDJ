@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -44,8 +45,31 @@ class Event(Base):
     banner_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     banner_colors: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Pre-event collection
+    collection_opens_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    live_starts_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    submission_cap_per_guest: Mapped[int] = mapped_column(
+        Integer, default=15, nullable=False, server_default="15"
+    )
+    collection_phase_override: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     created_by: Mapped["User"] = relationship("User", back_populates="events")
     requests: Mapped[list["Request"]] = relationship(
         "Request", back_populates="event", foreign_keys="Request.event_id"
     )
     play_history: Mapped[list["PlayHistory"]] = relationship("PlayHistory", back_populates="event")
+
+    @property
+    def phase(self) -> Literal["pre_announce", "collection", "live", "closed"]:
+        if self.collection_phase_override == "force_live":
+            return "live"
+        if self.collection_phase_override == "force_collection":
+            return "collection"
+        now = utcnow()
+        if self.collection_opens_at and now < self.collection_opens_at:
+            return "pre_announce"
+        if self.live_starts_at and now < self.live_starts_at:
+            return "collection"
+        if now < self.expires_at:
+            return "live"
+        return "closed"
