@@ -3,12 +3,29 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { z } from 'zod';
 import { useAuth } from '@/lib/auth';
 import { api, Event } from '@/lib/api';
 import { useHelp } from '@/lib/help/HelpContext';
 import { HelpSpot } from '@/components/help/HelpSpot';
 import { HelpButton } from '@/components/help/HelpButton';
 import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
+
+const collectionSchema = z
+  .object({
+    collection_opens_at: z.string().optional(),
+    live_starts_at: z.string().optional(),
+    submission_cap_per_guest: z.number().int().min(0).max(100).optional(),
+  })
+  .refine(
+    (v) => {
+      if (v.collection_opens_at && v.live_starts_at) {
+        return new Date(v.collection_opens_at) < new Date(v.live_starts_at);
+      }
+      return true;
+    },
+    { message: 'Collection opens must be before live starts' }
+  );
 
 const PAGE_ID = 'events';
 
@@ -25,6 +42,13 @@ export default function EventsPage() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
   const [deletingSelected, setDeletingSelected] = useState(false);
+
+  // Pre-event collection state
+  const [showCollection, setShowCollection] = useState(false);
+  const [collectionOpensAt, setCollectionOpensAt] = useState('');
+  const [liveStartsAt, setLiveStartsAt] = useState('');
+  const [submissionCap, setSubmissionCap] = useState(0);
+  const [collectionError, setCollectionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -63,12 +87,44 @@ export default function EventsPage() {
     e.preventDefault();
     if (!newEventName.trim()) return;
 
+    // Validate collection settings before creating
+    if (showCollection) {
+      const parsed = collectionSchema.safeParse({
+        collection_opens_at: collectionOpensAt || undefined,
+        live_starts_at: liveStartsAt || undefined,
+        submission_cap_per_guest: submissionCap,
+      });
+      if (!parsed.success) {
+        setCollectionError(parsed.error.issues[0].message);
+        return;
+      }
+    }
+    setCollectionError(null);
+
     setCreating(true);
     try {
       const event = await api.createEvent(newEventName);
+
+      // Apply collection settings if enabled
+      if (showCollection && (collectionOpensAt || liveStartsAt || submissionCap > 0)) {
+        await api.patchCollectionSettings(event.code, {
+          collection_opens_at: collectionOpensAt
+            ? new Date(collectionOpensAt).toISOString()
+            : null,
+          live_starts_at: liveStartsAt
+            ? new Date(liveStartsAt).toISOString()
+            : null,
+          submission_cap_per_guest: submissionCap,
+        });
+      }
+
       setEvents([event, ...events]);
       setNewEventName('');
       setShowCreate(false);
+      setShowCollection(false);
+      setCollectionOpensAt('');
+      setLiveStartsAt('');
+      setSubmissionCap(0);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to create event');
     } finally {
@@ -179,6 +235,69 @@ export default function EventsPage() {
                 required
               />
             </div>
+            {/* Pre-event collection section */}
+            <div style={{ borderTop: '1px solid #333', paddingTop: '0.75rem', marginBottom: '1rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 500 }}>
+                <input
+                  type="checkbox"
+                  checked={showCollection}
+                  onChange={(e) => setShowCollection(e.target.checked)}
+                  style={{ accentColor: '#3b82f6' }}
+                />
+                Enable pre-event voting
+              </label>
+
+              {showCollection && (
+                <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div className="form-group">
+                    <label htmlFor="collection-opens-at" style={{ fontSize: '0.875rem' }}>
+                      Collection opens at
+                    </label>
+                    <input
+                      id="collection-opens-at"
+                      type="datetime-local"
+                      className="input"
+                      value={collectionOpensAt}
+                      onChange={(e) => setCollectionOpensAt(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="live-starts-at" style={{ fontSize: '0.875rem' }}>
+                      Live starts at
+                    </label>
+                    <input
+                      id="live-starts-at"
+                      type="datetime-local"
+                      className="input"
+                      value={liveStartsAt}
+                      onChange={(e) => setLiveStartsAt(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="submission-cap" style={{ fontSize: '0.875rem' }}>
+                      Submission cap per guest
+                    </label>
+                    <input
+                      id="submission-cap"
+                      type="number"
+                      min={0}
+                      max={100}
+                      className="input"
+                      value={submissionCap}
+                      onChange={(e) => setSubmissionCap(Number(e.target.value))}
+                      style={{ width: '6rem' }}
+                    />
+                    <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: '0.25rem 0 0' }}>
+                      0 = unlimited picks per guest
+                    </p>
+                  </div>
+                  {collectionError && (
+                    <p style={{ color: '#f87171', fontSize: '0.875rem' }}>{collectionError}</p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div style={{ display: 'flex', gap: '1rem' }}>
               <button type="submit" className="btn btn-primary" disabled={creating}>
                 {creating ? 'Creating...' : 'Create'}
