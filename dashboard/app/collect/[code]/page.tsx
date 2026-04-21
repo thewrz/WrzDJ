@@ -9,6 +9,7 @@ import {
   CollectMyPicksResponse,
 } from "../../../lib/api";
 import FeatureOptInPanel from "./components/FeatureOptInPanel";
+import LeaderboardTabs from "./components/LeaderboardTabs";
 
 const POLL_MS = 5000;
 
@@ -106,21 +107,12 @@ export default function CollectPage() {
         until the event goes live
       </p>
       <FeatureOptInPanel hasEmail={hasEmail} onSave={saveEmail} />
-      <div style={{ marginTop: 16 }}>
-        <button onClick={() => setTab("trending")} aria-pressed={tab === "trending"}>
-          Trending
-        </button>
-        <button onClick={() => setTab("all")} aria-pressed={tab === "all"}>
-          All
-        </button>
-      </div>
-      <ul>
-        {leaderboard?.requests.map((r) => (
-          <li key={r.id}>
-            <strong>{r.title}</strong> — {r.artist} (▲ {r.vote_count})
-          </li>
-        ))}
-      </ul>
+      <LeaderboardTabs
+        rows={leaderboard?.requests ?? []}
+        tab={tab}
+        onTabChange={setTab}
+        onVote={(id) => apiClient.voteCollectRequest(code, id)}
+      />
       <section>
         <h2>My Picks</h2>
         {myPicks?.submitted.length === 0 && myPicks?.upvoted.length === 0 ? (
