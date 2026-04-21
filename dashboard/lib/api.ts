@@ -1052,6 +1052,10 @@ class ApiClient {
 
   // ========== Pre-Event Collection (DJ-authenticated) ==========
 
+  async getCollectionSettings(code: string): Promise<CollectionSettingsResponse> {
+    return this.fetch(`/api/events/${code}/collection`);
+  }
+
   async patchCollectionSettings(
     code: string,
     data: {

@@ -977,6 +977,27 @@ def upload_banner(
     return _event_to_out(event, request)
 
 
+@router.get("/{code}/collection")
+def get_collection_settings(
+    code: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+) -> dict:
+    """Get pre-event collection scheduling settings."""
+    event = db.query(Event).filter(Event.code == code).one_or_none()
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event.created_by_user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return {
+        "collection_opens_at": event.collection_opens_at,
+        "live_starts_at": event.live_starts_at,
+        "submission_cap_per_guest": event.submission_cap_per_guest,
+        "collection_phase_override": event.collection_phase_override,
+        "phase": event.phase,
+    }
+
+
 @router.patch("/{code}/collection")
 def update_collection_settings(
     code: str,
