@@ -16,6 +16,11 @@ vi.mock("../../../lib/api", () => ({
     getCollectMyPicks: vi.fn().mockResolvedValue({
       submitted: [], upvoted: [], is_top_contributor: false, first_suggestion_ids: []
     }),
+    setCollectProfile: vi.fn().mockResolvedValue({
+      has_email: false,
+      submission_count: 0,
+      submission_cap: 15,
+    }),
   },
 }));
 

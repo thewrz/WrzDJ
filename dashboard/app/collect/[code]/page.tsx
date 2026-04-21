@@ -11,6 +11,7 @@ import {
 import FeatureOptInPanel from "./components/FeatureOptInPanel";
 import LeaderboardTabs from "./components/LeaderboardTabs";
 import MyPicksPanel from "./components/MyPicksPanel";
+import SubmitBar from "./components/SubmitBar";
 
 const POLL_MS = 5000;
 
@@ -26,11 +27,20 @@ export default function CollectPage() {
   const [tab, setTab] = useState<"trending" | "all">("trending");
   const [error, setError] = useState<string | null>(null);
   const [hasEmail, setHasEmail] = useState(false);
+  const [profile, setProfile] = useState<{ submission_count: number; submission_cap: number } | null>(null);
 
   const saveEmail = async (email: string) => {
     const resp = await apiClient.setCollectProfile(code, { email });
     setHasEmail(resp.has_email);
   };
+
+  useEffect(() => {
+    if (!code) return;
+    apiClient.setCollectProfile(code, {}).then((p) => {
+      setProfile({ submission_count: p.submission_count, submission_cap: p.submission_cap });
+      setHasEmail(p.has_email);
+    });
+  }, [code]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const redirectToJoin = () => {
     sessionStorage.setItem(`wrzdj_live_splash_${code}`, "1");
@@ -115,6 +125,11 @@ export default function CollectPage() {
         onVote={(id) => apiClient.voteCollectRequest(code, id)}
       />
       {myPicks && <MyPicksPanel picks={myPicks} />}
+      <SubmitBar
+        used={profile?.submission_count ?? 0}
+        cap={event.submission_cap_per_guest}
+        onOpenSearch={() => alert("Song search coming in Task 19")}
+      />
     </main>
   );
 }
