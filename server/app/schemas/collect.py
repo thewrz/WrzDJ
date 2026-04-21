@@ -1,0 +1,138 @@
+"""Pydantic schemas for pre-event collection endpoints."""
+
+from datetime import datetime
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, EmailStr, Field, StringConstraints
+
+Nickname = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=30,
+        pattern=r"^[a-zA-Z0-9 _.-]+$",
+    ),
+]
+Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
+
+
+class CollectPhase(BaseModel):
+    phase: Literal["pre_announce", "collection", "live", "closed"]
+    collection_opens_at: datetime | None
+    live_starts_at: datetime | None
+    expires_at: datetime
+
+
+class CollectEventPreview(BaseModel):
+    code: str
+    name: str
+    banner_filename: str | None
+    submission_cap_per_guest: int
+    registration_enabled: bool
+    phase: Literal["pre_announce", "collection", "live", "closed"]
+    collection_opens_at: datetime | None
+    live_starts_at: datetime | None
+    expires_at: datetime
+
+
+class CollectLeaderboardRow(BaseModel):
+    id: int
+    title: str
+    artist: str
+    artwork_url: str | None
+    vote_count: int
+    nickname: str | None
+    status: Literal["new", "accepted", "playing", "played", "rejected"]
+    created_at: datetime
+
+
+class CollectLeaderboardResponse(BaseModel):
+    requests: list[CollectLeaderboardRow]
+    total: int
+
+
+class CollectProfileRequest(BaseModel):
+    nickname: Nickname | None = None
+    email: EmailStr | None = None
+
+
+class CollectProfileResponse(BaseModel):
+    nickname: str | None
+    has_email: bool
+    submission_count: int
+    submission_cap: int
+
+
+class CollectMyPicksItem(CollectLeaderboardRow):
+    interaction: Literal["submitted", "upvoted"]
+
+
+class CollectMyPicksResponse(BaseModel):
+    submitted: list[CollectMyPicksItem]
+    upvoted: list[CollectMyPicksItem]
+    is_top_contributor: bool
+    first_suggestion_ids: list[int]
+
+
+class CollectSubmitRequest(BaseModel):
+    song_title: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
+    ]
+    artist: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
+    ]
+    source: Literal["spotify", "beatport", "tidal", "manual"]
+    source_url: str | None = Field(default=None, max_length=500)
+    artwork_url: str | None = Field(default=None, max_length=500)
+    note: Note | None = None
+    nickname: Nickname | None = None
+
+
+class CollectVoteRequest(BaseModel):
+    request_id: int
+
+
+class UpdateCollectionSettings(BaseModel):
+    collection_opens_at: datetime | None = None
+    live_starts_at: datetime | None = None
+    submission_cap_per_guest: int | None = Field(default=None, ge=0, le=100)
+    collection_phase_override: Literal["force_collection", "force_live"] | None = None
+
+
+class PendingReviewRow(BaseModel):
+    id: int
+    song_title: str
+    artist: str
+    artwork_url: str | None
+    vote_count: int
+    nickname: str | None
+    created_at: datetime
+    note: str | None
+    status: Literal["new", "accepted", "playing", "played", "rejected"]
+
+
+class PendingReviewResponse(BaseModel):
+    requests: list[PendingReviewRow]
+    total: int
+
+
+class BulkReviewRequest(BaseModel):
+    action: Literal[
+        "accept_top_n",
+        "accept_threshold",
+        "accept_ids",
+        "reject_ids",
+        "reject_remaining",
+    ]
+    n: int | None = Field(default=None, ge=1, le=200)
+    min_votes: int | None = Field(default=None, ge=0)
+    request_ids: list[int] | None = Field(default=None, max_length=200)
+
+
+class BulkReviewResponse(BaseModel):
+    accepted: int
+    rejected: int
+    unchanged: int
