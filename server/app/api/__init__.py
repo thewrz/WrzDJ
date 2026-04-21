@@ -5,6 +5,7 @@ from app.api import (
     auth,
     beatport,
     bridge,
+    collect,
     events,
     kiosk,
     public,
@@ -30,6 +31,7 @@ api_router.include_router(requests.router, prefix="/requests", tags=["requests"]
 api_router.include_router(votes.router, prefix="/requests", tags=["votes"])
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(public.router, prefix="/public", tags=["public"])
+api_router.include_router(collect.router, prefix="/public/collect", tags=["collect"])
 api_router.include_router(sse.router, prefix="/public", tags=["sse"])
 api_router.include_router(bridge.router, tags=["bridge"])
 api_router.include_router(tidal.router, prefix="/tidal", tags=["tidal"])
