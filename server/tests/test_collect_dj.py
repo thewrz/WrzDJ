@@ -179,3 +179,42 @@ def test_bulk_review_bad_action(client, auth_headers, test_event):
         headers=auth_headers,
     )
     assert r.status_code == 422
+
+
+def test_get_collection_returns_settings(client, db, auth_headers, test_event):
+    now = utcnow()
+    test_event.collection_opens_at = now - timedelta(hours=1)
+    test_event.live_starts_at = now + timedelta(hours=3)
+    test_event.submission_cap_per_guest = 10
+    db.commit()
+
+    r = client.get(
+        f"/api/events/{test_event.code}/collection",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["submission_cap_per_guest"] == 10
+    assert body["phase"] in ("pre_announce", "collection", "live", "closed")
+    assert body["collection_opens_at"] is not None
+
+
+def test_get_collection_requires_ownership(client, db, test_event):
+    from app.models.user import User
+    from app.services.auth import create_access_token
+
+    other = User(username="otherdj_get", password_hash="x", role="dj")
+    db.add(other)
+    db.commit()
+    db.refresh(other)
+    token = create_access_token(data={"sub": other.username, "tv": other.token_version})
+    r = client.get(
+        f"/api/events/{test_event.code}/collection",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 403
+
+
+def test_get_collection_404_for_unknown(client, auth_headers):
+    r = client.get("/api/events/ZZZZZZ/collection", headers=auth_headers)
+    assert r.status_code == 404
