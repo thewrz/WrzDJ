@@ -43,6 +43,39 @@ export default function JoinEventPage() {
   const [votedIds, setVotedIds] = useState<Set<number>>(new Set());
   const [nowPlaying, setNowPlaying] = useState<GuestNowPlaying | null>(null);
 
+  // Splash + collect-phase banner
+  const [splashVisible, setSplashVisible] = useState(false);
+  const [collectPhase, setCollectPhase] = useState<
+    'pre_announce' | 'collection' | 'live' | 'closed' | null
+  >(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = `wrzdj_live_splash_${code}`;
+    if (sessionStorage.getItem(key) === '1') {
+      setSplashVisible(true);
+      sessionStorage.removeItem(key);
+      const t = setTimeout(() => setSplashVisible(false), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [code]);
+
+  useEffect(() => {
+    if (!code) return;
+    let cancelled = false;
+    api.getCollectEvent(code).then(
+      (ev) => {
+        if (!cancelled) setCollectPhase(ev.phase);
+      },
+      () => {
+        /* silently ignore — assume live */
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
+
   // My Requests tracking
   const [myRequestIds, setMyRequestIds] = useState<Set<number>>(new Set());
   const [myRequestsRefreshKey, setMyRequestsRefreshKey] = useState(0);
@@ -296,9 +329,22 @@ export default function JoinEventPage() {
     );
   }
 
+  const phaseBanner = (collectPhase === 'pre_announce' || collectPhase === 'collection') ? (
+    <div style={{ padding: 12, background: '#1a1a1a', textAlign: 'center' }}>
+      Voting for this event is open —{' '}
+      <a href={`/collect/${code}`}>go to the pre-event page →</a>
+    </div>
+  ) : null;
+
   if (showRequestList) {
     return (
       <div className="guest-request-list-container">
+        {splashVisible && (
+          <div style={{ padding: 12, background: '#ffcc00', color: '#000', textAlign: 'center' }}>
+            🎉 The event is now live — you&apos;re in!
+          </div>
+        )}
+        {phaseBanner}
         {toast && (
           <Toast
             message={toast.message}
@@ -602,6 +648,12 @@ export default function JoinEventPage() {
           <img src={event.banner_url} alt="" />
         </div>
       )}
+      {splashVisible && (
+        <div style={{ padding: 12, background: '#ffcc00', color: '#000', textAlign: 'center' }}>
+          🎉 The event is now live — you&apos;re in!
+        </div>
+      )}
+      {phaseBanner}
       <div className="container" style={{ maxWidth: '500px', position: 'relative', zIndex: 1 }}>
       <div className="card">
         <h1 style={{ marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{event.name}</h1>
