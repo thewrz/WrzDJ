@@ -24,6 +24,7 @@ from app.models.event import Event
 from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.activity_log import ActivityLogEntry
+from app.schemas.collect import UpdateCollectionSettings
 from app.schemas.common import AcceptAllResponse, BulkActionResponse
 from app.schemas.event import (
     BulkDeleteEventsRequest,
@@ -967,6 +968,51 @@ def upload_banner(
     save_banner_to_event(db, event, banner_filename, colors)
 
     return _event_to_out(event, request)
+
+
+@router.patch("/{code}/collection")
+def update_collection_settings(
+    code: str,
+    payload: UpdateCollectionSettings,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+) -> dict:
+    """Update pre-event collection scheduling settings."""
+    event = db.query(Event).filter(Event.code == code).one_or_none()
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event.created_by_user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if payload.collection_opens_at is not None:
+        event.collection_opens_at = payload.collection_opens_at
+    if payload.live_starts_at is not None:
+        event.live_starts_at = payload.live_starts_at
+    if payload.submission_cap_per_guest is not None:
+        event.submission_cap_per_guest = payload.submission_cap_per_guest
+    if "collection_phase_override" in payload.model_fields_set:
+        event.collection_phase_override = payload.collection_phase_override
+
+    # Validate ordering after applying changes
+    opens = event.collection_opens_at
+    live = event.live_starts_at
+    expires = event.expires_at
+    if opens and live and opens >= live:
+        raise HTTPException(
+            status_code=400, detail="collection_opens_at must be before live_starts_at"
+        )
+    if live and expires and live >= expires:
+        raise HTTPException(status_code=400, detail="live_starts_at must be before expires_at")
+
+    db.commit()
+    db.refresh(event)
+    return {
+        "collection_opens_at": event.collection_opens_at,
+        "live_starts_at": event.live_starts_at,
+        "submission_cap_per_guest": event.submission_cap_per_guest,
+        "collection_phase_override": event.collection_phase_override,
+        "phase": event.phase,
+    }
 
 
 @router.delete("/{code}/banner", response_model=EventOut)
