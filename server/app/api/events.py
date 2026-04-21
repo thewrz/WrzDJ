@@ -26,6 +26,8 @@ from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.activity_log import ActivityLogEntry
 from app.schemas.collect import (
+    BulkReviewRequest,
+    BulkReviewResponse,
     PendingReviewResponse,
     PendingReviewRow,
     UpdateCollectionSettings,
@@ -1059,6 +1061,71 @@ def pending_review(
         ],
         total=len(rows),
     )
+
+
+@router.post("/{code}/bulk-review", response_model=BulkReviewResponse)
+def bulk_review(
+    code: str,
+    payload: BulkReviewRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
+    event = db.query(Event).filter(Event.code == code).one_or_none()
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event.created_by_user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    pending_q = (
+        db.query(SongRequest)
+        .filter(SongRequest.event_id == event.id)
+        .filter(SongRequest.submitted_during_collection == True)  # noqa: E712
+        .filter(SongRequest.status == "new")
+    )
+
+    accepted = 0
+    rejected = 0
+
+    if payload.action == "accept_top_n":
+        if payload.n is None:
+            raise HTTPException(status_code=400, detail="n is required")
+        rows = (
+            pending_q.order_by(SongRequest.vote_count.desc(), SongRequest.created_at.asc())
+            .limit(payload.n)
+            .all()
+        )
+        for r in rows:
+            r.status = "accepted"
+            accepted += 1
+    elif payload.action == "accept_threshold":
+        if payload.min_votes is None:
+            raise HTTPException(status_code=400, detail="min_votes is required")
+        rows = pending_q.filter(SongRequest.vote_count >= payload.min_votes).all()
+        for r in rows:
+            r.status = "accepted"
+            accepted += 1
+    elif payload.action == "accept_ids":
+        if not payload.request_ids:
+            raise HTTPException(status_code=400, detail="request_ids is required")
+        rows = pending_q.filter(SongRequest.id.in_(payload.request_ids)).all()
+        for r in rows:
+            r.status = "accepted"
+            accepted += 1
+    elif payload.action == "reject_ids":
+        if not payload.request_ids:
+            raise HTTPException(status_code=400, detail="request_ids is required")
+        rows = pending_q.filter(SongRequest.id.in_(payload.request_ids)).all()
+        for r in rows:
+            r.status = "rejected"
+            rejected += 1
+    elif payload.action == "reject_remaining":
+        rows = pending_q.all()
+        for r in rows:
+            r.status = "rejected"
+            rejected += 1
+
+    db.commit()
+    return BulkReviewResponse(accepted=accepted, rejected=rejected, unchanged=0)
 
 
 @router.delete("/{code}/banner", response_model=EventOut)

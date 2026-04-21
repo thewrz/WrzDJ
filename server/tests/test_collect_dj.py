@@ -113,3 +113,69 @@ def test_pending_review_requires_ownership(client, db, test_event):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 403
+
+
+def test_bulk_review_accept_top_n(client, db, auth_headers, test_event, collection_requests):
+    r = client.post(
+        f"/api/events/{test_event.code}/bulk-review",
+        json={"action": "accept_top_n", "n": 2},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["accepted"] == 2
+    for row in collection_requests:
+        db.refresh(row)
+    statuses = sorted(r.status for r in collection_requests)
+    assert statuses == ["accepted", "accepted", "new"]
+
+
+def test_bulk_review_accept_threshold(client, db, auth_headers, test_event, collection_requests):
+    r = client.post(
+        f"/api/events/{test_event.code}/bulk-review",
+        json={"action": "accept_threshold", "min_votes": 3},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    # Only the vote_count=5 row qualifies
+    assert r.json()["accepted"] == 1
+
+
+def test_bulk_review_reject_remaining(client, db, auth_headers, test_event, collection_requests):
+    r = client.post(
+        f"/api/events/{test_event.code}/bulk-review",
+        json={"action": "reject_remaining"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["rejected"] == 3
+
+
+def test_bulk_review_accept_ids(client, db, auth_headers, test_event, collection_requests):
+    ids = [collection_requests[0].id, collection_requests[2].id]
+    r = client.post(
+        f"/api/events/{test_event.code}/bulk-review",
+        json={"action": "accept_ids", "request_ids": ids},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["accepted"] == 2
+
+
+def test_bulk_review_rejects_over_200_ids(client, auth_headers, test_event):
+    ids = list(range(1, 250))
+    r = client.post(
+        f"/api/events/{test_event.code}/bulk-review",
+        json={"action": "accept_ids", "request_ids": ids},
+        headers=auth_headers,
+    )
+    assert r.status_code == 422
+
+
+def test_bulk_review_bad_action(client, auth_headers, test_event):
+    r = client.post(
+        f"/api/events/{test_event.code}/bulk-review",
+        json={"action": "launch_nukes"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 422
