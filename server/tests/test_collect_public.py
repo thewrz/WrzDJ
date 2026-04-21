@@ -100,3 +100,82 @@ def test_collect_profile_me_empty_when_no_interactions(client, db, test_event):
     assert body["submitted"] == []
     assert body["upvoted"] == []
     assert body["is_top_contributor"] is False
+
+
+def test_collect_submit_creates_request_in_collection_phase(client, db, test_event):
+    _enable_collection(db, test_event)
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={
+            "song_title": "Mr. Brightside",
+            "artist": "The Killers",
+            "source": "spotify",
+            "source_url": "https://open.spotify.com/track/abc",
+        },
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["id"] > 0
+
+    from app.models.request import Request as SongRequest
+
+    row = db.query(SongRequest).filter(SongRequest.id == body["id"]).one()
+    assert row.submitted_during_collection is True
+    assert row.status == "new"
+
+
+def test_collect_submit_rejected_during_live_phase(client, db, test_event):
+    # event without collection fields → phase == "live"
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "A", "artist": "B", "source": "spotify"},
+    )
+    assert r.status_code == 409
+    assert "Collection" in r.json()["detail"]
+
+
+def test_collect_submit_blocked_at_cap(client, db, test_event):
+    _enable_collection(db, test_event)
+    test_event.submission_cap_per_guest = 2
+    db.commit()
+    for _ in range(2):
+        r = client.post(
+            f"/api/public/collect/{test_event.code}/requests",
+            json={"song_title": "A", "artist": "B", "source": "spotify"},
+        )
+        assert r.status_code == 201
+    r3 = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "C", "artist": "D", "source": "spotify"},
+    )
+    assert r3.status_code == 429
+    assert "Picks limit reached" in r3.json()["detail"]
+
+
+def test_collect_vote_increments_count(client, db, test_event, collection_requests):
+    _enable_collection(db, test_event)
+    req = collection_requests[0]
+    before = req.vote_count
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/vote",
+        json={"request_id": req.id},
+    )
+    assert r.status_code == 200
+    db.refresh(req)
+    assert req.vote_count == before + 1
+
+
+def test_collect_vote_is_idempotent(client, db, test_event, collection_requests):
+    _enable_collection(db, test_event)
+    req = collection_requests[0]
+    client.post(
+        f"/api/public/collect/{test_event.code}/vote",
+        json={"request_id": req.id},
+    )
+    before = db.query(type(req)).filter(type(req).id == req.id).one().vote_count
+    client.post(
+        f"/api/public/collect/{test_event.code}/vote",
+        json={"request_id": req.id},
+    )
+    after = db.query(type(req)).filter(type(req).id == req.id).one().vote_count
+    assert after == before

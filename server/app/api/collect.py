@@ -1,5 +1,6 @@
 """Public API endpoints for pre-event song collection (no authentication required)."""
 
+import hashlib
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -10,6 +11,7 @@ from app.api.deps import get_db
 from app.core.rate_limit import get_client_fingerprint, limiter
 from app.models.event import Event
 from app.models.request import Request as SongRequest
+from app.models.request import RequestStatus
 from app.models.request_vote import RequestVote
 from app.schemas.collect import (
     CollectEventPreview,
@@ -19,9 +21,12 @@ from app.schemas.collect import (
     CollectMyPicksResponse,
     CollectProfileRequest,
     CollectProfileResponse,
+    CollectSubmitRequest,
+    CollectVoteRequest,
 )
 from app.services import collect as collect_service
 from app.services.system_settings import get_system_settings
+from app.services.vote import add_vote
 
 router = APIRouter()
 
@@ -200,3 +205,80 @@ def my_picks(code: str, request: Request, db: Session = Depends(get_db)):
         is_top_contributor=is_top,
         first_suggestion_ids=first_suggestion_ids,
     )
+
+
+def _compute_dedupe_key(song_title: str, artist: str) -> str:
+    raw = f"{song_title.strip().lower()}|{artist.strip().lower()}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:64]
+
+
+@router.post("/{code}/requests", status_code=201)
+@limiter.limit("10/minute")
+def submit(
+    code: str,
+    payload: CollectSubmitRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    event = _get_event_or_404(db, code)
+    if event.phase != "collection":
+        raise HTTPException(status_code=409, detail="Collection has ended")
+
+    fingerprint = get_client_fingerprint(request)
+    try:
+        collect_service.check_and_increment_submission_count(
+            db, event=event, fingerprint=fingerprint
+        )
+    except collect_service.SubmissionCapExceeded:
+        raise HTTPException(status_code=429, detail="Picks limit reached") from None
+
+    if payload.nickname:
+        collect_service.upsert_profile(
+            db,
+            event_id=event.id,
+            fingerprint=fingerprint,
+            nickname=payload.nickname,
+        )
+
+    row = SongRequest(
+        event_id=event.id,
+        song_title=payload.song_title,
+        artist=payload.artist,
+        source=payload.source,
+        source_url=payload.source_url,
+        artwork_url=payload.artwork_url,
+        note=payload.note,
+        nickname=payload.nickname,
+        status=RequestStatus.NEW.value,
+        dedupe_key=_compute_dedupe_key(payload.song_title, payload.artist),
+        client_fingerprint=fingerprint,
+        submitted_during_collection=True,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id}
+
+
+@router.post("/{code}/vote")
+@limiter.limit("60/minute")
+def vote(
+    code: str,
+    payload: CollectVoteRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    event = _get_event_or_404(db, code)
+    if event.phase not in ("collection", "live"):
+        raise HTTPException(status_code=409, detail="Voting is closed")
+    fingerprint = get_client_fingerprint(request)
+    row = (
+        db.query(SongRequest)
+        .filter(SongRequest.id == payload.request_id)
+        .filter(SongRequest.event_id == event.id)
+        .one_or_none()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Request not found")
+    add_vote(db, request_id=row.id, client_fingerprint=fingerprint)
+    return {"ok": True}
