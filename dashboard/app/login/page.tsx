@@ -15,7 +15,13 @@ function LoginForm() {
   const { login } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get('redirect') || '/dashboard';
+  // SECURITY (M-F6): only accept same-origin paths. Reject protocol-relative
+  // URLs like "//evil.com" that Next.js router.push treats as external.
+  const rawRedirect = searchParams.get('redirect');
+  const redirectTo =
+    rawRedirect && rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
+      ? rawRedirect
+      : '/dashboard';
 
   useEffect(() => {
     api.getPublicSettings()
