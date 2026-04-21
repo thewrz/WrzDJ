@@ -57,3 +57,46 @@ def test_collect_leaderboard_all_tab_includes_zero_votes(
     assert r.status_code == 200
     votes = [row["vote_count"] for row in r.json()["requests"]]
     assert 0 in votes
+
+
+def test_collect_profile_set_nickname(client, db, test_event):
+    _enable_collection(db, test_event)
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/profile",
+        json={"nickname": "DancingQueen"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["nickname"] == "DancingQueen"
+    assert body["has_email"] is False
+    assert body["submission_count"] == 0
+    assert body["submission_cap"] == 15
+
+
+def test_collect_profile_invalid_nickname_rejected(client, db, test_event):
+    _enable_collection(db, test_event)
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/profile",
+        json={"nickname": "<script>alert(1)</script>"},
+    )
+    assert r.status_code == 422
+
+
+def test_collect_profile_accepts_email(client, db, test_event):
+    _enable_collection(db, test_event)
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/profile",
+        json={"nickname": "A", "email": "guest@example.com"},
+    )
+    assert r.status_code == 200
+    assert r.json()["has_email"] is True
+
+
+def test_collect_profile_me_empty_when_no_interactions(client, db, test_event):
+    _enable_collection(db, test_event)
+    r = client.get(f"/api/public/collect/{test_event.code}/profile/me")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["submitted"] == []
+    assert body["upvoted"] == []
+    assert body["is_top_contributor"] is False
