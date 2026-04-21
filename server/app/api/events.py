@@ -21,10 +21,15 @@ from app.api.deps import get_current_active_user, get_db, get_owned_event
 from app.core.config import get_settings
 from app.core.rate_limit import get_client_fingerprint, limiter
 from app.models.event import Event
+from app.models.request import Request as SongRequest
 from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.activity_log import ActivityLogEntry
-from app.schemas.collect import UpdateCollectionSettings
+from app.schemas.collect import (
+    PendingReviewResponse,
+    PendingReviewRow,
+    UpdateCollectionSettings,
+)
 from app.schemas.common import AcceptAllResponse, BulkActionResponse
 from app.schemas.event import (
     BulkDeleteEventsRequest,
@@ -1013,6 +1018,47 @@ def update_collection_settings(
         "collection_phase_override": event.collection_phase_override,
         "phase": event.phase,
     }
+
+
+@router.get("/{code}/pending-review", response_model=PendingReviewResponse)
+def pending_review(
+    code: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
+    """Get pending review data source for DJ bulk-review."""
+    event = db.query(Event).filter(Event.code == code).one_or_none()
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event.created_by_user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    rows = (
+        db.query(SongRequest)
+        .filter(SongRequest.event_id == event.id)
+        .filter(SongRequest.submitted_during_collection == True)  # noqa: E712
+        .filter(SongRequest.status == "new")
+        .order_by(SongRequest.vote_count.desc(), SongRequest.created_at.asc())
+        .limit(200)
+        .all()
+    )
+    return PendingReviewResponse(
+        requests=[
+            PendingReviewRow(
+                id=r.id,
+                song_title=r.song_title,
+                artist=r.artist,
+                artwork_url=r.artwork_url,
+                vote_count=r.vote_count,
+                nickname=r.nickname,
+                created_at=r.created_at,
+                note=r.note,
+                status=r.status,
+            )
+            for r in rows
+        ],
+        total=len(rows),
+    )
 
 
 @router.delete("/{code}/banner", response_model=EventOut)

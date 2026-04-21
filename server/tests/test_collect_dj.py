@@ -71,3 +71,45 @@ def test_patch_collection_override_bad_value(client, auth_headers, test_event):
         headers=auth_headers,
     )
     assert r.status_code == 422
+
+
+def test_pending_review_returns_collection_news_sorted_by_votes(
+    client, auth_headers, test_event, collection_requests
+):
+    r = client.get(
+        f"/api/events/{test_event.code}/pending-review",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    rows = r.json()["requests"]
+    # collection_requests fixture has vote_count 5, 2, 0
+    assert [row["vote_count"] for row in rows] == [5, 2, 0]
+
+
+def test_pending_review_excludes_accepted(
+    client, db, auth_headers, test_event, collection_requests
+):
+    collection_requests[0].status = "accepted"
+    db.commit()
+    r = client.get(
+        f"/api/events/{test_event.code}/pending-review",
+        headers=auth_headers,
+    )
+    votes = [row["vote_count"] for row in r.json()["requests"]]
+    assert 5 not in votes  # that request is now accepted
+
+
+def test_pending_review_requires_ownership(client, db, test_event):
+    from app.models.user import User
+    from app.services.auth import create_access_token
+
+    other = User(username="otherdj2", password_hash="x", role="dj")
+    db.add(other)
+    db.commit()
+    db.refresh(other)
+    token = create_access_token(data={"sub": other.username, "tv": other.token_version})
+    r = client.get(
+        f"/api/events/{test_event.code}/pending-review",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 403
