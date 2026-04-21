@@ -18,8 +18,13 @@ dependencies = [
     "spotipy>=2.23.0",
     "slowapi>=0.1.9",
     "tidalapi>=0.7.0",
-    "Pillow>=10.0.0",
-    "cryptography>=42.0.0",
+    # SECURITY: minimum versions per 2026-04-08 audit P0 CVEs.
+    # Bumping transitives to direct deps to enforce floor.
+    "Pillow>=12.1.1",        # CVE-2026-25990 (banner upload)
+    "cryptography>=46.0.7",  # CVE-2026-26007, 34073, 39892 (Fernet + JWT)
+    "PyJWT>=2.12.0",         # CVE-2026-32597 (auth lib)
+    "aiohttp>=3.13.4",       # 10x CVE-2026-* (HTTP client)
+    "requests>=2.33.0",      # CVE-2026-25645 (URL parsing)
     "anthropic>=0.40.0",
     "sse-starlette>=2.0.0",
 ]
