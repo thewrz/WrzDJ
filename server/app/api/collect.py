@@ -8,7 +8,7 @@ from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.core.rate_limit import get_client_fingerprint, limiter
+from app.core.rate_limit import get_client_fingerprint, limiter, mask_fingerprint
 from app.models.event import Event
 from app.models.request import Request as SongRequest
 from app.models.request import RequestStatus
@@ -25,6 +25,7 @@ from app.schemas.collect import (
     CollectVoteRequest,
 )
 from app.services import collect as collect_service
+from app.services.activity_log import log_activity
 from app.services.system_settings import get_system_settings
 from app.services.vote import add_vote
 
@@ -135,7 +136,7 @@ def set_profile(
     db: Session = Depends(get_db),
 ):
     event = _get_event_or_404(db, code)
-    fingerprint = get_client_fingerprint(request)
+    fingerprint = get_client_fingerprint(request, action="collect.set_profile", event_code=code)
     profile = collect_service.upsert_profile(
         db,
         event_id=event.id,
@@ -143,6 +144,19 @@ def set_profile(
         nickname=payload.nickname,
         email=payload.email,
     )
+    if payload.nickname is not None or payload.email is not None:
+        _parts = []
+        if payload.nickname is not None:
+            _parts.append("nickname")
+        if payload.email is not None:
+            _parts.append("email")
+        log_activity(
+            db,
+            level="info",
+            source="collect",
+            message=f"Guest [{mask_fingerprint(fingerprint)}] updated profile: {', '.join(_parts)}",
+            event_code=code,
+        )
     return CollectProfileResponse(
         nickname=profile.nickname,
         has_email=profile.email is not None,
@@ -155,7 +169,7 @@ def set_profile(
 @limiter.limit("60/minute")
 def my_picks(code: str, request: Request, db: Session = Depends(get_db)):
     event = _get_event_or_404(db, code)
-    fingerprint = get_client_fingerprint(request)
+    fingerprint = get_client_fingerprint(request, action="collect.my_picks", event_code=code)
 
     submitted = (
         db.query(SongRequest)
@@ -260,7 +274,7 @@ def submit(
     if event.phase != "collection":
         raise HTTPException(status_code=409, detail="Collection has ended")
 
-    fingerprint = get_client_fingerprint(request)
+    fingerprint = get_client_fingerprint(request, action="collect.submit", event_code=code)
     try:
         collect_service.check_and_increment_submission_count(
             db, event=event, fingerprint=fingerprint
@@ -293,6 +307,16 @@ def submit(
     db.add(row)
     db.commit()
     db.refresh(row)
+    log_activity(
+        db,
+        level="info",
+        source="collect",
+        message=(
+            f"Guest [{mask_fingerprint(fingerprint)}] submitted "
+            f"'{row.song_title}' by {row.artist} (req #{row.id})"
+        ),
+        event_code=code,
+    )
     return {"id": row.id}
 
 
@@ -307,7 +331,7 @@ def vote(
     event = _get_event_or_404(db, code)
     if event.phase not in ("collection", "live"):
         raise HTTPException(status_code=409, detail="Voting is closed")
-    fingerprint = get_client_fingerprint(request)
+    fingerprint = get_client_fingerprint(request, action="collect.vote", event_code=code)
     row = (
         db.query(SongRequest)
         .filter(SongRequest.id == payload.request_id)
@@ -316,5 +340,16 @@ def vote(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Request not found")
-    add_vote(db, request_id=row.id, client_fingerprint=fingerprint)
+    _, is_new_vote = add_vote(db, request_id=row.id, client_fingerprint=fingerprint)
+    if is_new_vote:
+        log_activity(
+            db,
+            level="info",
+            source="collect",
+            message=(
+                f"Guest [{mask_fingerprint(fingerprint)}] voted on "
+                f"'{row.song_title}' (req #{row.id})"
+            ),
+            event_code=code,
+        )
     return {"ok": True}

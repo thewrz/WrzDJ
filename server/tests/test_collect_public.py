@@ -251,3 +251,61 @@ def test_collect_my_picks_voted_request_ids_includes_self_votes(
     assert not any(u["id"] == target.id for u in body["upvoted"])
     # But voted_request_ids MUST include it — this is the fix.
     assert target.id in body["voted_request_ids"]
+
+
+def test_collect_activity_log_entries_for_state_changes(client, db, test_event):
+    """Submit, vote, and profile-set should each write one ActivityLog row
+    tagged with the masked fingerprint so DJs can audit guest activity.
+    """
+    from app.models.activity_log import ActivityLog
+
+    _enable_collection(db, test_event)
+
+    # 1. Submit a song.
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "Log Me", "artist": "Audit", "source": "spotify"},
+    )
+    assert r.status_code == 201
+    new_id = r.json()["id"]
+
+    # 2. Vote on it.
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/vote",
+        json={"request_id": new_id},
+    )
+    assert r.status_code == 200
+
+    # 2b. Vote again — idempotent, should NOT create a second activity row.
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/vote",
+        json={"request_id": new_id},
+    )
+    assert r.status_code == 200
+
+    # 3. Set a nickname.
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/profile",
+        json={"nickname": "LogTester"},
+    )
+    assert r.status_code == 200
+
+    rows = (
+        db.query(ActivityLog)
+        .filter(ActivityLog.event_code == test_event.code)
+        .filter(ActivityLog.source == "collect")
+        .order_by(ActivityLog.id.asc())
+        .all()
+    )
+    assert len(rows) == 3, (
+        f"expected 3 collect activity rows, got {len(rows)}: {[r.message for r in rows]}"
+    )
+    assert "submitted" in rows[0].message
+    assert "'Log Me'" in rows[0].message
+    assert "voted" in rows[1].message
+    assert "updated profile" in rows[2].message
+    # Every row should carry the masked fingerprint (12 hex chars in [brackets]).
+    import re
+
+    for row in rows:
+        assert re.search(r"\[[0-9a-f]{12}\]", row.message), f"missing masked fp: {row.message}"

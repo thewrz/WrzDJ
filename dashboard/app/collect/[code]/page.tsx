@@ -31,6 +31,7 @@ export default function CollectPage() {
   const [tab, setTab] = useState<'trending' | 'all'>('all');
   const [error, setError] = useState<string | null>(null);
   const [hasEmail, setHasEmail] = useState(false);
+  const [nickname, setNickname] = useState<string | null>(null);
   const [profile, setProfile] = useState<{
     submission_count: number;
     submission_cap: number;
@@ -44,9 +45,13 @@ export default function CollectPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const saveEmail = async (email: string) => {
-    const resp = await apiClient.setCollectProfile(code, { email });
+  const saveProfile = async (data: { nickname?: string; email?: string }) => {
+    const resp = await apiClient.setCollectProfile(code, data);
     setHasEmail(resp.has_email);
+    setNickname(resp.nickname);
+    if (resp.nickname) {
+      localStorage.setItem(`wrzdj_collect_nickname_${code}`, resp.nickname);
+    }
   };
 
   useEffect(() => {
@@ -54,6 +59,10 @@ export default function CollectPage() {
     apiClient.setCollectProfile(code, {}).then((p) => {
       setProfile({ submission_count: p.submission_count, submission_cap: p.submission_cap });
       setHasEmail(p.has_email);
+      setNickname(p.nickname);
+      if (p.nickname) {
+        localStorage.setItem(`wrzdj_collect_nickname_${code}`, p.nickname);
+      }
     });
   }, [code]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -95,14 +104,15 @@ export default function CollectPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const nickname = localStorage.getItem(`wrzdj_collect_nickname_${code}`) ?? undefined;
+      const submitNickname =
+        nickname ?? localStorage.getItem(`wrzdj_collect_nickname_${code}`) ?? undefined;
       await apiClient.submitCollectRequest(code, {
         song_title: song.title,
         artist: song.artist,
         source: song.source,
         source_url: song.url ?? undefined,
         artwork_url: song.album_art ?? undefined,
-        nickname,
+        nickname: submitNickname,
       });
       const [p, lb] = await Promise.all([
         apiClient.setCollectProfile(code, {}),
@@ -232,9 +242,18 @@ export default function CollectPage() {
               Live show in <strong>{formatCountdown(liveStarts)}</strong>
             </p>
           )}
+          {nickname && (
+            <p className="collect-countdown" style={{ marginTop: '0.25rem' }}>
+              Voting as <strong>@{nickname}</strong>
+            </p>
+          )}
         </header>
 
-        <FeatureOptInPanel hasEmail={hasEmail} onSave={saveEmail} />
+        <FeatureOptInPanel
+          hasEmail={hasEmail}
+          initialNickname={nickname}
+          onSave={saveProfile}
+        />
 
         <section className="collect-section">
           <LeaderboardTabs
