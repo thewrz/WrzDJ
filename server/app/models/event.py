@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
@@ -6,6 +6,18 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.time import utcnow
 from app.models.base import Base
+
+
+def _strip_tz(dt: datetime | None) -> datetime | None:
+    """Return a naive UTC datetime so comparisons with utcnow() never raise.
+
+    Project stores naive UTC. Defends against an in-memory aware datetime
+    that hasn't yet been round-tripped through the DB (Pydantic parses
+    ISO-with-Z as aware).
+    """
+    if dt is None or dt.tzinfo is None:
+        return dt
+    return dt.astimezone(UTC).replace(tzinfo=None)
 
 
 class Event(Base):
@@ -66,10 +78,13 @@ class Event(Base):
         if self.collection_phase_override == "force_collection":
             return "collection"
         now = utcnow()
-        if self.collection_opens_at and now < self.collection_opens_at:
+        opens = _strip_tz(self.collection_opens_at)
+        live = _strip_tz(self.live_starts_at)
+        expires = _strip_tz(self.expires_at)
+        if opens and now < opens:
             return "pre_announce"
-        if self.live_starts_at and now < self.live_starts_at:
+        if live and now < live:
             return "collection"
-        if now < self.expires_at:
+        if now < expires:
             return "live"
         return "closed"

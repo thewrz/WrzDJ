@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 from urllib.parse import quote
 
@@ -87,6 +87,20 @@ from app.services.sync.orchestrator import enrich_request_metadata, sync_request
 from app.services.sync.registry import get_connected_adapters
 
 router = APIRouter()
+
+
+def _to_naive_utc(dt: datetime) -> datetime:
+    """Normalize an incoming datetime to naive UTC (matches the project's stored convention).
+
+    Frontend sends ISO strings with timezone (`Z` suffix), which Pydantic parses as
+    aware datetimes. The DB columns are naive; comparing aware to naive raises
+    TypeError. Strip tz to UTC-naive for storage.
+    """
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone(UTC).replace(tzinfo=None)
+
+
 settings = get_settings()
 
 # FIXME: per-process cache — value drifts in multi-worker deployments until next request
@@ -1013,9 +1027,9 @@ def update_collection_settings(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     if payload.collection_opens_at is not None:
-        event.collection_opens_at = payload.collection_opens_at
+        event.collection_opens_at = _to_naive_utc(payload.collection_opens_at)
     if payload.live_starts_at is not None:
-        event.live_starts_at = payload.live_starts_at
+        event.live_starts_at = _to_naive_utc(payload.live_starts_at)
     if payload.submission_cap_per_guest is not None:
         event.submission_cap_per_guest = payload.submission_cap_per_guest
     if "collection_phase_override" in payload.model_fields_set:
