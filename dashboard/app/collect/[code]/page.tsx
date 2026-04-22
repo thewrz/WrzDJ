@@ -24,6 +24,7 @@ export default function CollectPage() {
   const [event, setEvent] = useState<CollectEventPreview | null>(null);
   const [leaderboard, setLeaderboard] = useState<CollectLeaderboardResponse | null>(null);
   const [myPicks, setMyPicks] = useState<CollectMyPicksResponse | null>(null);
+  const votedIds = new Set<number>(myPicks?.upvoted.map((p) => p.id) ?? []);
   const [tab, setTab] = useState<'trending' | 'all'>('all');
   const [error, setError] = useState<string | null>(null);
   const [hasEmail, setHasEmail] = useState(false);
@@ -238,6 +239,7 @@ export default function CollectPage() {
             tab={tab}
             onTabChange={setTab}
             onVote={(id) => apiClient.voteCollectRequest(code, id)}
+            votedIds={votedIds}
           />
         </section>
 

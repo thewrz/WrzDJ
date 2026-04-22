@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CollectLeaderboardRow } from '../../../../lib/api';
 
 interface Props {
@@ -8,19 +8,56 @@ interface Props {
   tab: 'trending' | 'all';
   onTabChange: (tab: 'trending' | 'all') => void;
   onVote: (requestId: number) => Promise<void>;
+  /** Request IDs this guest has already voted for (from my-picks). */
+  votedIds: ReadonlySet<number>;
 }
 
-export default function LeaderboardTabs({ rows, tab, onTabChange, onVote }: Props) {
+export default function LeaderboardTabs({
+  rows,
+  tab,
+  onTabChange,
+  onVote,
+  votedIds,
+}: Props) {
   const [optimistic, setOptimistic] = useState<Record<number, number>>({});
+  const [justVoted, setJustVoted] = useState<ReadonlySet<number>>(new Set());
+
+  // Drop optimistic overrides for rows whose vote_count the server has now
+  // caught up on (or exceeded) — prevents stale +1 overlays from lingering.
+  useEffect(() => {
+    setOptimistic((prev) => {
+      const next: Record<number, number> = {};
+      for (const r of rows) {
+        const guess = prev[r.id];
+        if (guess !== undefined && guess > r.vote_count) {
+          next[r.id] = guess;
+        }
+      }
+      return next;
+    });
+  }, [rows]);
+
+  const hasVoted = (id: number): boolean => votedIds.has(id) || justVoted.has(id);
 
   const handleVote = async (id: number, currentVotes: number) => {
+    if (hasVoted(id)) return;
     setOptimistic((o) => ({ ...o, [id]: currentVotes + 1 }));
+    setJustVoted((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
     try {
       await onVote(id);
     } catch {
       setOptimistic((o) => {
         const next = { ...o };
         delete next[id];
+        return next;
+      });
+      setJustVoted((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
         return next;
       });
     }
@@ -75,8 +112,10 @@ export default function LeaderboardTabs({ rows, tab, onTabChange, onVote }: Prop
                 </div>
                 <button
                   type="button"
-                  aria-label="upvote"
-                  className="collect-vote"
+                  aria-label={hasVoted(r.id) ? 'upvoted' : 'upvote'}
+                  aria-pressed={hasVoted(r.id)}
+                  className={`collect-vote${hasVoted(r.id) ? ' voted' : ''}`}
+                  disabled={hasVoted(r.id)}
                   onClick={() => handleVote(r.id, r.vote_count)}
                 >
                   <span className="collect-vote-caret">▲</span>

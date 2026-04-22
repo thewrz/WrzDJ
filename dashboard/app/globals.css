@@ -1620,9 +1620,17 @@ h1, .display-heading {
   transition: background 0.15s, border-color 0.15s;
 }
 
-.collect-vote:hover {
+.collect-vote:hover:not(:disabled) {
   background: rgba(59, 130, 246, 0.2);
   border-color: rgba(59, 130, 246, 0.4);
+}
+
+.collect-vote.voted,
+.collect-vote:disabled {
+  background: rgba(59, 130, 246, 0.35);
+  color: #dbeafe;
+  border-color: rgba(59, 130, 246, 0.6);
+  cursor: default;
 }
 
 .collect-vote-caret {
