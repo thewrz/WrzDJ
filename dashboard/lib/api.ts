@@ -998,6 +998,17 @@ class ApiClient {
     return res.json();
   }
 
+  async getCollectProfile(code: string): Promise<CollectProfileResponse> {
+    const res = await fetch(
+      `${getApiUrl()}/api/public/collect/${code}/profile`,
+      { method: 'GET', headers: { 'Content-Type': 'application/json' } },
+    );
+    if (!res.ok) {
+      throw new ApiError(`getCollectProfile failed: ${res.status}`, res.status);
+    }
+    return res.json();
+  }
+
   async setCollectProfile(
     code: string,
     data: { nickname?: string; email?: string },

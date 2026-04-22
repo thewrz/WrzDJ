@@ -309,3 +309,51 @@ def test_collect_activity_log_entries_for_state_changes(client, db, test_event):
 
     for row in rows:
         assert re.search(r"\[[0-9a-f]{12}\]", row.message), f"missing masked fp: {row.message}"
+
+
+def test_collect_get_profile_does_not_create_row(client, db, test_event):
+    """GET /profile returns defaults without creating a GuestProfile row —
+    reads should not have write side effects, and ActivityLog must stay clean.
+    """
+    from app.models.activity_log import ActivityLog
+    from app.models.guest_profile import GuestProfile
+
+    _enable_collection(db, test_event)
+
+    before_rows = db.query(GuestProfile).count()
+    before_log = db.query(ActivityLog).count()
+
+    r = client.get(f"/api/public/collect/{test_event.code}/profile")
+    assert r.status_code == 200
+    body = r.json()
+    assert body == {
+        "nickname": None,
+        "has_email": False,
+        "submission_count": 0,
+        "submission_cap": test_event.submission_cap_per_guest,
+    }
+
+    assert db.query(GuestProfile).count() == before_rows, (
+        "GET /profile must not create a GuestProfile row"
+    )
+    assert db.query(ActivityLog).count() == before_log, "GET /profile must not write to ActivityLog"
+
+
+def test_collect_get_profile_returns_existing_state(client, db, test_event):
+    """When a GuestProfile exists, GET returns its fields faithfully."""
+    _enable_collection(db, test_event)
+
+    # POST a real nickname + email first.
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/profile",
+        json={"nickname": "Reader", "email": "reader@example.com"},
+    )
+    assert r.status_code == 200
+
+    # Now read it back via GET.
+    r = client.get(f"/api/public/collect/{test_event.code}/profile")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["nickname"] == "Reader"
+    assert body["has_email"] is True
+    assert body["submission_cap"] == test_event.submission_cap_per_guest

@@ -56,7 +56,7 @@ export default function CollectPage() {
 
   useEffect(() => {
     if (!code) return;
-    apiClient.setCollectProfile(code, {}).then((p) => {
+    apiClient.getCollectProfile(code).then((p) => {
       setProfile({ submission_count: p.submission_count, submission_cap: p.submission_cap });
       setHasEmail(p.has_email);
       setNickname(p.nickname);
@@ -115,7 +115,7 @@ export default function CollectPage() {
         nickname: submitNickname,
       });
       const [p, lb] = await Promise.all([
-        apiClient.setCollectProfile(code, {}),
+        apiClient.getCollectProfile(code),
         apiClient.getCollectLeaderboard(code, tab),
       ]);
       setProfile({ submission_count: p.submission_count, submission_cap: p.submission_cap });

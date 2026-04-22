@@ -127,6 +127,32 @@ def leaderboard(
     )
 
 
+@router.get("/{code}/profile", response_model=CollectProfileResponse)
+@limiter.limit("60/minute")
+def get_profile(code: str, request: Request, db: Session = Depends(get_db)):
+    """Read the calling fingerprint's profile for this event. Does NOT
+    create a row if none exists — returns defaults instead. Separate from
+    POST /profile so reads and writes have different action tags in the
+    fingerprint log.
+    """
+    event = _get_event_or_404(db, code)
+    fingerprint = get_client_fingerprint(request, action="collect.get_profile", event_code=code)
+    profile = collect_service.get_profile(db, event_id=event.id, fingerprint=fingerprint)
+    if profile is None:
+        return CollectProfileResponse(
+            nickname=None,
+            has_email=False,
+            submission_count=0,
+            submission_cap=event.submission_cap_per_guest,
+        )
+    return CollectProfileResponse(
+        nickname=profile.nickname,
+        has_email=profile.email is not None,
+        submission_count=profile.submission_count,
+        submission_cap=event.submission_cap_per_guest,
+    )
+
+
 @router.post("/{code}/profile", response_model=CollectProfileResponse)
 @limiter.limit("5/minute")
 def set_profile(
