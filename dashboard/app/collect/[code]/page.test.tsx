@@ -89,7 +89,7 @@ describe("CollectPage", () => {
     });
     render(<CollectPage />);
     await waitFor(() => {
-      expect(screen.getByText(/opens in/i)).toBeInTheDocument();
+      expect(screen.getByText(/until voting opens/i)).toBeInTheDocument();
     });
   });
 

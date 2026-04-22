@@ -31,7 +31,8 @@ vi.mock("@/lib/api", () => ({
 describe("PreEventVotingTab", () => {
   it("renders phase and share link", () => {
     render(<PreEventVotingTab event={baseEvent} onEventChange={vi.fn()} />);
-    expect(screen.getByText(/phase:\s*collection/i)).toBeInTheDocument();
+    expect(screen.getByText(/current phase/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/collection/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/\/collect\/ABC/i)).toBeInTheDocument();
   });
 

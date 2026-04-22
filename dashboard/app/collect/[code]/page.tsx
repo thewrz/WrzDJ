@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import {
   apiClient,
   ApiError,
@@ -9,31 +9,32 @@ import {
   CollectLeaderboardResponse,
   CollectMyPicksResponse,
   SearchResult,
-} from "../../../lib/api";
-import FeatureOptInPanel from "./components/FeatureOptInPanel";
-import LeaderboardTabs from "./components/LeaderboardTabs";
-import MyPicksPanel from "./components/MyPicksPanel";
-import SubmitBar from "./components/SubmitBar";
+} from '../../../lib/api';
+import FeatureOptInPanel from './components/FeatureOptInPanel';
+import LeaderboardTabs from './components/LeaderboardTabs';
+import MyPicksPanel from './components/MyPicksPanel';
+import SubmitBar from './components/SubmitBar';
 
 const POLL_MS = 5000;
 
 export default function CollectPage() {
   const router = useRouter();
   const params = useParams<{ code: string }>();
-  const code = params?.code ?? "";
+  const code = params?.code ?? '';
   const [event, setEvent] = useState<CollectEventPreview | null>(null);
-  const [leaderboard, setLeaderboard] = useState<CollectLeaderboardResponse | null>(
-    null
-  );
+  const [leaderboard, setLeaderboard] = useState<CollectLeaderboardResponse | null>(null);
   const [myPicks, setMyPicks] = useState<CollectMyPicksResponse | null>(null);
-  const [tab, setTab] = useState<"trending" | "all">("trending");
+  const [tab, setTab] = useState<'trending' | 'all'>('trending');
   const [error, setError] = useState<string | null>(null);
   const [hasEmail, setHasEmail] = useState(false);
-  const [profile, setProfile] = useState<{ submission_count: number; submission_cap: number } | null>(null);
+  const [profile, setProfile] = useState<{
+    submission_count: number;
+    submission_cap: number;
+  } | null>(null);
 
   // Search modal state
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -54,14 +55,14 @@ export default function CollectPage() {
 
   const openSearch = () => {
     setSearchOpen(true);
-    setSearchQuery("");
+    setSearchQuery('');
     setSearchResults([]);
     setSubmitError(null);
   };
 
   const closeSearch = () => {
     setSearchOpen(false);
-    setSearchQuery("");
+    setSearchQuery('');
     setSearchResults([]);
     setSubmitError(null);
   };
@@ -99,7 +100,6 @@ export default function CollectPage() {
         artwork_url: song.album_art ?? undefined,
         nickname,
       });
-      // Refresh profile (submission count) + leaderboard
       const [p, lb] = await Promise.all([
         apiClient.setCollectProfile(code, {}),
         apiClient.getCollectLeaderboard(code, tab),
@@ -109,9 +109,9 @@ export default function CollectPage() {
       closeSearch();
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
-        setSubmitError("Picks limit reached");
+        setSubmitError('Picks limit reached');
       } else {
-        setSubmitError("Failed to submit. Please try again.");
+        setSubmitError('Failed to submit. Please try again.');
       }
     } finally {
       setSubmitting(false);
@@ -119,7 +119,7 @@ export default function CollectPage() {
   };
 
   const redirectToJoin = () => {
-    sessionStorage.setItem(`wrzdj_live_splash_${code}`, "1");
+    sessionStorage.setItem(`wrzdj_live_splash_${code}`, '1');
     router.replace(`/join/${code}`);
   };
 
@@ -133,11 +133,11 @@ export default function CollectPage() {
         const ev = await apiClient.getCollectEvent(code);
         if (cancelled) return;
         setEvent(ev);
-        if (ev.phase === "live" || ev.phase === "closed") {
+        if (ev.phase === 'live' || ev.phase === 'closed') {
           redirectToJoin();
           return;
         }
-        if (ev.phase === "collection") {
+        if (ev.phase === 'collection') {
           const [lb, picks] = await Promise.all([
             apiClient.getCollectLeaderboard(code, tab),
             apiClient.getCollectMyPicks(code),
@@ -150,57 +150,100 @@ export default function CollectPage() {
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
       }
-      if (!cancelled && document.visibilityState === "visible") {
+      if (!cancelled && document.visibilityState === 'visible') {
         timer = setTimeout(tick, POLL_MS);
       }
     };
 
     tick();
     const onVisibility = () => {
-      if (document.visibilityState === "visible" && !cancelled) tick();
+      if (document.visibilityState === 'visible' && !cancelled) tick();
     };
-    document.addEventListener("visibilitychange", onVisibility);
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
-      document.removeEventListener("visibilitychange", onVisibility);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [code, tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (error) return <main style={{ padding: 24 }}>Error: {error}</main>;
-  if (!event) return <main style={{ padding: 24 }}>Loading…</main>;
-
-  if (event.phase === "pre_announce") {
-    const opens = event.collection_opens_at
-      ? new Date(event.collection_opens_at)
-      : null;
+  if (error) {
     return (
-      <main style={{ padding: 24 }}>
-        <h1>{event.name}</h1>
-        <p>Voting opens in {formatCountdown(opens)}</p>
+      <main className="collect-page">
+        <div className="collect-container">
+          <div className="collect-error">Error: {error}</div>
+        </div>
+      </main>
+    );
+  }
+  if (!event) {
+    return (
+      <main className="collect-page">
+        <div className="loading">Loading…</div>
       </main>
     );
   }
 
+  const bannerNode = event.banner_url ? (
+    <div className="join-banner-bg">
+      <img src={event.banner_url} alt="" />
+    </div>
+  ) : null;
+
+  if (event.phase === 'pre_announce') {
+    const opens = event.collection_opens_at ? new Date(event.collection_opens_at) : null;
+    return (
+      <main className="collect-page">
+        {bannerNode}
+        <div className="collect-container">
+          <div className="collect-preannounce">
+            <div className="collect-phase-badge pre-announce">
+              <span>🎟️</span>
+              <span>Pre-event voting</span>
+            </div>
+            <h1 className="collect-title">{event.name}</h1>
+            <div className="collect-preannounce-count">{formatCountdown(opens)}</div>
+            <p className="collect-countdown">until voting opens</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const liveStarts = event.live_starts_at ? new Date(event.live_starts_at) : null;
+
   return (
-    <main style={{ padding: 24 }}>
-      <h1>{event.name}</h1>
-      <p>
-        Voting open —{" "}
-        {formatCountdown(
-          event.live_starts_at ? new Date(event.live_starts_at) : null
-        )}{" "}
-        until the event goes live
-      </p>
-      <FeatureOptInPanel hasEmail={hasEmail} onSave={saveEmail} />
-      <LeaderboardTabs
-        rows={leaderboard?.requests ?? []}
-        tab={tab}
-        onTabChange={setTab}
-        onVote={(id) => apiClient.voteCollectRequest(code, id)}
-      />
-      {myPicks && <MyPicksPanel picks={myPicks} />}
+    <main className="collect-page">
+      {bannerNode}
+      <div className="collect-container">
+        <header className="collect-header">
+          <div className="collect-phase-badge">
+            <span>🎟️</span>
+            <span>Pre-event voting is open</span>
+          </div>
+          <h1 className="collect-title">{event.name}</h1>
+          {liveStarts && (
+            <p className="collect-countdown">
+              Live show in <strong>{formatCountdown(liveStarts)}</strong>
+            </p>
+          )}
+        </header>
+
+        <FeatureOptInPanel hasEmail={hasEmail} onSave={saveEmail} />
+
+        <section className="collect-section">
+          <LeaderboardTabs
+            rows={leaderboard?.requests ?? []}
+            tab={tab}
+            onTabChange={setTab}
+            onVote={(id) => apiClient.voteCollectRequest(code, id)}
+          />
+        </section>
+
+        {myPicks && <MyPicksPanel picks={myPicks} />}
+      </div>
+
       <SubmitBar
         used={profile?.submission_count ?? 0}
         cap={event.submission_cap_per_guest}
@@ -209,41 +252,28 @@ export default function CollectPage() {
 
       {searchOpen && (
         <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.85)",
-            zIndex: 1000,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            overflowY: "auto",
-            padding: "1rem",
-          }}
+          className="collect-search-overlay"
           onClick={closeSearch}
+          role="dialog"
+          aria-label="Add a song"
         >
-          <div
-            className="card"
-            style={{ width: "100%", maxWidth: 480, marginTop: "2rem" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-              <h2 style={{ margin: 0 }}>Add a song</h2>
+          <div className="collect-search-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="collect-search-header">
+              <h2 style={{ margin: 0, fontSize: '1.1rem', flex: 1 }}>Add a song</h2>
               <button
+                type="button"
+                className="btn btn-sm collect-optin-dismiss"
                 onClick={closeSearch}
-                style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: "1.25rem", cursor: "pointer" }}
                 aria-label="Close search"
               >
                 ✕
               </button>
             </div>
 
-            {submitError && (
-              <p style={{ color: "#ef4444", marginBottom: "1rem" }}>{submitError}</p>
-            )}
+            {submitError && <div className="collect-error">{submitError}</div>}
 
-            <form onSubmit={handleSearch} style={{ marginBottom: "1rem" }}>
-              <div className="form-group">
+            <form onSubmit={handleSearch}>
+              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
                 <input
                   type="text"
                   className="input"
@@ -257,47 +287,37 @@ export default function CollectPage() {
               </div>
               <button
                 type="submit"
-                className="btn btn-primary"
-                style={{ width: "100%" }}
+                className="btn btn-primary btn-sm"
+                style={{ width: '100%' }}
                 disabled={searching}
               >
-                {searching ? "Searching…" : "Search"}
+                {searching ? 'Searching…' : 'Search'}
               </button>
             </form>
 
             {searchResults.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <div className="collect-search-results">
                 {searchResults.map((result, index) => (
                   <button
+                    type="button"
                     key={result.spotify_id ?? result.url ?? index}
-                    className="request-item"
-                    style={{
-                      cursor: submitting ? "default" : "pointer",
-                      border: "none",
-                      textAlign: "left",
-                      width: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.75rem",
-                    }}
+                    className="collect-search-result"
                     disabled={submitting}
                     onClick={() => handleSelectSong(result)}
                     data-testid="collect-search-result"
                   >
-                    {result.album_art && (
+                    {result.album_art ? (
                       <img
                         src={result.album_art}
                         alt={result.album ?? result.title}
-                        style={{ width: 48, height: 48, borderRadius: 4, objectFit: "cover", flexShrink: 0 }}
+                        className="collect-row-art"
                       />
+                    ) : (
+                      <div className="collect-row-art" aria-hidden="true" />
                     )}
-                    <div className="request-info" style={{ flex: 1, minWidth: 0 }}>
-                      <h3 style={{ fontSize: "1rem", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {result.title}
-                      </h3>
-                      <p style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {result.artist}
-                      </p>
+                    <div className="collect-row-info">
+                      <div className="collect-row-title">{result.title}</div>
+                      <div className="collect-row-artist">{result.artist}</div>
                     </div>
                   </button>
                 ))}
@@ -311,9 +331,9 @@ export default function CollectPage() {
 }
 
 function formatCountdown(target: Date | null): string {
-  if (!target) return "";
+  if (!target) return '';
   const diff = target.getTime() - Date.now();
-  if (diff <= 0) return "now";
+  if (diff <= 0) return 'now';
   const hrs = Math.floor(diff / 3_600_000);
   const mins = Math.floor((diff % 3_600_000) / 60_000);
   const days = Math.floor(hrs / 24);

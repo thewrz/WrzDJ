@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import type { CollectLeaderboardRow } from "../../../../lib/api";
+import { useState } from 'react';
+import type { CollectLeaderboardRow } from '../../../../lib/api';
 
 interface Props {
   rows: CollectLeaderboardRow[];
-  tab: "trending" | "all";
-  onTabChange: (tab: "trending" | "all") => void;
+  tab: 'trending' | 'all';
+  onTabChange: (tab: 'trending' | 'all') => void;
   onVote: (requestId: number) => Promise<void>;
 }
 
@@ -28,48 +28,61 @@ export default function LeaderboardTabs({ rows, tab, onTabChange, onVote }: Prop
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      <div className="collect-tabs">
         <button
-          aria-pressed={tab === "trending"}
-          onClick={() => onTabChange("trending")}
+          type="button"
+          className="collect-tab"
+          aria-pressed={tab === 'trending'}
+          onClick={() => onTabChange('trending')}
         >
           Trending
         </button>
         <button
-          aria-pressed={tab === "all"}
-          onClick={() => onTabChange("all")}
+          type="button"
+          className="collect-tab"
+          aria-pressed={tab === 'all'}
+          onClick={() => onTabChange('all')}
         >
           All
         </button>
       </div>
-      <ul style={{ listStyle: "none", padding: 0 }}>
-        {rows.map((r) => {
-          const votes = optimistic[r.id] ?? r.vote_count;
-          return (
-            <li
-              key={r.id}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                padding: 8,
-                background: "#1a1a1a",
-                marginBottom: 4,
-              }}
-            >
-              <div>
-                <strong>{r.title}</strong> — {r.artist}
-                {r.nickname && <span style={{ opacity: 0.7 }}> · by @{r.nickname}</span>}
-              </div>
-              <button
-                aria-label="upvote"
-                onClick={() => handleVote(r.id, r.vote_count)}
-              >
-                ▲ {votes}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      {rows.length === 0 ? (
+        <p className="collect-empty">No songs yet — be the first to add one!</p>
+      ) : (
+        <ul className="collect-leaderboard">
+          {rows.map((r) => {
+            const votes = optimistic[r.id] ?? r.vote_count;
+            return (
+              <li key={r.id} className="collect-row">
+                {r.artwork_url ? (
+                  <img src={r.artwork_url} alt="" className="collect-row-art" />
+                ) : (
+                  <div className="collect-row-art" aria-hidden="true" />
+                )}
+                <div className="collect-row-info">
+                  <div className="collect-row-title">{r.title}</div>
+                  <div className="collect-row-artist">{r.artist}</div>
+                  {r.nickname && (
+                    <div className="collect-row-nickname">
+                      <em className="nickname-icon">@</em>
+                      {r.nickname}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  aria-label="upvote"
+                  className="collect-vote"
+                  onClick={() => handleVote(r.id, r.vote_count)}
+                >
+                  <span className="collect-vote-caret">▲</span>
+                  <span>{votes}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

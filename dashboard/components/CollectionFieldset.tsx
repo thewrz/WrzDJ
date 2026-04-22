@@ -44,38 +44,20 @@ export function CollectionFieldset(props: CollectionFieldsetProps) {
   } = props;
 
   return (
-    <div style={{ borderTop: '1px solid #333', paddingTop: '0.75rem', marginBottom: '1rem' }}>
-      <label
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          cursor: 'pointer',
-          fontWeight: 500,
-        }}
-      >
+    <div className="collection-fieldset">
+      <label className="collection-fieldset-toggle">
         <input
           type="checkbox"
           checked={enabled}
           onChange={(e) => onEnabledChange(e.target.checked)}
-          style={{ accentColor: '#3b82f6' }}
         />
         Enable pre-event voting
       </label>
 
       {enabled && (
-        <div
-          style={{
-            marginTop: '0.75rem',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.75rem',
-          }}
-        >
+        <div className="collection-fieldset-fields">
           <div className="form-group">
-            <label htmlFor="collection-opens-at" style={{ fontSize: '0.875rem' }}>
-              Collection opens at
-            </label>
+            <label htmlFor="collection-opens-at">Collection opens at</label>
             <input
               id="collection-opens-at"
               type="datetime-local"
@@ -85,9 +67,7 @@ export function CollectionFieldset(props: CollectionFieldsetProps) {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="live-starts-at" style={{ fontSize: '0.875rem' }}>
-              Live starts at
-            </label>
+            <label htmlFor="live-starts-at">Live starts at</label>
             <input
               id="live-starts-at"
               type="datetime-local"
@@ -97,24 +77,19 @@ export function CollectionFieldset(props: CollectionFieldsetProps) {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="submission-cap" style={{ fontSize: '0.875rem' }}>
-              Submission cap per guest
-            </label>
+            <label htmlFor="submission-cap">Submission cap per guest</label>
             <input
               id="submission-cap"
               type="number"
               min={0}
               max={100}
-              className="input"
+              className="input collection-fieldset-cap"
               value={submissionCap}
               onChange={(e) => onSubmissionCapChange(Number(e.target.value))}
-              style={{ width: '6rem' }}
             />
-            <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: '0.25rem 0 0' }}>
-              0 = unlimited picks per guest
-            </p>
+            <p className="collection-fieldset-hint">0 = unlimited picks per guest</p>
           </div>
-          {error && <p style={{ color: '#f87171', fontSize: '0.875rem' }}>{error}</p>}
+          {error && <p className="collection-fieldset-error">{error}</p>}
         </div>
       )}
     </div>

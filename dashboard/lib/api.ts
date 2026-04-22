@@ -103,6 +103,8 @@ export interface CollectEventPreview {
   code: string;
   name: string;
   banner_filename: string | null;
+  banner_url: string | null;
+  banner_colors: string[] | null;
   submission_cap_per_guest: number;
   registration_enabled: boolean;
   phase: 'pre_announce' | 'collection' | 'live' | 'closed';

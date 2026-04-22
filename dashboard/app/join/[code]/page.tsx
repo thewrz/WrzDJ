@@ -330,8 +330,8 @@ export default function JoinEventPage() {
   }
 
   const phaseBanner = (collectPhase === 'pre_announce' || collectPhase === 'collection') ? (
-    <div style={{ padding: 12, background: '#1a1a1a', textAlign: 'center' }}>
-      Voting for this event is open —{' '}
+    <div className="join-pre-event-banner">
+      🎟️ Pre-event voting is open —{' '}
       <a href={`/collect/${code}`}>go to the pre-event page →</a>
     </div>
   ) : null;
@@ -340,7 +340,7 @@ export default function JoinEventPage() {
     return (
       <div className="guest-request-list-container">
         {splashVisible && (
-          <div style={{ padding: 12, background: '#ffcc00', color: '#000', textAlign: 'center' }}>
+          <div className="join-live-splash">
             🎉 The event is now live — you&apos;re in!
           </div>
         )}
@@ -649,7 +649,7 @@ export default function JoinEventPage() {
         </div>
       )}
       {splashVisible && (
-        <div style={{ padding: 12, background: '#ffcc00', color: '#000', textAlign: 'center' }}>
+        <div className="join-live-splash">
           🎉 The event is now live — you&apos;re in!
         </div>
       )}

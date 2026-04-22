@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { z } from "zod";
-import { apiClient, PendingReviewRow } from "@/lib/api";
+import { useEffect, useState } from 'react';
+import { z } from 'zod';
+import { apiClient, PendingReviewRow } from '@/lib/api';
 
 interface EventShape {
   code: string;
@@ -10,8 +10,8 @@ interface EventShape {
   collection_opens_at: string | null;
   live_starts_at: string | null;
   submission_cap_per_guest: number;
-  collection_phase_override: "force_collection" | "force_live" | null;
-  phase: "pre_announce" | "collection" | "live" | "closed";
+  collection_phase_override: 'force_collection' | 'force_live' | null;
+  phase: 'pre_announce' | 'collection' | 'live' | 'closed';
 }
 
 interface Props {
@@ -19,7 +19,13 @@ interface Props {
   onEventChange: (next: Partial<EventShape>) => void;
 }
 
-type ConfirmAction = "force_collection" | "force_live" | "clear";
+type ConfirmAction = 'force_collection' | 'force_live' | 'clear';
+
+const CONFIRM_LABEL: Record<ConfirmAction, string> = {
+  force_collection: 'Open collection now',
+  force_live: 'Start live now',
+  clear: 'Clear phase override',
+};
 
 const collectionSchema = z
   .object({
@@ -34,12 +40,11 @@ const collectionSchema = z
       }
       return true;
     },
-    { message: "Collection opens must be before live starts" }
+    { message: 'Collection opens must be before live starts' },
   );
 
 function toDatetimeLocal(iso: string | null): string {
-  if (!iso) return "";
-  // Chop seconds + timezone to get "YYYY-MM-DDTHH:mm"
+  if (!iso) return '';
   return iso.slice(0, 16);
 }
 
@@ -55,22 +60,18 @@ export default function PreEventVotingTab({ event, onEventChange }: Props) {
   const [topN, setTopN] = useState(20);
   const [minVotes, setMinVotes] = useState(3);
 
-  // Collection settings form state
   const [collectionOpensAt, setCollectionOpensAt] = useState(
-    toDatetimeLocal(event.collection_opens_at)
+    toDatetimeLocal(event.collection_opens_at),
   );
-  const [liveStartsAt, setLiveStartsAt] = useState(
-    toDatetimeLocal(event.live_starts_at)
-  );
-  const [submissionCap, setSubmissionCap] = useState(
-    event.submission_cap_per_guest
-  );
+  const [liveStartsAt, setLiveStartsAt] = useState(toDatetimeLocal(event.live_starts_at));
+  const [submissionCap, setSubmissionCap] = useState(event.submission_cap_per_guest);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsSaved, setSettingsSaved] = useState(false);
 
   useEffect(() => {
     refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event.code]);
 
   async function refresh() {
@@ -78,7 +79,7 @@ export default function PreEventVotingTab({ event, onEventChange }: Props) {
     setPending(resp.requests);
   }
 
-  async function applyOverride(value: "force_collection" | "force_live" | null) {
+  async function applyOverride(value: 'force_collection' | 'force_live' | null) {
     const resp = await apiClient.patchCollectionSettings(event.code, {
       collection_phase_override: value,
     });
@@ -88,7 +89,7 @@ export default function PreEventVotingTab({ event, onEventChange }: Props) {
 
   async function bulk(action: string, extras: Record<string, unknown> = {}) {
     await apiClient.bulkReview(event.code, {
-      action: action as Parameters<typeof apiClient.bulkReview>[1]["action"],
+      action: action as Parameters<typeof apiClient.bulkReview>[1]['action'],
       ...extras,
     });
     setSelected(new Set());
@@ -122,14 +123,14 @@ export default function PreEventVotingTab({ event, onEventChange }: Props) {
       setSettingsSaved(true);
       setTimeout(() => setSettingsSaved(false), 3000);
     } catch (err) {
-      setSettingsError(err instanceof Error ? err.message : "Failed to save settings");
+      setSettingsError(err instanceof Error ? err.message : 'Failed to save settings');
     } finally {
       setSavingSettings(false);
     }
   }
 
   const shareUrl =
-    typeof window !== "undefined"
+    typeof window !== 'undefined'
       ? `${window.location.origin}/collect/${event.code}`
       : `/collect/${event.code}`;
 
@@ -144,17 +145,43 @@ export default function PreEventVotingTab({ event, onEventChange }: Props) {
   }
 
   return (
-    <div style={{ padding: 16 }}>
-      <h2>Pre-Event Voting</h2>
+    <div style={{ padding: '1rem' }}>
+      <h2 style={{ marginBottom: '1rem' }}>Pre-Event Voting</h2>
 
-      {/* Collection settings */}
-      <div className="card" style={{ marginBottom: "1.5rem", padding: "1rem" }}>
-        <div style={{ fontWeight: 600, marginBottom: "0.75rem" }}>Collection Settings</div>
+      <div className="pre-event-stats">
+        <div className="pre-event-stat">
+          <div className="pre-event-stat-label">Current phase</div>
+          <div className="pre-event-stat-value">{event.phase.replace('_', ' ')}</div>
+        </div>
+        <div className="pre-event-stat">
+          <div className="pre-event-stat-label">Pending review</div>
+          <div className="pre-event-stat-value">{pending.length}</div>
+        </div>
+        <div className="pre-event-stat">
+          <div className="pre-event-stat-label">Pick cap / guest</div>
+          <div className="pre-event-stat-value">
+            {event.submission_cap_per_guest === 0 ? '∞' : event.submission_cap_per_guest}
+          </div>
+        </div>
+      </div>
+
+      <div className="pre-event-share">
+        <code>{shareUrl}</code>
+        <button
+          type="button"
+          className="btn btn-sm"
+          style={{ background: 'var(--border)', color: 'var(--text)' }}
+          onClick={() => navigator.clipboard.writeText(shareUrl)}
+        >
+          Copy
+        </button>
+      </div>
+
+      <div className="card" style={{ marginBottom: '1.25rem' }}>
+        <h3 style={{ marginBottom: '0.75rem', fontSize: '1rem' }}>Collection Settings</h3>
         <form onSubmit={handleSaveSettings}>
           <div className="form-group">
-            <label htmlFor="collection-opens-at" style={{ fontSize: "0.875rem" }}>
-              Collection opens at
-            </label>
+            <label htmlFor="collection-opens-at">Collection opens at</label>
             <input
               id="collection-opens-at"
               type="datetime-local"
@@ -164,9 +191,7 @@ export default function PreEventVotingTab({ event, onEventChange }: Props) {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="live-starts-at" style={{ fontSize: "0.875rem" }}>
-              Live starts at
-            </label>
+            <label htmlFor="live-starts-at">Live starts at</label>
             <input
               id="live-starts-at"
               type="datetime-local"
@@ -176,169 +201,194 @@ export default function PreEventVotingTab({ event, onEventChange }: Props) {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="submission-cap" style={{ fontSize: "0.875rem" }}>
-              Submission cap per guest
-            </label>
+            <label htmlFor="submission-cap">Submission cap per guest</label>
             <input
               id="submission-cap"
               type="number"
               min={0}
               max={100}
-              className="input"
+              className="input collection-fieldset-cap"
               value={submissionCap}
               onChange={(e) => setSubmissionCap(Number(e.target.value))}
-              style={{ width: "6rem" }}
             />
-            <p style={{ color: "#9ca3af", fontSize: "0.75rem", margin: "0.25rem 0 0" }}>
-              0 = unlimited picks per guest
-            </p>
+            <p className="collection-fieldset-hint">0 = unlimited picks per guest</p>
           </div>
-          {settingsError && (
-            <p style={{ color: "#f87171", fontSize: "0.875rem", marginBottom: "0.5rem" }}>
-              {settingsError}
-            </p>
-          )}
+          {settingsError && <p className="collection-fieldset-error">{settingsError}</p>}
           {settingsSaved && (
-            <p style={{ color: "#4ade80", fontSize: "0.875rem", marginBottom: "0.5rem" }}>
+            <p style={{ color: '#4ade80', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
               Settings saved.
             </p>
           )}
           <button type="submit" className="btn btn-primary btn-sm" disabled={savingSettings}>
-            {savingSettings ? "Saving..." : "Save settings"}
+            {savingSettings ? 'Saving…' : 'Save settings'}
           </button>
         </form>
       </div>
 
-      <p>Phase: {event.phase}</p>
-      <p>
-        Share link: <code>{shareUrl}</code>
-        <button
-          onClick={() => navigator.clipboard.writeText(shareUrl)}
-          style={{ marginLeft: 8 }}
-        >
-          Copy
-        </button>
-      </p>
-
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <button onClick={() => setConfirming("force_collection")}>Open collection now</button>
-        <button onClick={() => setConfirming("force_live")}>Start live now</button>
-        <button onClick={() => setConfirming("clear")}>Clear override</button>
-      </div>
-
-      {confirming && (
-        <div style={{ padding: 12, background: "#1a1a1a", marginBottom: 16 }}>
-          <p>Confirm action: {confirming}</p>
+      <div className="card" style={{ marginBottom: '1.25rem' }}>
+        <h3 style={{ marginBottom: '0.75rem', fontSize: '1rem' }}>Phase controls</h3>
+        <div className="pre-event-override-actions">
           <button
-            onClick={() =>
-              applyOverride(confirming === "clear" ? null : confirming)
-            }
+            type="button"
+            className="btn btn-sm"
+            style={{ background: 'var(--border)', color: 'var(--text)' }}
+            onClick={() => setConfirming('force_collection')}
           >
-            Confirm
+            Open collection now
           </button>
-          <button onClick={() => setConfirming(null)} style={{ marginLeft: 8 }}>
-            Cancel
+          <button
+            type="button"
+            className="btn btn-sm btn-success"
+            onClick={() => setConfirming('force_live')}
+          >
+            Start live now
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm"
+            style={{ background: 'var(--border)', color: 'var(--text)' }}
+            onClick={() => setConfirming('clear')}
+          >
+            Clear override
           </button>
         </div>
-      )}
 
-      <h3>Pending review ({pending.length})</h3>
-      <div style={{ marginBottom: 8 }}>
-        <label>
-          Top N:{" "}
-          <input
-            type="number"
-            value={topN}
-            onChange={(e) => setTopN(Number(e.target.value))}
-            style={{ width: 60 }}
-          />
-          <button onClick={() => bulk("accept_top_n", { n: topN })} style={{ marginLeft: 4 }}>
-            Accept top N
-          </button>
-        </label>
-        <label style={{ marginLeft: 16 }}>
-          ≥ votes:{" "}
-          <input
-            type="number"
-            value={minVotes}
-            onChange={(e) => setMinVotes(Number(e.target.value))}
-            style={{ width: 60 }}
-          />
-          <button
-            onClick={() => bulk("accept_threshold", { min_votes: minVotes })}
-            style={{ marginLeft: 4 }}
-          >
-            Accept threshold
-          </button>
-        </label>
-        <button
-          onClick={() => bulk("reject_remaining")}
-          style={{ marginLeft: 16 }}
-        >
-          Reject remaining
-        </button>
+        {confirming && (
+          <div className="pre-event-confirm">
+            <span>Confirm: {CONFIRM_LABEL[confirming]}?</span>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => applyOverride(confirming === 'clear' ? null : confirming)}
+            >
+              Confirm
+            </button>
+            <button type="button" className="btn btn-sm" onClick={() => setConfirming(null)}>
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
 
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th></th>
-            <th>▲</th>
-            <th>Song</th>
-            <th>Artist</th>
-            <th>Submitted by</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pending.map((r) => (
-            <tr key={r.id}>
-              <td>
-                <input
-                  type="checkbox"
-                  checked={selected.has(r.id)}
-                  onChange={(e) => toggleRow(r.id, e.target.checked)}
-                />
-              </td>
-              <td>{r.vote_count}</td>
-              <td>{r.song_title}</td>
-              <td>{r.artist}</td>
-              <td>{r.nickname ?? "—"}</td>
-              <td>
-                <button onClick={() => bulk("accept_ids", { request_ids: [r.id] })}>
-                  Accept
-                </button>
-                <button
-                  onClick={() => bulk("reject_ids", { request_ids: [r.id] })}
-                  style={{ marginLeft: 4 }}
-                >
-                  Reject
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="card">
+        <h3 style={{ marginBottom: '0.75rem', fontSize: '1rem' }}>
+          Pending review ({pending.length})
+        </h3>
 
-      {selected.size > 0 && (
-        <div style={{ marginTop: 8 }}>
+        <div className="pre-event-review-controls">
+          <label>
+            Top N:
+            <input
+              type="number"
+              value={topN}
+              onChange={(e) => setTopN(Number(e.target.value))}
+            />
+            <button
+              type="button"
+              className="btn btn-sm btn-success"
+              onClick={() => bulk('accept_top_n', { n: topN })}
+            >
+              Accept top N
+            </button>
+          </label>
+          <label>
+            ≥ votes:
+            <input
+              type="number"
+              value={minVotes}
+              onChange={(e) => setMinVotes(Number(e.target.value))}
+            />
+            <button
+              type="button"
+              className="btn btn-sm btn-success"
+              onClick={() => bulk('accept_threshold', { min_votes: minVotes })}
+            >
+              Accept threshold
+            </button>
+          </label>
           <button
-            onClick={() =>
-              bulk("accept_ids", { request_ids: Array.from(selected) })
-            }
+            type="button"
+            className="btn btn-sm btn-danger"
+            onClick={() => bulk('reject_remaining')}
           >
-            Accept selected ({selected.size})
-          </button>
-          <button
-            onClick={() =>
-              bulk("reject_ids", { request_ids: Array.from(selected) })
-            }
-            style={{ marginLeft: 8 }}
-          >
-            Reject selected ({selected.size})
+            Reject remaining
           </button>
         </div>
-      )}
+
+        {pending.length === 0 ? (
+          <p className="pre-event-review-empty">No pending requests — all caught up!</p>
+        ) : (
+          <table className="pre-event-review-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>▲</th>
+                <th>Song</th>
+                <th>Artist</th>
+                <th>Submitted by</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pending.map((r) => (
+                <tr key={r.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(r.id)}
+                      onChange={(e) => toggleRow(r.id, e.target.checked)}
+                    />
+                  </td>
+                  <td>{r.vote_count}</td>
+                  <td>{r.song_title}</td>
+                  <td>{r.artist}</td>
+                  <td>{r.nickname ?? '—'}</td>
+                  <td>
+                    <div className="pre-event-review-actions">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-success"
+                        onClick={() => bulk('accept_ids', { request_ids: [r.id] })}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-danger"
+                        onClick={() => bulk('reject_ids', { request_ids: [r.id] })}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {selected.size > 0 && (
+          <div className="pre-event-bulk-selection">
+            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+              {selected.size} selected
+            </span>
+            <button
+              type="button"
+              className="btn btn-sm btn-success"
+              onClick={() => bulk('accept_ids', { request_ids: Array.from(selected) })}
+            >
+              Accept selected
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-danger"
+              onClick={() => bulk('reject_ids', { request_ids: Array.from(selected) })}
+            >
+              Reject selected
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

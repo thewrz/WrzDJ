@@ -28,6 +28,8 @@ class CollectEventPreview(BaseModel):
     code: str
     name: str
     banner_filename: str | None
+    banner_url: str | None = None
+    banner_colors: list[str] | None = None
     submission_cap_per_guest: int
     registration_enabled: bool
     phase: Literal["pre_announce", "collection", "live", "closed"]

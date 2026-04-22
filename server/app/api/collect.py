@@ -38,6 +38,31 @@ def _get_event_or_404(db: Session, code: str) -> Event:
     return event
 
 
+def _banner_url_for_event(event: Event, request: Request) -> str | None:
+    """Build a public URL for the event's banner image, or None if not set."""
+    if not event.banner_filename:
+        return None
+    base = str(request.base_url).rstrip("/")
+    if request.headers.get("x-forwarded-proto") == "https" and base.startswith("http://"):
+        base = "https://" + base[len("http://") :]
+    return f"{base}/uploads/{event.banner_filename}"
+
+
+def _banner_colors_for_event(event: Event) -> list[str] | None:
+    """Parse the stored JSON-encoded banner_colors string into a list, or None."""
+    if not event.banner_colors:
+        return None
+    import json as _json
+
+    try:
+        value = _json.loads(event.banner_colors)
+        if isinstance(value, list) and all(isinstance(c, str) for c in value):
+            return value
+    except (_json.JSONDecodeError, TypeError):
+        pass
+    return None
+
+
 @router.get("/{code}", response_model=CollectEventPreview)
 @limiter.limit("120/minute")
 def preview(code: str, request: Request, db: Session = Depends(get_db)):
@@ -47,6 +72,8 @@ def preview(code: str, request: Request, db: Session = Depends(get_db)):
         code=event.code,
         name=event.name,
         banner_filename=event.banner_filename,
+        banner_url=_banner_url_for_event(event, request),
+        banner_colors=_banner_colors_for_event(event),
         submission_cap_per_guest=event.submission_cap_per_guest,
         registration_enabled=settings.registration_enabled,
         phase=event.phase,
