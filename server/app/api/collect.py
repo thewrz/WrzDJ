@@ -103,7 +103,9 @@ def leaderboard(
             SongRequest.vote_count.desc(), SongRequest.created_at.desc()
         )
     else:
-        q = q.order_by(SongRequest.created_at.desc())
+        # "All" is the discovery view — alphabetical makes it easy to scan
+        # and upvote existing submissions rather than recency bias.
+        q = q.order_by(func.lower(SongRequest.song_title).asc())
 
     rows = q.limit(200).all()
     return CollectLeaderboardResponse(

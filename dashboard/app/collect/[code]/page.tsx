@@ -24,7 +24,7 @@ export default function CollectPage() {
   const [event, setEvent] = useState<CollectEventPreview | null>(null);
   const [leaderboard, setLeaderboard] = useState<CollectLeaderboardResponse | null>(null);
   const [myPicks, setMyPicks] = useState<CollectMyPicksResponse | null>(null);
-  const [tab, setTab] = useState<'trending' | 'all'>('trending');
+  const [tab, setTab] = useState<'trending' | 'all'>('all');
   const [error, setError] = useState<string | null>(null);
   const [hasEmail, setHasEmail] = useState(false);
   const [profile, setProfile] = useState<{

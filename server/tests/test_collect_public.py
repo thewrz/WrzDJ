@@ -179,3 +179,38 @@ def test_collect_vote_is_idempotent(client, db, test_event, collection_requests)
     )
     after = db.query(type(req)).filter(type(req).id == req.id).one().vote_count
     assert after == before
+
+
+def test_collect_leaderboard_all_tab_sorts_alphabetically(client, db, test_event):
+    """The All tab should sort alphabetically (case-insensitive) by song title
+    so guests can scan and upvote existing submissions without recency bias.
+    """
+    from datetime import timedelta
+
+    from app.core.time import utcnow
+    from app.models.request import Request as SongRequest
+    from app.models.request import RequestStatus
+
+    _enable_collection(db, test_event)
+    now = utcnow()
+    # Intentionally insert out of order, with mixed casing.
+    for idx, title in enumerate(["zebra stripes", "Alpha Song", "mango tango"]):
+        db.add(
+            SongRequest(
+                event_id=test_event.id,
+                song_title=title,
+                artist=f"Artist {idx}",
+                source="spotify",
+                status=RequestStatus.NEW.value,
+                vote_count=0,
+                dedupe_key=f"dk_alpha_{idx}",
+                submitted_during_collection=True,
+                created_at=now - timedelta(seconds=idx),
+            )
+        )
+    db.commit()
+
+    r = client.get(f"/api/public/collect/{test_event.code}/leaderboard?tab=all")
+    assert r.status_code == 200
+    titles = [row["title"] for row in r.json()["requests"]]
+    assert titles == ["Alpha Song", "mango tango", "zebra stripes"]
