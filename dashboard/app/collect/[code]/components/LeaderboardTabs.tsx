@@ -47,7 +47,11 @@ export default function LeaderboardTabs({ rows, tab, onTabChange, onVote }: Prop
         </button>
       </div>
       {rows.length === 0 ? (
-        <p className="collect-empty">No songs yet — be the first to add one!</p>
+        <p className="collect-empty">
+          {tab === 'trending'
+            ? 'Not enough songs added yet! Once others contribute this list will grow.'
+            : 'No songs yet — be the first to add one!'}
+        </p>
       ) : (
         <ul className="collect-leaderboard">
           {rows.map((r) => {
