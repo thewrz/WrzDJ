@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import type { Event, TidalStatus, BeatportStatus, ActivityLogEntry } from '@/lib/api-types';
 import { ActivityLogPanel } from './components/ActivityLogPanel';
+import { CollectionFieldset, collectionSchema } from '@/components/CollectionFieldset';
 
 export default function DashboardPage() {
   const { isAuthenticated, isLoading, role, logout } = useAuth();
@@ -23,6 +24,13 @@ export default function DashboardPage() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
   const [deletingSelected, setDeletingSelected] = useState(false);
+
+  // Pre-event collection state
+  const [showCollection, setShowCollection] = useState(false);
+  const [collectionOpensAt, setCollectionOpensAt] = useState('');
+  const [liveStartsAt, setLiveStartsAt] = useState('');
+  const [submissionCap, setSubmissionCap] = useState(0);
+  const [collectionError, setCollectionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -62,12 +70,42 @@ export default function DashboardPage() {
     e.preventDefault();
     if (!newEventName.trim()) return;
 
+    if (showCollection) {
+      const parsed = collectionSchema.safeParse({
+        collection_opens_at: collectionOpensAt || undefined,
+        live_starts_at: liveStartsAt || undefined,
+        submission_cap_per_guest: submissionCap,
+      });
+      if (!parsed.success) {
+        setCollectionError(parsed.error.issues[0].message);
+        return;
+      }
+    }
+    setCollectionError(null);
+
     setCreating(true);
     try {
       const event = await api.createEvent(newEventName);
+
+      if (showCollection && (collectionOpensAt || liveStartsAt || submissionCap > 0)) {
+        await api.patchCollectionSettings(event.code, {
+          collection_opens_at: collectionOpensAt
+            ? new Date(collectionOpensAt).toISOString()
+            : null,
+          live_starts_at: liveStartsAt
+            ? new Date(liveStartsAt).toISOString()
+            : null,
+          submission_cap_per_guest: submissionCap,
+        });
+      }
+
       setEvents([event, ...events]);
       setNewEventName('');
       setShowCreate(false);
+      setShowCollection(false);
+      setCollectionOpensAt('');
+      setLiveStartsAt('');
+      setSubmissionCap(0);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to create event');
     } finally {
@@ -170,6 +208,17 @@ export default function DashboardPage() {
                 required
               />
             </div>
+            <CollectionFieldset
+              enabled={showCollection}
+              onEnabledChange={setShowCollection}
+              collectionOpensAt={collectionOpensAt}
+              onCollectionOpensAtChange={setCollectionOpensAt}
+              liveStartsAt={liveStartsAt}
+              onLiveStartsAtChange={setLiveStartsAt}
+              submissionCap={submissionCap}
+              onSubmissionCapChange={setSubmissionCap}
+              error={collectionError}
+            />
             <div style={{ display: 'flex', gap: '1rem' }}>
               <button type="submit" className="btn btn-primary" disabled={creating}>
                 {creating ? 'Creating...' : 'Create'}
