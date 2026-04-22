@@ -218,3 +218,31 @@ def test_get_collection_requires_ownership(client, db, test_event):
 def test_get_collection_404_for_unknown(client, auth_headers):
     r = client.get("/api/events/ZZZZZZ/collection", headers=auth_headers)
     assert r.status_code == 404
+
+
+def test_patch_collection_auto_extends_expires_at(client, db, auth_headers, test_event):
+    """When live_starts_at exceeds the event's default expires_at, the endpoint
+    should automatically push expires_at forward instead of returning 400.
+
+    The default event expiry is just 6 hours; a multi-day pre-event collection
+    obviously needs the event to live through the full timeline.
+    """
+    from datetime import timedelta
+
+    from app.core.time import utcnow
+
+    now = utcnow()
+    far_live = now + timedelta(days=5)
+    r = client.patch(
+        f"/api/events/{test_event.code}/collection",
+        json={
+            "collection_opens_at": (now + timedelta(hours=1)).isoformat(),
+            "live_starts_at": far_live.isoformat(),
+        },
+        headers=auth_headers,
+    )
+    assert r.status_code == 200, r.text
+    db.refresh(test_event)
+    assert test_event.live_starts_at is not None
+    # expires_at should now be > live_starts_at (the auto-extend applied)
+    assert test_event.expires_at > test_event.live_starts_at

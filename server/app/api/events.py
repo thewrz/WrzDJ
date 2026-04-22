@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 from urllib.parse import quote
 
@@ -1043,8 +1043,12 @@ def update_collection_settings(
         raise HTTPException(
             status_code=400, detail="collection_opens_at must be before live_starts_at"
         )
+    # Auto-extend expires_at when the user schedules a live phase that runs past
+    # the default event expiry. The default is just 6h — anyone scheduling a
+    # multi-day collection clearly intends the event to live through it.
+    # Give the live phase a 12h default duration on top of live_starts_at.
     if live and expires and live >= expires:
-        raise HTTPException(status_code=400, detail="live_starts_at must be before expires_at")
+        event.expires_at = live + timedelta(hours=12)
 
     db.commit()
     db.refresh(event)
