@@ -190,6 +190,8 @@ function mockEvent(overrides = {}) {
     tidal_sync_enabled: false, tidal_playlist_id: null,
     beatport_sync_enabled: false, beatport_playlist_id: null,
     banner_url: null, banner_kiosk_url: null, banner_colors: null,
+    collection_opens_at: null, live_starts_at: null,
+    submission_cap_per_guest: 15, collection_phase_override: null,
     ...overrides,
   };
 }

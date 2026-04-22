@@ -259,6 +259,10 @@ def _event_to_out(
         banner_kiosk_url=banner_kiosk_url,
         banner_colors=banner_colors,
         requests_open=event.requests_open,
+        collection_opens_at=event.collection_opens_at,
+        live_starts_at=event.live_starts_at,
+        submission_cap_per_guest=event.submission_cap_per_guest,
+        collection_phase_override=event.collection_phase_override,
     )
 
 
