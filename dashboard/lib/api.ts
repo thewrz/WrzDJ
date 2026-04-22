@@ -103,6 +103,8 @@ export interface CollectEventPreview {
   code: string;
   name: string;
   banner_filename: string | null;
+  banner_url: string | null;
+  banner_colors: string[] | null;
   submission_cap_per_guest: number;
   registration_enabled: boolean;
   phase: 'pre_announce' | 'collection' | 'live' | 'closed';
@@ -143,6 +145,7 @@ export interface CollectMyPicksResponse {
   upvoted: CollectMyPicksItem[];
   is_top_contributor: boolean;
   first_suggestion_ids: number[];
+  voted_request_ids: number[];
 }
 
 export interface CollectionSettingsResponse {
@@ -992,6 +995,17 @@ class ApiClient {
       { method: 'GET', headers: { 'Content-Type': 'application/json' } },
     );
     if (!res.ok) throw new ApiError(`getCollectLeaderboard failed: ${res.status}`, res.status);
+    return res.json();
+  }
+
+  async getCollectProfile(code: string): Promise<CollectProfileResponse> {
+    const res = await fetch(
+      `${getApiUrl()}/api/public/collect/${code}/profile`,
+      { method: 'GET', headers: { 'Content-Type': 'application/json' } },
+    );
+    if (!res.ok) {
+      throw new ApiError(`getCollectProfile failed: ${res.status}`, res.status);
+    }
     return res.json();
   }
 

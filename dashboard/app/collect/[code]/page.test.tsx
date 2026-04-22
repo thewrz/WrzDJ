@@ -9,6 +9,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const mockGetEvent = vi.fn();
+const mockGetCollectProfile = vi.fn();
 const mockSetCollectProfile = vi.fn();
 const mockGetCollectLeaderboard = vi.fn();
 const mockSubmitCollectRequest = vi.fn();
@@ -26,8 +27,9 @@ vi.mock("../../../lib/api", () => ({
     getCollectEvent: (...a: unknown[]) => mockGetEvent(...a),
     getCollectLeaderboard: (...a: unknown[]) => mockGetCollectLeaderboard(...a),
     getCollectMyPicks: vi.fn().mockResolvedValue({
-      submitted: [], upvoted: [], is_top_contributor: false, first_suggestion_ids: []
+      submitted: [], upvoted: [], is_top_contributor: false, first_suggestion_ids: [], voted_request_ids: []
     }),
+    getCollectProfile: (...a: unknown[]) => mockGetCollectProfile(...a),
     setCollectProfile: (...a: unknown[]) => mockSetCollectProfile(...a),
     submitCollectRequest: (...a: unknown[]) => mockSubmitCollectRequest(...a),
     eventSearch: (...a: unknown[]) => mockEventSearch(...a),
@@ -52,11 +54,14 @@ describe("CollectPage", () => {
   beforeEach(() => {
     mockReplace.mockClear();
     mockGetEvent.mockReset();
-    mockSetCollectProfile.mockResolvedValue({
+    const defaultProfile = {
       has_email: false,
+      nickname: null,
       submission_count: 0,
       submission_cap: 15,
-    });
+    };
+    mockGetCollectProfile.mockResolvedValue(defaultProfile);
+    mockSetCollectProfile.mockResolvedValue(defaultProfile);
     mockGetCollectLeaderboard.mockResolvedValue({ requests: [], total: 0 });
     mockSubmitCollectRequest.mockResolvedValue({ id: 42 });
     mockEventSearch.mockResolvedValue([]);
@@ -89,7 +94,7 @@ describe("CollectPage", () => {
     });
     render(<CollectPage />);
     await waitFor(() => {
-      expect(screen.getByText(/opens in/i)).toBeInTheDocument();
+      expect(screen.getByText(/until voting opens/i)).toBeInTheDocument();
     });
   });
 
@@ -126,11 +131,22 @@ describe("CollectPage", () => {
   it("calls submitCollectRequest and refreshes profile after track select", async () => {
     mockGetEvent.mockResolvedValue(COLLECTION_EVENT);
 
-    // First setCollectProfile call (initial profile load)
-    mockSetCollectProfile
-      .mockResolvedValueOnce({ has_email: false, submission_count: 0, submission_cap: 15 })
-      // Second call (refresh after submit)
-      .mockResolvedValueOnce({ has_email: false, submission_count: 1, submission_cap: 15 });
+    // Initial profile load goes through getCollectProfile; post-submit refresh
+    // also hits getCollectProfile (not setCollectProfile) now that reads and
+    // writes have separate endpoints.
+    mockGetCollectProfile
+      .mockResolvedValueOnce({
+        has_email: false,
+        nickname: null,
+        submission_count: 0,
+        submission_cap: 15,
+      })
+      .mockResolvedValueOnce({
+        has_email: false,
+        nickname: null,
+        submission_count: 1,
+        submission_cap: 15,
+      });
 
     mockSubmitCollectRequest.mockResolvedValue({ id: 42 });
 
@@ -190,7 +206,8 @@ describe("CollectPage", () => {
       });
     });
 
-    // Profile should have been refreshed at least once after submit (initial + at least one refresh)
-    expect(mockSetCollectProfile.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // Profile should have been refreshed at least once after submit
+    // (initial load + post-submit refresh, both via the read endpoint)
+    expect(mockGetCollectProfile.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });

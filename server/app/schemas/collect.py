@@ -28,6 +28,8 @@ class CollectEventPreview(BaseModel):
     code: str
     name: str
     banner_filename: str | None
+    banner_url: str | None = None
+    banner_colors: list[str] | None = None
     submission_cap_per_guest: int
     registration_enabled: bool
     phase: Literal["pre_announce", "collection", "live", "closed"]
@@ -73,6 +75,11 @@ class CollectMyPicksResponse(BaseModel):
     upvoted: list[CollectMyPicksItem]
     is_top_contributor: bool
     first_suggestion_ids: list[int]
+    # Every request_id this guest has voted on in this event, including votes
+    # on their own submissions. Separate from `upvoted` (which is de-duped
+    # against `submitted` for display purposes) so the UI can gate the vote
+    # button accurately.
+    voted_request_ids: list[int]
 
 
 class CollectSubmitRequest(BaseModel):

@@ -18,7 +18,7 @@ describe("MyPicksPanel", () => {
   it("shows empty state when no picks", () => {
     render(
       <MyPicksPanel
-        picks={{ submitted: [], upvoted: [], is_top_contributor: false, first_suggestion_ids: [] }}
+        picks={{ submitted: [], upvoted: [], is_top_contributor: false, first_suggestion_ids: [], voted_request_ids: [] }}
       />
     );
     expect(screen.getByText(/no picks yet/i)).toBeInTheDocument();
@@ -32,6 +32,7 @@ describe("MyPicksPanel", () => {
           upvoted: [],
           is_top_contributor: true,
           first_suggestion_ids: [],
+          voted_request_ids: [],
         }}
       />
     );
@@ -46,6 +47,7 @@ describe("MyPicksPanel", () => {
           upvoted: [],
           is_top_contributor: false,
           first_suggestion_ids: [1],
+          voted_request_ids: [1],
         }}
       />
     );
