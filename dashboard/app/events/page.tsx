@@ -86,12 +86,22 @@ export default function EventsPage() {
     setCollectionError(null);
 
     setCreating(true);
+    let createdEvent;
     try {
-      const event = await api.createEvent(newEventName);
+      createdEvent = await api.createEvent(newEventName);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to create event');
+      setCreating(false);
+      return;
+    }
 
-      // Apply collection settings if enabled
-      if (showCollection && (collectionOpensAt || liveStartsAt || submissionCap > 0)) {
-        await api.patchCollectionSettings(event.code, {
+    // Show the event in the list immediately, even if collection settings fail —
+    // the user can finish setup on the event's Pre-Event Voting tab.
+    setEvents([createdEvent, ...events]);
+
+    if (showCollection && (collectionOpensAt || liveStartsAt || submissionCap > 0)) {
+      try {
+        await api.patchCollectionSettings(createdEvent.code, {
           collection_opens_at: collectionOpensAt
             ? new Date(collectionOpensAt).toISOString()
             : null,
@@ -100,20 +110,24 @@ export default function EventsPage() {
             : null,
           submission_cap_per_guest: submissionCap,
         });
+      } catch (err) {
+        setErrorMsg(
+          `Event "${createdEvent.name}" was created, but collection settings failed: ${
+            err instanceof Error ? err.message : 'unknown error'
+          }. Open the event and finish setup on the Pre-Event Voting tab.`,
+        );
+        setCreating(false);
+        return;
       }
-
-      setEvents([event, ...events]);
-      setNewEventName('');
-      setShowCreate(false);
-      setShowCollection(false);
-      setCollectionOpensAt('');
-      setLiveStartsAt('');
-      setSubmissionCap(0);
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to create event');
-    } finally {
-      setCreating(false);
     }
+
+    setNewEventName('');
+    setShowCreate(false);
+    setShowCollection(false);
+    setCollectionOpensAt('');
+    setLiveStartsAt('');
+    setSubmissionCap(0);
+    setCreating(false);
   };
 
   const toggleSelection = (code: string) => {
