@@ -22,20 +22,22 @@ export default function LeaderboardTabs({
   const [optimistic, setOptimistic] = useState<Record<number, number>>({});
   const [justVoted, setJustVoted] = useState<ReadonlySet<number>>(new Set());
 
-  // Drop optimistic overrides for rows whose vote_count the server has now
-  // caught up on (or exceeded) — prevents stale +1 overlays from lingering.
+  // Once the server's my-picks response confirms a vote (votedIds has the id),
+  // drop the optimistic overlay — trust the server's authoritative vote_count.
+  // If the server rejected the vote as a duplicate, that's correct too; the
+  // UI reverts to the real value instead of clinging to a stale +1.
   useEffect(() => {
     setOptimistic((prev) => {
       const next: Record<number, number> = {};
-      for (const r of rows) {
-        const guess = prev[r.id];
-        if (guess !== undefined && guess > r.vote_count) {
-          next[r.id] = guess;
+      for (const [id, guess] of Object.entries(prev)) {
+        const numericId = Number(id);
+        if (!votedIds.has(numericId)) {
+          next[numericId] = guess;
         }
       }
       return next;
     });
-  }, [rows]);
+  }, [rows, votedIds]);
 
   const hasVoted = (id: number): boolean => votedIds.has(id) || justVoted.has(id);
 

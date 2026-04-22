@@ -214,3 +214,40 @@ def test_collect_leaderboard_all_tab_sorts_alphabetically(client, db, test_event
     assert r.status_code == 200
     titles = [row["title"] for row in r.json()["requests"]]
     assert titles == ["Alpha Song", "mango tango", "zebra stripes"]
+
+
+def test_collect_my_picks_voted_request_ids_includes_self_votes(
+    client, db, test_event, collection_requests
+):
+    """voted_request_ids must include votes on own submissions, so the UI
+    can disable the vote button for them even though they don't appear in
+    the `upvoted` section (which is de-duped against `submitted`).
+    """
+    _enable_collection(db, test_event)
+    from app.core.rate_limit import MAX_FINGERPRINT_LENGTH
+
+    # TestClient's default remote host is "testclient"; take first N chars.
+    fp = "testclient"[:MAX_FINGERPRINT_LENGTH]
+
+    # Mark one collection request as submitted by this client so the backend
+    # puts it under `submitted` (de-duped out of `upvoted`).
+    target = collection_requests[0]
+    target.client_fingerprint = fp
+    db.commit()
+
+    # Cast a vote on that same request.
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/vote",
+        json={"request_id": target.id},
+    )
+    assert r.status_code == 200
+
+    me = client.get(f"/api/public/collect/{test_event.code}/profile/me")
+    assert me.status_code == 200
+    body = me.json()
+
+    # The submission is in `submitted`, NOT in `upvoted` (dedupe behavior).
+    assert any(s["id"] == target.id for s in body["submitted"])
+    assert not any(u["id"] == target.id for u in body["upvoted"])
+    # But voted_request_ids MUST include it — this is the fix.
+    assert target.id in body["voted_request_ids"]

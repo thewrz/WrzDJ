@@ -24,7 +24,10 @@ export default function CollectPage() {
   const [event, setEvent] = useState<CollectEventPreview | null>(null);
   const [leaderboard, setLeaderboard] = useState<CollectLeaderboardResponse | null>(null);
   const [myPicks, setMyPicks] = useState<CollectMyPicksResponse | null>(null);
-  const votedIds = new Set<number>(myPicks?.upvoted.map((p) => p.id) ?? []);
+  // Canonical "I have voted on this request" set — covers both upvotes AND
+  // votes on my own submissions (which don't appear in `upvoted` because the
+  // backend dedupes that against `submitted` for display purposes).
+  const votedIds = new Set<number>(myPicks?.voted_request_ids ?? []);
   const [tab, setTab] = useState<'trending' | 'all'>('all');
   const [error, setError] = useState<string | null>(null);
   const [hasEmail, setHasEmail] = useState(false);

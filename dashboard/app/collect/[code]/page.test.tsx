@@ -26,7 +26,7 @@ vi.mock("../../../lib/api", () => ({
     getCollectEvent: (...a: unknown[]) => mockGetEvent(...a),
     getCollectLeaderboard: (...a: unknown[]) => mockGetCollectLeaderboard(...a),
     getCollectMyPicks: vi.fn().mockResolvedValue({
-      submitted: [], upvoted: [], is_top_contributor: false, first_suggestion_ids: []
+      submitted: [], upvoted: [], is_top_contributor: false, first_suggestion_ids: [], voted_request_ids: []
     }),
     setCollectProfile: (...a: unknown[]) => mockSetCollectProfile(...a),
     submitCollectRequest: (...a: unknown[]) => mockSubmitCollectRequest(...a),

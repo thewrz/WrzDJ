@@ -145,6 +145,7 @@ export interface CollectMyPicksResponse {
   upvoted: CollectMyPicksItem[];
   is_top_contributor: boolean;
   first_suggestion_ids: number[];
+  voted_request_ids: number[];
 }
 
 export interface CollectionSettingsResponse {

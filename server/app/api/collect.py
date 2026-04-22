@@ -166,10 +166,16 @@ def my_picks(code: str, request: Request, db: Session = Depends(get_db)):
         .all()
     )
 
-    upvoted_request_ids = [
-        rv.request_id
-        for rv in db.query(RequestVote).filter(RequestVote.client_fingerprint == fingerprint).all()
-    ]
+    # All request_ids this fingerprint has voted on (scoped to this event below).
+    # Used both for the `upvoted` section AND the full `voted_request_ids` list.
+    voted_rows = (
+        db.query(RequestVote.request_id)
+        .join(SongRequest, SongRequest.id == RequestVote.request_id)
+        .filter(RequestVote.client_fingerprint == fingerprint)
+        .filter(SongRequest.event_id == event.id)
+        .all()
+    )
+    upvoted_request_ids = [row[0] for row in voted_rows]
     upvoted: list[SongRequest] = []
     if upvoted_request_ids:
         upvoted = (
@@ -233,6 +239,7 @@ def my_picks(code: str, request: Request, db: Session = Depends(get_db)):
         upvoted=[_to_row(r, "upvoted") for r in upvoted if r.id not in submitted_ids],
         is_top_contributor=is_top,
         first_suggestion_ids=first_suggestion_ids,
+        voted_request_ids=upvoted_request_ids,
     )
 
 
