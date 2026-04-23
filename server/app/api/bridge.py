@@ -22,7 +22,7 @@ from app.schemas.now_playing import (
     PlayHistoryEntry,
     PlayHistoryResponse,
 )
-from app.services.bridge_commands import poll_commands, queue_command
+from app.services.bridge_integration import poll_commands, queue_command
 from app.services.event import (
     EventLookupResult,
     get_event_by_code_for_owner,
