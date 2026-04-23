@@ -1,5 +1,6 @@
 'use client';
 
+import { ModalOverlay } from '@/components/ModalOverlay';
 import type { TidalSearchResult, BeatportSearchResult } from '@/lib/api-types';
 
 type ServiceType = 'tidal' | 'beatport';
@@ -39,32 +40,16 @@ export function ServiceTrackPickerModal({
   const config = SERVICE_CONFIG[service];
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0,0,0,0.8)',
+    <ModalOverlay
+      onClose={linking ? undefined : onCancel}
+      card
+      cardStyle={{
+        maxWidth: '500px',
+        maxHeight: '80vh',
+        overflow: 'hidden',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
+        flexDirection: 'column',
       }}
-      onClick={() => !linking && onCancel()}
-    >
-      <div
-        className="card"
-        style={{
-          maxWidth: '500px',
-          maxHeight: '80vh',
-          margin: '1rem',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-        onClick={(e) => e.stopPropagation()}
       >
         <h2 style={{ marginBottom: '1rem' }}>Link {config.label} Track</h2>
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -115,8 +100,7 @@ export function ServiceTrackPickerModal({
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

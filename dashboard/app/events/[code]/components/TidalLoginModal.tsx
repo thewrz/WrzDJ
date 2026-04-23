@@ -1,5 +1,6 @@
 'use client';
 
+import { ModalOverlay } from '@/components/ModalOverlay';
 import { safeExternalUrl } from '@/lib/safe-url';
 
 interface TidalLoginModalProps {
@@ -16,25 +17,7 @@ export function TidalLoginModal({
   onCancel,
 }: TidalLoginModalProps) {
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0,0,0,0.8)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-      }}
-    >
-      <div
-        className="card"
-        style={{ maxWidth: '400px', margin: '1rem', textAlign: 'center' }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalOverlay onClose={onCancel} card cardStyle={{ textAlign: 'center' }}>
         <h2 style={{ marginBottom: '1rem' }}>Connect Tidal</h2>
         <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>
           Visit the link below and enter the code to connect your Tidal account:
@@ -83,7 +66,6 @@ export function TidalLoginModal({
         >
           Cancel
         </button>
-      </div>
-    </div>
+    </ModalOverlay>
   );
 }

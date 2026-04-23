@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { ModalOverlay } from '@/components/ModalOverlay';
+
 interface BeatportLoginModalProps {
   onSubmit: (username: string, password: string) => Promise<void>;
   onCancel: () => void;
@@ -27,26 +29,7 @@ export function BeatportLoginModal({ onSubmit, onCancel }: BeatportLoginModalPro
   };
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0,0,0,0.8)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-      }}
-      onClick={onCancel}
-    >
-      <div
-        className="card"
-        style={{ maxWidth: '400px', margin: '1rem', width: '100%' }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalOverlay onClose={submitting ? undefined : onCancel} card cardStyle={{ width: '100%' }}>
         <h2 style={{ marginBottom: '0.5rem' }}>Connect Beatport</h2>
         <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
           Enter your Beatport account credentials to link your account.
@@ -123,7 +106,6 @@ export function BeatportLoginModal({ onSubmit, onCancel }: BeatportLoginModalPro
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </ModalOverlay>
   );
 }
