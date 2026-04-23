@@ -222,24 +222,3 @@ def build_search_results(
             added_bp += 1
 
     return unique_main
-
-
-def merge_search_results(
-    spotify_results: list[SearchResult],
-    beatport_results: list[BeatportSearchResult] | None = None,
-    tidal_results: list[TidalSearchResult] | None = None,
-    dedup_threshold: float = 0.8,
-    max_beatport_extras: int = 5,
-    max_tidal_extras: int = 5,
-) -> list[SearchResult]:
-    """Backward-compatible wrapper around build_search_results().
-
-    Deprecated: Use build_search_results() for new code.
-    """
-    return build_search_results(
-        tidal_results=tidal_results,
-        spotify_results=spotify_results,
-        beatport_results=beatport_results,
-        dedup_threshold=dedup_threshold,
-        max_beatport_extras=max_beatport_extras,
-    )
