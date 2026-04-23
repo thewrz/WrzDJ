@@ -59,11 +59,11 @@
           }
         },
         "required": [
+          "api_key_configured",
+          "api_key_masked",
           "llm_enabled",
           "llm_model",
-          "llm_rate_limit_per_minute",
-          "api_key_configured",
-          "api_key_masked"
+          "llm_rate_limit_per_minute"
         ],
         "title": "AISettingsOut",
         "type": "object"
@@ -121,8 +121,8 @@
           }
         },
         "required": [
-          "status",
-          "accepted_count"
+          "accepted_count",
+          "status"
         ],
         "title": "AcceptAllResponse",
         "type": "object"
@@ -162,11 +162,12 @@
           }
         },
         "required": [
-          "id",
           "created_at",
+          "event_code",
+          "id",
           "level",
-          "source",
-          "message"
+          "message",
+          "source"
         ],
         "title": "ActivityLogEntry",
         "type": "object"
@@ -214,14 +215,15 @@
           }
         },
         "required": [
-          "id",
           "code",
-          "name",
-          "owner_username",
-          "owner_id",
           "created_at",
           "expires_at",
-          "is_active"
+          "id",
+          "is_active",
+          "name",
+          "owner_id",
+          "owner_username",
+          "request_count"
         ],
         "title": "AdminEventOut",
         "type": "object"
@@ -283,11 +285,12 @@
           }
         },
         "required": [
+          "created_at",
+          "event_count",
           "id",
-          "username",
           "is_active",
           "role",
-          "created_at"
+          "username"
         ],
         "title": "AdminUserOut",
         "type": "object"
@@ -517,9 +520,18 @@
           }
         },
         "required": [
-          "track_id",
+          "artist",
+          "beatport_url",
+          "bpm",
+          "cover_url",
+          "duration_seconds",
+          "genre",
+          "key",
+          "label",
+          "mix_name",
+          "release_date",
           "title",
-          "artist"
+          "track_id"
         ],
         "title": "BeatportSearchResult",
         "type": "object"
@@ -565,7 +577,11 @@
           }
         },
         "required": [
-          "linked"
+          "configured",
+          "expires_at",
+          "integration_enabled",
+          "linked",
+          "subscription"
         ],
         "title": "BeatportStatus",
         "type": "object"
@@ -710,6 +726,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "commands"
+        ],
         "title": "BridgeCommandsPollResponse",
         "type": "object"
       },
@@ -892,6 +911,16 @@
             "title": "Uptime Seconds"
           }
         },
+        "required": [
+          "buffer_size",
+          "circuit_breaker_state",
+          "connected",
+          "deck_count",
+          "device_name",
+          "last_seen",
+          "plugin_id",
+          "uptime_seconds"
+        ],
         "title": "BridgeStatusResponse",
         "type": "object"
       },
@@ -907,8 +936,8 @@
           }
         },
         "required": [
-          "status",
-          "count"
+          "count",
+          "status"
         ],
         "title": "BulkActionResponse",
         "type": "object"
@@ -1134,15 +1163,17 @@
           }
         },
         "required": [
-          "code",
-          "name",
+          "banner_colors",
           "banner_filename",
-          "submission_cap_per_guest",
-          "registration_enabled",
-          "phase",
+          "banner_url",
+          "code",
           "collection_opens_at",
+          "expires_at",
           "live_starts_at",
-          "expires_at"
+          "name",
+          "phase",
+          "registration_enabled",
+          "submission_cap_per_guest"
         ],
         "title": "CollectEventPreview",
         "type": "object"
@@ -1226,14 +1257,14 @@
           }
         },
         "required": [
-          "id",
-          "title",
           "artist",
           "artwork_url",
-          "vote_count",
+          "created_at",
+          "id",
           "nickname",
           "status",
-          "created_at"
+          "title",
+          "vote_count"
         ],
         "title": "CollectLeaderboardRow",
         "type": "object"
@@ -1304,15 +1335,15 @@
           }
         },
         "required": [
-          "id",
-          "title",
           "artist",
           "artwork_url",
-          "vote_count",
+          "created_at",
+          "id",
+          "interaction",
           "nickname",
           "status",
-          "created_at",
-          "interaction"
+          "title",
+          "vote_count"
         ],
         "title": "CollectMyPicksItem",
         "type": "object"
@@ -1353,10 +1384,10 @@
           }
         },
         "required": [
+          "first_suggestion_ids",
+          "is_top_contributor",
           "submitted",
           "upvoted",
-          "is_top_contributor",
-          "first_suggestion_ids",
           "voted_request_ids"
         ],
         "title": "CollectMyPicksResponse",
@@ -1421,10 +1452,10 @@
           }
         },
         "required": [
-          "nickname",
           "has_email",
-          "submission_count",
-          "submission_cap"
+          "nickname",
+          "submission_cap",
+          "submission_count"
         ],
         "title": "CollectProfileResponse",
         "type": "object"
@@ -1554,7 +1585,11 @@
           }
         },
         "required": [
-          "now_playing_hidden"
+          "kiosk_display_only",
+          "now_playing_auto_hide_minutes",
+          "now_playing_hidden",
+          "requests_open",
+          "status"
         ],
         "title": "DisplaySettingsResponse",
         "type": "object"
@@ -1696,6 +1731,15 @@
             "type": "integer"
           }
         },
+        "required": [
+          "avg_bpm",
+          "bpm_range_high",
+          "bpm_range_low",
+          "dominant_genres",
+          "dominant_keys",
+          "enriched_count",
+          "track_count"
+        ],
         "title": "EventMusicProfile",
         "type": "object"
       },
@@ -1881,12 +1925,28 @@
           }
         },
         "required": [
-          "id",
+          "archived_at",
+          "banner_colors",
+          "banner_kiosk_url",
+          "banner_url",
+          "beatport_playlist_id",
+          "beatport_sync_enabled",
           "code",
-          "name",
+          "collection_opens_at",
+          "collection_phase_override",
           "created_at",
           "expires_at",
-          "is_active"
+          "id",
+          "is_active",
+          "join_url",
+          "live_starts_at",
+          "name",
+          "request_count",
+          "requests_open",
+          "status",
+          "submission_cap_per_guest",
+          "tidal_playlist_id",
+          "tidal_sync_enabled"
         ],
         "title": "EventOut",
         "type": "object"
@@ -1959,10 +2019,10 @@
           }
         },
         "required": [
-          "title",
-          "artist",
           "album_art_url",
-          "source"
+          "artist",
+          "source",
+          "title"
         ],
         "title": "GuestNowPlaying",
         "type": "object"
@@ -2018,11 +2078,13 @@
           }
         },
         "required": [
-          "id",
-          "title",
           "artist",
           "artwork_url",
-          "status"
+          "id",
+          "nickname",
+          "status",
+          "title",
+          "vote_count"
         ],
         "title": "GuestRequestInfo",
         "type": "object"
@@ -2052,6 +2114,7 @@
         },
         "required": [
           "event",
+          "now_playing",
           "requests"
         ],
         "title": "GuestRequestListResponse",
@@ -2067,6 +2130,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "detail"
+        ],
         "title": "HTTPValidationError",
         "type": "object"
       },
@@ -2126,9 +2192,10 @@
           }
         },
         "required": [
-          "service",
+          "capabilities",
+          "error",
           "healthy",
-          "capabilities"
+          "service"
         ],
         "title": "IntegrationCheckResponse",
         "type": "object"
@@ -2185,11 +2252,12 @@
           }
         },
         "required": [
-          "service",
+          "capabilities",
+          "configured",
           "display_name",
           "enabled",
-          "configured",
-          "capabilities"
+          "last_check_error",
+          "service"
         ],
         "title": "IntegrationServiceStatus",
         "type": "object"
@@ -2221,8 +2289,8 @@
           }
         },
         "required": [
-          "service",
-          "enabled"
+          "enabled",
+          "service"
         ],
         "title": "IntegrationToggleResponse",
         "type": "object"
@@ -2342,11 +2410,16 @@
           }
         },
         "required": [
-          "event",
-          "qr_join_url",
           "accepted_queue",
+          "banner_colors",
+          "banner_kiosk_url",
+          "banner_url",
+          "event",
+          "kiosk_display_only",
           "now_playing",
           "now_playing_hidden",
+          "qr_join_url",
+          "requests_open",
           "updated_at"
         ],
         "title": "KioskDisplayResponse",
@@ -2422,12 +2495,13 @@
           }
         },
         "required": [
-          "id",
-          "name",
           "event_code",
-          "status",
+          "event_name",
+          "id",
+          "last_seen_at",
+          "name",
           "paired_at",
-          "last_seen_at"
+          "status"
         ],
         "title": "KioskOut",
         "type": "object"
@@ -2450,9 +2524,9 @@
           }
         },
         "required": [
+          "expires_at",
           "pair_code",
-          "session_token",
-          "expires_at"
+          "session_token"
         ],
         "title": "KioskPairResponse",
         "type": "object"
@@ -2488,6 +2562,8 @@
           }
         },
         "required": [
+          "event_code",
+          "event_name",
           "status"
         ],
         "title": "KioskPairStatusResponse",
@@ -2543,6 +2619,8 @@
           }
         },
         "required": [
+          "event_code",
+          "event_name",
           "status"
         ],
         "title": "KioskSessionResponse",
@@ -2611,12 +2689,13 @@
           }
         },
         "required": [
-          "id",
-          "title",
           "artist",
           "artwork_url",
+          "created_at",
+          "id",
           "status",
-          "created_at"
+          "title",
+          "vote_count"
         ],
         "title": "MyRequestInfo",
         "type": "object"
@@ -2773,10 +2852,15 @@
           }
         },
         "required": [
-          "title",
+          "album",
+          "album_art_url",
           "artist",
+          "bridge_connected",
+          "matched_request_id",
+          "source",
+          "spotify_uri",
           "started_at",
-          "source"
+          "title"
         ],
         "title": "NowPlayingResponse",
         "type": "object"
@@ -2803,9 +2887,9 @@
         },
         "required": [
           "items",
-          "total",
+          "limit",
           "page",
-          "limit"
+          "total"
         ],
         "title": "PaginatedResponse",
         "type": "object"
@@ -2900,15 +2984,15 @@
           }
         },
         "required": [
-          "id",
-          "song_title",
           "artist",
           "artwork_url",
-          "vote_count",
-          "nickname",
           "created_at",
+          "id",
+          "nickname",
           "note",
-          "status"
+          "song_title",
+          "status",
+          "vote_count"
         ],
         "title": "PendingReviewRow",
         "type": "object"
@@ -2997,12 +3081,17 @@
           }
         },
         "required": [
-          "id",
-          "title",
+          "album",
+          "album_art_url",
           "artist",
+          "ended_at",
+          "id",
+          "matched_request_id",
+          "play_order",
           "source",
+          "spotify_uri",
           "started_at",
-          "play_order"
+          "title"
         ],
         "title": "PlayHistoryEntry",
         "type": "object"
@@ -3090,10 +3179,12 @@
           }
         },
         "required": [
-          "id",
-          "title",
           "artist",
-          "artwork_url"
+          "artwork_url",
+          "id",
+          "nickname",
+          "title",
+          "vote_count"
         ],
         "title": "PublicRequestInfo",
         "type": "object"
@@ -3149,7 +3240,11 @@
           }
         },
         "required": [
-          "profile"
+          "llm_available",
+          "profile",
+          "services_used",
+          "suggestions",
+          "total_candidates_searched"
         ],
         "title": "RecommendationResponse",
         "type": "object"
@@ -3268,13 +3363,21 @@
           }
         },
         "required": [
-          "title",
           "artist",
-          "score",
+          "bpm",
           "bpm_score",
-          "key_score",
+          "cover_url",
+          "duration_seconds",
+          "genre",
           "genre_score",
-          "source"
+          "key",
+          "key_score",
+          "mb_verified",
+          "score",
+          "source",
+          "title",
+          "track_id",
+          "url"
         ],
         "title": "RecommendedTrack",
         "type": "object"
@@ -3597,17 +3700,26 @@
           }
         },
         "required": [
-          "id",
-          "event_id",
-          "song_title",
           "artist",
+          "artwork_url",
+          "bpm",
+          "created_at",
+          "event_id",
+          "genre",
+          "id",
+          "is_duplicate",
+          "musical_key",
+          "nickname",
+          "note",
+          "priority_score",
+          "raw_search_query",
+          "song_title",
           "source",
           "source_url",
-          "artwork_url",
-          "note",
           "status",
-          "created_at",
-          "updated_at"
+          "sync_results_json",
+          "updated_at",
+          "vote_count"
         ],
         "title": "RequestOut",
         "type": "object"
@@ -3768,8 +3880,19 @@
           }
         },
         "required": [
+          "album",
+          "album_art",
           "artist",
-          "title"
+          "bpm",
+          "genre",
+          "isrc",
+          "key",
+          "popularity",
+          "preview_url",
+          "source",
+          "spotify_id",
+          "title",
+          "url"
         ],
         "title": "SearchResult",
         "type": "object"
@@ -3807,8 +3930,8 @@
           }
         },
         "required": [
-          "status",
-          "message"
+          "message",
+          "status"
         ],
         "title": "StatusMessageResponse",
         "type": "object"
@@ -3866,15 +3989,15 @@
           }
         },
         "required": [
-          "registration_enabled",
-          "search_rate_limit_per_minute",
-          "spotify_enabled",
-          "tidal_enabled",
           "beatport_enabled",
           "bridge_enabled",
           "llm_enabled",
           "llm_model",
-          "llm_rate_limit_per_minute"
+          "llm_rate_limit_per_minute",
+          "registration_enabled",
+          "search_rate_limit_per_minute",
+          "spotify_enabled",
+          "tidal_enabled"
         ],
         "title": "SystemSettingsOut",
         "type": "object"
@@ -4016,12 +4139,12 @@
           }
         },
         "required": [
-          "total_users",
+          "active_events",
           "active_users",
           "pending_users",
           "total_events",
-          "active_events",
-          "total_requests"
+          "total_requests",
+          "total_users"
         ],
         "title": "SystemStats",
         "type": "object"
@@ -4110,7 +4233,12 @@
           }
         },
         "required": [
-          "complete"
+          "complete",
+          "error",
+          "pending",
+          "user_code",
+          "user_id",
+          "verification_url"
         ],
         "title": "TidalAuthCheckResponse",
         "type": "object"
@@ -4138,9 +4266,9 @@
           }
         },
         "required": [
-          "verification_url",
+          "message",
           "user_code",
-          "message"
+          "verification_url"
         ],
         "title": "TidalAuthStartResponse",
         "type": "object"
@@ -4165,6 +4293,7 @@
           }
         },
         "required": [
+          "tidal_playlist_id",
           "tidal_sync_enabled"
         ],
         "title": "TidalEventSettings",
@@ -4316,9 +4445,19 @@
           }
         },
         "required": [
-          "track_id",
+          "album",
+          "artist",
+          "bpm",
+          "cover_url",
+          "duration_seconds",
+          "explicit",
+          "isrc",
+          "key",
+          "popularity",
+          "tidal_url",
           "title",
-          "artist"
+          "track_id",
+          "version"
         ],
         "title": "TidalSearchResult",
         "type": "object"
@@ -4359,7 +4498,10 @@
           }
         },
         "required": [
-          "linked"
+          "expires_at",
+          "integration_enabled",
+          "linked",
+          "user_id"
         ],
         "title": "TidalStatus",
         "type": "object"
@@ -4398,8 +4540,10 @@
           }
         },
         "required": [
+          "error",
           "request_id",
-          "status"
+          "status",
+          "tidal_track_id"
         ],
         "title": "TidalSyncResult",
         "type": "object"
@@ -4427,7 +4571,8 @@
           }
         },
         "required": [
-          "access_token"
+          "access_token",
+          "token_type"
         ],
         "title": "Token",
         "type": "object"
@@ -4523,11 +4668,12 @@
           }
         },
         "required": [
+          "created_at",
+          "help_pages_seen",
           "id",
-          "username",
           "is_active",
           "role",
-          "created_at"
+          "username"
         ],
         "title": "UserOut",
         "type": "object"
@@ -4565,6 +4711,8 @@
           }
         },
         "required": [
+          "ctx",
+          "input",
           "loc",
           "msg",
           "type"
@@ -4588,9 +4736,9 @@
           }
         },
         "required": [
+          "has_voted",
           "status",
-          "vote_count",
-          "has_voted"
+          "vote_count"
         ],
         "title": "VoteResponse",
         "type": "object"
