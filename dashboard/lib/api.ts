@@ -97,6 +97,88 @@ export type {
   VoteResponse,
 } from './api-types';
 
+// ========== Pre-Event Collection Types ==========
+
+export interface CollectEventPreview {
+  code: string;
+  name: string;
+  banner_filename: string | null;
+  banner_url: string | null;
+  banner_colors: string[] | null;
+  submission_cap_per_guest: number;
+  registration_enabled: boolean;
+  phase: 'pre_announce' | 'collection' | 'live' | 'closed';
+  collection_opens_at: string | null;
+  live_starts_at: string | null;
+  expires_at: string;
+}
+
+export interface CollectLeaderboardRow {
+  id: number;
+  title: string;
+  artist: string;
+  artwork_url: string | null;
+  vote_count: number;
+  nickname: string | null;
+  status: 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
+  created_at: string;
+}
+
+export interface CollectLeaderboardResponse {
+  requests: CollectLeaderboardRow[];
+  total: number;
+}
+
+export interface CollectProfileResponse {
+  nickname: string | null;
+  has_email: boolean;
+  submission_count: number;
+  submission_cap: number;
+}
+
+export interface CollectMyPicksItem extends CollectLeaderboardRow {
+  interaction: 'submitted' | 'upvoted';
+}
+
+export interface CollectMyPicksResponse {
+  submitted: CollectMyPicksItem[];
+  upvoted: CollectMyPicksItem[];
+  is_top_contributor: boolean;
+  first_suggestion_ids: number[];
+  voted_request_ids: number[];
+}
+
+export interface CollectionSettingsResponse {
+  collection_opens_at: string | null;
+  live_starts_at: string | null;
+  submission_cap_per_guest: number;
+  collection_phase_override: 'force_collection' | 'force_live' | null;
+  phase: 'pre_announce' | 'collection' | 'live' | 'closed';
+}
+
+export interface PendingReviewRow {
+  id: number;
+  song_title: string;
+  artist: string;
+  artwork_url: string | null;
+  vote_count: number;
+  nickname: string | null;
+  created_at: string;
+  note: string | null;
+  status: 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
+}
+
+export interface PendingReviewResponse {
+  requests: PendingReviewRow[];
+  total: number;
+}
+
+export interface BulkReviewResponse {
+  accepted: number;
+  rejected: number;
+  unchanged: number;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -893,6 +975,140 @@ class ApiClient {
     return this.fetch(`/api/kiosk/${kioskId}`, { method: 'DELETE' });
   }
 
+  // ========== Pre-Event Collection (Public) ==========
+
+  async getCollectEvent(code: string): Promise<CollectEventPreview> {
+    const res = await fetch(`${getApiUrl()}/api/public/collect/${code}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) throw new ApiError(`getCollectEvent failed: ${res.status}`, res.status);
+    return res.json();
+  }
+
+  async getCollectLeaderboard(
+    code: string,
+    tab: 'trending' | 'all' = 'trending',
+  ): Promise<CollectLeaderboardResponse> {
+    const res = await fetch(
+      `${getApiUrl()}/api/public/collect/${code}/leaderboard?tab=${tab}`,
+      { method: 'GET', headers: { 'Content-Type': 'application/json' } },
+    );
+    if (!res.ok) throw new ApiError(`getCollectLeaderboard failed: ${res.status}`, res.status);
+    return res.json();
+  }
+
+  async getCollectProfile(code: string): Promise<CollectProfileResponse> {
+    const res = await fetch(
+      `${getApiUrl()}/api/public/collect/${code}/profile`,
+      { method: 'GET', headers: { 'Content-Type': 'application/json' } },
+    );
+    if (!res.ok) {
+      throw new ApiError(`getCollectProfile failed: ${res.status}`, res.status);
+    }
+    return res.json();
+  }
+
+  async setCollectProfile(
+    code: string,
+    data: { nickname?: string; email?: string },
+  ): Promise<CollectProfileResponse> {
+    const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new ApiError(`setCollectProfile failed: ${res.status}`, res.status);
+    return res.json();
+  }
+
+  async getCollectMyPicks(code: string): Promise<CollectMyPicksResponse> {
+    const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/profile/me`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) throw new ApiError(`getCollectMyPicks failed: ${res.status}`, res.status);
+    return res.json();
+  }
+
+  async submitCollectRequest(
+    code: string,
+    data: {
+      song_title: string;
+      artist: string;
+      source: 'spotify' | 'beatport' | 'tidal' | 'manual';
+      source_url?: string;
+      artwork_url?: string;
+      note?: string;
+      nickname?: string;
+    },
+  ): Promise<{ id: number }> {
+    const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/requests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(body.detail ?? `Submit failed: ${res.status}`, res.status);
+    }
+    return res.json();
+  }
+
+  async voteCollectRequest(code: string, requestId: number): Promise<void> {
+    const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/vote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id: requestId }),
+    });
+    if (!res.ok) throw new ApiError(`Vote failed: ${res.status}`, res.status);
+  }
+
+  // ========== Pre-Event Collection (DJ-authenticated) ==========
+
+  async getCollectionSettings(code: string): Promise<CollectionSettingsResponse> {
+    return this.fetch(`/api/events/${code}/collection`);
+  }
+
+  async patchCollectionSettings(
+    code: string,
+    data: {
+      collection_opens_at?: string | null;
+      live_starts_at?: string | null;
+      submission_cap_per_guest?: number;
+      collection_phase_override?: 'force_collection' | 'force_live' | null;
+    },
+  ): Promise<CollectionSettingsResponse> {
+    return this.fetch(`/api/events/${code}/collection`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getPendingReview(code: string): Promise<PendingReviewResponse> {
+    return this.fetch(`/api/events/${code}/pending-review`);
+  }
+
+  async bulkReview(
+    code: string,
+    data: {
+      action:
+        | 'accept_top_n'
+        | 'accept_threshold'
+        | 'accept_ids'
+        | 'reject_ids'
+        | 'reject_remaining';
+      n?: number;
+      min_votes?: number;
+      request_ids?: number[];
+    },
+  ): Promise<BulkReviewResponse> {
+    return this.fetch(`/api/events/${code}/bulk-review`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   // ========== Bridge Commands ==========
 
   async sendBridgeCommand(eventCode: string, command: string): Promise<BridgeCommandResponse> {
@@ -912,3 +1128,4 @@ class ApiClient {
 }
 
 export const api = new ApiClient();
+export const apiClient = api;

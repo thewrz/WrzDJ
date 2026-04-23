@@ -73,6 +73,11 @@ class EventOut(BaseModel):
     banner_colors: list[str] | None = None
     # Requests open/closed
     requests_open: bool = True
+    # Pre-event collection
+    collection_opens_at: datetime | None = None
+    live_starts_at: datetime | None = None
+    submission_cap_per_guest: int = 15
+    collection_phase_override: str | None = None
 
     class Config:
         from_attributes = True
@@ -81,7 +86,7 @@ class EventOut(BaseModel):
     def serialize_datetime(self, dt: datetime) -> str:
         return dt.isoformat() + "Z"
 
-    @field_serializer("archived_at")
+    @field_serializer("archived_at", "collection_opens_at", "live_starts_at")
     def serialize_datetime_optional(self, dt: datetime | None) -> str | None:
         if dt is None:
             return None

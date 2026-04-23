@@ -151,6 +151,31 @@ def test_event(db: Session, test_user: User) -> Event:
 
 
 @pytest.fixture
+def collection_requests(db: Session, test_event: Event) -> list[Request]:
+    """Creates 3 collection-submitted NEW requests with vote counts 5, 2, 0."""
+    now = utcnow()
+    rows = []
+    for i, votes in enumerate([5, 2, 0]):
+        r = Request(
+            event_id=test_event.id,
+            song_title=f"Song {i}",
+            artist=f"Artist {i}",
+            source="spotify",
+            status=RequestStatus.NEW.value,
+            vote_count=votes,
+            dedupe_key=f"dk_{i}",
+            submitted_during_collection=True,
+            created_at=now,
+        )
+        db.add(r)
+        rows.append(r)
+    db.commit()
+    for r in rows:
+        db.refresh(r)
+    return rows
+
+
+@pytest.fixture
 def test_request(db: Session, test_event: Event) -> Request:
     """Create a test song request."""
     request = Request(

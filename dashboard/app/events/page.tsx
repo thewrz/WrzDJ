@@ -9,6 +9,7 @@ import { useHelp } from '@/lib/help/HelpContext';
 import { HelpSpot } from '@/components/help/HelpSpot';
 import { HelpButton } from '@/components/help/HelpButton';
 import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
+import { CollectionFieldset, collectionSchema } from '@/components/CollectionFieldset';
 
 const PAGE_ID = 'events';
 
@@ -25,6 +26,13 @@ export default function EventsPage() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
   const [deletingSelected, setDeletingSelected] = useState(false);
+
+  // Pre-event collection state
+  const [showCollection, setShowCollection] = useState(false);
+  const [collectionOpensAt, setCollectionOpensAt] = useState('');
+  const [liveStartsAt, setLiveStartsAt] = useState('');
+  const [submissionCap, setSubmissionCap] = useState(0);
+  const [collectionError, setCollectionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -63,17 +71,63 @@ export default function EventsPage() {
     e.preventDefault();
     if (!newEventName.trim()) return;
 
+    // Validate collection settings before creating
+    if (showCollection) {
+      const parsed = collectionSchema.safeParse({
+        collection_opens_at: collectionOpensAt || undefined,
+        live_starts_at: liveStartsAt || undefined,
+        submission_cap_per_guest: submissionCap,
+      });
+      if (!parsed.success) {
+        setCollectionError(parsed.error.issues[0].message);
+        return;
+      }
+    }
+    setCollectionError(null);
+
     setCreating(true);
+    let createdEvent;
     try {
-      const event = await api.createEvent(newEventName);
-      setEvents([event, ...events]);
-      setNewEventName('');
-      setShowCreate(false);
+      createdEvent = await api.createEvent(newEventName);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to create event');
-    } finally {
       setCreating(false);
+      return;
     }
+
+    // Show the event in the list immediately, even if collection settings fail —
+    // the user can finish setup on the event's Pre-Event Voting tab.
+    setEvents([createdEvent, ...events]);
+
+    if (showCollection && (collectionOpensAt || liveStartsAt || submissionCap > 0)) {
+      try {
+        await api.patchCollectionSettings(createdEvent.code, {
+          collection_opens_at: collectionOpensAt
+            ? new Date(collectionOpensAt).toISOString()
+            : null,
+          live_starts_at: liveStartsAt
+            ? new Date(liveStartsAt).toISOString()
+            : null,
+          submission_cap_per_guest: submissionCap,
+        });
+      } catch (err) {
+        setErrorMsg(
+          `Event "${createdEvent.name}" was created, but collection settings failed: ${
+            err instanceof Error ? err.message : 'unknown error'
+          }. Open the event and finish setup on the Pre-Event Voting tab.`,
+        );
+        setCreating(false);
+        return;
+      }
+    }
+
+    setNewEventName('');
+    setShowCreate(false);
+    setShowCollection(false);
+    setCollectionOpensAt('');
+    setLiveStartsAt('');
+    setSubmissionCap(0);
+    setCreating(false);
   };
 
   const toggleSelection = (code: string) => {
@@ -179,6 +233,18 @@ export default function EventsPage() {
                 required
               />
             </div>
+            <CollectionFieldset
+              enabled={showCollection}
+              onEnabledChange={setShowCollection}
+              collectionOpensAt={collectionOpensAt}
+              onCollectionOpensAtChange={setCollectionOpensAt}
+              liveStartsAt={liveStartsAt}
+              onLiveStartsAtChange={setLiveStartsAt}
+              submissionCap={submissionCap}
+              onSubmissionCapChange={setSubmissionCap}
+              error={collectionError}
+            />
+
             <div style={{ display: 'flex', gap: '1rem' }}>
               <button type="submit" className="btn btn-primary" disabled={creating}>
                 {creating ? 'Creating...' : 'Create'}

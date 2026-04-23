@@ -56,6 +56,10 @@ EVENT_OUT_KEYS = {
     "banner_kiosk_url",
     "banner_colors",
     "requests_open",
+    "collection_opens_at",
+    "live_starts_at",
+    "submission_cap_per_guest",
+    "collection_phase_override",
 }
 
 REQUEST_OUT_KEYS = {

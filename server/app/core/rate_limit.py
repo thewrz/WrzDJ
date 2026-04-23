@@ -1,6 +1,7 @@
 """Rate limiting middleware using slowapi."""
 
 import ipaddress
+import logging
 from functools import lru_cache
 
 from fastapi import Request, Response
@@ -72,10 +73,56 @@ def get_client_ip(request: Request) -> str:
 
 MAX_FINGERPRINT_LENGTH = 64
 
+_fp_logger = logging.getLogger("app.fingerprint")
 
-def get_client_fingerprint(request: Request) -> str:
-    """Extract client fingerprint (IP) from the request, truncated to safe length."""
-    return get_client_ip(request)[:MAX_FINGERPRINT_LENGTH]
+
+def mask_fingerprint(fp: str) -> str:
+    """Return a short, non-reversible tag for a fingerprint — safe for logs
+    and activity-log messages.
+
+    SHA-256 truncated to 12 hex chars: enough to correlate actions by the
+    same guest across events in logs, but not enough to recover the original
+    IP. The raw value stays in the DB for legitimate abuse investigation.
+    """
+    import hashlib
+
+    return hashlib.sha256(fp.encode("utf-8")).hexdigest()[:12]
+
+
+def _fp_source(request: Request) -> str:
+    """Identify which header/layer supplied the fingerprint for this request."""
+    direct_ip = get_remote_address(request)
+    if request.headers.get("X-Real-IP") and _is_trusted_proxy(direct_ip):
+        return "x-real-ip"
+    if request.headers.get("X-Forwarded-For") and _is_trusted_proxy(direct_ip):
+        return "x-forwarded-for"
+    return "direct"
+
+
+def get_client_fingerprint(
+    request: Request,
+    *,
+    action: str | None = None,
+    event_code: str | None = None,
+) -> str:
+    """Extract client fingerprint (IP) from the request, truncated to safe length.
+
+    When `action` is provided, emits a structured INFO log line:
+        action=collect.vote event=PB5TTP source=x-real-ip fp=a1b2c3d4e5f6
+
+    The logged `fp` is a hashed tag — the raw IP stays in the DB for
+    legitimate abuse investigation but never appears in log output.
+    """
+    raw = get_client_ip(request)[:MAX_FINGERPRINT_LENGTH]
+    if action is not None:
+        _fp_logger.info(
+            "fp_resolve action=%s event=%s source=%s fp=%s",
+            action,
+            event_code or "-",
+            _fp_source(request),
+            mask_fingerprint(raw),
+        )
+    return raw
 
 
 # Create limiter instance with IP-based key function

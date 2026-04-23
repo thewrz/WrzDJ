@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/auth';
-import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem, TidalStatus, TidalSearchResult, BeatportStatus } from '@/lib/api';
+import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem, TidalStatus, TidalSearchResult, BeatportStatus, CollectionSettingsResponse } from '@/lib/api';
 import { useEventStream } from '@/lib/use-event-stream';
 import type { BeatportSearchResult, NowPlayingInfo } from '@/lib/api-types';
 import type { SortMode } from '@/lib/priority-score';
@@ -25,6 +25,7 @@ import { RequestQueueSection } from './components/RequestQueueSection';
 import { PlayHistorySection } from './components/PlayHistorySection';
 import { SongManagementTab } from './components/SongManagementTab';
 import { EventManagementTab } from './components/EventManagementTab';
+import PreEventVotingTab from './components/PreEventVotingTab';
 import type { RecommendedTrack } from '@/lib/api-types';
 
 function toLocalDateTimeString(date: Date): string {
@@ -112,8 +113,11 @@ export default function EventQueuePage() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<'songs' | 'manage'>('songs');
-  const helpPageId = activeTab === 'songs' ? 'event-songs' : 'event-manage';
+  const [activeTab, setActiveTab] = useState<'songs' | 'manage' | 'pre-event'>('songs');
+  const helpPageId = activeTab === 'songs' ? 'event-songs' : 'event-manage'; // pre-event shares manage page
+
+  // Pre-event collection settings
+  const [collectionSettings, setCollectionSettings] = useState<CollectionSettingsResponse | null>(null);
   const { hasSeenPage, startOnboarding, onboardingActive } = useHelp();
 
   // Banner upload state
@@ -222,6 +226,13 @@ export default function EventQueuePage() {
       clearTimeout(timeout);
     };
   }, [tidalLoginPolling]);
+
+  // Fetch collection settings when pre-event tab is first opened
+  useEffect(() => {
+    if (activeTab === 'pre-event' && !collectionSettings && isAuthenticated) {
+      api.getCollectionSettings(code).then(setCollectionSettings).catch(() => {});
+    }
+  }, [activeTab, collectionSettings, isAuthenticated, code]);
 
   // Auto-trigger onboarding for first-time visitors to this tab
   const eventLoaded = !isLoading && isAuthenticated && !loading && !!event;
@@ -1016,6 +1027,14 @@ export default function EventQueuePage() {
               >
                 Event Management
               </button>
+              {event && 'collection_opens_at' in event && event.collection_opens_at != null && (
+                <button
+                  className={`event-tab${activeTab === 'pre-event' ? ' active' : ''}`}
+                  onClick={() => setActiveTab('pre-event')}
+                >
+                  Pre-Event Voting
+                </button>
+              )}
             </div>
           </HelpSpot>
 
@@ -1096,6 +1115,21 @@ export default function EventQueuePage() {
               onDeleteBanner={handleDeleteBanner}
             />
           </div>
+
+          {collectionSettings && activeTab === 'pre-event' && (
+            <PreEventVotingTab
+              event={{
+                code,
+                name: event.name,
+                collection_opens_at: collectionSettings.collection_opens_at,
+                live_starts_at: collectionSettings.live_starts_at,
+                submission_cap_per_guest: collectionSettings.submission_cap_per_guest,
+                collection_phase_override: collectionSettings.collection_phase_override,
+                phase: collectionSettings.phase,
+              }}
+              onEventChange={(next) => setCollectionSettings((prev) => prev ? { ...prev, ...next } : prev)}
+            />
+          )}
         </>
       )}
 

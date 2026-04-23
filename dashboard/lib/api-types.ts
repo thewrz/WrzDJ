@@ -18,6 +18,11 @@ export interface Event {
   banner_colors: string[] | null;
   // Requests open/closed
   requests_open: boolean;
+  // Pre-event collection
+  collection_opens_at: string | null;
+  live_starts_at: string | null;
+  submission_cap_per_guest: number;
+  collection_phase_override: 'force_collection' | 'force_live' | null;
 }
 
 export interface ArchivedEvent extends Event {

@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.time import utcnow
@@ -61,6 +61,11 @@ class Request(Base):
 
     # Voting
     vote_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Pre-event collection flag — set on insert when event.phase == "collection"
+    submitted_during_collection: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="0", index=True
+    )
 
     event: Mapped["Event"] = relationship(
         "Event", back_populates="requests", foreign_keys=[event_id]
