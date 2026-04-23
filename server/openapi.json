@@ -6966,7 +6966,7 @@
       },
       "patch": {
         "description": "Update pre-event collection scheduling settings.",
-        "operationId": "update_collection_settings_api_events__code__collection_patch",
+        "operationId": "update_collection_settings_endpoint_api_events__code__collection_patch",
         "parameters": [
           {
             "in": "path",
@@ -6994,7 +6994,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Update Collection Settings Api Events  Code  Collection Patch",
+                  "title": "Response Update Collection Settings Endpoint Api Events  Code  Collection Patch",
                   "type": "object"
                 }
               }
@@ -7017,7 +7017,7 @@
             "OAuth2PasswordBearer": []
           }
         ],
-        "summary": "Update Collection Settings",
+        "summary": "Update Collection Settings Endpoint",
         "tags": [
           "events"
         ]

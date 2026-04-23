@@ -74,6 +74,25 @@ def get_owned_event(
     return event
 
 
+def get_event_for_dj_or_admin(
+    code: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> Event:
+    """Get an event accessible to the current user (owner or admin).
+
+    Returns 404 if the event doesn't exist, 403 if the user neither owns it
+    nor has admin role. Used by pre-event-collection endpoints where admins
+    need to inspect/mutate events they don't own.
+    """
+    event = db.query(Event).filter(Event.code == code).one_or_none()
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event.created_by_user_id != current_user.id and current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return event
+
+
 def get_owned_event_by_id(
     event_id: int,
     current_user: User = Depends(get_current_active_user),

@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Literal
 from urllib.parse import quote
 
@@ -17,11 +17,15 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db, get_owned_event
+from app.api.deps import (
+    get_current_active_user,
+    get_db,
+    get_event_for_dj_or_admin,
+    get_owned_event,
+)
 from app.core.config import get_settings
 from app.core.rate_limit import get_client_fingerprint, limiter
 from app.models.event import Event
-from app.models.request import Request as SongRequest
 from app.models.request import RequestStatus
 from app.models.user import User
 from app.schemas.activity_log import ActivityLogEntry
@@ -50,6 +54,12 @@ from app.schemas.recommendation import (
 )
 from app.schemas.request import RequestCreate, RequestOut
 from app.schemas.search import SearchResult
+from app.services.collect import (
+    collection_settings_payload,
+    execute_bulk_review,
+    get_pending_review_rows,
+    update_collection_settings,
+)
 from app.services.event import (
     EventLookupResult,
     archive_event,
@@ -997,96 +1007,30 @@ def upload_banner(
 
 @router.get("/{code}/collection")
 def get_collection_settings(
-    code: str,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_active_user),
+    event: Event = Depends(get_event_for_dj_or_admin),
 ) -> dict:
     """Get pre-event collection scheduling settings."""
-    event = db.query(Event).filter(Event.code == code).one_or_none()
-    if event is None:
-        raise HTTPException(status_code=404, detail="Event not found")
-    if event.created_by_user_id != user.id and user.role != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden")
-    return {
-        "collection_opens_at": event.collection_opens_at,
-        "live_starts_at": event.live_starts_at,
-        "submission_cap_per_guest": event.submission_cap_per_guest,
-        "collection_phase_override": event.collection_phase_override,
-        "phase": event.phase,
-    }
+    return collection_settings_payload(event)
 
 
 @router.patch("/{code}/collection")
-def update_collection_settings(
-    code: str,
+def update_collection_settings_endpoint(
     payload: UpdateCollectionSettings,
+    event: Event = Depends(get_event_for_dj_or_admin),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_active_user),
 ) -> dict:
     """Update pre-event collection scheduling settings."""
-    event = db.query(Event).filter(Event.code == code).one_or_none()
-    if event is None:
-        raise HTTPException(status_code=404, detail="Event not found")
-    if event.created_by_user_id != user.id and user.role != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden")
-
-    if payload.collection_opens_at is not None:
-        event.collection_opens_at = _to_naive_utc(payload.collection_opens_at)
-    if payload.live_starts_at is not None:
-        event.live_starts_at = _to_naive_utc(payload.live_starts_at)
-    if payload.submission_cap_per_guest is not None:
-        event.submission_cap_per_guest = payload.submission_cap_per_guest
-    if "collection_phase_override" in payload.model_fields_set:
-        event.collection_phase_override = payload.collection_phase_override
-
-    # Validate ordering after applying changes
-    opens = event.collection_opens_at
-    live = event.live_starts_at
-    expires = event.expires_at
-    if opens and live and opens >= live:
-        raise HTTPException(
-            status_code=400, detail="collection_opens_at must be before live_starts_at"
-        )
-    # Auto-extend expires_at when the user schedules a live phase that runs past
-    # the default event expiry. The default is just 6h — anyone scheduling a
-    # multi-day collection clearly intends the event to live through it.
-    # Give the live phase a 12h default duration on top of live_starts_at.
-    if live and expires and live >= expires:
-        event.expires_at = live + timedelta(hours=12)
-
-    db.commit()
-    db.refresh(event)
-    return {
-        "collection_opens_at": event.collection_opens_at,
-        "live_starts_at": event.live_starts_at,
-        "submission_cap_per_guest": event.submission_cap_per_guest,
-        "collection_phase_override": event.collection_phase_override,
-        "phase": event.phase,
-    }
+    update_collection_settings(db, event, payload)
+    return collection_settings_payload(event)
 
 
 @router.get("/{code}/pending-review", response_model=PendingReviewResponse)
 def pending_review(
-    code: str,
+    event: Event = Depends(get_event_for_dj_or_admin),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_active_user),
 ):
     """Get pending review data source for DJ bulk-review."""
-    event = db.query(Event).filter(Event.code == code).one_or_none()
-    if event is None:
-        raise HTTPException(status_code=404, detail="Event not found")
-    if event.created_by_user_id != user.id and user.role != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden")
-
-    rows = (
-        db.query(SongRequest)
-        .filter(SongRequest.event_id == event.id)
-        .filter(SongRequest.submitted_during_collection == True)  # noqa: E712
-        .filter(SongRequest.status == "new")
-        .order_by(SongRequest.vote_count.desc(), SongRequest.created_at.asc())
-        .limit(200)
-        .all()
-    )
+    rows = get_pending_review_rows(db, event.id)
     return PendingReviewResponse(
         requests=[
             PendingReviewRow(
@@ -1108,66 +1052,11 @@ def pending_review(
 
 @router.post("/{code}/bulk-review", response_model=BulkReviewResponse)
 def bulk_review(
-    code: str,
     payload: BulkReviewRequest,
+    event: Event = Depends(get_event_for_dj_or_admin),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_active_user),
 ):
-    event = db.query(Event).filter(Event.code == code).one_or_none()
-    if event is None:
-        raise HTTPException(status_code=404, detail="Event not found")
-    if event.created_by_user_id != user.id and user.role != "admin":
-        raise HTTPException(status_code=403, detail="Forbidden")
-
-    pending_q = (
-        db.query(SongRequest)
-        .filter(SongRequest.event_id == event.id)
-        .filter(SongRequest.submitted_during_collection == True)  # noqa: E712
-        .filter(SongRequest.status == "new")
-    )
-
-    accepted = 0
-    rejected = 0
-
-    if payload.action == "accept_top_n":
-        if payload.n is None:
-            raise HTTPException(status_code=400, detail="n is required")
-        rows = (
-            pending_q.order_by(SongRequest.vote_count.desc(), SongRequest.created_at.asc())
-            .limit(payload.n)
-            .all()
-        )
-        for r in rows:
-            r.status = "accepted"
-            accepted += 1
-    elif payload.action == "accept_threshold":
-        if payload.min_votes is None:
-            raise HTTPException(status_code=400, detail="min_votes is required")
-        rows = pending_q.filter(SongRequest.vote_count >= payload.min_votes).all()
-        for r in rows:
-            r.status = "accepted"
-            accepted += 1
-    elif payload.action == "accept_ids":
-        if not payload.request_ids:
-            raise HTTPException(status_code=400, detail="request_ids is required")
-        rows = pending_q.filter(SongRequest.id.in_(payload.request_ids)).all()
-        for r in rows:
-            r.status = "accepted"
-            accepted += 1
-    elif payload.action == "reject_ids":
-        if not payload.request_ids:
-            raise HTTPException(status_code=400, detail="request_ids is required")
-        rows = pending_q.filter(SongRequest.id.in_(payload.request_ids)).all()
-        for r in rows:
-            r.status = "rejected"
-            rejected += 1
-    elif payload.action == "reject_remaining":
-        rows = pending_q.all()
-        for r in rows:
-            r.status = "rejected"
-            rejected += 1
-
-    db.commit()
+    accepted, rejected = execute_bulk_review(db, event.id, payload)
     return BulkReviewResponse(accepted=accepted, rejected=rejected, unchanged=0)
 
 
