@@ -1,12 +1,14 @@
 'use client';
 
 import type { Event, ArchivedEvent, TidalStatus, BeatportStatus } from '@/lib/api-types';
+import type { CollectionSettingsResponse } from '@/lib/api';
 import { KioskControlsCard } from './KioskControlsCard';
 import { PairedKiosksCard } from './PairedKiosksCard';
 import { StreamOverlayCard } from './StreamOverlayCard';
 import { BridgeStatusCard } from './BridgeStatusCard';
 import { CloudProvidersCard } from './CloudProvidersCard';
 import { EventCustomizationCard } from './EventCustomizationCard';
+import { PreEventVotingCard } from './PreEventVotingCard';
 import { HelpSpot } from '@/components/help/HelpSpot';
 
 interface BridgeDetails {
@@ -51,6 +53,8 @@ interface EventManagementTabProps {
   uploadingBanner: boolean;
   onBannerSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDeleteBanner: () => void;
+  onPreEventEnabled: (next: CollectionSettingsResponse) => void;
+  onJumpToPreEventTab: () => void;
 }
 
 export function EventManagementTab(props: EventManagementTabProps) {
@@ -86,6 +90,12 @@ export function EventManagementTab(props: EventManagementTabProps) {
           onDeleteBanner={props.onDeleteBanner}
         />
       </HelpSpot>
+
+      <PreEventVotingCard
+        event={props.event}
+        onEnabled={props.onPreEventEnabled}
+        onJumpToTab={props.onJumpToPreEventTab}
+      />
 
       <HelpSpot spotId="event-stream-overlay" page="event-manage" order={3} title="Stream Overlay" description="Copy the OBS browser source URL to show currently playing track on your stream.">
         <StreamOverlayCard code={props.code} />

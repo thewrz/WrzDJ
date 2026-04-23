@@ -148,6 +148,24 @@ export default function PreEventVotingTab({ event, onEventChange }: Props) {
     <div style={{ padding: '1rem' }}>
       <h2 style={{ marginBottom: '1rem' }}>Pre-Event Voting</h2>
 
+      {!event.collection_opens_at && !event.live_starts_at && (
+        <div
+          style={{
+            padding: '0.875rem 1rem',
+            background: 'rgba(59, 130, 246, 0.12)',
+            border: '1px solid rgba(59, 130, 246, 0.25)',
+            borderRadius: 8,
+            color: '#60a5fa',
+            marginBottom: '1.25rem',
+            fontSize: '0.9rem',
+          }}
+        >
+          Pre-event voting isn&apos;t enabled yet. Set the dates below to turn it
+          on — guests can then visit the share link to suggest and upvote songs
+          ahead of the live event.
+        </div>
+      )}
+
       <div className="pre-event-stats">
         <div className="pre-event-stat">
           <div className="pre-event-stat-label">Current phase</div>

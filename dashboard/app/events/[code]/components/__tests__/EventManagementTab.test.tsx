@@ -66,6 +66,8 @@ const baseProps = {
   uploadingBanner: false,
   onBannerSelect: vi.fn(),
   onDeleteBanner: vi.fn(),
+  onPreEventEnabled: vi.fn(),
+  onJumpToPreEventTab: vi.fn(),
 };
 
 describe('EventManagementTab', () => {

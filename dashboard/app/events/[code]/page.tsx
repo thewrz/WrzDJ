@@ -1027,12 +1027,17 @@ export default function EventQueuePage() {
               >
                 Event Management
               </button>
-              {event && 'collection_opens_at' in event && event.collection_opens_at != null && (
+              {event && (
                 <button
                   className={`event-tab${activeTab === 'pre-event' ? ' active' : ''}`}
                   onClick={() => setActiveTab('pre-event')}
                 >
                   Pre-Event Voting
+                  {'collection_opens_at' in event && event.collection_opens_at == null && (
+                    <span style={{ marginLeft: 6, fontSize: '0.75em', opacity: 0.7 }}>
+                      (off)
+                    </span>
+                  )}
                 </button>
               )}
             </div>
@@ -1113,6 +1118,20 @@ export default function EventQueuePage() {
               uploadingBanner={uploadingBanner}
               onBannerSelect={handleBannerSelect}
               onDeleteBanner={handleDeleteBanner}
+              onPreEventEnabled={(next) => {
+                setCollectionSettings(next);
+                if (event) {
+                  setEvent({
+                    ...event,
+                    collection_opens_at: next.collection_opens_at,
+                    live_starts_at: next.live_starts_at,
+                    submission_cap_per_guest: next.submission_cap_per_guest,
+                    collection_phase_override: next.collection_phase_override,
+                  } as typeof event);
+                }
+                setActiveTab('pre-event');
+              }}
+              onJumpToPreEventTab={() => setActiveTab('pre-event')}
             />
           </div>
 
