@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, AdminUser } from '@/lib/api';
-import { useHelp } from '@/lib/help/HelpContext';
+import { useAdminPage } from '@/lib/useAdminPage';
 import { HelpSpot } from '@/components/help/HelpSpot';
 import { HelpButton } from '@/components/help/HelpButton';
 import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
@@ -10,43 +10,26 @@ import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
 const PAGE_ID = 'admin-users';
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [roleFilter, setRoleFilter] = useState<string | undefined>();
-  const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
   const [formData, setFormData] = useState({ username: '', password: '', role: 'dj' });
   const [editData, setEditData] = useState({ role: '', is_active: true, password: '' });
   const [error, setError] = useState('');
   const limit = 20;
-  const { hasSeenPage, startOnboarding, onboardingActive } = useHelp();
 
-  const loadUsers = async () => {
-    setLoading(true);
-    try {
-      const data = await api.getAdminUsers(page, limit, roleFilter);
-      setUsers(data.items);
-      setTotal(data.total);
-    } catch {
-      setError('Failed to load users');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: paginated, error: loadError, loading, reload } = useAdminPage({
+    pageId: PAGE_ID,
+    loader: () => api.getAdminUsers(page, limit, roleFilter),
+    onError: () => 'Failed to load users',
+  });
+  const users = paginated?.items ?? [];
+  const total = paginated?.total ?? 0;
 
   useEffect(() => {
-    loadUsers();
-  }, [page, roleFilter]);
-
-  const dataLoaded = !loading;
-  useEffect(() => {
-    if (dataLoaded && !onboardingActive && !hasSeenPage(PAGE_ID)) {
-      const timer = setTimeout(() => startOnboarding(PAGE_ID), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [dataLoaded, onboardingActive, hasSeenPage, startOnboarding]);
+    reload();
+  }, [page, roleFilter, reload]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +38,7 @@ export default function AdminUsersPage() {
       await api.createAdminUser(formData);
       setShowCreate(false);
       setFormData({ username: '', password: '', role: 'dj' });
-      loadUsers();
+      reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create user');
     }
@@ -72,7 +55,7 @@ export default function AdminUsersPage() {
       if (editData.password) update.password = editData.password;
       await api.updateAdminUser(editUser.id, update);
       setEditUser(null);
-      loadUsers();
+      reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update user');
     }
@@ -82,7 +65,7 @@ export default function AdminUsersPage() {
     if (!confirm(`Delete user "${user.username}"? This will also delete all their events.`)) return;
     try {
       await api.deleteAdminUser(user.id);
-      loadUsers();
+      reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete user');
     }
@@ -117,8 +100,8 @@ export default function AdminUsersPage() {
         </HelpSpot>
       </div>
 
-      {error && (
-        <div style={{ color: '#ef4444', marginBottom: '1rem' }}>{error}</div>
+      {(error || loadError) && (
+        <div style={{ color: '#ef4444', marginBottom: '1rem' }}>{error || loadError}</div>
       )}
 
       <HelpSpot spotId="admin-role-filters" page={PAGE_ID} order={2} title="Role Filters" description="Filter by role: All, Admins, DJs, or Pending.">

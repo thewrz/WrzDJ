@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api } from '@/lib/api';
 import type { AISettings, AIModelInfo } from '@/lib/api-types';
-import { useHelp } from '@/lib/help/HelpContext';
+import { useAdminPage } from '@/lib/useAdminPage';
 import { HelpSpot } from '@/components/help/HelpSpot';
 import { HelpButton } from '@/components/help/HelpButton';
 import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
@@ -11,30 +11,23 @@ import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
 const PAGE_ID = 'admin-ai';
 
 export default function AdminAISettingsPage() {
-  const [settings, setSettings] = useState<AISettings | null>(null);
   const [models, setModels] = useState<AIModelInfo[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const { hasSeenPage, startOnboarding, onboardingActive } = useHelp();
 
-  useEffect(() => {
-    Promise.all([api.getAISettings(), api.getAIModels()])
-      .then(([settingsData, modelsData]) => {
-        setSettings(settingsData);
-        setModels(modelsData.models);
-      })
-      .catch(() => setError('Failed to load AI settings'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (settings && !onboardingActive && !hasSeenPage(PAGE_ID)) {
-      const timer = setTimeout(() => startOnboarding(PAGE_ID), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [settings, onboardingActive, hasSeenPage, startOnboarding]);
+  const { data: settings, loading, error: loadError, setData: setSettings } = useAdminPage<AISettings>({
+    pageId: PAGE_ID,
+    loader: async () => {
+      const [settingsData, modelsData] = await Promise.all([
+        api.getAISettings(),
+        api.getAIModels(),
+      ]);
+      setModels(modelsData.models);
+      return settingsData;
+    },
+    onError: () => 'Failed to load AI settings',
+  });
 
   const handleSave = async () => {
     if (!settings) return;
@@ -68,7 +61,7 @@ export default function AdminAISettingsPage() {
   if (!settings) {
     return (
       <div className="container">
-        <div className="card" style={{ color: '#ef4444' }}>{error || 'Failed to load'}</div>
+        <div className="card" style={{ color: '#ef4444' }}>{error || loadError || 'Failed to load'}</div>
       </div>
     );
   }
@@ -79,8 +72,8 @@ export default function AdminAISettingsPage() {
       <OnboardingOverlay page={PAGE_ID} />
       <h1 style={{ marginBottom: '2rem' }}>AI / LLM Settings</h1>
 
-      {error && (
-        <div style={{ color: '#ef4444', marginBottom: '1rem' }}>{error}</div>
+      {(error || loadError) && (
+        <div style={{ color: '#ef4444', marginBottom: '1rem' }}>{error || loadError}</div>
       )}
       {success && (
         <div style={{ color: '#22c55e', marginBottom: '1rem' }}>{success}</div>

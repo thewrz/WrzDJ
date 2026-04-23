@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { api, SystemSettings } from '@/lib/api';
-import { useHelp } from '@/lib/help/HelpContext';
+import { useAdminPage } from '@/lib/useAdminPage';
 import { HelpSpot } from '@/components/help/HelpSpot';
 import { HelpButton } from '@/components/help/HelpButton';
 import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
@@ -10,26 +10,15 @@ import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
 const PAGE_ID = 'admin-settings';
 
 export default function AdminSettingsPage() {
-  const [settings, setSettings] = useState<SystemSettings | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const { hasSeenPage, startOnboarding, onboardingActive } = useHelp();
 
-  useEffect(() => {
-    api.getAdminSettings()
-      .then(setSettings)
-      .catch(() => setError('Failed to load settings'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (settings && !onboardingActive && !hasSeenPage(PAGE_ID)) {
-      const timer = setTimeout(() => startOnboarding(PAGE_ID), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [settings, onboardingActive, hasSeenPage, startOnboarding]);
+  const { data: settings, loading, error: loadError, setData: setSettings } = useAdminPage<SystemSettings>({
+    pageId: PAGE_ID,
+    loader: () => api.getAdminSettings(),
+    onError: () => 'Failed to load settings',
+  });
 
   const handleSave = async () => {
     if (!settings) return;
@@ -59,7 +48,7 @@ export default function AdminSettingsPage() {
   if (!settings) {
     return (
       <div className="container">
-        <div className="card" style={{ color: '#ef4444' }}>{error || 'Failed to load'}</div>
+        <div className="card" style={{ color: '#ef4444' }}>{error || loadError || 'Failed to load'}</div>
       </div>
     );
   }
@@ -70,8 +59,8 @@ export default function AdminSettingsPage() {
       <OnboardingOverlay page={PAGE_ID} />
       <h1 style={{ marginBottom: '2rem' }}>System Settings</h1>
 
-      {error && (
-        <div style={{ color: '#ef4444', marginBottom: '1rem' }}>{error}</div>
+      {(error || loadError) && (
+        <div style={{ color: '#ef4444', marginBottom: '1rem' }}>{error || loadError}</div>
       )}
       {success && (
         <div style={{ color: '#22c55e', marginBottom: '1rem' }}>{success}</div>

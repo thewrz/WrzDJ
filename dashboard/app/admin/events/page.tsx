@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, AdminEvent } from '@/lib/api';
-import { useHelp } from '@/lib/help/HelpContext';
+import { useAdminPage } from '@/lib/useAdminPage';
 import { HelpSpot } from '@/components/help/HelpSpot';
 import { HelpButton } from '@/components/help/HelpButton';
 import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
@@ -10,10 +10,7 @@ import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
 const PAGE_ID = 'admin-events';
 
 export default function AdminEventsPage() {
-  const [events, setEvents] = useState<AdminEvent[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
   const [editEvent, setEditEvent] = useState<AdminEvent | null>(null);
   const [editName, setEditName] = useState('');
   const [error, setError] = useState('');
@@ -21,33 +18,19 @@ export default function AdminEventsPage() {
   const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
   const [deletingSelected, setDeletingSelected] = useState(false);
   const limit = 20;
-  const { hasSeenPage, startOnboarding, onboardingActive } = useHelp();
 
-  const loadEvents = async () => {
-    setLoading(true);
-    try {
-      const data = await api.getAdminEvents(page, limit);
-      setEvents(data.items);
-      setTotal(data.total);
-    } catch {
-      setError('Failed to load events');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: paginated, error: loadError, loading, reload } = useAdminPage({
+    pageId: PAGE_ID,
+    loader: () => api.getAdminEvents(page, limit),
+    onError: () => 'Failed to load events',
+  });
+  const events = paginated?.items ?? [];
+  const total = paginated?.total ?? 0;
 
   useEffect(() => {
     setSelectedEvents(new Set());
-    loadEvents();
-  }, [page]);
-
-  const dataLoaded = !loading;
-  useEffect(() => {
-    if (dataLoaded && !onboardingActive && !hasSeenPage(PAGE_ID)) {
-      const timer = setTimeout(() => startOnboarding(PAGE_ID), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [dataLoaded, onboardingActive, hasSeenPage, startOnboarding]);
+    reload();
+  }, [page, reload]);
 
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +39,7 @@ export default function AdminEventsPage() {
     try {
       await api.updateAdminEvent(editEvent.code, { name: editName });
       setEditEvent(null);
-      loadEvents();
+      reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update event');
     }
@@ -66,7 +49,7 @@ export default function AdminEventsPage() {
     if (!confirm(`Delete event "${event.name}" (${event.code})? This cannot be undone.`)) return;
     try {
       await api.deleteAdminEvent(event.code);
-      loadEvents();
+      reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete event');
     }
@@ -100,7 +83,7 @@ export default function AdminEventsPage() {
     try {
       await api.bulkDeleteAdminEvents([...selectedEvents]);
       setSelectedEvents(new Set());
-      loadEvents();
+      reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete events');
     } finally {
@@ -121,8 +104,8 @@ export default function AdminEventsPage() {
         </div>
       </HelpSpot>
 
-      {error && (
-        <div style={{ color: '#ef4444', marginBottom: '1rem' }}>{error}</div>
+      {(error || loadError) && (
+        <div style={{ color: '#ef4444', marginBottom: '1rem' }}>{error || loadError}</div>
       )}
 
       {/* Edit Modal */}
