@@ -22,7 +22,11 @@ import re
 from app.schemas.beatport import BeatportSearchResult
 from app.schemas.search import SearchResult
 from app.schemas.tidal import TidalSearchResult
-from app.services.track_normalizer import artist_match_score, fuzzy_match_score
+from app.services.track_normalizer import (
+    artist_match_score,
+    fuzzy_match_score,
+    score_track_match,
+)
 from app.services.version_filter import is_unwanted_version
 
 # --- Compilation / junk detection for main titles ---
@@ -63,7 +67,7 @@ def _is_duplicate(
     for result in existing:
         title_score = fuzzy_match_score(candidate.title, result.title)
         artist_score = artist_match_score(candidate.artist, result.artist)
-        combined = title_score * 0.6 + artist_score * 0.4
+        combined = score_track_match(title_score, artist_score)
         if combined >= threshold:
             return True
     return False

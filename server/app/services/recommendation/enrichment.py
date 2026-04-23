@@ -19,6 +19,7 @@ from app.services.track_normalizer import (
     is_original_mix_name,
     is_remix_title,
     primary_artist,
+    score_track_match,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,7 @@ def enrich_from_tidal(
             track_title = track.name or ""
             title_score = fuzzy_match_score(title, track_title)
             artist_score = artist_match_score(artist, track_artist)
-            combined = title_score * 0.6 + artist_score * 0.4
+            combined = score_track_match(title_score, artist_score)
             version_adj = 0.0
             if not want_remix and is_remix_title(track_title):
                 version_adj = -0.1
@@ -135,7 +136,7 @@ def enrich_from_beatport(
     for i, result in enumerate(results):
         title_score = fuzzy_match_score(title, result.title)
         artist_score = artist_match_score(artist, result.artist)
-        combined = title_score * 0.6 + artist_score * 0.4
+        combined = score_track_match(title_score, artist_score)
         version_adj = 0.0
         if not want_remix and result.mix_name:
             if is_original_mix_name(result.mix_name):
