@@ -12,7 +12,7 @@
     "screenshots": "playwright test --config playwright.config.ts",
     "e2e": "playwright test --config playwright-e2e.config.ts",
     "types:export": "cd ../server && .venv/bin/python scripts/export_openapi.py",
-    "types:generate": "openapi-typescript ../server/openapi.json -o lib/api-types.generated.ts --properties-required-by-default"
+    "types:generate": "openapi-typescript ../server/openapi.json -o lib/api-types.generated.ts"
   },
   "dependencies": {
     "next": "^16.2.3",

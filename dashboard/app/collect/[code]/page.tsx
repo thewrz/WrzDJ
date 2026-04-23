@@ -109,7 +109,7 @@ export default function CollectPage() {
       await apiClient.submitCollectRequest(code, {
         song_title: song.title,
         artist: song.artist,
-        source: song.source,
+        source: song.source as 'spotify' | 'beatport' | 'tidal' | 'manual',
         source_url: song.url ?? undefined,
         artwork_url: song.album_art ?? undefined,
         nickname: submitNickname,

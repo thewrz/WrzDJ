@@ -1,29 +1,77 @@
-export interface Event {
-  id: number;
-  code: string;
-  name: string;
-  created_at: string;
-  expires_at: string;
-  is_active: boolean;
-  join_url: string | null;
-  // Tidal sync settings
-  tidal_sync_enabled: boolean;
-  tidal_playlist_id: string | null;
-  // Beatport sync settings
-  beatport_sync_enabled: boolean;
-  beatport_playlist_id: string | null;
-  // Banner
-  banner_url: string | null;
-  banner_kiosk_url: string | null;
-  banner_colors: string[] | null;
-  // Requests open/closed
-  requests_open: boolean;
-  // Pre-event collection
-  collection_opens_at: string | null;
-  live_starts_at: string | null;
-  submission_cap_per_guest: number;
-  collection_phase_override: 'force_collection' | 'force_live' | null;
-}
+/**
+ * Public API type surface for the dashboard.
+ *
+ * Most types are re-exported from `./api-types.generated.ts`, which is
+ * auto-generated from the FastAPI OpenAPI spec via `npm run types:generate`.
+ *
+ * A handful of types are kept hand-crafted here because the corresponding
+ * FastAPI endpoints don't declare `response_model=`, so they aren't part of
+ * the OpenAPI components surface. These are flagged below.
+ *
+ * DO NOT edit `api-types.generated.ts` by hand. Instead, update the backend
+ * schema + re-run `npm run types:generate`. CI validates zero drift.
+ */
+
+import type { components } from './api-types.generated';
+
+type Schemas = components['schemas'];
+
+// ---------------------------------------------------------------------------
+// Auto-re-exports from the OpenAPI spec (aliased to historical TS names).
+// ---------------------------------------------------------------------------
+
+export type Event = Schemas['EventOut'];
+export type SongRequest = Schemas['RequestOut'];
+export type PublicRequestInfo = Schemas['PublicRequestInfo'];
+export type GuestRequestInfo = Schemas['GuestRequestInfo'];
+export type GuestNowPlaying = Schemas['GuestNowPlaying'];
+export type GuestRequestListResponse = Schemas['GuestRequestListResponse'];
+export type MyRequestInfo = Schemas['MyRequestInfo'];
+export type MyRequestsResponse = Schemas['MyRequestsResponse'];
+export type HasRequestedResponse = Schemas['HasRequestedResponse'];
+export type VoteResponse = Schemas['VoteResponse'];
+export type KioskDisplay = Schemas['KioskDisplayResponse'];
+export type DisplaySettingsResponse = Schemas['DisplaySettingsResponse'];
+export type SearchResult = Schemas['SearchResult'];
+export type NowPlayingInfo = Schemas['NowPlayingResponse'];
+export type PlayHistoryItem = Schemas['PlayHistoryEntry'];
+export type PlayHistoryResponse = Schemas['PlayHistoryResponse'];
+export type TidalStatus = Schemas['TidalStatus'];
+export type TidalSearchResult = Schemas['TidalSearchResult'];
+export type TidalEventSettings = Schemas['TidalEventSettings'];
+export type TidalSyncResult = Schemas['TidalSyncResult'];
+export type BeatportStatus = Schemas['BeatportStatus'];
+export type BeatportSearchResult = Schemas['BeatportSearchResult'];
+export type BeatportEventSettings = Schemas['BeatportEventSettings'];
+export type SystemStats = Schemas['SystemStats'];
+export type AdminUser = Schemas['AdminUserOut'];
+export type AdminEvent = Schemas['AdminEventOut'];
+export type SystemSettings = Schemas['SystemSettingsOut'];
+export type AIModelInfo = Schemas['AIModelInfo'];
+export type AIModelsResponse = Schemas['AIModelsResponse'];
+export type AISettings = Schemas['AISettingsOut'];
+export type AISettingsUpdate = Schemas['AISettingsUpdate'];
+export type ActivityLogEntry = Schemas['ActivityLogEntry'];
+export type CapabilityStatus = Schemas['CapabilityStatus'];
+export type ServiceCapabilities = Schemas['ServiceCapabilities'];
+export type IntegrationServiceStatus = Schemas['IntegrationServiceStatus'];
+export type IntegrationHealthResponse = Schemas['IntegrationHealthResponse'];
+export type IntegrationToggleResponse = Schemas['IntegrationToggleResponse'];
+export type IntegrationCheckResponse = Schemas['IntegrationCheckResponse'];
+export type KioskPairResponse = Schemas['KioskPairResponse'];
+export type KioskPairStatusResponse = Schemas['KioskPairStatusResponse'];
+export type KioskSessionResponse = Schemas['KioskSessionResponse'];
+export type KioskInfo = Schemas['KioskOut'];
+export type BridgeCommandResponse = Schemas['BridgeCommandResponse'];
+export type RecommendedTrack = Schemas['RecommendedTrack'];
+export type EventMusicProfile = Schemas['EventMusicProfile'];
+export type RecommendationResponse = Schemas['RecommendationResponse'];
+
+// ---------------------------------------------------------------------------
+// Hand-crafted: endpoints without response_model=, or client-side synthetic
+// shapes. When adding response_model to the backend, move the type here into
+// the auto-re-export section above and delete the manual definition.
+// ---------------------------------------------------------------------------
 
 export interface ArchivedEvent extends Event {
   status: 'expired' | 'archived';
@@ -31,221 +79,6 @@ export interface ArchivedEvent extends Event {
   archived_at: string | null;
 }
 
-export interface SongRequest {
-  id: number;
-  event_id: number;
-  song_title: string;
-  artist: string;
-  source: string;
-  source_url: string | null;
-  artwork_url: string | null;
-  note: string | null;
-  nickname: string | null;
-  status: 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
-  created_at: string;
-  updated_at: string;
-  is_duplicate?: boolean;
-  // Search intent
-  raw_search_query: string | null;
-  // Multi-service sync results (JSON string)
-  sync_results_json: string | null;
-  // Track metadata
-  genre: string | null;
-  bpm: number | null;
-  musical_key: string | null;
-  // Voting
-  vote_count: number;
-  // Priority scoring (populated only when sort=priority)
-  priority_score: number | null;
-}
-
-export interface PublicRequestInfo {
-  id: number;
-  title: string;
-  artist: string;
-  artwork_url: string | null;
-  nickname: string | null;
-  vote_count: number;
-}
-
-export interface GuestRequestInfo extends PublicRequestInfo {
-  status: 'new' | 'accepted';
-}
-
-export interface GuestNowPlaying {
-  title: string;
-  artist: string;
-  album_art_url: string | null;
-  source: string;
-}
-
-export interface GuestRequestListResponse {
-  event: { code: string; name: string };
-  requests: GuestRequestInfo[];
-  now_playing: GuestNowPlaying | null;
-}
-
-export interface MyRequestInfo {
-  id: number;
-  title: string;
-  artist: string;
-  artwork_url: string | null;
-  status: 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
-  vote_count: number;
-  created_at: string;
-}
-
-export interface MyRequestsResponse {
-  requests: MyRequestInfo[];
-}
-
-export interface HasRequestedResponse {
-  has_requested: boolean;
-}
-
-export interface VoteResponse {
-  status: string;
-  vote_count: number;
-  has_voted: boolean;
-}
-
-export interface KioskDisplay {
-  event: { code: string; name: string };
-  qr_join_url: string;
-  accepted_queue: PublicRequestInfo[];
-  now_playing: PublicRequestInfo | null;
-  now_playing_hidden: boolean;
-  requests_open: boolean;
-  kiosk_display_only: boolean;
-  updated_at: string;
-  banner_url: string | null;
-  banner_kiosk_url: string | null;
-  banner_colors: string[] | null;
-}
-
-export interface DisplaySettingsResponse {
-  status: string;
-  now_playing_hidden: boolean;
-  now_playing_auto_hide_minutes: number;
-  requests_open: boolean;
-  kiosk_display_only: boolean;
-}
-
-export interface SearchResult {
-  artist: string;
-  title: string;
-  album: string | null;
-  popularity: number;
-  spotify_id: string | null;
-  album_art: string | null;
-  preview_url: string | null;
-  url: string | null;
-  source: 'spotify' | 'beatport' | 'tidal';
-  // Track metadata (from Beatport/Tidal search results)
-  genre: string | null;
-  bpm: number | null;
-  key: string | null;
-  isrc: string | null;
-}
-
-/** StageLinQ now-playing track info */
-export interface NowPlayingInfo {
-  title: string;
-  artist: string;
-  album: string | null;
-  album_art_url: string | null;
-  spotify_uri: string | null;
-  started_at: string;
-  source: string;
-  matched_request_id: number | null;
-  bridge_connected: boolean;
-}
-
-/** Single entry in play history */
-export interface PlayHistoryItem {
-  id: number;
-  title: string;
-  artist: string;
-  album: string | null;
-  album_art_url: string | null;
-  spotify_uri: string | null;
-  matched_request_id: number | null;
-  source: string;
-  started_at: string;
-  ended_at: string | null;
-  play_order: number;
-}
-
-/** Paginated play history response */
-export interface PlayHistoryResponse {
-  items: PlayHistoryItem[];
-  total: number;
-}
-
-/** Tidal account status */
-export interface TidalStatus {
-  linked: boolean;
-  user_id: string | null;
-  expires_at: string | null;
-  integration_enabled: boolean;
-}
-
-/** Tidal search result */
-export interface TidalSearchResult {
-  track_id: string;
-  title: string;
-  artist: string;
-  album: string | null;
-  duration_seconds: number | null;
-  cover_url: string | null;
-  tidal_url: string | null;
-}
-
-/** Tidal event settings */
-export interface TidalEventSettings {
-  tidal_sync_enabled: boolean;
-  tidal_playlist_id: string | null;
-}
-
-/** Tidal sync result */
-export interface TidalSyncResult {
-  request_id: number;
-  status: 'pending' | 'synced' | 'not_found' | 'error';
-  tidal_track_id: string | null;
-  error: string | null;
-}
-
-/** Beatport account status */
-export interface BeatportStatus {
-  linked: boolean;
-  expires_at: string | null;
-  configured: boolean;
-  subscription: string | null;
-  integration_enabled: boolean;
-}
-
-/** Beatport search result */
-export interface BeatportSearchResult {
-  track_id: string;
-  title: string;
-  artist: string;
-  mix_name: string | null;
-  label: string | null;
-  genre: string | null;
-  bpm: number | null;
-  key: string | null;
-  duration_seconds: number | null;
-  cover_url: string | null;
-  beatport_url: string | null;
-  release_date: string | null;
-}
-
-/** Beatport event settings */
-export interface BeatportEventSettings {
-  beatport_sync_enabled: boolean;
-}
-
-/** Per-service sync result entry from sync_results_json */
 export interface SyncResultEntry {
   service: string;
   status: 'matched' | 'added' | 'not_found' | 'error';
@@ -257,166 +90,8 @@ export interface SyncResultEntry {
   duration_seconds: number | null;
   playlist_id: string | null;
   error: string | null;
-}
-
-export interface SystemStats {
-  total_users: number;
-  active_users: number;
-  pending_users: number;
-  total_events: number;
-  active_events: number;
-  total_requests: number;
-}
-
-export interface AdminUser {
-  id: number;
-  username: string;
-  is_active: boolean;
-  role: string;
-  created_at: string;
-  event_count: number;
-}
-
-export interface AdminEvent {
-  id: number;
-  code: string;
-  name: string;
-  owner_username: string;
-  owner_id: number;
-  created_at: string;
-  expires_at: string;
-  is_active: boolean;
-  request_count: number;
-}
-
-export interface SystemSettings {
-  registration_enabled: boolean;
-  search_rate_limit_per_minute: number;
-  spotify_enabled: boolean;
-  tidal_enabled: boolean;
-  beatport_enabled: boolean;
-  bridge_enabled: boolean;
-  llm_enabled: boolean;
-  llm_model: string;
-  llm_rate_limit_per_minute: number;
-}
-
-/** AI model info from admin endpoint */
-export interface AIModelInfo {
-  id: string;
-  name: string;
-}
-
-/** Response from GET /api/admin/ai/models */
-export interface AIModelsResponse {
-  models: AIModelInfo[];
-}
-
-/** AI settings from admin endpoint */
-export interface AISettings {
-  llm_enabled: boolean;
-  llm_model: string;
-  llm_rate_limit_per_minute: number;
-  api_key_configured: boolean;
-  api_key_masked: string;
-}
-
-/** Update payload for PUT /api/admin/ai/settings */
-export interface AISettingsUpdate {
-  llm_enabled?: boolean;
-  llm_model?: string;
-  llm_rate_limit_per_minute?: number;
-}
-
-/** Activity log entry */
-export interface ActivityLogEntry {
-  id: number;
-  created_at: string;
-  level: 'info' | 'warning' | 'error';
-  source: string;
-  message: string;
-  event_code: string | null;
-}
-
-/** Capability status for integration services */
-export type CapabilityStatus =
-  | 'yes'
-  | 'no'
-  | 'not_implemented'
-  | 'configured'
-  | 'not_configured';
-
-/** Capability matrix for a single service */
-export interface ServiceCapabilities {
-  auth: CapabilityStatus;
-  catalog_search: CapabilityStatus;
-  playlist_sync: CapabilityStatus;
-}
-
-/** Full status for a single integration */
-export interface IntegrationServiceStatus {
-  service: string;
-  display_name: string;
-  enabled: boolean;
-  configured: boolean;
-  capabilities: ServiceCapabilities;
-  last_check_error: string | null;
-}
-
-/** Response from GET /api/admin/integrations */
-export interface IntegrationHealthResponse {
-  services: IntegrationServiceStatus[];
-}
-
-/** Response from PATCH /api/admin/integrations/{service} */
-export interface IntegrationToggleResponse {
-  service: string;
-  enabled: boolean;
-}
-
-/** Response from POST /api/admin/integrations/{service}/check */
-export interface IntegrationCheckResponse {
-  service: string;
-  healthy: boolean;
-  capabilities: ServiceCapabilities;
-  error: string | null;
-}
-
-/** Kiosk pairing session creation response */
-export interface KioskPairResponse {
-  pair_code: string;
-  session_token: string;
-  expires_at: string;
-}
-
-/** Kiosk pairing status polling response */
-export interface KioskPairStatusResponse {
-  status: 'pairing' | 'active' | 'expired';
-  event_code: string | null;
-  event_name: string | null;
-}
-
-/** Kiosk session assignment polling response */
-export interface KioskSessionResponse {
-  status: string;
-  event_code: string | null;
-  event_name: string | null;
-}
-
-/** Kiosk info for DJ dashboard (never includes session_token) */
-export interface KioskInfo {
-  id: number;
-  name: string | null;
-  event_code: string | null;
-  event_name: string | null;
-  status: string;
-  paired_at: string | null;
-  last_seen_at: string | null;
-}
-
-export interface BridgeCommandResponse {
-  command_id: string;
-  command_type: string;
+  error_code: string | null;
+  extra: Record<string, unknown> | null;
 }
 
 export interface BridgeEnrichedStatus {
@@ -438,53 +113,6 @@ export interface PublicBridgeStatus {
   uptime_seconds: number | null;
 }
 
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
-/** Recommended track from the suggestion engine */
-export interface RecommendedTrack {
-  title: string;
-  artist: string;
-  bpm: number | null;
-  key: string | null;
-  genre: string | null;
-  score: number;
-  bpm_score: number;
-  key_score: number;
-  genre_score: number;
-  source: string;
-  track_id: string | null;
-  url: string | null;
-  cover_url: string | null;
-  duration_seconds: number | null;
-  mb_verified: boolean;
-}
-
-/** Music profile of an event derived from its requests */
-export interface EventMusicProfile {
-  avg_bpm: number | null;
-  bpm_range_low: number | null;
-  bpm_range_high: number | null;
-  dominant_keys: string[];
-  dominant_genres: string[];
-  track_count: number;
-  enriched_count: number;
-}
-
-/** Response from POST /api/events/{code}/recommendations */
-export interface RecommendationResponse {
-  suggestions: RecommendedTrack[];
-  profile: EventMusicProfile;
-  services_used: string[];
-  total_candidates_searched: number;
-  llm_available: boolean;
-}
-
-/** LLM-generated search query with reasoning */
 export interface LLMQueryInfo {
   search_query: string;
   target_bpm: number | null;
@@ -493,7 +121,6 @@ export interface LLMQueryInfo {
   reasoning: string;
 }
 
-/** Response from POST /api/events/{code}/recommendations/llm */
 export interface LLMRecommendationResponse {
   suggestions: RecommendedTrack[];
   profile: EventMusicProfile;
@@ -504,7 +131,6 @@ export interface LLMRecommendationResponse {
   llm_model: string;
 }
 
-/** Playlist info from connected music services */
 export interface PlaylistInfo {
   id: string;
   name: string;
@@ -514,7 +140,15 @@ export interface PlaylistInfo {
   source: 'tidal' | 'beatport';
 }
 
-/** Response from GET /api/events/{code}/playlists */
 export interface PlaylistListResponse {
   playlists: PlaylistInfo[];
+}
+
+/** OpenAPI expresses PaginatedResponse with `items: any[]`; keep this
+ *  hand-crafted generic wrapper for type-safe consumer sites. */
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
 }
