@@ -2988,15 +2988,8 @@
             "title": "Spotify Uri"
           },
           "started_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Started At"
+            "title": "Started At",
+            "type": "string"
           },
           "title": {
             "title": "Title",

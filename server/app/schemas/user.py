@@ -5,8 +5,10 @@ from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from app.schemas.common import BaseSchema
 
-class UserOut(BaseModel):
+
+class UserOut(BaseSchema):
     id: int
     username: str
     is_active: bool
@@ -23,9 +25,6 @@ class UserOut(BaseModel):
             return json.loads(v)
         return v
 
-    class Config:
-        from_attributes = True
-
 
 class AdminUserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
@@ -39,7 +38,7 @@ class AdminUserUpdate(BaseModel):
     password: str | None = Field(None, min_length=8, max_length=128)
 
 
-class AdminUserOut(BaseModel):
+class AdminUserOut(BaseSchema):
     id: int
     username: str
     is_active: bool
@@ -47,11 +46,8 @@ class AdminUserOut(BaseModel):
     created_at: datetime
     event_count: int = 0
 
-    class Config:
-        from_attributes = True
 
-
-class AdminEventOut(BaseModel):
+class AdminEventOut(BaseSchema):
     id: int
     code: str
     name: str
@@ -61,9 +57,6 @@ class AdminEventOut(BaseModel):
     expires_at: datetime
     is_active: bool
     request_count: int = 0
-
-    class Config:
-        from_attributes = True
 
 
 class SystemStats(BaseModel):

@@ -1,6 +1,31 @@
-"""Shared response models for endpoints that return simple JSON dicts."""
+"""Shared response models + base types used across the schema package."""
 
-from pydantic import BaseModel
+from datetime import datetime
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, PlainSerializer
+
+
+class BaseSchema(BaseModel):
+    """Base for response schemas that hydrate from SQLAlchemy model attributes."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ISO8601 + "Z" suffix for naive-UTC datetimes. Use as a field type to get the
+# serializer automatically without repeating @field_serializer in every schema.
+IsoDatetime = Annotated[
+    datetime,
+    PlainSerializer(lambda dt: dt.isoformat() + "Z", return_type=str),
+]
+
+OptionalIsoDatetime = Annotated[
+    datetime | None,
+    PlainSerializer(
+        lambda dt: dt.isoformat() + "Z" if dt is not None else None,
+        return_type=str | None,
+    ),
+]
 
 
 class StatusResponse(BaseModel):

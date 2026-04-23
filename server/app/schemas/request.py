@@ -1,10 +1,10 @@
-from datetime import datetime
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, field_serializer, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.validation import normalize_single_line, normalize_text
 from app.models.request import RequestSource, RequestStatus
+from app.schemas.common import BaseSchema, IsoDatetime
 
 ALLOWED_URL_SCHEMES = {"http", "https", "spotify"}
 
@@ -65,7 +65,7 @@ class RequestUpdate(BaseModel):
     status: RequestStatus
 
 
-class RequestOut(BaseModel):
+class RequestOut(BaseSchema):
     id: int
     event_id: int
     song_title: str
@@ -76,8 +76,8 @@ class RequestOut(BaseModel):
     note: str | None
     nickname: str | None = None
     status: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: IsoDatetime
+    updated_at: IsoDatetime
     is_duplicate: bool = False
     # Track metadata
     genre: str | None = None
@@ -91,10 +91,3 @@ class RequestOut(BaseModel):
     vote_count: int = 0
     # Priority scoring (populated only when sort=priority)
     priority_score: float | None = None
-
-    class Config:
-        from_attributes = True
-
-    @field_serializer("created_at", "updated_at")
-    def serialize_datetime(self, dt: datetime) -> str:
-        return dt.isoformat() + "Z"

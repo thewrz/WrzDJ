@@ -1,7 +1,9 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field, field_serializer, field_validator
+from pydantic import BaseModel, Field, field_validator
+
+from app.schemas.common import BaseSchema, IsoDatetime, OptionalIsoDatetime
 
 
 class EventStatus(str, Enum):
@@ -50,14 +52,14 @@ class DisplaySettingsResponse(BaseModel):
     kiosk_display_only: bool = False
 
 
-class EventOut(BaseModel):
+class EventOut(BaseSchema):
     id: int
     code: str
     name: str
-    created_at: datetime
-    expires_at: datetime
+    created_at: IsoDatetime
+    expires_at: IsoDatetime
     is_active: bool
-    archived_at: datetime | None = None
+    archived_at: OptionalIsoDatetime = None
     status: EventStatus | None = None
     join_url: str | None = None
     request_count: int | None = None
@@ -74,20 +76,7 @@ class EventOut(BaseModel):
     # Requests open/closed
     requests_open: bool = True
     # Pre-event collection
-    collection_opens_at: datetime | None = None
-    live_starts_at: datetime | None = None
+    collection_opens_at: OptionalIsoDatetime = None
+    live_starts_at: OptionalIsoDatetime = None
     submission_cap_per_guest: int = 15
     collection_phase_override: str | None = None
-
-    class Config:
-        from_attributes = True
-
-    @field_serializer("created_at", "expires_at")
-    def serialize_datetime(self, dt: datetime) -> str:
-        return dt.isoformat() + "Z"
-
-    @field_serializer("archived_at", "collection_opens_at", "live_starts_at")
-    def serialize_datetime_optional(self, dt: datetime | None) -> str | None:
-        if dt is None:
-            return None
-        return dt.isoformat() + "Z"

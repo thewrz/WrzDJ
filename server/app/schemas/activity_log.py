@@ -1,11 +1,9 @@
 """Schemas for activity log."""
 
-from pydantic import BaseModel, ConfigDict
+from app.schemas.common import BaseSchema
 
 
-class ActivityLogEntry(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class ActivityLogEntry(BaseSchema):
     id: int
     created_at: str
     level: str
