@@ -10,7 +10,9 @@
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
     "screenshots": "playwright test --config playwright.config.ts",
-    "e2e": "playwright test --config playwright-e2e.config.ts"
+    "e2e": "playwright test --config playwright-e2e.config.ts",
+    "types:export": "cd ../server && .venv/bin/python scripts/export_openapi.py",
+    "types:generate": "openapi-typescript ../server/openapi.json -o lib/api-types.generated.ts --properties-required-by-default"
   },
   "dependencies": {
     "next": "^16.2.3",
@@ -35,6 +37,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^17.5.0",
     "jsdom": "^29.0.2",
+    "openapi-typescript": "^7.13.0",
     "typescript": "^5",
     "vitest": "^4.0.18"
   }
