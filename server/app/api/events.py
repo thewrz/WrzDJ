@@ -1053,10 +1053,15 @@ def pending_review(
 @router.post("/{code}/bulk-review", response_model=BulkReviewResponse)
 def bulk_review(
     payload: BulkReviewRequest,
+    background_tasks: BackgroundTasks,
     event: Event = Depends(get_event_for_dj_or_admin),
     db: Session = Depends(get_db),
 ):
-    accepted, rejected = execute_bulk_review(db, event.id, payload)
+    accepted, rejected, accepted_rows = execute_bulk_review(db, event.id, payload)
+    # Enrich + sync accepted requests. Guest-collect submissions arrive without
+    # BPM/key/genre — this is where that metadata fills in.
+    if accepted_rows:
+        background_tasks.add_task(sync_requests_batch, db, accepted_rows)
     return BulkReviewResponse(accepted=accepted, rejected=rejected, unchanged=0)
 
 

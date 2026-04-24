@@ -75,11 +75,19 @@ def get_pending_review_rows(db: Session, event_id: int, limit: int = 200) -> lis
     )
 
 
-def execute_bulk_review(db: Session, event_id: int, payload: BulkReviewRequest) -> tuple[int, int]:
+def execute_bulk_review(
+    db: Session, event_id: int, payload: BulkReviewRequest
+) -> tuple[int, int, list[SongRequest]]:
     """Apply a bulk-review action to collection-phase pending requests.
 
-    Returns (accepted_count, rejected_count). Raises HTTPException(400) when the
-    payload parameters are inconsistent with the selected action.
+    Returns (accepted_count, rejected_count, accepted_rows). Caller is expected
+    to pass accepted_rows to sync_requests_batch() as a FastAPI background task
+    so the metadata-enrichment + playlist-sync pipeline runs before the tracks
+    show up in the DJ queue. Guest-collect submissions don't have BPM/key/genre;
+    this is the first chance to fill them in.
+
+    Raises HTTPException(400) when the payload parameters are inconsistent with
+    the selected action.
     """
     pending_q = (
         db.query(SongRequest)
@@ -90,6 +98,7 @@ def execute_bulk_review(db: Session, event_id: int, payload: BulkReviewRequest) 
 
     accepted = 0
     rejected = 0
+    accepted_rows: list[SongRequest] = []
 
     if payload.action == "accept_top_n":
         if payload.n is None:
@@ -102,6 +111,7 @@ def execute_bulk_review(db: Session, event_id: int, payload: BulkReviewRequest) 
         for r in rows:
             r.status = "accepted"
             accepted += 1
+            accepted_rows.append(r)
     elif payload.action == "accept_threshold":
         if payload.min_votes is None:
             raise HTTPException(status_code=400, detail="min_votes is required")
@@ -109,6 +119,7 @@ def execute_bulk_review(db: Session, event_id: int, payload: BulkReviewRequest) 
         for r in rows:
             r.status = "accepted"
             accepted += 1
+            accepted_rows.append(r)
     elif payload.action == "accept_ids":
         if not payload.request_ids:
             raise HTTPException(status_code=400, detail="request_ids is required")
@@ -116,6 +127,7 @@ def execute_bulk_review(db: Session, event_id: int, payload: BulkReviewRequest) 
         for r in rows:
             r.status = "accepted"
             accepted += 1
+            accepted_rows.append(r)
     elif payload.action == "reject_ids":
         if not payload.request_ids:
             raise HTTPException(status_code=400, detail="request_ids is required")
@@ -130,7 +142,7 @@ def execute_bulk_review(db: Session, event_id: int, payload: BulkReviewRequest) 
             rejected += 1
 
     db.commit()
-    return accepted, rejected
+    return accepted, rejected, accepted_rows
 
 
 class SubmissionCapExceeded(Exception):
