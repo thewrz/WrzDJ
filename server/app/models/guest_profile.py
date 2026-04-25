@@ -12,7 +12,7 @@ class GuestProfile(Base):
     __tablename__ = "guest_profiles"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
     client_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
     nickname: Mapped[str | None] = mapped_column(String(30), nullable=True)
     email: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
