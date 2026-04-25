@@ -1059,8 +1059,13 @@ def bulk_review(
 ):
     accepted, rejected, accepted_rows = execute_bulk_review(db, event.id, payload)
     # Enrich + sync accepted requests. Guest-collect submissions arrive without
-    # BPM/key/genre — this is where that metadata fills in.
+    # BPM/key/genre. enrich_request_metadata fills those in directly (Tidal/
+    # Beatport/MusicBrainz cascade) — this works regardless of whether the DJ
+    # has any sync adapters connected. sync_requests_batch only adds to a
+    # connected user's playlists; if no adapters, it returns early as a no-op.
     if accepted_rows:
+        for row in accepted_rows:
+            background_tasks.add_task(enrich_request_metadata, db, row.id)
         background_tasks.add_task(sync_requests_batch, db, accepted_rows)
     return BulkReviewResponse(accepted=accepted, rejected=rejected, unchanged=0)
 
