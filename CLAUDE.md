@@ -475,3 +475,41 @@ Bridge plugins depend on community-maintained open-source projects for protocol 
 - When a DJ reports equipment detection issues after updating their DJ software
 - When `npm audit` or Dependabot flags vulnerabilities in `stagelinq` or `alphatheta-connect`
 - Quarterly, as part of general maintenance — check for new releases, breaking changes, and community activity
+
+<!-- gitnexus:start -->
+# GitNexus — Code Intelligence
+
+This project is indexed by GitNexus as **WrzDJ** (9968 symbols, 16173 relationships, 200 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+
+## Recommended
+
+- **SHOULD run impact analysis before editing a non-trivial symbol.** Before modifying a function, class, or method that may have multiple callers, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **SHOULD run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **SHOULD warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+
+## Avoid
+
+- AVOID editing a widely-used function, class, or method without first running `gitnexus_impact` on it.
+- AVOID ignoring HIGH or CRITICAL risk warnings from impact analysis without explaining the rationale to the user.
+- AVOID renaming symbols with find-and-replace — prefer `gitnexus_rename` which understands the call graph.
+- AVOID committing significant changes without running `gitnexus_detect_changes()` to check affected scope.
+
+## Resources
+
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/WrzDJ/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/WrzDJ/clusters` | All functional areas |
+| `gitnexus://repo/WrzDJ/processes` | All execution flows |
+| `gitnexus://repo/WrzDJ/process/{name}` | Step-by-step execution trace |
+
+## Skills
+
+GitNexus skills auto-load into Claude Code from `~/.claude/skills/`. Reference by name:
+`gitnexus-exploring` (architecture / "how does X work?"), `gitnexus-impact-analysis` (blast radius), `gitnexus-debugging` (trace bugs), `gitnexus-refactoring` (rename/extract/split/move), `gitnexus-guide` (tool/schema reference), `gitnexus-cli` (CLI commands), `gitnexus-pr-review` (review PRs).
+
+<!-- gitnexus:end -->
