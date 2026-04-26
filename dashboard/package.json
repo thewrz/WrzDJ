@@ -15,11 +15,11 @@
     "types:generate": "openapi-typescript ../server/openapi.json -o lib/api-types.generated.ts"
   },
   "dependencies": {
-    "next": "^16.2.3",
+    "next": "^16.2.4",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "simple-keyboard": "^3.8.132"
+    "simple-keyboard": "^3.8.135"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
@@ -29,12 +29,12 @@
     "@types/node": "^25",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@typescript-eslint/eslint-plugin": "^8.58.2",
+    "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.54.0",
-    "@vitest/coverage-v8": "^4.1.4",
+    "@vitest/coverage-v8": "^4.1.5",
     "eslint": "^9.39.4",
     "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.5.0",
     "jsdom": "^29.0.2",
     "openapi-typescript": "^7.13.0",
