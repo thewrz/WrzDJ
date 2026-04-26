@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, ApiError, KioskDisplay, NowPlayingInfo, PlayHistoryItem } from '@/lib/api';
 import { useEventStream } from '@/lib/use-event-stream';
+import { usePollingLoop } from '@/lib/usePollingLoop';
 import { RequestModal } from './components/RequestModal';
 const AUTO_SCROLL_INTERVAL = 5000; // 5 seconds between auto-scrolls
 const SESSION_CHECK_INTERVAL = 10_000; // 10 seconds between kiosk session checks
@@ -85,37 +86,8 @@ export default function KioskDisplayPage() {
     }
   }, [code]);
 
-  // Poll for updates every 3 seconds
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
-    let stopped = false;
-
-    const poll = async () => {
-      const shouldContinue = await loadDisplay();
-      if (!shouldContinue) {
-        stopped = true;
-        if (intervalId) {
-          clearInterval(intervalId);
-          intervalId = null;
-        }
-      }
-    };
-
-    poll();
-
-    // Poll every 10s as fallback (SSE handles real-time updates)
-    intervalId = setInterval(() => {
-      if (!stopped) {
-        poll();
-      }
-    }, 10_000);
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [loadDisplay]);
+  // Poll every 10s as fallback (SSE handles real-time updates).
+  usePollingLoop(true, loadDisplay, 10_000);
 
   // SSE: trigger immediate refresh on any real-time event
   const loadDisplayRef = useRef(loadDisplay);

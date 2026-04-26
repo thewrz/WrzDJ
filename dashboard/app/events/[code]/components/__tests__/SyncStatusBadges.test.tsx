@@ -17,6 +17,7 @@ function makeRequest(overrides: Partial<SongRequest> = {}): SongRequest {
     status: 'accepted',
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
+    is_duplicate: false,
     raw_search_query: null,
     sync_results_json: null,
     vote_count: 0,
@@ -40,6 +41,8 @@ function makeSyncResults(entries: Partial<SyncResultEntry>[]): string {
     duration_seconds: null,
     playlist_id: null,
     error: null,
+    error_code: null,
+    extra: null,
     ...e,
   }));
   return JSON.stringify(full);

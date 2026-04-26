@@ -8,7 +8,11 @@ from __future__ import annotations
 
 from app.models.request import Request
 from app.services.recommendation.scorer import TrackProfile
-from app.services.track_normalizer import artist_match_score, fuzzy_match_score
+from app.services.track_normalizer import (
+    artist_match_score,
+    fuzzy_match_score,
+    score_track_match,
+)
 
 
 def deduplicate_against_requests(
@@ -31,7 +35,7 @@ def deduplicate_against_requests(
         for req in existing_requests:
             title_score = fuzzy_match_score(candidate.title, req.song_title)
             artist_score = artist_match_score(candidate.artist, req.artist)
-            combined = title_score * 0.6 + artist_score * 0.4
+            combined = score_track_match(title_score, artist_score)
             if combined >= 0.8:
                 is_dupe = True
                 break
@@ -58,7 +62,7 @@ def deduplicate_against_template(
         for tmpl in template_tracks:
             title_score = fuzzy_match_score(candidate.title, tmpl.title)
             artist_score = artist_match_score(candidate.artist, tmpl.artist)
-            combined = title_score * 0.6 + artist_score * 0.4
+            combined = score_track_match(title_score, artist_score)
             if combined >= 0.8:
                 is_dupe = True
                 break
@@ -75,7 +79,7 @@ def deduplicate_candidates(candidates: list[TrackProfile]) -> list[TrackProfile]
         for existing in seen:
             title_score = fuzzy_match_score(candidate.title, existing.title)
             artist_score = artist_match_score(candidate.artist, existing.artist)
-            combined = title_score * 0.6 + artist_score * 0.4
+            combined = score_track_match(title_score, artist_score)
             if combined >= 0.8:
                 is_dupe = True
                 break

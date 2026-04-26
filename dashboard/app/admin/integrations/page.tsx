@@ -1,12 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import type {
   IntegrationServiceStatus,
   CapabilityStatus,
 } from '@/lib/api';
 import { api } from '@/lib/api';
-import { useHelp } from '@/lib/help/HelpContext';
+import { useAdminPage } from '@/lib/useAdminPage';
 import { HelpSpot } from '@/components/help/HelpSpot';
 import { HelpButton } from '@/components/help/HelpButton';
 import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
@@ -34,45 +34,24 @@ function CapabilityBadge({ status }: { status: CapabilityStatus }) {
 }
 
 export default function AdminIntegrationsPage() {
-  const [services, setServices] = useState<IntegrationServiceStatus[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [checking, setChecking] = useState<Record<string, boolean>>({});
   const [toggling, setToggling] = useState<Record<string, boolean>>({});
-  const { hasSeenPage, startOnboarding, onboardingActive } = useHelp();
 
-  const loadIntegrations = useCallback(async () => {
-    try {
-      const data = await api.getIntegrations();
-      setServices(data.services);
-      setError('');
-    } catch {
-      setError('Failed to load integration status');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadIntegrations();
-  }, [loadIntegrations]);
-
-  const dataLoaded = !loading;
-  useEffect(() => {
-    if (dataLoaded && !onboardingActive && !hasSeenPage(PAGE_ID)) {
-      const timer = setTimeout(() => startOnboarding(PAGE_ID), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [dataLoaded, onboardingActive, hasSeenPage, startOnboarding]);
+  const { data: services, loading, error: loadError, setData: setServices, reload } = useAdminPage<IntegrationServiceStatus[]>({
+    pageId: PAGE_ID,
+    loader: () => api.getIntegrations().then((d) => d.services),
+    onError: () => 'Failed to load integration status',
+  });
 
   const handleToggle = async (service: string, currentEnabled: boolean) => {
     setToggling((prev) => ({ ...prev, [service]: true }));
     try {
       const result = await api.toggleIntegration(service, !currentEnabled);
       setServices((prev) =>
-        prev.map((s) =>
+        prev?.map((s) =>
           s.service === service ? { ...s, enabled: result.enabled } : s
-        )
+        ) ?? prev
       );
     } catch {
       setError(`Failed to toggle ${service}`);
@@ -86,7 +65,7 @@ export default function AdminIntegrationsPage() {
     try {
       const result = await api.checkIntegrationHealth(service);
       setServices((prev) =>
-        prev.map((s) =>
+        prev?.map((s) =>
           s.service === service
             ? {
                 ...s,
@@ -94,7 +73,7 @@ export default function AdminIntegrationsPage() {
                 last_check_error: result.error,
               }
             : s
-        )
+        ) ?? prev
       );
     } catch {
       setError(`Health check failed for ${service}`);
@@ -121,7 +100,7 @@ export default function AdminIntegrationsPage() {
         show &quot;currently unavailable&quot; to DJs.
       </p>
 
-      {error && (
+      {(error || loadError) && (
         <div
           style={{
             color: '#ef4444',
@@ -131,7 +110,7 @@ export default function AdminIntegrationsPage() {
             borderRadius: '6px',
           }}
         >
-          {error}
+          {error || loadError}
         </div>
       )}
 
@@ -153,7 +132,7 @@ export default function AdminIntegrationsPage() {
               </tr>
             </thead>
             <tbody>
-              {services.map((svc) => (
+              {(services ?? []).map((svc) => (
                 <tr key={svc.service}>
                   <td>
                     <div style={{ fontWeight: 500 }}>{svc.display_name}</div>

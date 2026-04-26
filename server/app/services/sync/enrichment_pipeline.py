@@ -26,6 +26,7 @@ from app.services.track_normalizer import (
     is_remix_title,
     normalize_bpm_to_context,
     primary_artist,
+    score_track_match,
 )
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,7 @@ def _find_best_match(
                 result.artist,
             )
             continue
-        combined = title_score * 0.6 + artist_score * 0.4
+        combined = score_track_match(title_score, artist_score)
         version_adj = 0.0
 
         if prefer_original:

@@ -7,7 +7,6 @@ from app.services.intent_parser import parse_intent
 from app.services.search_merge import (
     _is_compilation,
     build_search_results,
-    merge_search_results,
     tidal_to_search_result,
 )
 
@@ -299,29 +298,3 @@ class TestTidalToSearchResult:
         t = _tidal("Strobe", "deadmau5", isrc="USRC12345")
         result = tidal_to_search_result(t)
         assert result.isrc == "USRC12345"
-
-
-class TestBackwardCompatWrapper:
-    """Tests for the deprecated merge_search_results() wrapper."""
-
-    def test_spotify_only(self):
-        """Backward compat: Spotify-only call still works."""
-        spotify = [_spotify("Strobe", "deadmau5")]
-        result = merge_search_results(spotify)
-        assert len(result) == 1
-        assert result[0].source == "spotify"
-
-    def test_beatport_appended(self):
-        """Backward compat: Beatport appending still works."""
-        spotify = [_spotify("Strobe", "deadmau5")]
-        beatport = [_beatport("Acid Phase", "DJ Pierre")]
-        result = merge_search_results(spotify, beatport_results=beatport)
-        assert len(result) == 2
-
-    def test_tidal_appended(self):
-        """Backward compat: Tidal results still processed."""
-        tidal = [_tidal("Levels", "Avicii", popularity=90)]
-        result = merge_search_results([], tidal_results=tidal)
-        assert len(result) == 1
-        assert result[0].source == "tidal"
-        assert result[0].popularity == 90

@@ -1,6 +1,6 @@
 'use client';
 
-import { ModalOverlay } from './ModalOverlay';
+import { ModalOverlay } from '@/components/ModalOverlay';
 
 interface DeleteEventModalProps {
   eventName: string;
@@ -18,7 +18,7 @@ export function DeleteEventModal({
   onCancel,
 }: DeleteEventModalProps) {
   return (
-    <ModalOverlay onClose={deleting ? undefined : onCancel}>
+    <ModalOverlay onClose={deleting ? undefined : onCancel} card>
       <h2 style={{ marginBottom: '1rem' }}>Delete Event?</h2>
       <p style={{ color: '#9ca3af', marginBottom: '1.5rem' }}>
         This will permanently delete &quot;{eventName}&quot; and all {requestCount} song requests.

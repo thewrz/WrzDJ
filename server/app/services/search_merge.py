@@ -22,7 +22,11 @@ import re
 from app.schemas.beatport import BeatportSearchResult
 from app.schemas.search import SearchResult
 from app.schemas.tidal import TidalSearchResult
-from app.services.track_normalizer import artist_match_score, fuzzy_match_score
+from app.services.track_normalizer import (
+    artist_match_score,
+    fuzzy_match_score,
+    score_track_match,
+)
 from app.services.version_filter import is_unwanted_version
 
 # --- Compilation / junk detection for main titles ---
@@ -63,7 +67,7 @@ def _is_duplicate(
     for result in existing:
         title_score = fuzzy_match_score(candidate.title, result.title)
         artist_score = artist_match_score(candidate.artist, result.artist)
-        combined = title_score * 0.6 + artist_score * 0.4
+        combined = score_track_match(title_score, artist_score)
         if combined >= threshold:
             return True
     return False
@@ -222,24 +226,3 @@ def build_search_results(
             added_bp += 1
 
     return unique_main
-
-
-def merge_search_results(
-    spotify_results: list[SearchResult],
-    beatport_results: list[BeatportSearchResult] | None = None,
-    tidal_results: list[TidalSearchResult] | None = None,
-    dedup_threshold: float = 0.8,
-    max_beatport_extras: int = 5,
-    max_tidal_extras: int = 5,
-) -> list[SearchResult]:
-    """Backward-compatible wrapper around build_search_results().
-
-    Deprecated: Use build_search_results() for new code.
-    """
-    return build_search_results(
-        tidal_results=tidal_results,
-        spotify_results=spotify_results,
-        beatport_results=beatport_results,
-        dedup_threshold=dedup_threshold,
-        max_beatport_extras=max_beatport_extras,
-    )

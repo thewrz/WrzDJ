@@ -1,7 +1,9 @@
 from pydantic import BaseModel, Field
 
+from app.schemas.common import BaseSchema
 
-class SystemSettingsOut(BaseModel):
+
+class SystemSettingsOut(BaseSchema):
     registration_enabled: bool
     search_rate_limit_per_minute: int
     spotify_enabled: bool
@@ -11,9 +13,6 @@ class SystemSettingsOut(BaseModel):
     llm_enabled: bool
     llm_model: str
     llm_rate_limit_per_minute: int
-
-    class Config:
-        from_attributes = True
 
 
 class SystemSettingsUpdate(BaseModel):

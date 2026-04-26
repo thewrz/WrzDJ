@@ -192,6 +192,7 @@ function mockEvent(overrides = {}) {
     banner_url: null, banner_kiosk_url: null, banner_colors: null,
     collection_opens_at: null, live_starts_at: null,
     submission_cap_per_guest: 15, collection_phase_override: null,
+    archived_at: null, request_count: null, status: null,
     ...overrides,
   };
 }
@@ -201,7 +202,7 @@ function mockRequest(overrides: Partial<SongRequest> = {}): SongRequest {
     id: 1, event_id: 1, song_title: 'Strobe', artist: 'deadmau5',
     source: 'spotify', source_url: null, artwork_url: null, note: null, nickname: null,
     status: 'new', created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z', raw_search_query: null,
+    updated_at: '2026-01-01T00:00:00Z', is_duplicate: false, raw_search_query: null,
     sync_results_json: null, genre: null, bpm: null, musical_key: null,
     vote_count: 0, priority_score: null, ...overrides,
   };

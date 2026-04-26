@@ -435,15 +435,6 @@ a {
   flex-shrink: 0;
 }
 
-.guest-vote-badge {
-  background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
-  font-size: 0.75rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 1rem;
-  white-space: nowrap;
-}
-
 .badge-pending {
   background: rgba(59, 130, 246, 0.15);
   color: #60a5fa;

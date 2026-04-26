@@ -1,8 +1,8 @@
 """Schemas for StageLinQ now-playing and play history."""
 
-from datetime import datetime
+from pydantic import BaseModel, Field
 
-from pydantic import BaseModel, Field, field_serializer
+from app.schemas.common import BaseSchema, IsoDatetime, OptionalIsoDatetime
 
 # --- Bridge Inbound Payloads ---
 
@@ -35,7 +35,7 @@ class BridgeStatusPayload(BaseModel):
 # --- Public Outbound Responses ---
 
 
-class NowPlayingResponse(BaseModel):
+class NowPlayingResponse(BaseSchema):
     """Response for current now-playing track."""
 
     title: str
@@ -43,17 +43,10 @@ class NowPlayingResponse(BaseModel):
     album: str | None = None
     album_art_url: str | None = None
     spotify_uri: str | None = None
-    started_at: datetime
+    started_at: IsoDatetime
     source: str
     matched_request_id: int | None = None
     bridge_connected: bool = False
-
-    class Config:
-        from_attributes = True
-
-    @field_serializer("started_at")
-    def serialize_datetime(self, dt: datetime) -> str:
-        return dt.isoformat() + "Z"
 
 
 class BridgeStatusResponse(BaseModel):
@@ -61,7 +54,7 @@ class BridgeStatusResponse(BaseModel):
 
     connected: bool = False
     device_name: str | None = None
-    last_seen: datetime | None = None
+    last_seen: OptionalIsoDatetime = None
     # Enriched fields (populated from most recent SSE event, not persisted)
     circuit_breaker_state: str | None = None
     buffer_size: int | None = None
@@ -69,14 +62,8 @@ class BridgeStatusResponse(BaseModel):
     deck_count: int | None = None
     uptime_seconds: int | None = None
 
-    @field_serializer("last_seen")
-    def serialize_last_seen(self, dt: datetime | None) -> str | None:
-        if dt is None:
-            return None
-        return dt.isoformat() + "Z"
 
-
-class PlayHistoryEntry(BaseModel):
+class PlayHistoryEntry(BaseSchema):
     """Single entry in play history."""
 
     id: int
@@ -87,18 +74,9 @@ class PlayHistoryEntry(BaseModel):
     spotify_uri: str | None = None
     matched_request_id: int | None = None
     source: str
-    started_at: datetime
-    ended_at: datetime | None = None
+    started_at: IsoDatetime
+    ended_at: OptionalIsoDatetime = None
     play_order: int
-
-    class Config:
-        from_attributes = True
-
-    @field_serializer("started_at", "ended_at")
-    def serialize_datetime(self, dt: datetime | None) -> str | None:
-        if dt is None:
-            return None
-        return dt.isoformat() + "Z"
 
 
 class PlayHistoryResponse(BaseModel):

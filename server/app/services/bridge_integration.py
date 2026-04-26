@@ -1,15 +1,21 @@
-"""Bridge integration — handles now-playing updates from DJ equipment."""
+"""Bridge integration — now-playing updates + admin command queue."""
 
 from __future__ import annotations
 
 import logging
+import threading
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.time import utcnow
 from app.models.now_playing import NowPlaying
 from app.models.request import Request, RequestStatus
-from app.services.play_history_service import archive_to_history
+
+# `archive_to_history` is imported lazily inside the handlers below to avoid a
+# circular import with now_playing.py, which re-exports the bridge update
+# helpers at module bottom (legacy compatibility shim).
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +23,49 @@ logger = logging.getLogger(__name__)
 def _utcnow() -> datetime:
     """Return current UTC datetime (timezone-aware)."""
     return datetime.now(UTC)
+
+
+# --- Admin command queue (previously in services/bridge_commands.py) ---
+# Thread-safe in-memory command queue polled by the bridge on its next cycle.
+
+_COMMAND_TTL_SECONDS = 60
+_commands: dict[str, list[dict]] = {}
+_lock = threading.Lock()
+
+
+def queue_command(event_code: str, command_type: str) -> str:
+    """Queue a command for the bridge to pick up. Returns the UUID command_id."""
+    command_id = str(uuid.uuid4())
+    entry = {
+        "id": command_id,
+        "type": command_type,
+        "created_at": utcnow(),
+    }
+    with _lock:
+        if event_code not in _commands:
+            _commands[event_code] = []
+        _commands[event_code].append(entry)
+    return command_id
+
+
+def poll_commands(event_code: str) -> list[dict]:
+    """Return and atomically clear all pending commands for an event.
+
+    Expired commands (older than TTL) are pruned before returning.
+    """
+    now = utcnow()
+    with _lock:
+        pending = _commands.pop(event_code, [])
+
+    return [
+        cmd for cmd in pending if (now - cmd["created_at"]).total_seconds() <= _COMMAND_TTL_SECONDS
+    ]
+
+
+def clear_all() -> None:
+    """Clear the entire command store. Used for testing."""
+    with _lock:
+        _commands.clear()
 
 
 def handle_now_playing_update(
@@ -38,6 +87,7 @@ def handle_now_playing_update(
     5. Fuzzy match against accepted requests -> set to "playing"
     """
     from app.services.now_playing import (
+        archive_to_history,
         fuzzy_match_pending_request,
         get_event_by_code_for_bridge,
         get_now_playing,
@@ -176,7 +226,11 @@ def update_bridge_status(
 
 def clear_now_playing(db: Session, event_code: str) -> bool:
     """Clear now_playing for an event (bridge disconnect or deck cleared)."""
-    from app.services.now_playing import get_event_by_code_for_bridge, get_now_playing
+    from app.services.now_playing import (
+        archive_to_history,
+        get_event_by_code_for_bridge,
+        get_now_playing,
+    )
 
     event = get_event_by_code_for_bridge(db, event_code)
     if not event:

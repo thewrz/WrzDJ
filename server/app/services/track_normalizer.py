@@ -101,6 +101,11 @@ def fuzzy_match_score(a: str, b: str) -> float:
     return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
 
 
+def score_track_match(title_score: float, artist_score: float) -> float:
+    """Weighted track-match score: 60% title, 40% artist."""
+    return title_score * 0.6 + artist_score * 0.4
+
+
 # Splitting pattern: comma, ampersand, "and", "x" (collab), feat variants
 _SPLIT_RE = re.compile(
     r"\s*,\s*"  # comma

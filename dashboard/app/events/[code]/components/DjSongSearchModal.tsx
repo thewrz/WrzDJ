@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import type { SearchResult } from '@/lib/api-types';
 import { KeyBadge, BpmBadge, GenreBadge } from '@/components/MusicBadges';
+import { ModalOverlay } from '@/components/ModalOverlay';
 import { PreviewPlayer } from '@/components/PreviewPlayer';
 
 interface DjSongSearchModalProps {
@@ -64,34 +65,18 @@ export function DjSongSearchModal({ code, onSongAdded, onClose }: DjSongSearchMo
   }, [code, query, onSongAdded]);
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0,0,0,0.8)',
+    <ModalOverlay
+      onClose={onClose}
+      card
+      cardStyle={{
+        maxWidth: '550px',
+        width: '100%',
+        maxHeight: '80vh',
+        overflow: 'hidden',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
+        flexDirection: 'column',
       }}
-      onClick={onClose}
     >
-      <div
-        className="card"
-        style={{
-          maxWidth: '550px',
-          width: '100%',
-          maxHeight: '80vh',
-          margin: '1rem',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
         <h2 style={{ marginBottom: '1rem' }}>Search For Song</h2>
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
           <input
@@ -205,7 +190,6 @@ export function DjSongSearchModal({ code, onSongAdded, onClose }: DjSongSearchMo
             Close
           </button>
         </div>
-      </div>
-    </div>
+    </ModalOverlay>
   );
 }

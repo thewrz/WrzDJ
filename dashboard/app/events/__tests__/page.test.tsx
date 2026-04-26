@@ -84,6 +84,9 @@ function mockEvent(overrides = {}) {
     live_starts_at: null,
     submission_cap_per_guest: 15,
     collection_phase_override: null,
+    archived_at: null,
+    request_count: null,
+    status: null,
     ...overrides,
   };
 }

@@ -11,7 +11,7 @@ from app.core.time import utcnow
 from app.models.event import Event
 from app.models.user import User
 from app.services.auth import get_password_hash
-from app.services.bridge_commands import clear_all as clear_command_queue
+from app.services.bridge_integration import clear_all as clear_command_queue
 
 
 @pytest.fixture(autouse=True)
@@ -240,7 +240,7 @@ class TestCommandTTL:
     """Tests for command expiry (60s TTL)."""
 
     @patch("app.core.bridge_auth.get_settings")
-    @patch("app.services.bridge_commands.utcnow")
+    @patch("app.services.bridge_integration.utcnow")
     def test_expired_commands_are_pruned(
         self,
         mock_utcnow,
@@ -269,7 +269,7 @@ class TestCommandTTL:
         assert len(response.json()["commands"]) == 0
 
     @patch("app.core.bridge_auth.get_settings")
-    @patch("app.services.bridge_commands.utcnow")
+    @patch("app.services.bridge_integration.utcnow")
     def test_fresh_commands_survive(
         self,
         mock_utcnow,

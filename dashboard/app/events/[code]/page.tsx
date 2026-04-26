@@ -7,6 +7,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '@/lib/auth';
 import { api, ApiError, Event, ArchivedEvent, SongRequest, PlayHistoryItem, TidalStatus, TidalSearchResult, BeatportStatus, CollectionSettingsResponse } from '@/lib/api';
 import { useEventStream } from '@/lib/use-event-stream';
+import { usePollingLoop } from '@/lib/usePollingLoop';
 import type { BeatportSearchResult, NowPlayingInfo } from '@/lib/api-types';
 import type { SortMode } from '@/lib/priority-score';
 import { useHelp } from '@/lib/help/HelpContext';
@@ -329,38 +330,8 @@ export default function EventQueuePage() {
     }
   }, [code]);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      let intervalId: NodeJS.Timeout | null = null;
-      let stopped = false;
-
-      const poll = async () => {
-        const shouldContinue = await loadData();
-        if (!shouldContinue) {
-          stopped = true;
-          if (intervalId) {
-            clearInterval(intervalId);
-            intervalId = null;
-          }
-        }
-      };
-
-      poll();
-
-      // Poll every 5 seconds unless stopped (SSE handles real-time updates)
-      intervalId = setInterval(() => {
-        if (!stopped) {
-          poll();
-        }
-      }, 5000);
-
-      return () => {
-        if (intervalId) {
-          clearInterval(intervalId);
-        }
-      };
-    }
-  }, [isAuthenticated, loadData]);
+  // Poll every 5 seconds unless stopped (SSE handles real-time updates).
+  usePollingLoop(isAuthenticated, loadData, 5_000);
 
   // SSE: trigger immediate refresh on real-time events (new requests, bridge updates)
   const loadDataRef = useRef(loadData);
