@@ -54,9 +54,13 @@ jobs:
         run: bandit -r app -c pyproject.toml
 
       - name: Dependency audit with pip-audit
-        # Ignore CVE-2024-23342 (ecdsa timing attack) - no fix available yet
-        # This is a transitive dependency from python-jose
-        run: pip-audit --ignore-vuln CVE-2024-23342
+        # Ignored CVEs (each requires explicit justification + revisit cadence):
+        #   CVE-2024-23342 (ecdsa timing attack) - transitive from python-jose, no fix released yet
+        #   CVE-2026-3219  (pip 26.x: concatenated tar/ZIP handling, CVSS 4.6 MEDIUM) -
+        #                  affects pip the build tool, not runtime deps. Our CI installs from
+        #                  pinned requirements only; no untrusted-source install path. Fix is
+        #                  in pip PR #13870; revisit when GitHub Actions ships a patched pip.
+        run: pip-audit --ignore-vuln CVE-2024-23342 --ignore-vuln CVE-2026-3219
 
       - name: Run tests with coverage
         env:
