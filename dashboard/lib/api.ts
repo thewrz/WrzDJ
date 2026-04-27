@@ -1112,6 +1112,39 @@ class ApiClient {
     });
   }
 
+  // ========== Guest Email Verification ==========
+
+  async requestVerificationCode(email: string): Promise<{ sent: boolean }> {
+    const resp = await fetch(`${getApiUrl()}/api/public/guest/verify/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new ApiError((data as { detail?: string }).detail || 'Failed to send code', resp.status);
+    }
+    return resp.json();
+  }
+
+  async confirmVerificationCode(
+    email: string,
+    code: string
+  ): Promise<{ verified: boolean; guest_id: number; merged: boolean }> {
+    const resp = await fetch(`${getApiUrl()}/api/public/guest/verify/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, code }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new ApiError((data as { detail?: string }).detail || 'Verification failed', resp.status);
+    }
+    return resp.json();
+  }
+
   // ========== Bridge Commands ==========
 
   async sendBridgeCommand(eventCode: string, command: string): Promise<BridgeCommandResponse> {
