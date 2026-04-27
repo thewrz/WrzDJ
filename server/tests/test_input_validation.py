@@ -3,12 +3,14 @@
 import pytest
 
 from app.core.validation import (
+    contains_profanity,
     is_safe_string,
     normalize_single_line,
     normalize_text,
     validate_event_code,
     validate_length,
 )
+from app.schemas.collect import CollectProfileRequest
 from app.schemas.request import RequestCreate
 
 
@@ -154,3 +156,107 @@ class TestURLSchemeAllowlist:
         req = RequestCreate(artist="A", title="T", source_url=None, artwork_url=None)
         assert req.source_url is None
         assert req.artwork_url is None
+
+
+class TestContainsProfanity:
+    """Tests for the contains_profanity utility."""
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "DancingQueen",
+            "Sarah",
+            "DJ_Mike",
+            "Party.Animal",
+            "xXx360noscope",
+            "BassDropper",
+            "ClassicVibes",
+            "",
+        ],
+    )
+    def test_clean_names_pass(self, name: str):
+        assert contains_profanity(name) is False
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "BigDickPenis",
+            "FuckYou",
+            "PussyDestroyer",
+            "CockMaster",
+            "ShitFace",
+            "CuntPunter",
+        ],
+    )
+    def test_concatenated_profanity_caught(self, name: str):
+        assert contains_profanity(name) is True
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "fuck you",
+            "big dick energy",
+            "what the shit",
+        ],
+    )
+    def test_spaced_profanity_caught(self, name: str):
+        assert contains_profanity(name) is True
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "B1tchPlz",
+            "Sh1tFac3",
+            "D1ckH3ad",
+            "5h1thead",
+        ],
+    )
+    def test_leetspeak_caught(self, name: str):
+        assert contains_profanity(name) is True
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "f.u.c.k.y.o.u",
+            "d_i_c_k",
+        ],
+    )
+    def test_separated_chars_caught(self, name: str):
+        assert contains_profanity(name) is True
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "poopyshart",
+            "PoopyShart",
+            "FartMaster",
+            "TurdBurglar",
+            "p00pyshart",
+        ],
+    )
+    def test_juvenile_profanity_caught(self, name: str):
+        assert contains_profanity(name) is True
+
+
+class TestNicknameProfanityValidation:
+    """Tests for profanity rejection at the schema level."""
+
+    def test_request_schema_rejects_profane_nickname(self):
+        with pytest.raises(Exception, match="Please choose a different name"):
+            RequestCreate(artist="A", title="T", nickname="BigDickPenis")
+
+    def test_request_schema_allows_clean_nickname(self):
+        req = RequestCreate(artist="A", title="T", nickname="DancingQueen")
+        assert req.nickname == "DancingQueen"
+
+    def test_request_schema_allows_none_nickname(self):
+        req = RequestCreate(artist="A", title="T", nickname=None)
+        assert req.nickname is None
+
+    def test_collect_profile_rejects_profane_nickname(self):
+        with pytest.raises(Exception, match="Please choose a different name"):
+            CollectProfileRequest(nickname="FuckYou")
+
+    def test_collect_profile_allows_clean_nickname(self):
+        req = CollectProfileRequest(nickname="DancingQueen")
+        assert req.nickname == "DancingQueen"

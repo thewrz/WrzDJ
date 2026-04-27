@@ -3,6 +3,8 @@
 import re
 import unicodedata
 
+from better_profanity import profanity
+
 # Control characters to remove (except newline, tab)
 CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
@@ -78,3 +80,54 @@ def validate_length(text: str | None, min_len: int = 0, max_len: int = 255) -> b
         return min_len == 0
     length = len(text)
     return min_len <= length <= max_len
+
+
+profanity.load_censor_words()
+
+_LEET_MAP = str.maketrans(
+    {"@": "a", "$": "s", "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t"}
+)
+
+_BLOCKED_SUBSTRINGS = frozenset(
+    {
+        "fuck",
+        "shit",
+        "dick",
+        "cock",
+        "cunt",
+        "pussy",
+        "penis",
+        "bitch",
+        "nigger",
+        "nigga",
+        "faggot",
+        "whore",
+        "slut",
+        "twat",
+        "asshole",
+        "wank",
+        "tits",
+        "dildo",
+        "jizz",
+        "retard",
+        "poop",
+        "shart",
+        "fart",
+        "turd",
+    }
+)
+
+_NON_ALPHA_RE = re.compile(r"[^a-z]")
+
+
+def contains_profanity(text: str) -> bool:
+    """Check text for profanity using word-boundary matching and substring
+    matching with leetspeak normalization.  Designed for username-style input
+    where words are concatenated without spaces."""
+    if not text:
+        return False
+    if profanity.contains_profanity(text):
+        return True
+    normalized = text.lower().translate(_LEET_MAP)
+    alpha_only = _NON_ALPHA_RE.sub("", normalized)
+    return any(word in alpha_only for word in _BLOCKED_SUBSTRINGS)

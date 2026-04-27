@@ -2,7 +2,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.core.validation import normalize_single_line, normalize_text
+from app.core.validation import contains_profanity, normalize_single_line, normalize_text
 from app.models.request import RequestSource, RequestStatus
 from app.schemas.common import BaseSchema, IsoDatetime
 
@@ -40,7 +40,11 @@ class RequestCreate(BaseModel):
         if v is None:
             return v
         normalized = normalize_single_line(v)
-        return normalized if normalized else None
+        if not normalized:
+            return None
+        if contains_profanity(normalized):
+            raise ValueError("Please choose a different name")
+        return normalized
 
     @field_validator("raw_search_query")
     @classmethod
