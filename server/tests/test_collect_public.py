@@ -138,15 +138,15 @@ def test_collect_submit_blocked_at_cap(client, db, test_event):
     _enable_collection(db, test_event)
     test_event.submission_cap_per_guest = 2
     db.commit()
-    for _ in range(2):
+    for i in range(2):
         r = client.post(
             f"/api/public/collect/{test_event.code}/requests",
-            json={"song_title": "A", "artist": "B", "source": "spotify"},
+            json={"song_title": f"Song {i}", "artist": f"Artist {i}", "source": "spotify"},
         )
         assert r.status_code == 201
     r3 = client.post(
         f"/api/public/collect/{test_event.code}/requests",
-        json={"song_title": "C", "artist": "D", "source": "spotify"},
+        json={"song_title": "Song 99", "artist": "Artist 99", "source": "spotify"},
     )
     assert r3.status_code == 429
     assert "Picks limit reached" in r3.json()["detail"]
@@ -357,3 +357,121 @@ def test_collect_get_profile_returns_existing_state(client, db, test_event):
     assert body["nickname"] == "Reader"
     assert body["has_email"] is True
     assert body["submission_cap"] == test_event.submission_cap_per_guest
+
+
+# ── Dedup tests ──────────────────────────────────────────────────────────────
+
+
+def test_collect_submit_same_user_duplicate_returns_409(client, db, test_event):
+    """Same fingerprint submitting the same song twice → 409."""
+    _enable_collection(db, test_event)
+    payload = {"song_title": "Mr. Brightside", "artist": "The Killers", "source": "spotify"}
+    r1 = client.post(f"/api/public/collect/{test_event.code}/requests", json=payload)
+    assert r1.status_code == 201
+
+    r2 = client.post(f"/api/public/collect/{test_event.code}/requests", json=payload)
+    assert r2.status_code == 409
+    assert "already" in r2.json()["detail"].lower()
+
+
+def test_collect_submit_same_user_duplicate_case_insensitive(client, db, test_event):
+    """Dedup is case-insensitive: 'The Killers' == 'the killers'."""
+    _enable_collection(db, test_event)
+    r1 = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "Mr. Brightside", "artist": "The Killers", "source": "spotify"},
+    )
+    assert r1.status_code == 201
+
+    r2 = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "mr. brightside", "artist": "the killers", "source": "spotify"},
+    )
+    assert r2.status_code == 409
+
+
+def test_collect_submit_different_user_duplicate_auto_votes(client, db, test_event):
+    """Different fingerprint submitting the same song → 200, is_duplicate=true, vote added."""
+    _enable_collection(db, test_event)
+    from app.models.request import Request as SongRequest
+    from app.services.dedup import compute_dedupe_key
+
+    key = compute_dedupe_key("The Killers", "Mr. Brightside")
+    row = SongRequest(
+        event_id=test_event.id,
+        song_title="Mr. Brightside",
+        artist="The Killers",
+        source="spotify",
+        status="new",
+        dedupe_key=key,
+        client_fingerprint="other-user-ip",
+        submitted_during_collection=True,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    original_votes = row.vote_count
+
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "Mr. Brightside", "artist": "The Killers", "source": "spotify"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["is_duplicate"] is True
+    assert body["id"] == row.id
+
+    db.refresh(row)
+    assert row.vote_count == original_votes + 1
+
+
+def test_collect_submit_different_user_duplicate_no_pick_slot(client, db, test_event):
+    """Duplicate submission by different user must NOT consume a pick slot."""
+    _enable_collection(db, test_event)
+    test_event.submission_cap_per_guest = 1
+    db.commit()
+
+    from app.models.request import Request as SongRequest
+    from app.services.dedup import compute_dedupe_key
+
+    key = compute_dedupe_key("The Killers", "Mr. Brightside")
+    db.add(
+        SongRequest(
+            event_id=test_event.id,
+            song_title="Mr. Brightside",
+            artist="The Killers",
+            source="spotify",
+            status="new",
+            dedupe_key=key,
+            client_fingerprint="other-user-ip",
+            submitted_during_collection=True,
+        )
+    )
+    db.commit()
+
+    # This is a duplicate → should not consume the only pick slot
+    r1 = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "Mr. Brightside", "artist": "The Killers", "source": "spotify"},
+    )
+    assert r1.status_code == 200
+    assert r1.json()["is_duplicate"] is True
+
+    # Now submit a genuinely new song → should succeed (pick slot still available)
+    r2 = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "Somebody Told Me", "artist": "The Killers", "source": "spotify"},
+    )
+    assert r2.status_code == 201
+
+
+def test_collect_submit_new_request_returns_is_duplicate_false(client, db, test_event):
+    """Fresh submission returns is_duplicate=false."""
+    _enable_collection(db, test_event)
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "New Song", "artist": "New Artist", "source": "spotify"},
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert body["is_duplicate"] is False

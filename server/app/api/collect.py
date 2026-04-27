@@ -1,9 +1,9 @@
 """Public API endpoints for pre-event song collection (no authentication required)."""
 
-import hashlib
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,7 @@ from app.schemas.collect import (
 )
 from app.services import collect as collect_service
 from app.services.activity_log import log_activity
+from app.services.dedup import compute_dedupe_key, find_duplicate
 from app.services.system_settings import get_system_settings
 from app.services.vote import add_vote
 
@@ -283,11 +284,6 @@ def my_picks(code: str, request: Request, db: Session = Depends(get_db)):
     )
 
 
-def _compute_dedupe_key(song_title: str, artist: str) -> str:
-    raw = f"{song_title.strip().lower()}|{artist.strip().lower()}"
-    return hashlib.sha256(raw.encode()).hexdigest()[:64]
-
-
 @router.post("/{code}/requests", status_code=201)
 @limiter.limit("10/minute")
 def submit(
@@ -301,6 +297,29 @@ def submit(
         raise HTTPException(status_code=409, detail="Collection has ended")
 
     fingerprint = get_client_fingerprint(request, action="collect.submit", event_code=code)
+
+    existing = find_duplicate(db, event.id, payload.artist, payload.song_title)
+    if existing:
+        if (
+            existing.client_fingerprint
+            and fingerprint
+            and existing.client_fingerprint == fingerprint
+        ):
+            raise HTTPException(status_code=409, detail="You already picked this one!")
+
+        add_vote(db, existing.id, fingerprint)
+        log_activity(
+            db,
+            level="info",
+            source="collect",
+            message=(
+                f"Guest [{mask_fingerprint(fingerprint)}] duplicate-voted "
+                f"'{existing.song_title}' by {existing.artist} (req #{existing.id})"
+            ),
+            event_code=code,
+        )
+        return JSONResponse({"id": existing.id, "is_duplicate": True}, status_code=200)
+
     try:
         collect_service.check_and_increment_submission_count(
             db, event=event, fingerprint=fingerprint
@@ -326,7 +345,7 @@ def submit(
         note=payload.note,
         nickname=payload.nickname,
         status=RequestStatus.NEW.value,
-        dedupe_key=_compute_dedupe_key(payload.song_title, payload.artist),
+        dedupe_key=compute_dedupe_key(payload.artist, payload.song_title),
         client_fingerprint=fingerprint,
         submitted_during_collection=True,
     )
@@ -343,7 +362,7 @@ def submit(
         ),
         event_code=code,
     )
-    return {"id": row.id}
+    return {"id": row.id, "is_duplicate": False}
 
 
 @router.post("/{code}/vote")
