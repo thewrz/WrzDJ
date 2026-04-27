@@ -61,6 +61,7 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
       UPLOADS_DIR: /app/uploads
     ports:
       - "127.0.0.1:${PORT_API:-8000}:8000"
