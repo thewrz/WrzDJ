@@ -1042,7 +1042,7 @@ class ApiClient {
       note?: string;
       nickname?: string;
     },
-  ): Promise<{ id: number }> {
+  ): Promise<{ id: number; is_duplicate: boolean }> {
     const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/requests`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1061,7 +1061,10 @@ class ApiClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ request_id: requestId }),
     });
-    if (!res.ok) throw new ApiError(`Vote failed: ${res.status}`, res.status);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(body.detail ?? `Vote failed: ${res.status}`, res.status);
+    }
   }
 
   // ========== Pre-Event Collection (DJ-authenticated) ==========
