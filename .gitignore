@@ -78,3 +78,4 @@ llm-plans*.md
 notes/
 .gitnexus
 .aider*
+.claude/
