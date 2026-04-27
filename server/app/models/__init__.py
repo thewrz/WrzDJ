@@ -1,5 +1,6 @@
 from app.models.activity_log import ActivityLog
 from app.models.base import Base
+from app.models.email_verification_code import EmailVerificationCode
 from app.models.event import Event
 from app.models.guest import Guest
 from app.models.guest_profile import GuestProfile  # noqa: F401
@@ -16,6 +17,7 @@ from app.models.user import User
 __all__ = [
     "ActivityLog",
     "Base",
+    "EmailVerificationCode",
     "Event",
     "Guest",
     "GuestProfile",
