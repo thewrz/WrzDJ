@@ -10,6 +10,7 @@ import {
   CollectMyPicksResponse,
   SearchResult,
 } from '../../../lib/api';
+import { useGuestIdentity } from '../../../lib/use-guest-identity';
 import FeatureOptInPanel from './components/FeatureOptInPanel';
 import LeaderboardTabs from './components/LeaderboardTabs';
 import MyPicksPanel from './components/MyPicksPanel';
@@ -21,6 +22,8 @@ export default function CollectPage() {
   const router = useRouter();
   const params = useParams<{ code: string }>();
   const code = params?.code ?? '';
+  useGuestIdentity();
+
   const [event, setEvent] = useState<CollectEventPreview | null>(null);
   const [leaderboard, setLeaderboard] = useState<CollectLeaderboardResponse | null>(null);
   const [myPicks, setMyPicks] = useState<CollectMyPicksResponse | null>(null);

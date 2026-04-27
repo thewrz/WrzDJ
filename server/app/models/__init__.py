@@ -1,6 +1,7 @@
 from app.models.activity_log import ActivityLog
 from app.models.base import Base
 from app.models.event import Event
+from app.models.guest import Guest
 from app.models.guest_profile import GuestProfile  # noqa: F401
 from app.models.kiosk import Kiosk
 from app.models.mb_artist_cache import MbArtistCache
@@ -16,6 +17,7 @@ __all__ = [
     "ActivityLog",
     "Base",
     "Event",
+    "Guest",
     "GuestProfile",
     "Kiosk",
     "MbArtistCache",

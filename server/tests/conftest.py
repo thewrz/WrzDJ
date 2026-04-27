@@ -14,6 +14,7 @@ from app.core.time import utcnow
 from app.main import app
 from app.models.base import Base
 from app.models.event import Event
+from app.models.guest import Guest
 from app.models.request import Request, RequestStatus
 from app.models.user import User
 from app.services.auth import get_password_hash
@@ -173,6 +174,26 @@ def collection_requests(db: Session, test_event: Event) -> list[Request]:
     for r in rows:
         db.refresh(r)
     return rows
+
+
+@pytest.fixture
+def test_guest(db: Session) -> Guest:
+    """Create a test guest with known token and fingerprint."""
+    guest = Guest(
+        token="a" * 64,
+        fingerprint_hash="fp_test_hash_123",
+        fingerprint_components='{"screen":"1170x2532","timezone":"America/Chicago"}',
+        ip_address="192.168.1.100",
+        user_agent=(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
+            "Version/17.4 Mobile/15E148 Safari/604.1"
+        ),
+    )
+    db.add(guest)
+    db.commit()
+    db.refresh(guest)
+    return guest
 
 
 @pytest.fixture

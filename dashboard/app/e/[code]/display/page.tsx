@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, ApiError, KioskDisplay, NowPlayingInfo, PlayHistoryItem } from '@/lib/api';
 import { useEventStream } from '@/lib/use-event-stream';
+import { useGuestIdentity } from '@/lib/use-guest-identity';
 import { usePollingLoop } from '@/lib/usePollingLoop';
 import { RequestModal } from './components/RequestModal';
 const AUTO_SCROLL_INTERVAL = 5000; // 5 seconds between auto-scrolls
@@ -20,6 +21,8 @@ export default function KioskDisplayPage() {
   const params = useParams();
   const router = useRouter();
   const code = params.code as string;
+
+  useGuestIdentity();
 
   const [display, setDisplay] = useState<KioskDisplay | null>(null);
   const [loading, setLoading] = useState(true);

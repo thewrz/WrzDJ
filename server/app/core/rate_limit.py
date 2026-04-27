@@ -1,8 +1,11 @@
 """Rate limiting middleware using slowapi."""
 
+from __future__ import annotations
+
 import ipaddress
 import logging
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 from fastapi import Request, Response
 from slowapi import Limiter
@@ -11,6 +14,9 @@ from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
 from app.core.config import get_settings
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 
 @lru_cache(maxsize=1)
@@ -127,6 +133,17 @@ def get_client_fingerprint(
 
 # Create limiter instance with IP-based key function
 limiter = Limiter(key_func=get_client_ip, enabled=get_settings().is_rate_limit_enabled)
+
+
+def get_guest_id(request: Request, db: Session) -> int | None:
+    """Read wrzdj_guest cookie and return the Guest.id, or None."""
+    from app.models.guest import Guest
+
+    token = request.cookies.get("wrzdj_guest")
+    if not token:
+        return None
+    guest = db.query(Guest).filter(Guest.token == token).first()
+    return guest.id if guest else None
 
 
 def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Response:
