@@ -145,13 +145,19 @@ def get_profile(code: str, request: Request, db: Session = Depends(get_db)):
     if profile is None:
         return CollectProfileResponse(
             nickname=None,
-            has_email=False,
+            email_verified=False,
             submission_count=0,
             submission_cap=event.submission_cap_per_guest,
         )
+    is_verified = False
+    if guest_id:
+        from app.models.guest import Guest
+
+        guest_row = db.query(Guest).filter(Guest.id == guest_id).first()
+        is_verified = guest_row is not None and guest_row.email_verified_at is not None
     return CollectProfileResponse(
         nickname=profile.nickname,
-        has_email=profile.email is not None,
+        email_verified=is_verified,
         submission_count=profile.submission_count,
         submission_cap=event.submission_cap_per_guest,
     )
@@ -174,24 +180,24 @@ def set_profile(
         fingerprint=fingerprint,
         guest_id=guest_id,
         nickname=payload.nickname,
-        email=payload.email,
     )
-    if payload.nickname is not None or payload.email is not None:
-        _parts = []
-        if payload.nickname is not None:
-            _parts.append("nickname")
-        if payload.email is not None:
-            _parts.append("email")
+    if payload.nickname is not None:
         log_activity(
             db,
             level="info",
             source="collect",
-            message=f"Guest [{mask_fingerprint(fingerprint)}] updated profile: {', '.join(_parts)}",
+            message=f"Guest [{mask_fingerprint(fingerprint)}] updated profile: nickname",
             event_code=code,
         )
+    is_verified = False
+    if guest_id:
+        from app.models.guest import Guest
+
+        guest_row = db.query(Guest).filter(Guest.id == guest_id).first()
+        is_verified = guest_row is not None and guest_row.email_verified_at is not None
     return CollectProfileResponse(
         nickname=profile.nickname,
-        has_email=profile.email is not None,
+        email_verified=is_verified,
         submission_count=profile.submission_count,
         submission_cap=event.submission_cap_per_guest,
     )

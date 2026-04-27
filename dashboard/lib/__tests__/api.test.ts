@@ -2095,4 +2095,86 @@ describe('ApiClient', () => {
       await expect(api.getKioskDisplay('BAD')).rejects.toThrow('Request failed');
     });
   });
+
+  describe('email verification', () => {
+    it('requestVerificationCode sends email and returns sent', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ sent: true }),
+      });
+
+      const result = await api.requestVerificationCode('fan@test.com');
+      expect(result.sent).toBe(true);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/public/guest/verify/request');
+      expect(options.credentials).toBe('include');
+      expect(JSON.parse(options.body)).toEqual({ email: 'fan@test.com' });
+    });
+
+    it('requestVerificationCode throws on error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        json: async () => ({ detail: 'Too many codes requested' }),
+      });
+
+      await expect(api.requestVerificationCode('fan@test.com')).rejects.toThrow(
+        'Too many codes requested'
+      );
+    });
+
+    it('requestVerificationCode throws generic on json failure', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => { throw new Error('not json'); },
+      });
+
+      await expect(api.requestVerificationCode('fan@test.com')).rejects.toThrow(
+        'Failed to send code'
+      );
+    });
+
+    it('confirmVerificationCode sends code and returns result', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ verified: true, guest_id: 42, merged: false }),
+      });
+
+      const result = await api.confirmVerificationCode('fan@test.com', '847293');
+      expect(result.verified).toBe(true);
+      expect(result.guest_id).toBe(42);
+      expect(result.merged).toBe(false);
+
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toContain('/api/public/guest/verify/confirm');
+      expect(options.credentials).toBe('include');
+      expect(JSON.parse(options.body)).toEqual({ email: 'fan@test.com', code: '847293' });
+    });
+
+    it('confirmVerificationCode throws on wrong code', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: async () => ({ detail: 'Incorrect verification code' }),
+      });
+
+      await expect(api.confirmVerificationCode('fan@test.com', '000000')).rejects.toThrow(
+        'Incorrect verification code'
+      );
+    });
+
+    it('confirmVerificationCode throws generic on json failure', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => { throw new Error('not json'); },
+      });
+
+      await expect(api.confirmVerificationCode('fan@test.com', '123456')).rejects.toThrow(
+        'Verification failed'
+      );
+    });
+  });
 });

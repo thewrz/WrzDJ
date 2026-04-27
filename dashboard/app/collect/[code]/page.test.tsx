@@ -2,6 +2,10 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import CollectPage from "./page";
 
+vi.mock("./components/EmailVerification", () => ({
+  default: () => <div data-testid="email-verification-stub" />,
+}));
+
 const mockReplace = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mockReplace, push: vi.fn() }),
@@ -55,7 +59,7 @@ describe("CollectPage", () => {
     mockReplace.mockClear();
     mockGetEvent.mockReset();
     const defaultProfile = {
-      has_email: false,
+      email_verified: false,
       nickname: null,
       submission_count: 0,
       submission_cap: 15,
@@ -136,13 +140,13 @@ describe("CollectPage", () => {
     // writes have separate endpoints.
     mockGetCollectProfile
       .mockResolvedValueOnce({
-        has_email: false,
+        email_verified: false,
         nickname: null,
         submission_count: 0,
         submission_cap: 15,
       })
       .mockResolvedValueOnce({
-        has_email: false,
+        email_verified: false,
         nickname: null,
         submission_count: 1,
         submission_cap: 15,

@@ -179,7 +179,6 @@ def upsert_profile(
     fingerprint: str | None = None,
     guest_id: int | None = None,
     nickname: str | None = None,
-    email: str | None = None,
 ) -> GuestProfile:
     profile = get_profile(db, event_id=event_id, fingerprint=fingerprint, guest_id=guest_id)
     if profile is None:
@@ -188,14 +187,11 @@ def upsert_profile(
             client_fingerprint=fingerprint,
             guest_id=guest_id,
             nickname=nickname,
-            email=email,
         )
         db.add(profile)
     else:
         if nickname is not None:
             profile.nickname = nickname
-        if email is not None:
-            profile.email = email
     db.commit()
     db.refresh(profile)
     return profile

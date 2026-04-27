@@ -22,18 +22,14 @@ def test_upsert_profile_creates_row(db, test_event: Event):
         db, event_id=test_event.id, fingerprint="fp1", nickname="Alex"
     )
     assert profile.nickname == "Alex"
-    assert profile.email is None
     assert profile.submission_count == 0
 
 
-def test_upsert_profile_preserves_email_when_only_nickname_given(db, test_event: Event):
-    collect_service.upsert_profile(
-        db, event_id=test_event.id, fingerprint="fp2", email="g@example.com"
-    )
+def test_upsert_profile_updates_nickname(db, test_event: Event):
+    collect_service.upsert_profile(db, event_id=test_event.id, fingerprint="fp2", nickname="Old")
     profile = collect_service.upsert_profile(
         db, event_id=test_event.id, fingerprint="fp2", nickname="NewName"
     )
-    assert profile.email == "g@example.com"
     assert profile.nickname == "NewName"
 
 

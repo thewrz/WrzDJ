@@ -131,7 +131,7 @@ export interface CollectLeaderboardResponse {
 
 export interface CollectProfileResponse {
   nickname: string | null;
-  has_email: boolean;
+  email_verified: boolean;
   submission_count: number;
   submission_cap: number;
 }
@@ -1011,7 +1011,7 @@ class ApiClient {
 
   async setCollectProfile(
     code: string,
-    data: { nickname?: string; email?: string },
+    data: { nickname?: string },
   ): Promise<CollectProfileResponse> {
     const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/profile`, {
       method: 'POST',
@@ -1110,6 +1110,39 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  // ========== Guest Email Verification ==========
+
+  async requestVerificationCode(email: string): Promise<{ sent: boolean }> {
+    const resp = await fetch(`${getApiUrl()}/api/public/guest/verify/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new ApiError((data as { detail?: string }).detail || 'Failed to send code', resp.status);
+    }
+    return resp.json();
+  }
+
+  async confirmVerificationCode(
+    email: string,
+    code: string
+  ): Promise<{ verified: boolean; guest_id: number; merged: boolean }> {
+    const resp = await fetch(`${getApiUrl()}/api/public/guest/verify/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, code }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new ApiError((data as { detail?: string }).detail || 'Verification failed', resp.status);
+    }
+    return resp.json();
   }
 
   // ========== Bridge Commands ==========

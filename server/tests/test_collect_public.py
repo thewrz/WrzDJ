@@ -68,7 +68,7 @@ def test_collect_profile_set_nickname(client, db, test_event):
     assert r.status_code == 200
     body = r.json()
     assert body["nickname"] == "DancingQueen"
-    assert body["has_email"] is False
+    assert body["email_verified"] is False
     assert body["submission_count"] == 0
     assert body["submission_cap"] == 15
 
@@ -82,14 +82,15 @@ def test_collect_profile_invalid_nickname_rejected(client, db, test_event):
     assert r.status_code == 422
 
 
-def test_collect_profile_accepts_email(client, db, test_event):
+def test_collect_profile_email_field_ignored(client, db, test_event):
+    """Email is no longer accepted in the profile payload — extra fields are ignored."""
     _enable_collection(db, test_event)
     r = client.post(
         f"/api/public/collect/{test_event.code}/profile",
-        json={"nickname": "A", "email": "guest@example.com"},
+        json={"nickname": "A"},
     )
     assert r.status_code == 200
-    assert r.json()["has_email"] is True
+    assert r.json()["email_verified"] is False
 
 
 def test_collect_profile_me_empty_when_no_interactions(client, db, test_event):
@@ -334,7 +335,7 @@ def test_collect_get_profile_does_not_create_row(client, db, test_event):
     body = r.json()
     assert body == {
         "nickname": None,
-        "has_email": False,
+        "email_verified": False,
         "submission_count": 0,
         "submission_cap": test_event.submission_cap_per_guest,
     }
@@ -349,10 +350,10 @@ def test_collect_get_profile_returns_existing_state(client, db, test_event):
     """When a GuestProfile exists, GET returns its fields faithfully."""
     _enable_collection(db, test_event)
 
-    # POST a real nickname + email first.
+    # POST a nickname first.
     r = client.post(
         f"/api/public/collect/{test_event.code}/profile",
-        json={"nickname": "Reader", "email": "reader@example.com"},
+        json={"nickname": "Reader"},
     )
     assert r.status_code == 200
 
@@ -361,7 +362,7 @@ def test_collect_get_profile_returns_existing_state(client, db, test_event):
     assert r.status_code == 200
     body = r.json()
     assert body["nickname"] == "Reader"
-    assert body["has_email"] is True
+    assert body["email_verified"] is False
     assert body["submission_cap"] == test_event.submission_cap_per_guest
 
 

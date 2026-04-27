@@ -14,6 +14,7 @@ from app.api import (
     search,
     sse,
     tidal,
+    verify,
     votes,
 )
 
@@ -33,6 +34,7 @@ api_router.include_router(votes.router, prefix="/requests", tags=["votes"])
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(public.router, prefix="/public", tags=["public"])
 api_router.include_router(guest.router, prefix="/public", tags=["guest"])
+api_router.include_router(verify.router, prefix="/public/guest", tags=["verify"])
 api_router.include_router(collect.router, prefix="/public/collect", tags=["collect"])
 api_router.include_router(sse.router, prefix="/public", tags=["sse"])
 api_router.include_router(bridge.router, tags=["bridge"])
