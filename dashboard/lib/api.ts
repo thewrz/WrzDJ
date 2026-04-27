@@ -131,7 +131,7 @@ export interface CollectLeaderboardResponse {
 
 export interface CollectProfileResponse {
   nickname: string | null;
-  has_email: boolean;
+  email_verified: boolean;
   submission_count: number;
   submission_cap: number;
 }
@@ -1011,7 +1011,7 @@ class ApiClient {
 
   async setCollectProfile(
     code: string,
-    data: { nickname?: string; email?: string },
+    data: { nickname?: string },
   ): Promise<CollectProfileResponse> {
     const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/profile`, {
       method: 'POST',

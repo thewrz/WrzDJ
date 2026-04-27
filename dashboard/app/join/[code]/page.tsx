@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { api, ApiError, Event, GuestNowPlaying, GuestRequestInfo, SearchResult } from '@/lib/api';
 import { useEventStream } from '@/lib/use-event-stream';
 import { useGuestIdentity } from '@/lib/use-guest-identity';
+import EmailVerification from '../../collect/[code]/components/EmailVerification';
 import MyRequestsTracker from './components/MyRequestsTracker';
 import CelebrationOverlay from './components/CelebrationOverlay';
 import Toast from './components/Toast';
@@ -45,6 +46,9 @@ export default function JoinEventPage() {
   const [votingId, setVotingId] = useState<number | null>(null);
   const [votedIds, setVotedIds] = useState<Set<number>>(new Set());
   const [nowPlaying, setNowPlaying] = useState<GuestNowPlaying | null>(null);
+
+  // Email verification CTA (shown after submitting a request)
+  const [emailVerified, setEmailVerified] = useState(false);
 
   // Splash + collect-phase banner
   const [splashVisible, setSplashVisible] = useState(false);
@@ -515,6 +519,12 @@ export default function JoinEventPage() {
             </div>
           )}
         </div>
+
+        {!emailVerified && (
+          <div style={{ margin: '1rem 0', padding: '0.75rem', background: 'var(--card-bg)', borderRadius: '8px' }}>
+            <EmailVerification isVerified={false} onVerified={() => setEmailVerified(true)} />
+          </div>
+        )}
 
         {event.requests_open && (
           <div className="sticky-bottom-button">

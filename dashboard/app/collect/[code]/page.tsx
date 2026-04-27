@@ -36,7 +36,7 @@ export default function CollectPage() {
   ]);
   const [tab, setTab] = useState<'trending' | 'all'>('all');
   const [error, setError] = useState<string | null>(null);
-  const [hasEmail, setHasEmail] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
   const [nickname, setNickname] = useState<string | null>(null);
   const [profile, setProfile] = useState<{
     submission_count: number;
@@ -51,9 +51,8 @@ export default function CollectPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const saveProfile = async (data: { nickname?: string; email?: string }) => {
+  const saveProfile = async (data: { nickname?: string }) => {
     const resp = await apiClient.setCollectProfile(code, data);
-    setHasEmail(resp.has_email);
     setNickname(resp.nickname);
     if (resp.nickname) {
       localStorage.setItem(`wrzdj_collect_nickname_${code}`, resp.nickname);
@@ -64,7 +63,7 @@ export default function CollectPage() {
     if (!code) return;
     apiClient.getCollectProfile(code).then((p) => {
       setProfile({ submission_count: p.submission_count, submission_cap: p.submission_cap });
-      setHasEmail(p.has_email);
+      setEmailVerified(p.email_verified);
       setNickname(p.nickname);
       if (p.nickname) {
         localStorage.setItem(`wrzdj_collect_nickname_${code}`, p.nickname);
@@ -266,9 +265,10 @@ export default function CollectPage() {
         </header>
 
         <FeatureOptInPanel
-          hasEmail={hasEmail}
+          emailVerified={emailVerified}
           initialNickname={nickname}
           onSave={saveProfile}
+          onVerified={() => setEmailVerified(true)}
         />
 
         <section className="collect-section">

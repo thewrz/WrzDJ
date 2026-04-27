@@ -2,21 +2,33 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import FeatureOptInPanel from './FeatureOptInPanel';
 
+// EmailVerification makes real API calls — mock it out for panel tests
+vi.mock('./EmailVerification', () => ({
+  default: ({ isVerified }: { isVerified: boolean }) =>
+    isVerified ? <div>Email verified</div> : <div data-testid="email-verification-stub" />,
+}));
+
 describe('FeatureOptInPanel', () => {
-  it('does not render when guest already has email AND a nickname', () => {
+  it('does not render when guest already has verified email AND a nickname', () => {
     render(
       <FeatureOptInPanel
-        hasEmail={true}
+        emailVerified={true}
         initialNickname="Alex"
         onSave={vi.fn()}
+        onVerified={vi.fn()}
       />,
     );
     expect(screen.queryByText(/make it yours/i)).not.toBeInTheDocument();
   });
 
-  it('shows feature copy and inputs when nothing set yet', () => {
+  it('shows feature copy and nickname input when nothing set yet', () => {
     render(
-      <FeatureOptInPanel hasEmail={false} initialNickname={null} onSave={vi.fn()} />,
+      <FeatureOptInPanel
+        emailVerified={false}
+        initialNickname={null}
+        onSave={vi.fn()}
+        onVerified={vi.fn()}
+      />,
     );
     expect(screen.getByText(/nickname appears/i)).toBeInTheDocument();
     expect(screen.getByText(/notify me when my song plays/i)).toBeInTheDocument();
@@ -24,35 +36,32 @@ describe('FeatureOptInPanel', () => {
     expect(screen.getByLabelText(/^nickname$/i)).toBeInTheDocument();
   });
 
-  it('rejects invalid email on client', async () => {
+  it('requires at least a nickname to save', async () => {
     const onSave = vi.fn();
     render(
-      <FeatureOptInPanel hasEmail={false} initialNickname={null} onSave={onSave} />,
+      <FeatureOptInPanel
+        emailVerified={false}
+        initialNickname={null}
+        onSave={onSave}
+        onVerified={vi.fn()}
+      />,
     );
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'bogus' } });
     fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
     await waitFor(() => {
-      expect(screen.getByText(/invalid email/i)).toBeInTheDocument();
+      expect(screen.getByText(/enter a nickname/i)).toBeInTheDocument();
     });
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it('requires at least one of nickname or email', async () => {
-    const onSave = vi.fn();
-    render(
-      <FeatureOptInPanel hasEmail={false} initialNickname={null} onSave={onSave} />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/enter a nickname or email/i)).toBeInTheDocument();
-    });
-    expect(onSave).not.toHaveBeenCalled();
-  });
-
-  it('calls onSave with just nickname when only nickname entered', async () => {
+  it('calls onSave with nickname when nickname entered', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(
-      <FeatureOptInPanel hasEmail={false} initialNickname={null} onSave={onSave} />,
+      <FeatureOptInPanel
+        emailVerified={false}
+        initialNickname={null}
+        onSave={onSave}
+        onVerified={vi.fn()}
+      />,
     );
     fireEvent.change(screen.getByLabelText(/^nickname$/i), {
       target: { value: 'DancingQueen' },
@@ -63,23 +72,15 @@ describe('FeatureOptInPanel', () => {
     });
   });
 
-  it('calls onSave with both fields when both filled', async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
+  it('renders EmailVerification component inside the panel', () => {
     render(
-      <FeatureOptInPanel hasEmail={false} initialNickname={null} onSave={onSave} />,
+      <FeatureOptInPanel
+        emailVerified={false}
+        initialNickname={null}
+        onSave={vi.fn()}
+        onVerified={vi.fn()}
+      />,
     );
-    fireEvent.change(screen.getByLabelText(/^nickname$/i), {
-      target: { value: 'Alex' },
-    });
-    fireEvent.change(screen.getByLabelText(/email/i), {
-      target: { value: 'alex@example.com' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
-    await waitFor(() => {
-      expect(onSave).toHaveBeenCalledWith({
-        nickname: 'Alex',
-        email: 'alex@example.com',
-      });
-    });
+    expect(screen.getByTestId('email-verification-stub')).toBeInTheDocument();
   });
 });
