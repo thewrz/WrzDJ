@@ -134,6 +134,13 @@ class Settings(BaseSettings):
     banner_width: int = 1920
     banner_height: int = 480
 
+    # SMTP (email verification)
+    smtp_host: str = ""
+    smtp_port: int = 465
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_address: str = ""
+
     @property
     def resolved_uploads_dir(self) -> str:
         """Return uploads directory, defaulting to server/uploads/ if not set."""
