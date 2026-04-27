@@ -13,7 +13,7 @@ from app.schemas.verify import (
     VerifyRequestResponse,
     VerifyRequestSchema,
 )
-from app.services.email_sender import EmailNotConfiguredError
+from app.services.email_sender import EmailNotConfiguredError, EmailSendError
 from app.services.email_verification import (
     CodeExpiredError,
     CodeInvalidError,
@@ -41,7 +41,7 @@ def request_verification_code(
         create_verification_code(db, guest_id=guest_id, email=payload.email)
     except RateLimitExceededError:
         raise HTTPException(status_code=429, detail="Too many codes requested")
-    except EmailNotConfiguredError:
+    except (EmailNotConfiguredError, EmailSendError):
         raise HTTPException(status_code=503, detail="Email verification is temporarily unavailable")
 
     return VerifyRequestResponse(sent=True)

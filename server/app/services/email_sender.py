@@ -13,6 +13,10 @@ class EmailNotConfiguredError(Exception):
     """Raised when SMTP settings are missing."""
 
 
+class EmailSendError(Exception):
+    """Raised when SMTP connection or sending fails."""
+
+
 def send_verification_email(to_address: str, code: str) -> None:
     """Send a 6-digit verification code via SMTP."""
     settings = get_settings()
@@ -30,8 +34,12 @@ def send_verification_email(to_address: str, code: str) -> None:
         f"If you didn't request this, you can safely ignore this email.\n"
     )
 
-    with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port) as smtp:
-        smtp.login(settings.smtp_username, settings.smtp_password)
-        smtp.send_message(msg)
+    try:
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port) as smtp:
+            smtp.login(settings.smtp_username, settings.smtp_password)
+            smtp.send_message(msg)
+    except (OSError, smtplib.SMTPException) as exc:
+        _logger.error("email.send_failed to_hash=%s error=%s", to_address[:3] + "***", exc)
+        raise EmailSendError(str(exc)) from exc
 
     _logger.info("email.sent to_hash=%s", to_address[:3] + "***")
