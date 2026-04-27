@@ -385,6 +385,8 @@ def vote(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Request not found")
+    if row.client_fingerprint and row.client_fingerprint == fingerprint:
+        raise HTTPException(status_code=409, detail="Can't vote on your own pick")
     _, is_new_vote = add_vote(db, request_id=row.id, client_fingerprint=fingerprint)
     if is_new_vote:
         log_activity(
