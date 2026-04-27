@@ -134,12 +134,9 @@ class Settings(BaseSettings):
     banner_width: int = 1920
     banner_height: int = 480
 
-    # SMTP (email verification)
-    smtp_host: str = ""
-    smtp_port: int = 465
-    smtp_username: str = ""
-    smtp_password: str = ""
-    smtp_from_address: str = ""
+    # Email (Resend API)
+    resend_api_key: str = ""
+    email_from_address: str = "WrzDJ <noreply@wrzdj.com>"
 
     @property
     def resolved_uploads_dir(self) -> str:

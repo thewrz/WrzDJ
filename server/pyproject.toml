@@ -26,6 +26,7 @@ dependencies = [
     "aiohttp>=3.13.4",       # 10x CVE-2026-* (HTTP client)
     "requests>=2.33.0",      # CVE-2026-25645 (URL parsing)
     "anthropic>=0.40.0",
+    "resend>=2.0.0",
     "better-profanity>=0.7.0",
     "sse-starlette>=2.0.0",
 ]

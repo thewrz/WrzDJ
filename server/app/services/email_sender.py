@@ -1,8 +1,8 @@
-"""SMTP email sending for verification codes."""
+"""Email sending via Resend API for verification codes."""
 
 import logging
-import smtplib
-from email.message import EmailMessage
+
+import resend
 
 from app.core.config import get_settings
 
@@ -10,35 +10,36 @@ _logger = logging.getLogger("app.email")
 
 
 class EmailNotConfiguredError(Exception):
-    """Raised when SMTP settings are missing."""
+    """Raised when email API key is missing."""
 
 
 class EmailSendError(Exception):
-    """Raised when SMTP connection or sending fails."""
+    """Raised when email sending fails."""
 
 
 def send_verification_email(to_address: str, code: str) -> None:
-    """Send a 6-digit verification code via SMTP."""
+    """Send a 6-digit verification code via Resend."""
     settings = get_settings()
 
-    if not settings.smtp_host:
-        raise EmailNotConfiguredError("SMTP is not configured (smtp_host is empty)")
+    if not settings.resend_api_key:
+        raise EmailNotConfiguredError("Resend API key is not configured")
 
-    msg = EmailMessage()
-    msg["Subject"] = "Your WrzDJ verification code"
-    msg["From"] = f"WrzDJ <{settings.smtp_from_address}>"
-    msg["To"] = to_address
-    msg.set_content(
-        f"Your verification code is: {code}\n\n"
-        f"Enter this code on the WrzDJ page. It expires in 15 minutes.\n\n"
-        f"If you didn't request this, you can safely ignore this email.\n"
-    )
+    resend.api_key = settings.resend_api_key
 
     try:
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port) as smtp:
-            smtp.login(settings.smtp_username, settings.smtp_password)
-            smtp.send_message(msg)
-    except (OSError, smtplib.SMTPException) as exc:
+        resend.Emails.send(
+            {
+                "from": settings.email_from_address,
+                "to": [to_address],
+                "subject": "Your WrzDJ verification code",
+                "text": (
+                    f"Your verification code is: {code}\n\n"
+                    f"Enter this code on the WrzDJ page. It expires in 15 minutes.\n\n"
+                    f"If you didn't request this, you can safely ignore this email.\n"
+                ),
+            }
+        )
+    except Exception as exc:
         _logger.error("email.send_failed to_hash=%s error=%s", to_address[:3] + "***", exc)
         raise EmailSendError(str(exc)) from exc
 
