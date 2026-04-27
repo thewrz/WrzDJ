@@ -138,15 +138,15 @@ def test_collect_submit_blocked_at_cap(client, db, test_event):
     _enable_collection(db, test_event)
     test_event.submission_cap_per_guest = 2
     db.commit()
-    for _ in range(2):
+    for i in range(2):
         r = client.post(
             f"/api/public/collect/{test_event.code}/requests",
-            json={"song_title": "A", "artist": "B", "source": "spotify"},
+            json={"song_title": f"Song {i}", "artist": f"Artist {i}", "source": "spotify"},
         )
         assert r.status_code == 201
     r3 = client.post(
         f"/api/public/collect/{test_event.code}/requests",
-        json={"song_title": "C", "artist": "D", "source": "spotify"},
+        json={"song_title": "Song 99", "artist": "Artist 99", "source": "spotify"},
     )
     assert r3.status_code == 429
     assert "Picks limit reached" in r3.json()["detail"]
@@ -216,41 +216,32 @@ def test_collect_leaderboard_all_tab_sorts_alphabetically(client, db, test_event
     assert titles == ["Alpha Song", "mango tango", "zebra stripes"]
 
 
-def test_collect_my_picks_voted_request_ids_includes_self_votes(
-    client, db, test_event, collection_requests
-):
-    """voted_request_ids must include votes on own submissions, so the UI
-    can disable the vote button for them even though they don't appear in
-    the `upvoted` section (which is de-duped against `submitted`).
+def test_collect_self_vote_blocked_not_in_voted_ids(client, db, test_event):
+    """Self-voting is blocked, so voted_request_ids should not include
+    own submissions (since the vote was rejected).
     """
     _enable_collection(db, test_event)
-    from app.core.rate_limit import MAX_FINGERPRINT_LENGTH
 
-    # TestClient's default remote host is "testclient"; take first N chars.
-    fp = "testclient"[:MAX_FINGERPRINT_LENGTH]
+    target = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "My Song", "artist": "My Artist", "source": "spotify"},
+    )
+    assert target.status_code == 201
+    target_id = target.json()["id"]
 
-    # Mark one collection request as submitted by this client so the backend
-    # puts it under `submitted` (de-duped out of `upvoted`).
-    target = collection_requests[0]
-    target.client_fingerprint = fp
-    db.commit()
-
-    # Cast a vote on that same request.
+    # Self-vote should be rejected.
     r = client.post(
         f"/api/public/collect/{test_event.code}/vote",
-        json={"request_id": target.id},
+        json={"request_id": target_id},
     )
-    assert r.status_code == 200
+    assert r.status_code == 409
 
     me = client.get(f"/api/public/collect/{test_event.code}/profile/me")
     assert me.status_code == 200
     body = me.json()
 
-    # The submission is in `submitted`, NOT in `upvoted` (dedupe behavior).
-    assert any(s["id"] == target.id for s in body["submitted"])
-    assert not any(u["id"] == target.id for u in body["upvoted"])
-    # But voted_request_ids MUST include it — this is the fix.
-    assert target.id in body["voted_request_ids"]
+    assert any(s["id"] == target_id for s in body["submitted"])
+    assert target_id not in body["voted_request_ids"]
 
 
 def test_collect_activity_log_entries_for_state_changes(client, db, test_event):
@@ -258,6 +249,8 @@ def test_collect_activity_log_entries_for_state_changes(client, db, test_event):
     tagged with the masked fingerprint so DJs can audit guest activity.
     """
     from app.models.activity_log import ActivityLog
+    from app.models.request import Request as SongRequest
+    from app.services.dedup import compute_dedupe_key
 
     _enable_collection(db, test_event)
 
@@ -267,19 +260,33 @@ def test_collect_activity_log_entries_for_state_changes(client, db, test_event):
         json={"song_title": "Log Me", "artist": "Audit", "source": "spotify"},
     )
     assert r.status_code == 201
-    new_id = r.json()["id"]
 
-    # 2. Vote on it.
+    # 2. Vote on a DIFFERENT request (not our own — self-voting is blocked).
+    key = compute_dedupe_key("Other", "Song")
+    other_row = SongRequest(
+        event_id=test_event.id,
+        song_title="Song",
+        artist="Other",
+        source="spotify",
+        status="new",
+        dedupe_key=key,
+        client_fingerprint="someone-else",
+        submitted_during_collection=True,
+    )
+    db.add(other_row)
+    db.commit()
+    db.refresh(other_row)
+
     r = client.post(
         f"/api/public/collect/{test_event.code}/vote",
-        json={"request_id": new_id},
+        json={"request_id": other_row.id},
     )
     assert r.status_code == 200
 
     # 2b. Vote again — idempotent, should NOT create a second activity row.
     r = client.post(
         f"/api/public/collect/{test_event.code}/vote",
-        json={"request_id": new_id},
+        json={"request_id": other_row.id},
     )
     assert r.status_code == 200
 
@@ -304,7 +311,6 @@ def test_collect_activity_log_entries_for_state_changes(client, db, test_event):
     assert "'Log Me'" in rows[0].message
     assert "voted" in rows[1].message
     assert "updated profile" in rows[2].message
-    # Every row should carry the masked fingerprint (12 hex chars in [brackets]).
     import re
 
     for row in rows:
@@ -357,3 +363,172 @@ def test_collect_get_profile_returns_existing_state(client, db, test_event):
     assert body["nickname"] == "Reader"
     assert body["has_email"] is True
     assert body["submission_cap"] == test_event.submission_cap_per_guest
+
+
+# ── Dedup tests ──────────────────────────────────────────────────────────────
+
+
+def test_collect_submit_same_user_duplicate_returns_409(client, db, test_event):
+    """Same fingerprint submitting the same song twice → 409."""
+    _enable_collection(db, test_event)
+    payload = {"song_title": "Mr. Brightside", "artist": "The Killers", "source": "spotify"}
+    r1 = client.post(f"/api/public/collect/{test_event.code}/requests", json=payload)
+    assert r1.status_code == 201
+
+    r2 = client.post(f"/api/public/collect/{test_event.code}/requests", json=payload)
+    assert r2.status_code == 409
+    assert "already" in r2.json()["detail"].lower()
+
+
+def test_collect_submit_same_user_duplicate_case_insensitive(client, db, test_event):
+    """Dedup is case-insensitive: 'The Killers' == 'the killers'."""
+    _enable_collection(db, test_event)
+    r1 = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "Mr. Brightside", "artist": "The Killers", "source": "spotify"},
+    )
+    assert r1.status_code == 201
+
+    r2 = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "mr. brightside", "artist": "the killers", "source": "spotify"},
+    )
+    assert r2.status_code == 409
+
+
+def test_collect_submit_different_user_duplicate_auto_votes(client, db, test_event):
+    """Different fingerprint submitting the same song → 200, is_duplicate=true, vote added."""
+    _enable_collection(db, test_event)
+    from app.models.request import Request as SongRequest
+    from app.services.dedup import compute_dedupe_key
+
+    key = compute_dedupe_key("The Killers", "Mr. Brightside")
+    row = SongRequest(
+        event_id=test_event.id,
+        song_title="Mr. Brightside",
+        artist="The Killers",
+        source="spotify",
+        status="new",
+        dedupe_key=key,
+        client_fingerprint="other-user-ip",
+        submitted_during_collection=True,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    original_votes = row.vote_count
+
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "Mr. Brightside", "artist": "The Killers", "source": "spotify"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["is_duplicate"] is True
+    assert body["id"] == row.id
+
+    db.refresh(row)
+    assert row.vote_count == original_votes + 1
+
+
+def test_collect_submit_different_user_duplicate_no_pick_slot(client, db, test_event):
+    """Duplicate submission by different user must NOT consume a pick slot."""
+    _enable_collection(db, test_event)
+    test_event.submission_cap_per_guest = 1
+    db.commit()
+
+    from app.models.request import Request as SongRequest
+    from app.services.dedup import compute_dedupe_key
+
+    key = compute_dedupe_key("The Killers", "Mr. Brightside")
+    db.add(
+        SongRequest(
+            event_id=test_event.id,
+            song_title="Mr. Brightside",
+            artist="The Killers",
+            source="spotify",
+            status="new",
+            dedupe_key=key,
+            client_fingerprint="other-user-ip",
+            submitted_during_collection=True,
+        )
+    )
+    db.commit()
+
+    # This is a duplicate → should not consume the only pick slot
+    r1 = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "Mr. Brightside", "artist": "The Killers", "source": "spotify"},
+    )
+    assert r1.status_code == 200
+    assert r1.json()["is_duplicate"] is True
+
+    # Now submit a genuinely new song → should succeed (pick slot still available)
+    r2 = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "Somebody Told Me", "artist": "The Killers", "source": "spotify"},
+    )
+    assert r2.status_code == 201
+
+
+def test_collect_submit_new_request_returns_is_duplicate_false(client, db, test_event):
+    """Fresh submission returns is_duplicate=false."""
+    _enable_collection(db, test_event)
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "New Song", "artist": "New Artist", "source": "spotify"},
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert body["is_duplicate"] is False
+
+
+# ── Self-vote tests ──────────────────────────────────────────────────────────
+
+
+def test_collect_vote_self_vote_blocked(client, db, test_event):
+    """Submitter cannot vote on their own request → 409."""
+    _enable_collection(db, test_event)
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/requests",
+        json={"song_title": "My Song", "artist": "My Artist", "source": "spotify"},
+    )
+    assert r.status_code == 201
+    request_id = r.json()["id"]
+
+    r2 = client.post(
+        f"/api/public/collect/{test_event.code}/vote",
+        json={"request_id": request_id},
+    )
+    assert r2.status_code == 409
+    assert "own" in r2.json()["detail"].lower()
+
+
+def test_collect_vote_other_user_still_works(client, db, test_event):
+    """Voting on someone else's request still works normally."""
+    _enable_collection(db, test_event)
+    from app.models.request import Request as SongRequest
+    from app.services.dedup import compute_dedupe_key
+
+    key = compute_dedupe_key("Other Artist", "Other Song")
+    row = SongRequest(
+        event_id=test_event.id,
+        song_title="Other Song",
+        artist="Other Artist",
+        source="spotify",
+        status="new",
+        dedupe_key=key,
+        client_fingerprint="different-user",
+        submitted_during_collection=True,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/vote",
+        json={"request_id": row.id},
+    )
+    assert r.status_code == 200
+    db.refresh(row)
+    assert row.vote_count == 1

@@ -27,7 +27,10 @@ export default function CollectPage() {
   // Canonical "I have voted on this request" set — covers both upvotes AND
   // votes on my own submissions (which don't appear in `upvoted` because the
   // backend dedupes that against `submitted` for display purposes).
-  const votedIds = new Set<number>(myPicks?.voted_request_ids ?? []);
+  const votedIds = new Set<number>([
+    ...(myPicks?.voted_request_ids ?? []),
+    ...(myPicks?.submitted ?? []).map((s) => s.id),
+  ]);
   const [tab, setTab] = useState<'trending' | 'all'>('all');
   const [error, setError] = useState<string | null>(null);
   const [hasEmail, setHasEmail] = useState(false);
@@ -106,7 +109,7 @@ export default function CollectPage() {
     try {
       const submitNickname =
         nickname ?? localStorage.getItem(`wrzdj_collect_nickname_${code}`) ?? undefined;
-      await apiClient.submitCollectRequest(code, {
+      const result = await apiClient.submitCollectRequest(code, {
         song_title: song.title,
         artist: song.artist,
         source: song.source as 'spotify' | 'beatport' | 'tidal' | 'manual',
@@ -114,16 +117,26 @@ export default function CollectPage() {
         artwork_url: song.album_art ?? undefined,
         nickname: submitNickname,
       });
+
+      if (result.is_duplicate) {
+        setSubmitError('Great minds think alike! Your vote has been added.');
+      }
+
       const [p, lb] = await Promise.all([
         apiClient.getCollectProfile(code),
         apiClient.getCollectLeaderboard(code, tab),
       ]);
       setProfile({ submission_count: p.submission_count, submission_cap: p.submission_cap });
       setLeaderboard(lb);
-      closeSearch();
+
+      if (!result.is_duplicate) {
+        closeSearch();
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
         setSubmitError('Picks limit reached');
+      } else if (err instanceof ApiError && err.status === 409) {
+        setSubmitError('You already picked this one!');
       } else {
         setSubmitError('Failed to submit. Please try again.');
       }
