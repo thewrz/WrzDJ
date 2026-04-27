@@ -136,7 +136,7 @@ class Settings(BaseSettings):
 
     # Email (Resend API)
     resend_api_key: str = ""
-    email_from_address: str = "WrzDJ <noreply@send.wrzdj.com>"
+    email_from_address: str = ""
 
     @property
     def resolved_uploads_dir(self) -> str:

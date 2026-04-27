@@ -21,8 +21,8 @@ def send_verification_email(to_address: str, code: str) -> None:
     """Send a 6-digit verification code via Resend."""
     settings = get_settings()
 
-    if not settings.resend_api_key:
-        raise EmailNotConfiguredError("Resend API key is not configured")
+    if not settings.resend_api_key or not settings.email_from_address:
+        raise EmailNotConfiguredError("Resend API key or from address is not configured")
 
     resend.api_key = settings.resend_api_key
 
