@@ -48,6 +48,9 @@ class Request(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
     client_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    guest_id: Mapped[int | None] = mapped_column(
+        ForeignKey("guests.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     dedupe_key: Mapped[str] = mapped_column(String(64), index=True)
 
     # Multi-service sync
