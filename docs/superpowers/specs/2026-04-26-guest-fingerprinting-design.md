@@ -227,7 +227,7 @@ All service functions gain a `guest_id: int` parameter. The old `client_fingerpr
 
 ### Dependency: ThumbmarkJS
 
-- Package: `thumbmarkjs` (MIT license, actively maintained)
+- Package: `@thumbmarkjs/thumbmarkjs` (MIT license, actively maintained — old `thumbmarkjs` package is deprecated)
 - Install in `dashboard/` only
 - Import dynamically to avoid blocking page load
 
@@ -432,4 +432,6 @@ For local dev with the dev proxy (nginx on different ports), cookies work becaus
 
 ### npm Dependency
 
-Add `thumbmarkjs` to `dashboard/package.json`. Check for CVEs before adding (`npm audit`). MIT license — no restrictions.
+Add `@thumbmarkjs/thumbmarkjs` to `dashboard/package.json`. The old `thumbmarkjs` package is deprecated — use the scoped package. Check for CVEs before adding (`npm audit`). MIT license — no restrictions.
+
+Note: FingerprintJS v5+ is also MIT now, but only returns a hashed `visitorId` with no individual component signals. ThumbmarkJS returns both hash + raw components, which we need for debugging collisions and future confidence scoring. ThumbmarkJS also supports `exclude: ['canvas', 'webgl']` to disable invasive signals.
