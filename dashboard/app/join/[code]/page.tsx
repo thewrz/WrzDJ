@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { api, ApiError, Event, GuestNowPlaying, GuestRequestInfo, SearchResult } from '@/lib/api';
 import { useEventStream } from '@/lib/use-event-stream';
+import { useGuestIdentity } from '@/lib/use-guest-identity';
 import MyRequestsTracker from './components/MyRequestsTracker';
 import CelebrationOverlay from './components/CelebrationOverlay';
 import Toast from './components/Toast';
@@ -16,6 +17,8 @@ const BACKOFF_INTERVAL_MS = 60000;
 export default function JoinEventPage() {
   const params = useParams();
   const code = params.code as string;
+
+  useGuestIdentity();
 
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
