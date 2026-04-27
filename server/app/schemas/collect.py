@@ -3,7 +3,16 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, EmailStr, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, EmailStr, Field, StringConstraints
+
+from app.core.validation import contains_profanity
+
+
+def _check_nickname_profanity(v: str) -> str:
+    if contains_profanity(v):
+        raise ValueError("Please choose a different name")
+    return v
+
 
 Nickname = Annotated[
     str,
@@ -13,6 +22,7 @@ Nickname = Annotated[
         max_length=30,
         pattern=r"^[a-zA-Z0-9 _.-]+$",
     ),
+    AfterValidator(_check_nickname_profanity),
 ]
 Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
 
