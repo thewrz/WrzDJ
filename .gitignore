@@ -77,3 +77,4 @@ llm-plans*.md
 # Development notes (feature brainstorms, scratch)
 notes/
 .gitnexus
+.aider*
