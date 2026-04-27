@@ -13,7 +13,7 @@ class GuestProfile(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
-    client_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    client_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     guest_id: Mapped[int | None] = mapped_column(
         ForeignKey("guests.id", ondelete="SET NULL"), nullable=True, index=True
     )

@@ -46,6 +46,7 @@ def create_request(
     source_url: str | None = None,
     artwork_url: str | None = None,
     client_fingerprint: str | None = None,
+    guest_id: int | None = None,
     raw_search_query: str | None = None,
     genre: str | None = None,
     bpm: float | None = None,
@@ -59,9 +60,8 @@ def create_request(
     existing = find_duplicate(db, event.id, artist, title)
 
     if existing:
-        # Auto-vote for the existing request when a duplicate is submitted
-        if client_fingerprint:
-            add_vote(db, existing.id, client_fingerprint)
+        if client_fingerprint or guest_id:
+            add_vote(db, existing.id, client_fingerprint, guest_id=guest_id)
             db.refresh(existing)
         return existing, True
 
@@ -75,6 +75,7 @@ def create_request(
         source_url=source_url,
         artwork_url=artwork_url,
         client_fingerprint=client_fingerprint,
+        guest_id=guest_id,
         dedupe_key=dedupe_key,
         raw_search_query=raw_search_query,
         genre=genre,
@@ -262,6 +263,25 @@ def get_requests_by_fingerprint(
         .filter(
             Request.event_id == event_id,
             Request.client_fingerprint == fingerprint,
+        )
+        .order_by(Request.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def get_requests_by_guest(
+    db: Session,
+    event_id: int,
+    guest_id: int,
+    limit: int = 50,
+) -> list[Request]:
+    """Get all requests submitted by a specific guest for an event."""
+    return (
+        db.query(Request)
+        .filter(
+            Request.event_id == event_id,
+            Request.guest_id == guest_id,
         )
         .order_by(Request.created_at.desc())
         .limit(limit)

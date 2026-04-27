@@ -12,7 +12,35 @@ class RequestNotFoundError(Exception):
     """Raised when a request does not exist."""
 
 
-def add_vote(db: Session, request_id: int, client_fingerprint: str) -> tuple[Request, bool]:
+def _find_existing_vote(
+    db: Session,
+    request_id: int,
+    client_fingerprint: str | None,
+    guest_id: int | None,
+) -> RequestVote | None:
+    if guest_id:
+        return (
+            db.query(RequestVote)
+            .filter(RequestVote.request_id == request_id, RequestVote.guest_id == guest_id)
+            .first()
+        )
+    return (
+        db.query(RequestVote)
+        .filter(
+            RequestVote.request_id == request_id,
+            RequestVote.client_fingerprint == client_fingerprint,
+        )
+        .first()
+    )
+
+
+def add_vote(
+    db: Session,
+    request_id: int,
+    client_fingerprint: str | None = None,
+    *,
+    guest_id: int | None = None,
+) -> tuple[Request, bool]:
     """
     Add a vote for a request.
     Returns (request, is_new_vote). Idempotent: duplicate votes are no-ops.
@@ -22,16 +50,7 @@ def add_vote(db: Session, request_id: int, client_fingerprint: str) -> tuple[Req
     if not song_request:
         raise RequestNotFoundError
 
-    # Check if already voted
-    existing = (
-        db.query(RequestVote)
-        .filter(
-            RequestVote.request_id == request_id,
-            RequestVote.client_fingerprint == client_fingerprint,
-        )
-        .first()
-    )
-
+    existing = _find_existing_vote(db, request_id, client_fingerprint, guest_id)
     if existing:
         return song_request, False
 
@@ -39,11 +58,11 @@ def add_vote(db: Session, request_id: int, client_fingerprint: str) -> tuple[Req
         vote = RequestVote(
             request_id=request_id,
             client_fingerprint=client_fingerprint,
+            guest_id=guest_id,
         )
         db.add(vote)
-        db.flush()  # Force unique constraint check before updating count
+        db.flush()
 
-        # Atomic increment via SQL expression to prevent race conditions
         db.execute(
             update(Request)
             .where(Request.id == request_id)
@@ -53,13 +72,18 @@ def add_vote(db: Session, request_id: int, client_fingerprint: str) -> tuple[Req
         db.refresh(song_request)
         return song_request, True
     except IntegrityError:
-        # Unique constraint violation: another request already voted
         db.rollback()
         song_request = db.query(Request).filter(Request.id == request_id).first()
         return song_request, False
 
 
-def remove_vote(db: Session, request_id: int, client_fingerprint: str) -> tuple[Request, bool]:
+def remove_vote(
+    db: Session,
+    request_id: int,
+    client_fingerprint: str | None = None,
+    *,
+    guest_id: int | None = None,
+) -> tuple[Request, bool]:
     """
     Remove a vote for a request.
     Returns (request, was_removed). Idempotent: removing non-existent vote is a no-op.
@@ -68,21 +92,12 @@ def remove_vote(db: Session, request_id: int, client_fingerprint: str) -> tuple[
     if not song_request:
         raise RequestNotFoundError
 
-    existing = (
-        db.query(RequestVote)
-        .filter(
-            RequestVote.request_id == request_id,
-            RequestVote.client_fingerprint == client_fingerprint,
-        )
-        .first()
-    )
-
+    existing = _find_existing_vote(db, request_id, client_fingerprint, guest_id)
     if not existing:
         return song_request, False
 
     try:
         db.delete(existing)
-        # Atomic decrement, clamped to 0 at SQL level
         db.execute(
             update(Request)
             .where(Request.id == request_id)
@@ -101,17 +116,15 @@ def remove_vote(db: Session, request_id: int, client_fingerprint: str) -> tuple[
         raise
 
 
-def has_voted(db: Session, request_id: int, client_fingerprint: str) -> bool:
-    """Check if a fingerprint has voted for a request."""
-    return (
-        db.query(RequestVote)
-        .filter(
-            RequestVote.request_id == request_id,
-            RequestVote.client_fingerprint == client_fingerprint,
-        )
-        .first()
-        is not None
-    )
+def has_voted(
+    db: Session,
+    request_id: int,
+    client_fingerprint: str | None = None,
+    *,
+    guest_id: int | None = None,
+) -> bool:
+    """Check if a fingerprint or guest has voted for a request."""
+    return _find_existing_vote(db, request_id, client_fingerprint, guest_id) is not None
 
 
 def get_vote_count(db: Session, request_id: int) -> int:

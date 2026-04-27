@@ -149,7 +149,19 @@ class SubmissionCapExceeded(Exception):
     """Raised when a guest has hit their per-event submission cap."""
 
 
-def get_profile(db: Session, *, event_id: int, fingerprint: str) -> GuestProfile | None:
+def get_profile(
+    db: Session,
+    *,
+    event_id: int,
+    fingerprint: str | None = None,
+    guest_id: int | None = None,
+) -> GuestProfile | None:
+    if guest_id:
+        return (
+            db.query(GuestProfile)
+            .filter(GuestProfile.event_id == event_id, GuestProfile.guest_id == guest_id)
+            .one_or_none()
+        )
     return (
         db.query(GuestProfile)
         .filter(
@@ -164,15 +176,17 @@ def upsert_profile(
     db: Session,
     *,
     event_id: int,
-    fingerprint: str,
+    fingerprint: str | None = None,
+    guest_id: int | None = None,
     nickname: str | None = None,
     email: str | None = None,
 ) -> GuestProfile:
-    profile = get_profile(db, event_id=event_id, fingerprint=fingerprint)
+    profile = get_profile(db, event_id=event_id, fingerprint=fingerprint, guest_id=guest_id)
     if profile is None:
         profile = GuestProfile(
             event_id=event_id,
             client_fingerprint=fingerprint,
+            guest_id=guest_id,
             nickname=nickname,
             email=email,
         )
@@ -188,18 +202,23 @@ def upsert_profile(
 
 
 def check_and_increment_submission_count(
-    db: Session, *, event: Event, fingerprint: str
+    db: Session,
+    *,
+    event: Event,
+    fingerprint: str | None = None,
+    guest_id: int | None = None,
 ) -> GuestProfile:
     """Atomically enforce the per-guest cap, incrementing submission_count on success.
 
     Raises SubmissionCapExceeded when the cap would be exceeded. cap == 0 means
     unlimited (explicit by design).
     """
-    profile = get_profile(db, event_id=event.id, fingerprint=fingerprint)
+    profile = get_profile(db, event_id=event.id, fingerprint=fingerprint, guest_id=guest_id)
     if profile is None:
         profile = GuestProfile(
             event_id=event.id,
             client_fingerprint=fingerprint,
+            guest_id=guest_id,
         )
         db.add(profile)
         db.flush()
