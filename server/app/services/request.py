@@ -1,11 +1,11 @@
-import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 from app.core.time import utcnow
 from app.models.event import Event
 from app.models.request import Request, RequestStatus
+from app.services.dedup import compute_dedupe_key, find_duplicate
 from app.services.recommendation.camelot import parse_key
 from app.services.vote import add_vote
 
@@ -35,12 +35,6 @@ def normalize_key(key_str: str | None) -> str | None:
     return str(pos) if pos else None
 
 
-def compute_dedupe_key(artist: str, title: str) -> str:
-    """Compute a deduplication key from normalized artist and title."""
-    normalized = f"{artist.lower().strip()}:{title.lower().strip()}"
-    return hashlib.sha256(normalized.encode()).hexdigest()[:32]
-
-
 def create_request(
     db: Session,
     event: Event,
@@ -62,18 +56,7 @@ def create_request(
     Returns (request, is_duplicate).
     """
     dedupe_key = compute_dedupe_key(artist, title)
-
-    # Check for duplicate in last 6 hours
-    six_hours_ago = utcnow() - timedelta(hours=6)
-    existing = (
-        db.query(Request)
-        .filter(
-            Request.event_id == event.id,
-            Request.dedupe_key == dedupe_key,
-            Request.created_at > six_hours_ago,
-        )
-        .first()
-    )
+    existing = find_duplicate(db, event.id, artist, title)
 
     if existing:
         # Auto-vote for the existing request when a duplicate is submitted
