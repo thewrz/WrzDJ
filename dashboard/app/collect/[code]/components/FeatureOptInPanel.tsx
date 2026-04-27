@@ -50,7 +50,6 @@ export default function FeatureOptInPanel({ emailVerified, initialNickname, onSa
     setSaving(true);
     try {
       await onSave(payload);
-      setExpanded(false);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -60,7 +59,18 @@ export default function FeatureOptInPanel({ emailVerified, initialNickname, onSa
 
   return (
     <section className="collect-optin">
-      <h3>Make it yours</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <h3 style={{ margin: 0 }}>Make it yours</h3>
+        <button
+          type="button"
+          className="btn btn-sm collect-optin-dismiss"
+          onClick={() => setExpanded(false)}
+          aria-label="Close"
+          style={{ padding: '0.25rem 0.5rem', lineHeight: 1 }}
+        >
+          ✕
+        </button>
+      </div>
       <p
         style={{
           fontSize: '0.875rem',
@@ -86,20 +96,13 @@ export default function FeatureOptInPanel({ emailVerified, initialNickname, onSa
           onChange={(e) => setNickname(e.target.value)}
           placeholder="DancingQueen"
           maxLength={30}
+          required
         />
       </div>
 
       {error && <p className="collection-fieldset-error">{error}</p>}
 
       <div className="collect-optin-actions">
-        <button
-          type="button"
-          className="btn btn-sm collect-optin-dismiss"
-          onClick={() => setExpanded(false)}
-          disabled={saving}
-        >
-          {initialNickname ? 'Close' : 'Skip'}
-        </button>
         <button
           type="button"
           className="btn btn-primary btn-sm"
