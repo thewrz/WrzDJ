@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, EmailStr, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
 from app.core.validation import contains_profanity
 
@@ -66,12 +66,11 @@ class CollectLeaderboardResponse(BaseModel):
 
 class CollectProfileRequest(BaseModel):
     nickname: Nickname | None = None
-    email: EmailStr | None = None
 
 
 class CollectProfileResponse(BaseModel):
     nickname: str | None
-    has_email: bool
+    email_verified: bool
     submission_count: int
     submission_cap: int
 
