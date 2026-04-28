@@ -132,6 +132,21 @@ describe("CollectPage", () => {
     );
   });
 
+  it("hides FeatureOptInPanel when profile returns email_verified true with nickname", async () => {
+    mockGetEvent.mockResolvedValue(COLLECTION_EVENT);
+    mockGetCollectProfile.mockResolvedValue({
+      email_verified: true,
+      nickname: "DancingQueen",
+      submission_count: 0,
+      submission_cap: 15,
+    });
+    render(<CollectPage />);
+    await waitFor(() => {
+      expect(screen.getByText(/test event/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/make it yours/i)).not.toBeInTheDocument();
+  });
+
   it("calls submitCollectRequest and refreshes profile after track select", async () => {
     mockGetEvent.mockResolvedValue(COLLECTION_EVENT);
 
