@@ -457,8 +457,12 @@ class ApiClient {
     source?: string,
     nickname?: string,
   ): Promise<SongRequest> {
-    return this.fetch(`/api/events/${code}/requests`, {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+    const res = await fetch(`${getApiUrl()}/api/events/${code}/requests`, {
       method: 'POST',
+      headers,
+      credentials: 'include',
       body: JSON.stringify({
         artist,
         title,
@@ -473,6 +477,14 @@ class ApiClient {
         musical_key: metadata?.musical_key,
       }),
     });
+    if (!res.ok) {
+      if (res.status === 401 && this.onUnauthorized) {
+        this.onUnauthorized();
+      }
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError((body as { detail?: string }).detail ?? 'Submit failed', res.status);
+    }
+    return res.json();
   }
 
   async search(query: string): Promise<SearchResult[]> {
@@ -480,9 +492,15 @@ class ApiClient {
   }
 
   async eventSearch(code: string, query: string): Promise<SearchResult[]> {
-    return this.publicFetch(
-      `${getApiUrl()}/api/events/${code}/search?q=${encodeURIComponent(query)}`
+    const res = await fetch(
+      `${getApiUrl()}/api/events/${code}/search?q=${encodeURIComponent(query)}`,
+      { credentials: 'include' },
     );
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: 'Request failed' }));
+      throw new ApiError(error.detail || 'Request failed', res.status);
+    }
+    return res.json();
   }
 
   async voteRequest(requestId: number): Promise<VoteResponse> {
@@ -494,12 +512,15 @@ class ApiClient {
   }
 
   async publicVoteRequest(requestId: number): Promise<VoteResponse> {
-    const response = await fetch(`${getApiUrl()}/api/requests/${requestId}/vote`, { method: 'POST' });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Vote failed' }));
-      throw new ApiError(error.detail || 'Vote failed', response.status);
+    const res = await fetch(`${getApiUrl()}/api/requests/${requestId}/vote`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: 'Vote failed' }));
+      throw new ApiError(error.detail || 'Vote failed', res.status);
     }
-    return response.json();
+    return res.json();
   }
 
   async getArchivedEvents(): Promise<ArchivedEvent[]> {

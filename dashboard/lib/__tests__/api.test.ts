@@ -95,6 +95,7 @@ describe('ApiClient', () => {
       const [url, options] = mockFetch.mock.calls[0];
       expect(url).toContain('/api/events/ABC123/requests');
       expect(options.method).toBe('POST');
+      expect(options.credentials).toBe('include');
 
       const body = JSON.parse(options.body);
       expect(body.artist).toBe('Artist');
@@ -1268,7 +1269,7 @@ describe('ApiClient', () => {
   // ========== Public endpoints ==========
 
   describe('eventSearch', () => {
-    it('searches via public endpoint without auth', async () => {
+    it('searches via event code with cookie credentials', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => [{ title: 'Found Song', artist: 'Found Artist' }],
@@ -2093,6 +2094,47 @@ describe('ApiClient', () => {
       });
 
       await expect(api.getKioskDisplay('BAD')).rejects.toThrow('Request failed');
+    });
+  });
+
+  describe('credentials propagation (F2)', () => {
+    it('submitRequest sends credentials: include', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 1, vote_count: 0 }),
+      });
+
+      await api.submitRequest('TEST01', 'Artist', 'Title');
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [, options] = mockFetch.mock.calls[0];
+      expect(options.credentials).toBe('include');
+    });
+
+    it('publicVoteRequest sends credentials: include', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'voted', vote_count: 1, has_voted: true }),
+      });
+
+      await api.publicVoteRequest(42);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [, options] = mockFetch.mock.calls[0];
+      expect(options.credentials).toBe('include');
+    });
+
+    it('eventSearch sends credentials: include', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      });
+
+      await api.eventSearch('TEST01', 'foo');
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [, options] = mockFetch.mock.calls[0];
+      expect(options.credentials).toBe('include');
     });
   });
 
