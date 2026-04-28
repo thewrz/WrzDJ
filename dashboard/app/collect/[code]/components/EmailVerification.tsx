@@ -52,6 +52,19 @@ export default function EmailVerification({ isVerified, onVerified }: Props) {
 
   const handleDigitChange = useCallback(
     (index: number, value: string) => {
+      if (value.length > 1) {
+        const allDigits = value.replace(/\D/g, '').slice(0, 6);
+        if (allDigits.length > 1) {
+          const next = ['', '', '', '', '', ''];
+          for (let i = 0; i < allDigits.length; i++) {
+            next[i] = allDigits[i];
+          }
+          setDigits(next);
+          const focusIdx = Math.min(allDigits.length, 5);
+          inputRefs.current[focusIdx]?.focus();
+          return;
+        }
+      }
       if (!/^\d?$/.test(value)) return;
       const next = [...digits];
       next[index] = value;
@@ -61,6 +74,22 @@ export default function EmailVerification({ isVerified, onVerified }: Props) {
       }
     },
     [digits]
+  );
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      e.preventDefault();
+      const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+      if (!pasted) return;
+      const next = ['', '', '', '', '', ''];
+      for (let i = 0; i < pasted.length; i++) {
+        next[i] = pasted[i];
+      }
+      setDigits(next);
+      const focusIdx = Math.min(pasted.length, 5);
+      inputRefs.current[focusIdx]?.focus();
+    },
+    []
   );
 
   const handleDigitKeyDown = useCallback(
@@ -127,6 +156,7 @@ export default function EmailVerification({ isVerified, onVerified }: Props) {
               maxLength={1}
               value={d}
               onChange={(e) => handleDigitChange(i, e.target.value)}
+              onPaste={handlePaste}
               onKeyDown={(e) => handleDigitKeyDown(i, e)}
               className="verify-digit-input"
               disabled={confirming}
