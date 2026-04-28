@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import FeatureOptInPanel from './FeatureOptInPanel';
 
 // EmailVerification makes real API calls — mock it out for panel tests
-vi.mock('./EmailVerification', () => ({
+vi.mock('../../../../components/EmailVerification', () => ({
   default: ({ isVerified }: { isVerified: boolean }) =>
     isVerified ? <div>Email verified</div> : <div data-testid="email-verification-stub" />,
 }));

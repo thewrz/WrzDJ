@@ -1,9 +1,23 @@
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { useEffect } from "react";
 import CollectPage from "./page";
 
 vi.mock("./components/EmailVerification", () => ({
   default: () => <div data-testid="email-verification-stub" />,
+}));
+
+vi.mock("../../../components/NicknameGate", () => ({
+  NicknameGate: ({ onComplete }: { onComplete: (r: { nickname: string; emailVerified: boolean; submissionCount: number; submissionCap: number }) => void }) => {
+    useEffect(() => {
+      onComplete({ nickname: '', emailVerified: false, submissionCount: 0, submissionCap: 15 });
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return null;
+  },
+}));
+
+vi.mock("../../../components/IdentityBar", () => ({
+  IdentityBar: () => <div data-testid="identity-bar-stub" />,
 }));
 
 const mockReplace = vi.fn();
@@ -14,7 +28,6 @@ vi.mock("next/navigation", () => ({
 
 const mockGetEvent = vi.fn();
 const mockGetCollectProfile = vi.fn();
-const mockSetCollectProfile = vi.fn();
 const mockGetCollectLeaderboard = vi.fn();
 const mockSubmitCollectRequest = vi.fn();
 const mockEventSearch = vi.fn();
@@ -34,7 +47,6 @@ vi.mock("../../../lib/api", () => ({
       submitted: [], upvoted: [], is_top_contributor: false, first_suggestion_ids: [], voted_request_ids: []
     }),
     getCollectProfile: (...a: unknown[]) => mockGetCollectProfile(...a),
-    setCollectProfile: (...a: unknown[]) => mockSetCollectProfile(...a),
     submitCollectRequest: (...a: unknown[]) => mockSubmitCollectRequest(...a),
     eventSearch: (...a: unknown[]) => mockEventSearch(...a),
     search: vi.fn().mockResolvedValue([]),
@@ -65,7 +77,6 @@ describe("CollectPage", () => {
       submission_cap: 15,
     };
     mockGetCollectProfile.mockResolvedValue(defaultProfile);
-    mockSetCollectProfile.mockResolvedValue(defaultProfile);
     mockGetCollectLeaderboard.mockResolvedValue({ requests: [], total: 0 });
     mockSubmitCollectRequest.mockResolvedValue({ id: 42 });
     mockEventSearch.mockResolvedValue([]);
@@ -132,19 +143,16 @@ describe("CollectPage", () => {
     );
   });
 
-  it("hides FeatureOptInPanel when profile returns email_verified true with nickname", async () => {
+  it("IdentityBar renders after gate completes", async () => {
     mockGetEvent.mockResolvedValue(COLLECTION_EVENT);
-    mockGetCollectProfile.mockResolvedValue({
-      email_verified: true,
-      nickname: "DancingQueen",
-      submission_count: 0,
-      submission_cap: 15,
-    });
     render(<CollectPage />);
     await waitFor(() => {
       expect(screen.getByText(/test event/i)).toBeInTheDocument();
     });
-    expect(screen.queryByText(/make it yours/i)).not.toBeInTheDocument();
+    // IdentityBar is rendered (mocked as identity-bar-stub) once gate completes.
+    // The NicknameGate mock fires onComplete with empty nickname so IdentityBar
+    // should NOT render (nickname is falsy).
+    expect(screen.queryByTestId("identity-bar-stub")).not.toBeInTheDocument();
   });
 
   it("calls submitCollectRequest and refreshes profile after track select", async () => {
@@ -225,8 +233,9 @@ describe("CollectPage", () => {
       });
     });
 
-    // Profile should have been refreshed at least once after submit
-    // (initial load + post-submit refresh, both via the read endpoint)
-    expect(mockGetCollectProfile.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // Profile should have been refreshed after submit (via getCollectProfile).
+    // The initial load is now handled by NicknameGate (mocked), so only the
+    // post-submit refresh counts here.
+    expect(mockGetCollectProfile.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 });

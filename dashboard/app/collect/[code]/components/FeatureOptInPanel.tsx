@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { z } from 'zod';
-import EmailVerification from './EmailVerification';
+import EmailVerification from '../../../../components/EmailVerification';
 
 const nicknameSchema = z
   .string()
