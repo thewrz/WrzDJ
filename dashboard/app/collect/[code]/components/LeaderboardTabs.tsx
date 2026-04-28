@@ -172,7 +172,7 @@ export default function LeaderboardTabs({ rows, tab, onTabChange, onVote, votedI
                   </div>
 
                   {/* Vote count + button */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, marginLeft: 'auto' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                       <span style={{
                         fontFamily: 'var(--font-mono, monospace)', fontSize: 16.5, fontWeight: 800,

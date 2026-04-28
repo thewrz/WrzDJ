@@ -671,7 +671,7 @@ export default function JoinEventPage() {
                     </div>
 
                     {/* Vote count + button */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, marginLeft: 'auto' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                         <TickNumber
                           value={effectiveVotes}
