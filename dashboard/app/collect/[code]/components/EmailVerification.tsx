@@ -8,9 +8,10 @@ type VerifyState = 'input' | 'code_sent' | 'verified';
 interface Props {
   isVerified: boolean;
   onVerified: () => void;
+  onSkip?: () => void;
 }
 
-export default function EmailVerification({ isVerified, onVerified }: Props) {
+export default function EmailVerification({ isVerified, onVerified, onSkip }: Props) {
   const [state, setState] = useState<VerifyState>(isVerified ? 'verified' : 'input');
   const [email, setEmail] = useState('');
   const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
@@ -208,6 +209,16 @@ export default function EmailVerification({ isVerified, onVerified }: Props) {
       >
         {sending ? 'Sending...' : 'Send Code'}
       </button>
+      {onSkip && (
+        <button
+          type="button"
+          className="btn-link"
+          onClick={onSkip}
+          style={{ fontSize: '0.8rem', marginTop: '0.5rem', display: 'block' }}
+        >
+          Skip for now
+        </button>
+      )}
     </div>
   );
 }
