@@ -113,6 +113,12 @@ def get_client_fingerprint(
 ) -> str:
     """Extract client fingerprint (IP) from the request, truncated to safe length.
 
+    The returned value is the raw client IP. It is stored in plain text in
+    the `client_fingerprint` columns of `requests`, `request_votes`, and
+    `guest_profiles`. **Any export of those tables (CSV, backup, analytics)
+    must scrub or hash this column** — `mask_fingerprint()` is the helper
+    for that.
+
     When `action` is provided, emits a structured INFO log line:
         action=collect.vote event=PB5TTP source=x-real-ip fp=a1b2c3d4e5f6
 
