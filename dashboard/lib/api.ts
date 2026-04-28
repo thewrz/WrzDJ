@@ -521,11 +521,19 @@ class ApiClient {
   }
 
   async checkHasRequested(code: string): Promise<HasRequestedResponse> {
-    return this.publicFetch(`${getApiUrl()}/api/public/events/${code}/has-requested`);
+    const res = await fetch(`${getApiUrl()}/api/public/events/${code}/has-requested`, {
+      credentials: 'include',
+    });
+    if (!res.ok) throw new ApiError(`checkHasRequested failed: ${res.status}`, res.status);
+    return res.json();
   }
 
   async getMyRequests(code: string): Promise<MyRequestsResponse> {
-    return this.publicFetch(`${getApiUrl()}/api/public/events/${code}/my-requests`);
+    const res = await fetch(`${getApiUrl()}/api/public/events/${code}/my-requests`, {
+      credentials: 'include',
+    });
+    if (!res.ok) throw new ApiError(`getMyRequests failed: ${res.status}`, res.status);
+    return res.json();
   }
 
   async getPublicRequests(code: string): Promise<GuestRequestListResponse> {
@@ -1001,7 +1009,7 @@ class ApiClient {
   async getCollectProfile(code: string): Promise<CollectProfileResponse> {
     const res = await fetch(
       `${getApiUrl()}/api/public/collect/${code}/profile`,
-      { method: 'GET', headers: { 'Content-Type': 'application/json' } },
+      { method: 'GET', headers: { 'Content-Type': 'application/json' }, credentials: 'include' },
     );
     if (!res.ok) {
       throw new ApiError(`getCollectProfile failed: ${res.status}`, res.status);
@@ -1016,6 +1024,7 @@ class ApiClient {
     const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/profile`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new ApiError(`setCollectProfile failed: ${res.status}`, res.status);
@@ -1026,6 +1035,7 @@ class ApiClient {
     const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/profile/me`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
     });
     if (!res.ok) throw new ApiError(`getCollectMyPicks failed: ${res.status}`, res.status);
     return res.json();
@@ -1046,6 +1056,7 @@ class ApiClient {
     const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/requests`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(data),
     });
     if (!res.ok) {
@@ -1059,6 +1070,7 @@ class ApiClient {
     const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/vote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ request_id: requestId }),
     });
     if (!res.ok) {

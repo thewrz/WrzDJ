@@ -70,14 +70,14 @@ export default function JoinEventPage() {
   useEffect(() => {
     if (!code) return;
     let cancelled = false;
-    api.getCollectEvent(code).then(
-      (ev) => {
-        if (!cancelled) setCollectPhase(ev.phase);
-      },
-      () => {
-        /* silently ignore — assume live */
-      }
-    );
+    Promise.allSettled([
+      api.getCollectEvent(code),
+      api.getCollectProfile(code),
+    ]).then(([evResult, profileResult]) => {
+      if (cancelled) return;
+      if (evResult.status === 'fulfilled') setCollectPhase(evResult.value.phase);
+      if (profileResult.status === 'fulfilled') setEmailVerified(profileResult.value.email_verified);
+    });
     return () => {
       cancelled = true;
     };
