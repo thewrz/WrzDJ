@@ -261,7 +261,7 @@ export default function CollectPage() {
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '5px 11px', borderRadius: 99,
             background: `${accent}14`, border: `1px solid ${accent}40`,
-            fontFamily: 'var(--font-mono, monospace)', fontSize: 9.5, fontWeight: 700,
+            fontFamily: 'var(--font-mono, monospace)', fontSize: 10.5, fontWeight: 700,
             color: accent, letterSpacing: 1.2, marginBottom: 10,
           }}>
             <span>🎟️</span>
@@ -272,23 +272,23 @@ export default function CollectPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <h1 style={{
-                fontSize: 26, fontWeight: 800, letterSpacing: -0.7, lineHeight: 1.05,
+                fontSize: 28.6, fontWeight: 800, letterSpacing: -0.7, lineHeight: 1.05,
                 margin: 0, color: '#fff',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>
                 {event.name}
               </h1>
               {liveStarts && (
-                <p style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10, color: subFg, marginTop: 6, letterSpacing: 0.5 }}>
+                <p style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11, color: subFg, marginTop: 6, letterSpacing: 0.5 }}>
                   Live show in <strong style={{ color: '#fff' }}>{formatCountdown(liveStarts)}</strong>
                 </p>
               )}
             </div>
             <div style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${border}`, flexShrink: 0 }}>
-              <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 13, fontWeight: 800, color: '#fff' }}>
+              <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 14.3, fontWeight: 800, color: '#fff' }}>
                 {(leaderboard?.requests ?? []).length}
               </span>
-              <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 7.5, color: subFg, letterSpacing: 1.2, marginTop: 2 }}>
+              <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 8.2, color: subFg, letterSpacing: 1.2, marginTop: 2 }}>
                 SONGS
               </div>
             </div>
@@ -328,7 +328,7 @@ export default function CollectPage() {
           >
             {/* Header */}
             <div style={{ padding: '12px 18px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
-              <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: -0.5, color: '#fff' }}>Add a song</div>
+              <div style={{ fontSize: 24.2, fontWeight: 800, letterSpacing: -0.5, color: '#fff' }}>Add a song</div>
               <button
                 type="button"
                 onClick={closeSearch}
@@ -369,7 +369,7 @@ export default function CollectPage() {
                     data-testid="collect-search-input"
                     style={{
                       flex: 1, background: 'transparent', border: 'none',
-                      color: '#fff', fontFamily: 'var(--font-grotesk, inherit)', fontSize: 15, fontWeight: 500,
+                      color: '#fff', fontFamily: 'var(--font-grotesk, inherit)', fontSize: 16.5, fontWeight: 500,
                       outline: 'none',
                     }}
                   />
@@ -380,7 +380,7 @@ export default function CollectPage() {
                     width: '100%', marginTop: 8, height: 44, borderRadius: 10,
                     background: `linear-gradient(90deg, ${accent}, ${accent2})`,
                     border: 'none', color: '#000',
-                    fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 14, fontWeight: 800,
+                    fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 15.4, fontWeight: 800,
                     cursor: searching ? 'default' : 'pointer', opacity: searching ? 0.7 : 1,
                   }}
                   disabled={searching}
