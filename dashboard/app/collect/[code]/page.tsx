@@ -319,7 +319,7 @@ export default function CollectPage() {
           className="gst-request-sheet"
           onClick={closeSearch}
           role="dialog"
-          aria-label="Add a song"
+          aria-label="Request a song"
           style={{ background: '#0a0a12' }}
         >
           <div
@@ -328,7 +328,7 @@ export default function CollectPage() {
           >
             {/* Header */}
             <div style={{ padding: '12px 18px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
-              <div style={{ fontSize: 26.6, fontWeight: 800, letterSpacing: -0.5, color: '#fff' }}>Add a song</div>
+              <div style={{ fontSize: 26.6, fontWeight: 800, letterSpacing: -0.5, color: '#fff' }}>Request a song</div>
               <button
                 type="button"
                 onClick={closeSearch}

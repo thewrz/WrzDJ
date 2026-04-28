@@ -21,7 +21,7 @@ export default function SubmitBar({ used, cap, onOpenSearch }: Props) {
       display: 'flex', alignItems: 'center', gap: 12,
     }}>
       <span style={{
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 10, fontWeight: 600,
+        fontFamily: 'var(--font-mono, monospace)', fontSize: 12, fontWeight: 600,
         color: atCap ? '#ef4444' : 'rgba(255,255,255,0.45)',
         letterSpacing: 0.5,
       }}>
@@ -35,7 +35,7 @@ export default function SubmitBar({ used, cap, onOpenSearch }: Props) {
           flex: 1, height: 58, borderRadius: 14,
           background: atCap ? 'rgba(255,255,255,0.06)' : `linear-gradient(90deg, ${ACCENT}, ${ACCENT2})`,
           border: 'none', color: atCap ? 'rgba(255,255,255,0.35)' : '#000',
-          fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 14, fontWeight: 800, letterSpacing: 0.4,
+          fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 17, fontWeight: 800, letterSpacing: 0.4,
           cursor: atCap ? 'default' : 'pointer',
           boxShadow: atCap ? 'none' : `0 10px 28px -6px ${ACCENT}80`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -47,7 +47,7 @@ export default function SubmitBar({ used, cap, onOpenSearch }: Props) {
             <path d="M7 1.5v11M1.5 7h11" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
           </svg>
         )}
-        + Add a song
+        Request a song
       </button>
     </div>
   );

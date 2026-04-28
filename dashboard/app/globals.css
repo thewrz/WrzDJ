@@ -1586,7 +1586,8 @@ h1, .display-heading {
 }
 
 .collect-row-title {
-  font-weight: 500;
+  font-size: 1rem;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1594,14 +1595,14 @@ h1, .display-heading {
 
 .collect-row-artist {
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .collect-row-nickname {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: #a78bfa;
   margin-top: 0.125rem;
   white-space: nowrap;
