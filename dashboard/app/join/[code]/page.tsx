@@ -5,7 +5,8 @@ import { useParams } from 'next/navigation';
 import { api, ApiError, Event, GuestNowPlaying, GuestRequestInfo, SearchResult } from '@/lib/api';
 import { useEventStream } from '@/lib/use-event-stream';
 import { useGuestIdentity } from '@/lib/use-guest-identity';
-import EmailVerification from '@/components/EmailVerification';
+import { NicknameGate, GateResult } from '@/components/NicknameGate';
+import { IdentityBar } from '@/components/IdentityBar';
 import MyRequestsTracker from './components/MyRequestsTracker';
 import CelebrationOverlay from './components/CelebrationOverlay';
 import Toast from './components/Toast';
@@ -50,6 +51,14 @@ export default function JoinEventPage() {
   // Email verification CTA (shown after submitting a request)
   const [emailVerified, setEmailVerified] = useState(false);
 
+  // Gate state — gate must complete before the page is shown
+  const [gateComplete, setGateComplete] = useState(false);
+  const handleGateComplete = (result: GateResult) => {
+    setNickname(result.nickname);
+    setEmailVerified(result.emailVerified);
+    setGateComplete(true);
+  };
+
   // Splash + collect-phase banner
   const [splashVisible, setSplashVisible] = useState(false);
   const [collectPhase, setCollectPhase] = useState<
@@ -68,6 +77,7 @@ export default function JoinEventPage() {
   }, [code]);
 
   useEffect(() => {
+    if (!gateComplete) return;
     if (!code) return;
     let cancelled = false;
     Promise.allSettled([
@@ -81,7 +91,7 @@ export default function JoinEventPage() {
     return () => {
       cancelled = true;
     };
-  }, [code]);
+  }, [code, gateComplete]);
 
   // My Requests tracking
   const [myRequestIds, setMyRequestIds] = useState<Set<number>>(new Set());
@@ -298,13 +308,16 @@ export default function JoinEventPage() {
     setSearchResults([]);
     setSelectedSong(null);
     setNote('');
-    setNickname('');
     setSubmitted(false);
     setSubmitIsDuplicate(false);
     setSubmitVoteCount(0);
     setFadingOut(false);
     setShowRequestList(false);
   };
+
+  if (!gateComplete) {
+    return <NicknameGate code={code} onComplete={handleGateComplete} />;
+  }
 
   if (loading) {
     return (
@@ -346,6 +359,13 @@ export default function JoinEventPage() {
   if (showRequestList) {
     return (
       <div className="guest-request-list-container">
+        {nickname && (
+          <IdentityBar
+            nickname={nickname}
+            emailVerified={emailVerified}
+            onVerified={() => setEmailVerified(true)}
+          />
+        )}
         {splashVisible && (
           <div className="join-live-splash">
             🎉 The event is now live — you&apos;re in!
@@ -520,12 +540,6 @@ export default function JoinEventPage() {
           )}
         </div>
 
-        {!emailVerified && (
-          <div style={{ margin: '1rem 0', padding: '0.75rem', background: 'var(--card-bg)', borderRadius: '8px' }}>
-            <EmailVerification isVerified={false} onVerified={() => setEmailVerified(true)} />
-          </div>
-        )}
-
         {event.requests_open && (
           <div className="sticky-bottom-button">
             <button className="btn btn-primary" onClick={resetForm}>
@@ -586,18 +600,6 @@ export default function JoinEventPage() {
             </div>
           </div>
           <div className="form-group">
-            <label htmlFor="nickname">Your name (optional)</label>
-            <input
-              id="nickname"
-              type="text"
-              className="input"
-              placeholder="e.g., Sarah"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              maxLength={30}
-            />
-          </div>
-          <div className="form-group">
             <label htmlFor="note">Add a note (optional)</label>
             <input
               id="note"
@@ -642,6 +644,13 @@ export default function JoinEventPage() {
             <img src={event.banner_url} alt="" />
           </div>
         )}
+        {nickname && (
+          <IdentityBar
+            nickname={nickname}
+            emailVerified={emailVerified}
+            onVerified={() => setEmailVerified(true)}
+          />
+        )}
         <div className="container" style={{ maxWidth: '500px', position: 'relative', zIndex: 1 }}>
           <div className="card" style={{ textAlign: 'center' }}>
             <h1 style={{ marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{event.name}</h1>
@@ -660,6 +669,13 @@ export default function JoinEventPage() {
         <div className="join-banner-bg">
           <img src={event.banner_url} alt="" />
         </div>
+      )}
+      {nickname && (
+        <IdentityBar
+          nickname={nickname}
+          emailVerified={emailVerified}
+          onVerified={() => setEmailVerified(true)}
+        />
       )}
       {splashVisible && (
         <div className="join-live-splash">
