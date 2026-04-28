@@ -120,14 +120,39 @@ _BLOCKED_SUBSTRINGS = frozenset(
 _NON_ALPHA_RE = re.compile(r"[^a-z]")
 
 
+def _distinct_ordered_alpha(text: str) -> str:
+    """Extract each unique lowercase letter exactly once, in first-occurrence
+    order.  'mmShmmImmT' -> 'mshit'.  Used to detect letter-padding bypasses
+    where a blocked word's letters are separated by repeated filler characters
+    (e.g. 'mmSmmHmmImmT' to spell out 'shit' with 'mm' padding)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for c in text:
+        if c not in seen:
+            seen.add(c)
+            out.append(c)
+    return _NON_ALPHA_RE.sub("", "".join(out))
+
+
 def contains_profanity(text: str) -> bool:
     """Check text for profanity using word-boundary matching and substring
     matching with leetspeak normalization.  Designed for username-style input
-    where words are concatenated without spaces."""
+    where words are concatenated without spaces.
+
+    Detection layers:
+    1. better_profanity word-boundary check (catches common phrases).
+    2. Substring check on alpha-only normalized text (catches dots/numbers
+       used as separators, e.g. 's.h.i.t' or 'sh1t').
+    3. Distinct-letter skeleton check (catches alpha letter padding,
+       e.g. 'mmSmmHmmImmT' -> 'mshit' contains 'shit').
+    """
     if not text:
         return False
     if profanity.contains_profanity(text):
         return True
     normalized = text.lower().translate(_LEET_MAP)
     alpha_only = _NON_ALPHA_RE.sub("", normalized)
-    return any(word in alpha_only for word in _BLOCKED_SUBSTRINGS)
+    if any(word in alpha_only for word in _BLOCKED_SUBSTRINGS):
+        return True
+    distinct_alpha = _distinct_ordered_alpha(normalized)
+    return any(word in distinct_alpha for word in _BLOCKED_SUBSTRINGS)
