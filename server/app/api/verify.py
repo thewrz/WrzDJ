@@ -42,7 +42,7 @@ def request_verification_code(
     except RateLimitExceededError:
         raise HTTPException(status_code=429, detail="Too many codes requested")
     except (EmailNotConfiguredError, EmailSendError):
-        raise HTTPException(status_code=503, detail="Email verification is temporarily unavailable")
+        raise HTTPException(status_code=422, detail="Email verification is temporarily unavailable")
 
     return VerifyRequestResponse(sent=True)
 
