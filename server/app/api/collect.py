@@ -317,11 +317,11 @@ def submit(
 
     existing = find_duplicate(db, event.id, payload.artist, payload.song_title)
     if existing:
-        is_own = False
-        if guest_id and existing.guest_id:
-            is_own = existing.guest_id == guest_id
-        elif existing.client_fingerprint and fingerprint:
-            is_own = existing.client_fingerprint == fingerprint
+        is_own = (guest_id is not None and existing.guest_id == guest_id) or (
+            existing.client_fingerprint is not None
+            and fingerprint is not None
+            and existing.client_fingerprint == fingerprint
+        )
         if is_own:
             raise HTTPException(status_code=409, detail="You already picked this one!")
 
@@ -406,11 +406,11 @@ def vote(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Request not found")
-    is_own = False
-    if guest_id and row.guest_id:
-        is_own = row.guest_id == guest_id
-    elif row.client_fingerprint and row.client_fingerprint == fingerprint:
-        is_own = True
+    is_own = (guest_id is not None and row.guest_id == guest_id) or (
+        row.client_fingerprint is not None
+        and fingerprint is not None
+        and row.client_fingerprint == fingerprint
+    )
     if is_own:
         raise HTTPException(status_code=409, detail="Can't vote on your own pick")
     _, is_new_vote = add_vote(
