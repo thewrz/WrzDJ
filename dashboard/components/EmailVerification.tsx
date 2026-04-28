@@ -1,16 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiClient, ApiError } from '../../../../lib/api';
+import { apiClient, ApiError } from '../lib/api';
 
 type VerifyState = 'input' | 'code_sent' | 'verified';
 
 interface Props {
   isVerified: boolean;
   onVerified: () => void;
+  onSkip?: () => void;
 }
 
-export default function EmailVerification({ isVerified, onVerified }: Props) {
+export default function EmailVerification({ isVerified, onVerified, onSkip }: Props) {
   const [state, setState] = useState<VerifyState>(isVerified ? 'verified' : 'input');
   const [email, setEmail] = useState('');
   const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
@@ -111,6 +112,10 @@ export default function EmailVerification({ isVerified, onVerified }: Props) {
       if (result.verified) {
         setState('verified');
         onVerified();
+        // Hard reload on account merge: the guest's identity was consolidated with an
+        // existing verified account. A full reload is intentional — it picks up the
+        // merged session token (set via the verify/confirm cookie response) so all
+        // subsequent API calls use the canonical guest identity.
         if (result.merged) {
           window.location.reload();
         }
@@ -208,6 +213,16 @@ export default function EmailVerification({ isVerified, onVerified }: Props) {
       >
         {sending ? 'Sending...' : 'Send Code'}
       </button>
+      {onSkip && (
+        <button
+          type="button"
+          className="btn-link"
+          onClick={onSkip}
+          style={{ fontSize: '0.8rem', marginTop: '0.5rem', display: 'block' }}
+        >
+          Skip for now
+        </button>
+      )}
     </div>
   );
 }

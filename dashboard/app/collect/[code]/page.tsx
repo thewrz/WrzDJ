@@ -11,7 +11,8 @@ import {
   SearchResult,
 } from '../../../lib/api';
 import { useGuestIdentity } from '../../../lib/use-guest-identity';
-import FeatureOptInPanel from './components/FeatureOptInPanel';
+import { IdentityBar } from '../../../components/IdentityBar';
+import { NicknameGate, GateResult } from '../../../components/NicknameGate';
 import LeaderboardTabs from './components/LeaderboardTabs';
 import MyPicksPanel from './components/MyPicksPanel';
 import SubmitBar from './components/SubmitBar';
@@ -43,6 +44,14 @@ export default function CollectPage() {
     submission_cap: number;
   } | null>(null);
 
+  const [gateComplete, setGateComplete] = useState(false);
+  const handleGateComplete = (result: GateResult) => {
+    setNickname(result.nickname || null);
+    setEmailVerified(result.emailVerified);
+    setProfile({ submission_count: result.submissionCount, submission_cap: result.submissionCap });
+    setGateComplete(true);
+  };
+
   // Search modal state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,26 +59,6 @@ export default function CollectPage() {
   const [searching, setSearching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  const saveProfile = async (data: { nickname?: string }) => {
-    const resp = await apiClient.setCollectProfile(code, data);
-    setNickname(resp.nickname);
-    if (resp.nickname) {
-      localStorage.setItem(`wrzdj_collect_nickname_${code}`, resp.nickname);
-    }
-  };
-
-  useEffect(() => {
-    if (!code) return;
-    apiClient.getCollectProfile(code).then((p) => {
-      setProfile({ submission_count: p.submission_count, submission_cap: p.submission_cap });
-      setEmailVerified(p.email_verified);
-      setNickname(p.nickname);
-      if (p.nickname) {
-        localStorage.setItem(`wrzdj_collect_nickname_${code}`, p.nickname);
-      }
-    });
-  }, [code]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openSearch = () => {
     setSearchOpen(true);
@@ -109,8 +98,7 @@ export default function CollectPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const submitNickname =
-        nickname ?? localStorage.getItem(`wrzdj_collect_nickname_${code}`) ?? undefined;
+      const submitNickname = nickname ?? undefined;
       const result = await apiClient.submitCollectRequest(code, {
         song_title: song.title,
         artist: song.artist,
@@ -153,6 +141,7 @@ export default function CollectPage() {
   };
 
   useEffect(() => {
+    if (!gateComplete) return;
     if (!code) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -195,7 +184,11 @@ export default function CollectPage() {
       if (timer) clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [code, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [code, tab, gateComplete]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!gateComplete) {
+    return <NicknameGate code={code} onComplete={handleGateComplete} />;
+  }
 
   if (error) {
     return (
@@ -244,6 +237,13 @@ export default function CollectPage() {
 
   return (
     <main className="collect-page">
+      {nickname && (
+        <IdentityBar
+          nickname={nickname}
+          emailVerified={emailVerified}
+          onVerified={() => setEmailVerified(true)}
+        />
+      )}
       {bannerNode}
       <div className="collect-container">
         <header className="collect-header">
@@ -257,19 +257,7 @@ export default function CollectPage() {
               Live show in <strong>{formatCountdown(liveStarts)}</strong>
             </p>
           )}
-          {nickname && (
-            <p className="collect-countdown" style={{ marginTop: '0.25rem' }}>
-              Voting as <strong>@{nickname}</strong>
-            </p>
-          )}
         </header>
-
-        <FeatureOptInPanel
-          emailVerified={emailVerified}
-          initialNickname={nickname}
-          onSave={saveProfile}
-          onVerified={() => setEmailVerified(true)}
-        />
 
         <section className="collect-section">
           <LeaderboardTabs
