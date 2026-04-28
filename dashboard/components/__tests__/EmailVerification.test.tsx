@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import EmailVerification from './EmailVerification';
+import EmailVerification from '../EmailVerification';
 
 describe('EmailVerification — onSkip prop', () => {
   it('renders "Skip for now" button when onSkip is provided', () => {

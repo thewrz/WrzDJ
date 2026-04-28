@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { api, ApiError, Event, GuestNowPlaying, GuestRequestInfo, SearchResult } from '@/lib/api';
 import { useEventStream } from '@/lib/use-event-stream';
 import { useGuestIdentity } from '@/lib/use-guest-identity';
-import EmailVerification from '../../collect/[code]/components/EmailVerification';
+import EmailVerification from '@/components/EmailVerification';
 import MyRequestsTracker from './components/MyRequestsTracker';
 import CelebrationOverlay from './components/CelebrationOverlay';
 import Toast from './components/Toast';

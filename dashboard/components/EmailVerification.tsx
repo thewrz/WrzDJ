@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiClient, ApiError } from '../../../../lib/api';
+import { apiClient, ApiError } from '../lib/api';
 
 type VerifyState = 'input' | 'code_sent' | 'verified';
 
@@ -112,6 +112,10 @@ export default function EmailVerification({ isVerified, onVerified, onSkip }: Pr
       if (result.verified) {
         setState('verified');
         onVerified();
+        // Hard reload on account merge: the guest's identity was consolidated with an
+        // existing verified account. A full reload is intentional — it picks up the
+        // merged session token (set via the verify/confirm cookie response) so all
+        // subsequent API calls use the canonical guest identity.
         if (result.merged) {
           window.location.reload();
         }

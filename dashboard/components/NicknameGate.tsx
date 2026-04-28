@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { apiClient, ApiError, CollectProfileResponse } from '../lib/api';
 import { ModalOverlay } from './ModalOverlay';
-import EmailVerification from '../app/collect/[code]/components/EmailVerification';
+import EmailVerification from './EmailVerification';
 
 const nicknameSchema = z
   .string()
