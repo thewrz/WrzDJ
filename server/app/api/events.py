@@ -24,7 +24,7 @@ from app.api.deps import (
     get_owned_event,
 )
 from app.core.config import get_settings
-from app.core.rate_limit import get_client_fingerprint, get_guest_id, limiter
+from app.core.rate_limit import get_guest_id, limiter
 from app.models.event import Event
 from app.models.request import RequestStatus
 from app.models.user import User
@@ -632,8 +632,7 @@ def submit_request(
         source=request_data.source.value,
         source_url=request_data.source_url,
         artwork_url=request_data.artwork_url,
-        client_fingerprint=get_client_fingerprint(request),
-        guest_id=get_guest_id(request, db),  # NEW — F1 fix
+        guest_id=get_guest_id(request, db),
         raw_search_query=request_data.raw_search_query,
         genre=request_data.genre,
         bpm=request_data.bpm,

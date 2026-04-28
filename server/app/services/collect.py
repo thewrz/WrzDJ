@@ -153,54 +153,41 @@ def get_profile(
     db: Session,
     *,
     event_id: int,
-    fingerprint: str | None = None,
     guest_id: int | None = None,
 ) -> GuestProfile | None:
-    """Find a profile by guest_id, falling back to fingerprint when both
-    are provided but guest_id has no row yet (orphan case — profile was
-    created before the wrzdj_guest cookie existed)."""
-    if guest_id:
-        row = (
-            db.query(GuestProfile)
-            .filter(GuestProfile.event_id == event_id, GuestProfile.guest_id == guest_id)
-            .one_or_none()
-        )
-        if row is not None:
-            return row
-    if fingerprint:
-        return (
-            db.query(GuestProfile)
-            .filter(
-                GuestProfile.event_id == event_id,
-                GuestProfile.client_fingerprint == fingerprint,
-            )
-            .one_or_none()
-        )
-    return None
+    """Find a profile by guest_id. Returns None when no cookie/guest_id is
+    available — there is no IP fallback. See docs/RECOVERY-IP-IDENTITY.md.
+    """
+    if guest_id is None:
+        return None
+    return (
+        db.query(GuestProfile)
+        .filter(GuestProfile.event_id == event_id, GuestProfile.guest_id == guest_id)
+        .one_or_none()
+    )
 
 
 def upsert_profile(
     db: Session,
     *,
     event_id: int,
-    fingerprint: str | None = None,
     guest_id: int | None = None,
     nickname: str | None = None,
-) -> GuestProfile:
-    profile = get_profile(db, event_id=event_id, fingerprint=fingerprint, guest_id=guest_id)
+) -> GuestProfile | None:
+    """Create or update a profile keyed on (event_id, guest_id). Returns None
+    when no guest_id is provided — anonymous callers cannot persist profile state.
+    """
+    if guest_id is None:
+        return None
+    profile = get_profile(db, event_id=event_id, guest_id=guest_id)
     if profile is None:
         profile = GuestProfile(
             event_id=event_id,
-            client_fingerprint=fingerprint,
             guest_id=guest_id,
             nickname=nickname,
         )
         db.add(profile)
     else:
-        if profile.guest_id is None and guest_id is not None:
-            profile.guest_id = guest_id
-        if profile.client_fingerprint is None and fingerprint is not None:
-            profile.client_fingerprint = fingerprint
         if nickname is not None:
             profile.nickname = nickname
     db.commit()
@@ -212,19 +199,19 @@ def check_and_increment_submission_count(
     db: Session,
     *,
     event: Event,
-    fingerprint: str | None = None,
     guest_id: int | None = None,
 ) -> GuestProfile:
     """Atomically enforce the per-guest cap, incrementing submission_count on success.
 
     Raises SubmissionCapExceeded when the cap would be exceeded. cap == 0 means
-    unlimited (explicit by design).
+    unlimited (explicit by design). Requires guest_id (cookie identity).
     """
-    profile = get_profile(db, event_id=event.id, fingerprint=fingerprint, guest_id=guest_id)
+    if guest_id is None:
+        raise ValueError("guest_id is required — see docs/RECOVERY-IP-IDENTITY.md")
+    profile = get_profile(db, event_id=event.id, guest_id=guest_id)
     if profile is None:
         profile = GuestProfile(
             event_id=event.id,
-            client_fingerprint=fingerprint,
             guest_id=guest_id,
         )
         db.add(profile)

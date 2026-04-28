@@ -99,16 +99,10 @@ def test_same_guest_double_vote_still_idempotent(client, votable_event_and_reque
     assert second.json()["status"] == "already_voted"
 
 
-def test_legacy_anon_vote_blocks_anon_revote_same_ip(client, votable_event_and_request):
-    """Sanity: when no cookie is involved (no /identify call), the
-    fp-only dedup still works — same IP can only vote once."""
+def test_anon_vote_returns_401(client, votable_event_and_request):
+    """No cookie -> 401. Identity-by-IP fallback removed; see docs/RECOVERY-IP-IDENTITY.md."""
     _, req = votable_event_and_request
 
-    first = client.post(f"/api/requests/{req.id}/vote")
-    assert first.status_code == 200
-    assert first.json()["vote_count"] == 1
-
-    second = client.post(f"/api/requests/{req.id}/vote")
-    assert second.status_code == 200
-    assert second.json()["vote_count"] == 1, "anonymous re-vote must be a no-op"
-    assert second.json()["status"] == "already_voted"
+    client.cookies.clear()
+    resp = client.post(f"/api/requests/{req.id}/vote")
+    assert resp.status_code == 401

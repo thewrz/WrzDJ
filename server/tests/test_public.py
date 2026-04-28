@@ -3,9 +3,26 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.core.time import utcnow
 from app.models.event import Event
+from app.models.guest import Guest
 from app.models.now_playing import NowPlaying
 from app.models.request import Request, RequestStatus
+
+
+def _make_guest_and_cookie(client: TestClient, db: Session, suffix: str = "a") -> Guest:
+    g = Guest(
+        token=suffix.ljust(64, "0"),
+        fingerprint_hash=f"fp_{suffix}",
+        created_at=utcnow(),
+        last_seen_at=utcnow(),
+    )
+    db.add(g)
+    db.commit()
+    db.refresh(g)
+    client.cookies.clear()
+    client.cookies.set("wrzdj_guest", g.token)
+    return g
 
 
 class TestMyRequests:
@@ -14,8 +31,8 @@ class TestMyRequests:
     def test_my_requests_returns_own_requests(
         self, client: TestClient, test_event: Event, db: Session
     ):
-        """Test that my-requests returns only requests matching the client fingerprint."""
-        # TestClient default host is "testclient" — fingerprint derived from that
+        """my-requests returns only requests with matching guest_id."""
+        guest = _make_guest_and_cookie(client, db)
         req1 = Request(
             event_id=test_event.id,
             song_title="My Song",
@@ -23,7 +40,7 @@ class TestMyRequests:
             source="spotify",
             status=RequestStatus.NEW.value,
             dedupe_key="my_req_001",
-            client_fingerprint="testclient",
+            guest_id=guest.id,
         )
         req2 = Request(
             event_id=test_event.id,
@@ -32,7 +49,6 @@ class TestMyRequests:
             source="spotify",
             status=RequestStatus.NEW.value,
             dedupe_key="other_req_001",
-            client_fingerprint="someone_else",
         )
         db.add_all([req1, req2])
         db.commit()
@@ -46,7 +62,8 @@ class TestMyRequests:
     def test_my_requests_returns_all_statuses(
         self, client: TestClient, test_event: Event, db: Session
     ):
-        """Test that my-requests includes all statuses, not just new/accepted."""
+        """my-requests includes all statuses, not just new/accepted."""
+        guest = _make_guest_and_cookie(client, db)
         statuses = [
             RequestStatus.NEW,
             RequestStatus.ACCEPTED,
@@ -62,7 +79,7 @@ class TestMyRequests:
                 source="spotify",
                 status=status.value,
                 dedupe_key=f"status_test_{i}",
-                client_fingerprint="testclient",
+                guest_id=guest.id,
             )
             db.add(req)
         db.commit()
@@ -75,21 +92,22 @@ class TestMyRequests:
         assert returned_statuses == {"new", "accepted", "playing", "played", "rejected"}
 
     def test_my_requests_empty(self, client: TestClient, test_event: Event):
-        """Test that my-requests returns empty list when no requests match."""
+        """my-requests returns empty list when no requests match."""
         response = client.get(f"/api/public/events/{test_event.code}/my-requests")
         assert response.status_code == 200
         data = response.json()
         assert data["requests"] == []
 
     def test_my_requests_event_not_found(self, client: TestClient):
-        """Test my-requests for nonexistent event."""
+        """my-requests for nonexistent event returns 404."""
         response = client.get("/api/public/events/NOTFOUND/my-requests")
         assert response.status_code == 404
 
     def test_my_requests_includes_metadata(
         self, client: TestClient, test_event: Event, db: Session
     ):
-        """Test that my-requests includes all expected fields."""
+        """my-requests includes all expected fields."""
+        guest = _make_guest_and_cookie(client, db)
         req = Request(
             event_id=test_event.id,
             song_title="Detailed Song",
@@ -98,8 +116,8 @@ class TestMyRequests:
             source="spotify",
             status=RequestStatus.ACCEPTED.value,
             dedupe_key="detailed_test_001",
-            client_fingerprint="testclient",
             vote_count=5,
+            guest_id=guest.id,
         )
         db.add(req)
         db.commit()
@@ -138,7 +156,6 @@ class TestKioskDisplay:
 
     def test_kiosk_display_accepted_queue(self, client: TestClient, test_event: Event, db: Session):
         """Test that accepted requests appear in queue."""
-        # Create an accepted request
         request = Request(
             event_id=test_event.id,
             song_title="Accepted Song",
@@ -159,7 +176,6 @@ class TestKioskDisplay:
 
     def test_kiosk_display_now_playing(self, client: TestClient, test_event: Event, db: Session):
         """Test that now_playing shows the current song."""
-        # Create a playing request
         request = Request(
             event_id=test_event.id,
             song_title="Now Playing Song",
@@ -172,7 +188,6 @@ class TestKioskDisplay:
         db.commit()
         db.refresh(request)
 
-        # Set now_playing via NowPlaying table (single source of truth)
         np = NowPlaying(
             event_id=test_event.id,
             title="Now Playing Song",

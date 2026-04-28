@@ -6,10 +6,8 @@ import pytest
 from starlette.responses import JSONResponse
 
 from app.core.rate_limit import (
-    MAX_FINGERPRINT_LENGTH,
     _get_trusted_proxies,
     _is_trusted_proxy,
-    get_client_fingerprint,
     get_client_ip,
     rate_limit_exceeded_handler,
 )
@@ -219,25 +217,6 @@ class TestGetClientIp:
                 headers={"X-Forwarded-For": "1.2.3.4"},
             )
             assert get_client_ip(request) == "192.168.1.1"
-
-
-# =============================================================================
-# get_client_fingerprint()
-# =============================================================================
-
-
-class TestGetClientFingerprint:
-    def test_returns_ip_truncated_to_max_length(self):
-        long_ip = "a" * 200
-        with patch("app.core.rate_limit.get_client_ip", return_value=long_ip):
-            result = get_client_fingerprint(MagicMock())
-        assert len(result) == MAX_FINGERPRINT_LENGTH
-        assert result == long_ip[:MAX_FINGERPRINT_LENGTH]
-
-    def test_normal_ip_unchanged(self):
-        with patch("app.core.rate_limit.get_client_ip", return_value="192.168.1.1"):
-            result = get_client_fingerprint(MagicMock())
-        assert result == "192.168.1.1"
 
 
 # =============================================================================

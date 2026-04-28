@@ -57,10 +57,3 @@ def test_remove_vote_by_guest_id(db: Session, test_request: Request, test_guest:
 
     db.refresh(test_request)
     assert test_request.vote_count == 0
-
-
-def test_legacy_vote_still_works(db: Session, test_request: Request):
-    """Old vote with only client_fingerprint still works."""
-    _, is_new = add_vote(db, test_request.id, client_fingerprint="legacy_ip_addr")
-    assert is_new is True
-    assert has_voted(db, test_request.id, client_fingerprint="legacy_ip_addr") is True
