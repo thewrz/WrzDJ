@@ -1,0 +1,203 @@
+'use client';
+
+import { GuestRequestInfo } from '@/lib/api';
+import TickNumber from './TickNumber';
+
+interface Props {
+  track: GuestRequestInfo;
+  rank: number;
+  totalCount: number;
+  votes: number;
+  voted: boolean;
+  onVote: () => void;
+  onClose: () => void;
+}
+
+const ACCENT = '#00f0ff';
+const ACCENT2 = '#ff2bd6';
+
+const GRADIENTS = [
+  'linear-gradient(135deg, #ff006e, #8338ec, #3a86ff)',
+  'linear-gradient(135deg, #ffbe0b, #fb5607)',
+  'linear-gradient(135deg, #06ffa5, #0077b6)',
+  'linear-gradient(135deg, #ff6b9d, #c44569)',
+  'linear-gradient(135deg, #f72585, #7209b7)',
+  'linear-gradient(135deg, #4cc9f0, #4361ee)',
+  'linear-gradient(135deg, #f15bb5, #fee440)',
+  'linear-gradient(135deg, #2dc653, #25a244)',
+  'linear-gradient(135deg, #ef476f, #ffd166)',
+];
+
+function artGradient(seed: string) {
+  const code = (seed.charCodeAt(0) || 0) + (seed.charCodeAt(1) || 0);
+  return GRADIENTS[code % GRADIENTS.length];
+}
+
+export default function SongDetailSheet({
+  track, rank, totalCount, votes, voted, onVote, onClose,
+}: Props) {
+  const initials = `${track.title[0] ?? '?'}${track.artist[0] ?? ''}`.toUpperCase();
+  const surface = 'rgba(255,255,255,0.05)';
+  const border = 'rgba(255,255,255,0.1)';
+  const subFg = 'rgba(255,255,255,0.55)';
+  const subFg2 = 'rgba(255,255,255,0.35)';
+
+  return (
+    <div className="gst-detail-sheet">
+      {/* Glow */}
+      <div style={{
+        position: 'absolute', top: 80, left: '50%', transform: 'translateX(-50%)',
+        width: '100%', maxWidth: 420, height: 300,
+        background: `radial-gradient(circle, ${ACCENT}28, transparent 65%)`,
+        filter: 'blur(50px)', pointerEvents: 'none',
+      }} />
+
+      {/* Header */}
+      <div style={{ padding: '12px 16px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
+        <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9, color: subFg, letterSpacing: 1.5 }}>
+          QUEUE · #{rank}
+        </div>
+        <button
+          onClick={onClose}
+          style={{
+            width: 38, height: 38, borderRadius: 11,
+            background: surface, border: `1px solid ${border}`, color: '#fff',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          aria-label="Close"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14">
+            <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* Scrollable body */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 18px 140px', position: 'relative', zIndex: 1 }}>
+        {/* Artwork */}
+        <div style={{
+          width: '100%', aspectRatio: '1', borderRadius: 22, marginTop: 6,
+          background: track.artwork_url ? undefined : artGradient(track.title + track.artist),
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden',
+          boxShadow: `0 30px 70px -20px ${ACCENT}70, 0 0 0 1px ${border}`,
+        }}>
+          {track.artwork_url ? (
+            <img
+              src={track.artwork_url}
+              alt={track.title}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : (
+            <span style={{
+              fontSize: 64, fontWeight: 800, color: '#fff', letterSpacing: 1,
+              textShadow: '0 4px 30px rgba(0,0,0,0.3)',
+            }}>
+              {initials}
+            </span>
+          )}
+        </div>
+
+        {/* Title + artist */}
+        <div style={{ marginTop: 22 }}>
+          <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: -0.8, lineHeight: 1.05 }}>
+            {track.title}
+          </div>
+          <div style={{ fontSize: 17, color: subFg, marginTop: 5, fontWeight: 500 }}>
+            {track.artist}
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+          <div style={{ flex: 1, padding: 14, borderRadius: 14, background: surface, border: `1px solid ${border}` }}>
+            <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 8.5, color: subFg, letterSpacing: 1.5 }}>
+              UPVOTES
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 4 }}>
+              <TickNumber
+                value={votes}
+                style={{
+                  fontFamily: 'var(--font-mono, monospace)', fontSize: 30, fontWeight: 800,
+                  lineHeight: '1', color: ACCENT, fontVariantNumeric: 'tabular-nums',
+                }}
+              />
+              <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10, color: subFg2 }}>
+                votes
+              </span>
+            </div>
+          </div>
+          <div style={{ flex: 1, padding: 14, borderRadius: 14, background: surface, border: `1px solid ${border}` }}>
+            <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 8.5, color: subFg, letterSpacing: 1.5 }}>
+              QUEUE RANK
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 4 }}>
+              <span style={{
+                fontFamily: 'var(--font-mono, monospace)', fontSize: 30, fontWeight: 800,
+                lineHeight: '1', color: '#fff', fontVariantNumeric: 'tabular-nums',
+              }}>
+                #{rank}
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10, color: subFg2 }}>
+                of {totalCount}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Requested by */}
+        {track.nickname && (
+          <div style={{
+            marginTop: 14, padding: 14, borderRadius: 14,
+            background: surface, border: `1px solid ${border}`,
+            display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+              background: `linear-gradient(135deg, ${ACCENT}, ${ACCENT2})`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 14, fontWeight: 800, color: '#000',
+            }}>
+              {track.nickname[0]?.toUpperCase() ?? '?'}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 8.5, color: subFg, letterSpacing: 1.5 }}>
+                REQUESTED BY
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>
+                {track.nickname}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom vote CTA */}
+      <div style={{
+        position: 'absolute',
+        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
+        left: 14, right: 14, zIndex: 30,
+      }}>
+        <button
+          onClick={onVote}
+          style={{
+            width: '100%', height: 56, borderRadius: 16,
+            background: voted ? 'transparent' : `linear-gradient(90deg, ${ACCENT}, ${ACCENT2})`,
+            border: voted ? `1.5px solid ${ACCENT}` : 'none',
+            color: voted ? ACCENT : '#000',
+            fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 15, fontWeight: 800, letterSpacing: 0.4,
+            cursor: 'pointer',
+            boxShadow: voted ? 'none' : `0 14px 36px -8px ${ACCENT}90, 0 0 0 1px rgba(255,255,255,0.15) inset`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            transition: 'all 160ms',
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 9L7 3L12 9" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          {voted ? 'VOTED · TAP TO REMOVE' : 'UPVOTE THIS TRACK'}
+        </button>
+      </div>
+    </div>
+  );
+}

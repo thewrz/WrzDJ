@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { DM_Sans, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
+import { DM_Sans, Plus_Jakarta_Sans, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
 import { AuthProvider } from '@/lib/auth';
 import { HelpProvider } from '@/lib/help/HelpContext';
 import { ThemeProvider } from '@/lib/theme';
@@ -24,6 +24,13 @@ const jetbrainsMono = JetBrains_Mono({
   preload: false,
 });
 
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  variable: '--font-grotesk',
+  display: 'swap',
+  preload: false,
+});
+
 export const metadata: Metadata = {
   title: 'WrzDJ Dashboard',
   description: 'DJ song request management',
@@ -41,7 +48,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${dmSans.variable} ${plusJakarta.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" className={`${dmSans.variable} ${plusJakarta.variable} ${jetbrainsMono.variable} ${spaceGrotesk.variable}`}>
       <body>
         <ThemeProvider>
           <AuthProvider>
