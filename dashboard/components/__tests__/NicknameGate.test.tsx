@@ -151,6 +151,61 @@ describe('NicknameGate', () => {
     });
   });
 
+  it('shows validation error for invalid nickname (line 80-81 — validation error path)', async () => {
+    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
+    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
+    await waitFor(() => screen.getByRole('heading', { name: /what.s your nickname/i }));
+
+    // Type an invalid nickname with special chars not in the allowed set
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Invalid@Name!' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/letters, numbers/i)).toBeInTheDocument();
+    });
+  });
+
+  it('saves nickname via Enter key (line 158 — enter key branch)', async () => {
+    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
+    mockSetProfile.mockResolvedValue(baseProfile({ nickname: 'PressEnter', email_verified: false }));
+    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
+    await waitFor(() => screen.getByRole('heading', { name: /what.s your nickname/i }));
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'PressEnter' } });
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(mockSetProfile).toHaveBeenCalled();
+    });
+  });
+
+  it('does not save nickname when Enter is pressed with empty input', async () => {
+    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
+    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
+    await waitFor(() => screen.getByRole('heading', { name: /what.s your nickname/i }));
+
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'k' });
+    expect(mockSetProfile).not.toHaveBeenCalled();
+  });
+
+  it('typing clears inputError (line 91-92 — input change clears error)', async () => {
+    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
+    mockSetProfile.mockRejectedValue(new Error('Server error'));
+    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
+    await waitFor(() => screen.getByRole('heading', { name: /what.s your nickname/i }));
+
+    // Trigger an error first
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'SomeName' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+    await waitFor(() => screen.getByText(/couldn.t save/i));
+
+    // Now type again — error should clear
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'SomeName2' } });
+    await waitFor(() => {
+      expect(screen.queryByText(/couldn.t save/i)).not.toBeInTheDocument();
+    });
+  });
+
   it('email verified from email_prompt calls onComplete with emailVerified=true', async () => {
     const onComplete = vi.fn();
     const mockRequestCode = apiClient.requestVerificationCode as ReturnType<typeof vi.fn>;
