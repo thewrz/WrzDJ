@@ -1,5 +1,7 @@
 """Pydantic schemas for guest identity."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -10,3 +12,4 @@ class IdentifyRequest(BaseModel):
 
 class IdentifyResponse(BaseModel):
     guest_id: int
+    action: Literal["create", "cookie_hit", "reconcile"]

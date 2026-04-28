@@ -612,3 +612,39 @@ class TestMarkPlayingSingleActive:
         if np:
             assert np.title == ""
             assert np.artist == ""
+
+
+def test_live_submit_persists_guest_id_from_cookie(client, test_event, db):
+    """F1 regression: events.py submit_request() must capture guest_id from
+    the wrzdj_guest cookie and persist it on the Request row.
+
+    Before the fix, every live-event request was stored with guest_id=NULL.
+    """
+    from app.models.request import Request as SongRequest
+
+    identify_resp = client.post(
+        "/api/public/guest/identify",
+        json={
+            "fingerprint_hash": "fp_test_live_submit",
+            "fingerprint_components": {"screen": "1170x2532"},
+        },
+    )
+    assert identify_resp.status_code == 200
+    guest_id = identify_resp.json()["guest_id"]
+
+    submit_resp = client.post(
+        f"/api/events/{test_event.code}/requests",
+        json={
+            "artist": "Test Artist",
+            "title": "Test Song",
+            "source": "manual",
+        },
+    )
+    assert submit_resp.status_code == 200, submit_resp.json()
+    request_id = submit_resp.json()["id"]
+
+    row = db.query(SongRequest).filter(SongRequest.id == request_id).first()
+    assert row is not None
+    assert row.guest_id == guest_id, (
+        f"Expected guest_id={guest_id} on persisted request, got {row.guest_id}"
+    )

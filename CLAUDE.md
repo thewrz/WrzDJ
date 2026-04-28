@@ -159,6 +159,7 @@ This section exists because a previous OAuth token implementation stored tokens 
 - Encrypt PII and sensitive user data at rest wherever feasible. Default to encrypted; plaintext storage of sensitive fields requires explicit justification.
 - Minimize data collection — don't store data you don't need.
 - Client fingerprinting (IP-based) should not be logged in a way that creates a tracking database.
+- The `client_fingerprint` column on `requests`, `request_votes`, and `guest_profiles` is the raw client IP truncated to 64 chars. Scrub or hash this column on any export (event CSV, play-history CSV, backups, analytics dumps) — use `mask_fingerprint()` from `app.core.rate_limit`. Search for any new export endpoints that select this column and apply the same treatment.
 
 ### Dependency CVE Vigilance
 - **Before adding any new package**, check for known CVEs and recent security advisories. Do not add packages with unpatched critical or high-severity vulnerabilities.
@@ -479,24 +480,24 @@ Bridge plugins depend on community-maintained open-source projects for protocol 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **WrzDJ** (9968 symbols, 16173 relationships, 200 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **WrzDJ** (10612 symbols, 17044 relationships, 210 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
-## Recommended
+## Always Do
 
-- **SHOULD run impact analysis before editing a non-trivial symbol.** Before modifying a function, class, or method that may have multiple callers, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **SHOULD run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
-- **SHOULD warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
 - When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
 - When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
 
-## Avoid
+## Never Do
 
-- AVOID editing a widely-used function, class, or method without first running `gitnexus_impact` on it.
-- AVOID ignoring HIGH or CRITICAL risk warnings from impact analysis without explaining the rationale to the user.
-- AVOID renaming symbols with find-and-replace — prefer `gitnexus_rename` which understands the call graph.
-- AVOID committing significant changes without running `gitnexus_detect_changes()` to check affected scope.
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
 
 ## Resources
 
@@ -507,9 +508,15 @@ This project is indexed by GitNexus as **WrzDJ** (9968 symbols, 16173 relationsh
 | `gitnexus://repo/WrzDJ/processes` | All execution flows |
 | `gitnexus://repo/WrzDJ/process/{name}` | Step-by-step execution trace |
 
-## Skills
+## CLI
 
-GitNexus skills auto-load into Claude Code from `~/.claude/skills/`. Reference by name:
-`gitnexus-exploring` (architecture / "how does X work?"), `gitnexus-impact-analysis` (blast radius), `gitnexus-debugging` (trace bugs), `gitnexus-refactoring` (rename/extract/split/move), `gitnexus-guide` (tool/schema reference), `gitnexus-cli` (CLI commands), `gitnexus-pr-review` (review PRs).
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->

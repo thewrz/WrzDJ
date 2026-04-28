@@ -34,7 +34,7 @@ def identify(
         user_agent=user_agent,
     )
 
-    response = JSONResponse(content={"guest_id": result.guest_id})
+    response = JSONResponse(content={"guest_id": result.guest_id, "action": result.action})
 
     if result.token:
         is_prod = get_settings().env == "production"
