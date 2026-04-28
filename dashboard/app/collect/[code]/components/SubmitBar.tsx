@@ -11,22 +11,13 @@ interface Props {
 
 export default function SubmitBar({ used, cap, onOpenSearch }: Props) {
   const atCap = cap !== 0 && used >= cap;
-  const label = cap === 0 ? 'Unlimited picks' : `${used} of ${cap} picks used`;
 
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20,
       padding: '12px 16px calc(12px + env(safe-area-inset-bottom, 0px))',
       background: 'linear-gradient(transparent, #06060a 35%)',
-      display: 'flex', alignItems: 'center', gap: 12,
     }}>
-      <span style={{
-        fontFamily: 'var(--font-mono, monospace)', fontSize: 12, fontWeight: 600,
-        color: atCap ? '#ef4444' : 'rgba(255,255,255,0.45)',
-        letterSpacing: 0.5,
-      }}>
-        {label}
-      </span>
       <button
         type="button"
         disabled={atCap}

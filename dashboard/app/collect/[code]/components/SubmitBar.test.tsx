@@ -3,13 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import SubmitBar from "./SubmitBar";
 
 describe("SubmitBar", () => {
-  it("shows used vs cap", () => {
-    render(
-      <SubmitBar used={3} cap={15} onOpenSearch={vi.fn()} />
-    );
-    expect(screen.getByText(/3 of 15 picks used/i)).toBeInTheDocument();
-  });
-
   it("disables button at cap", () => {
     render(
       <SubmitBar used={15} cap={15} onOpenSearch={vi.fn()} />

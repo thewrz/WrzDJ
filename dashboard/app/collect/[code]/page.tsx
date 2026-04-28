@@ -251,6 +251,11 @@ export default function CollectPage() {
           nickname={nickname}
           emailVerified={emailVerified}
           onVerified={() => setEmailVerified(true)}
+          picksLabel={
+            event.submission_cap_per_guest === 0
+              ? 'Unlimited picks'
+              : `${profile?.submission_count ?? 0} of ${event.submission_cap_per_guest} picks used`
+          }
         />
       )}
       {bannerNode}
