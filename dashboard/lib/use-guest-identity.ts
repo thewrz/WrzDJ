@@ -50,10 +50,10 @@ export function useGuestIdentity(): GuestIdentity {
         throw new Error(`Identify failed: ${resp.status}`);
       }
 
-      const data = await resp.json();
+      const data = (await resp.json()) as { guest_id: number; action: "create" | "cookie_hit" | "reconcile" };
       const identity = {
-        guestId: data.guest_id as number,
-        isReturning: !resp.headers.get("set-cookie"),
+        guestId: data.guest_id,
+        isReturning: data.action !== "create",
       };
       cachedIdentity = identity;
       setState({ ...identity, isLoading: false, error: null });

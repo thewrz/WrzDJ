@@ -9,6 +9,7 @@ import json
 import logging
 import secrets
 from dataclasses import dataclass
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -22,7 +23,7 @@ _logger = logging.getLogger("app.guest.identity")
 @dataclass
 class IdentifyResult:
     guest_id: int
-    action: str  # "create", "cookie_hit", "reconcile"
+    action: Literal["create", "cookie_hit", "reconcile"]
     token: str | None  # set only when a new cookie should be issued
 
 
