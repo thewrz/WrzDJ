@@ -387,7 +387,7 @@ export default function JoinEventPage() {
   if (loading) {
     return (
       <div className="guest-tower" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12.1, color: 'rgba(255,255,255,0.4)', letterSpacing: 2 }}>
+        <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 13.3, color: 'rgba(255,255,255,0.4)', letterSpacing: 2 }}>
           LOADING…
         </div>
       </div>
@@ -400,10 +400,10 @@ export default function JoinEventPage() {
     return (
       <div className="guest-tower" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
         <div style={{ textAlign: 'center', maxWidth: 360 }}>
-          <div style={{ fontSize: 30.8, fontWeight: 800, letterSpacing: -0.6, marginBottom: 10 }}>
+          <div style={{ fontSize: 33.9, fontWeight: 800, letterSpacing: -0.6, marginBottom: 10 }}>
             {is410 ? 'Event Expired' : is404 ? 'Event Not Found' : 'Oops!'}
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 16.5 }}>
+          <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 18.2 }}>
             {is410
               ? 'This event has ended and is no longer accepting requests.'
               : is404
@@ -425,10 +425,10 @@ export default function JoinEventPage() {
         )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100dvh', padding: '2rem' }}>
           <div style={{ textAlign: 'center', maxWidth: 360 }}>
-            <div style={{ fontSize: 28.6, fontWeight: 800, letterSpacing: -0.5, marginBottom: 8 }}>
+            <div style={{ fontSize: 31.5, fontWeight: 800, letterSpacing: -0.5, marginBottom: 8 }}>
               {event.name}
             </div>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 16.5 }}>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 18.2 }}>
               Requests are closed for this event
             </div>
           </div>
@@ -496,17 +496,17 @@ export default function JoinEventPage() {
         <div style={{ padding: '10px 16px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <div style={{
-              width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+              width: 34, height: 34, borderRadius: 8, flexShrink: 0,
               background: `conic-gradient(from 180deg, ${ACCENT}, ${ACCENT2}, ${ACCENT})`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 14.3, fontWeight: 800, color: '#000',
+              fontSize: 15.7, fontWeight: 800, color: '#000',
               boxShadow: `0 0 16px ${ACCENT}40`,
             }}>W</div>
             <div>
-              <div style={{ fontSize: 15.4, fontWeight: 700, letterSpacing: -0.3, lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '55vw' }}>
+              <div style={{ fontSize: 16.9, fontWeight: 700, letterSpacing: -0.3, lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '55vw' }}>
                 {event.name}
               </div>
-              <div style={{ fontSize: 9.9, fontFamily: 'var(--font-mono, monospace)', color: subFg, letterSpacing: 1.2, marginTop: 2 }}>
+              <div style={{ fontSize: 10.9, fontFamily: 'var(--font-mono, monospace)', color: subFg, letterSpacing: 1.2, marginTop: 2 }}>
                 {code.toUpperCase()}
               </div>
             </div>
@@ -520,7 +520,7 @@ export default function JoinEventPage() {
         {nowPlaying && (
           <div className="gst-now-playing" style={{ background: surface, border: `1px solid ${border}`, position: 'relative', zIndex: 1 }}>
             <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: ACCENT, boxShadow: `0 0 14px ${ACCENT}`, borderRadius: '14px 0 0 14px' }} />
-            <div style={{ width: 56, height: 56, borderRadius: 9, flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
+            <div style={{ width: 62, height: 62, borderRadius: 10, flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
               {nowPlaying.album_art_url ? (
                 <img src={nowPlaying.album_art_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
@@ -537,14 +537,14 @@ export default function JoinEventPage() {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 9.4, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, color: ACCENT, letterSpacing: 1.6 }}>
+                <span style={{ fontSize: 10.3, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, color: ACCENT, letterSpacing: 1.6 }}>
                   Now Playing
                 </span>
               </div>
-              <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: -0.25, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ fontSize: 17.6, fontWeight: 700, letterSpacing: -0.25, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {nowPlaying.title}
               </div>
-              <div style={{ fontSize: 12.7, color: subFg, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ fontSize: 14, color: subFg, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {nowPlaying.artist}
               </div>
             </div>
@@ -567,7 +567,7 @@ export default function JoinEventPage() {
             </button>
           ))}
           <div style={{ flex: 1 }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-mono, monospace)', fontSize: 9.9, color: subFg, letterSpacing: 1.2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-mono, monospace)', fontSize: 10.9, color: subFg, letterSpacing: 1.2 }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: ACCENT, animation: 'gst-live-pulse 1.6s infinite' }} />
             LIVE
           </div>
@@ -576,7 +576,7 @@ export default function JoinEventPage() {
         {/* ── Request list / empty state ────────────────────── */}
         <div style={{ padding: '0 12px', position: 'relative', zIndex: 1 }}>
           {tabRows.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2.5rem 0', color: subFg, fontSize: 15.4 }}>
+            <div style={{ textAlign: 'center', padding: '2.5rem 0', color: subFg, fontSize: 16.9 }}>
               {activeTab === 'mine' ? 'No requests from you yet.' : 'No requests yet. Be the first!'}
             </div>
           ) : (
@@ -619,12 +619,12 @@ export default function JoinEventPage() {
                     {/* Rank bubble */}
                     {activeTab === 'leaderboard' && (
                       <div style={{
-                        width: 28, height: 28, flexShrink: 0, borderRadius: 7, position: 'relative',
+                        width: 32, height: 32, flexShrink: 0, borderRadius: 8, position: 'relative',
                         background: isTop3 ? rankColors[i] : 'transparent',
                         border: isTop3 ? 'none' : `1px solid ${border}`,
                         color: isTop3 ? '#000' : subFg2,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontFamily: 'var(--font-mono, monospace)', fontSize: 12.7, fontWeight: 800,
+                        fontFamily: 'var(--font-mono, monospace)', fontSize: 14, fontWeight: 800,
                         boxShadow: i === 0 ? `0 0 14px ${ACCENT}50` : 'none',
                       }}>
                         {i + 1}
@@ -634,10 +634,10 @@ export default function JoinEventPage() {
 
                     {/* Artwork */}
                     <div style={{
-                      width: 40, height: 40, borderRadius: 7, flexShrink: 0,
+                      width: 46, height: 46, borderRadius: 8, flexShrink: 0,
                       background: artGradient(req.title + req.artist), overflow: 'hidden',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 11, fontWeight: 800, color: '#fff',
+                      fontSize: 12.1, fontWeight: 800, color: '#fff',
                     }}>
                       {req.artwork_url
                         ? <img src={req.artwork_url} alt={req.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -648,7 +648,7 @@ export default function JoinEventPage() {
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 14.9, fontWeight: 700, letterSpacing: -0.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+                        <span style={{ fontSize: 16.4, fontWeight: 700, letterSpacing: -0.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
                           {req.title}
                         </span>
                         {isMine && (
@@ -660,11 +660,11 @@ export default function JoinEventPage() {
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: 13.8, color: subFg, marginTop: 2, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <div style={{ fontSize: 15.2, color: subFg, marginTop: 2, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {req.artist}
                       </div>
                       {req.nickname && (
-                        <div style={{ fontSize: 11, color: subFg2, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div style={{ fontSize: 12.1, color: subFg2, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           Requested by {req.nickname}
                         </div>
                       )}
@@ -676,12 +676,12 @@ export default function JoinEventPage() {
                         <TickNumber
                           value={effectiveVotes}
                           style={{
-                            fontFamily: 'var(--font-mono, monospace)', fontSize: 16.5, fontWeight: 800,
+                            fontFamily: 'var(--font-mono, monospace)', fontSize: 18.2, fontWeight: 800,
                             lineHeight: '1', color: isTop3 ? rankColors[i] : '#fff',
                             fontVariantNumeric: 'tabular-nums',
                           }}
                         />
-                        <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 8.2, color: subFg, letterSpacing: 1, marginTop: 2 }}>
+                        <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9, color: subFg, letterSpacing: 1, marginTop: 2 }}>
                           VOTES
                         </span>
                       </div>
@@ -689,7 +689,7 @@ export default function JoinEventPage() {
                         onClick={(e) => { e.stopPropagation(); handleVote(req.id); }}
                         disabled={votingId === req.id || isMine}
                         style={{
-                          width: 32, height: 32, borderRadius: 7,
+                          width: 38, height: 38, borderRadius: 8,
                           background: isVoted ? ACCENT : 'transparent',
                           border: `1px solid ${isVoted ? ACCENT : border}`,
                           color: isVoted ? '#000' : '#fff',
@@ -714,7 +714,7 @@ export default function JoinEventPage() {
           )}
 
           {tabRows.length > 0 && (
-            <div style={{ textAlign: 'center', padding: '10px 0 0', fontFamily: 'var(--font-mono, monospace)', fontSize: 9.9, color: subFg2, letterSpacing: 1.5 }}>
+            <div style={{ textAlign: 'center', padding: '10px 0 0', fontFamily: 'var(--font-mono, monospace)', fontSize: 10.9, color: subFg2, letterSpacing: 1.5 }}>
               ◇ END OF QUEUE ◇
             </div>
           )}
@@ -727,10 +727,10 @@ export default function JoinEventPage() {
           <button
             onClick={openRequestSheet}
             style={{
-              width: '100%', maxWidth: 500, margin: '0 auto', height: 54, borderRadius: 14,
+              width: '100%', maxWidth: 500, margin: '0 auto', height: 62, borderRadius: 14,
               background: `linear-gradient(90deg, ${ACCENT}, ${ACCENT2})`,
               border: 'none', color: '#000',
-              fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 16.5, fontWeight: 800, letterSpacing: 0.4,
+              fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 18.2, fontWeight: 800, letterSpacing: 0.4,
               cursor: 'pointer',
               boxShadow: `0 12px 32px -8px ${ACCENT}90, 0 0 0 1px rgba(255,255,255,0.15) inset`,
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
@@ -743,7 +743,7 @@ export default function JoinEventPage() {
             REQUEST A SONG
           </button>
         ) : (
-          <div style={{ textAlign: 'center', color: subFg, padding: '0.75rem', fontFamily: 'var(--font-mono, monospace)', fontSize: 12.1, letterSpacing: 1 }}>
+          <div style={{ textAlign: 'center', color: subFg, padding: '0.75rem', fontFamily: 'var(--font-mono, monospace)', fontSize: 13.3, letterSpacing: 1 }}>
             Requests are closed for this event
           </div>
         )}
@@ -812,10 +812,10 @@ function StatPill({ label, value, accent, sub, border }: {
 }) {
   return (
     <div style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${border}`, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 42 }}>
-      <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 13.8, fontWeight: 800, lineHeight: '1', color: accent }}>
+      <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 15.2, fontWeight: 800, lineHeight: '1', color: accent }}>
         {value}
       </span>
-      <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 8.2, color: sub, letterSpacing: 1.2, marginTop: 2.5 }}>
+      <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9, color: sub, letterSpacing: 1.2, marginTop: 2.5 }}>
         {label}
       </span>
     </div>
@@ -877,11 +877,11 @@ function RequestSheetInline({
       <div style={{ padding: '12px 18px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
         <div>
           {!submitted && (
-            <div style={{ fontSize: 9.9, fontFamily: 'var(--font-mono, monospace)', color: subFg, letterSpacing: 1.5, marginBottom: 4 }}>
+            <div style={{ fontSize: 10.9, fontFamily: 'var(--font-mono, monospace)', color: subFg, letterSpacing: 1.5, marginBottom: 4 }}>
               {selectedSong ? 'STEP 02 OF 02' : 'STEP 01 OF 02'}
             </div>
           )}
-          <div style={{ fontSize: 24.2, fontWeight: 800, letterSpacing: -0.5, color: '#fff' }}>
+          <div style={{ fontSize: 26.6, fontWeight: 800, letterSpacing: -0.5, color: '#fff' }}>
             {submitted
               ? ''
               : selectedSong
@@ -892,7 +892,7 @@ function RequestSheetInline({
         <button
           onClick={onClose}
           style={{
-            width: 36, height: 36, borderRadius: 10, marginTop: 2,
+            width: 40, height: 40, borderRadius: 11, marginTop: 2,
             background: surface, border: `1px solid ${border}`, color: '#fff',
             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}
@@ -925,7 +925,7 @@ function RequestSheetInline({
                   placeholder="Search for a song or artist..."
                   style={{
                     flex: 1, background: 'transparent', border: 'none',
-                    color: '#fff', fontFamily: 'var(--font-grotesk, inherit)', fontSize: 17.6, fontWeight: 500,
+                    color: '#fff', fontFamily: 'var(--font-grotesk, inherit)', fontSize: 19.4, fontWeight: 500,
                     outline: 'none',
                   }}
                 />
@@ -933,8 +933,8 @@ function RequestSheetInline({
                   type="submit"
                   style={{
                     background: `linear-gradient(90deg, ${accent}, ${accent2})`,
-                    border: 'none', color: '#000', padding: '7px 14px', borderRadius: 8,
-                    fontFamily: 'var(--font-grotesk, inherit)', fontSize: 14.3, fontWeight: 800, cursor: 'pointer',
+                    border: 'none', color: '#000', padding: '9px 16px', borderRadius: 8,
+                    fontFamily: 'var(--font-grotesk, inherit)', fontSize: 15.7, fontWeight: 800, cursor: 'pointer',
                     flexShrink: 0,
                   }}
                   disabled={searching}
@@ -949,7 +949,7 @@ function RequestSheetInline({
             {searchResults.length > 0 && (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0 10px' }}>
-                  <span style={{ fontSize: 9.9, fontFamily: 'var(--font-mono, monospace)', color: subFg2, letterSpacing: 1.5 }}>
+                  <span style={{ fontSize: 10.9, fontFamily: 'var(--font-mono, monospace)', color: subFg2, letterSpacing: 1.5 }}>
                     {searchResults.length} RESULTS
                   </span>
                   <div style={{ flex: 1 }} />
@@ -961,7 +961,7 @@ function RequestSheetInline({
                       background: sortByVibes ? `${accent}18` : 'transparent',
                       border: `1px solid ${sortByVibes ? accent : border}`,
                       color: sortByVibes ? accent : subFg,
-                      fontFamily: 'var(--font-mono, monospace)', fontSize: 9.9, fontWeight: 700, letterSpacing: 1.2,
+                      fontFamily: 'var(--font-mono, monospace)', fontSize: 10.9, fontWeight: 700, letterSpacing: 1.2,
                       cursor: 'pointer',
                     }}
                   >
@@ -1007,20 +1007,20 @@ function RequestSheetInline({
                             width: 44, height: 44, borderRadius: 8, flexShrink: 0,
                             background: artGradient(result.title + result.artist),
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 12.1, fontWeight: 800, color: '#fff',
+                            fontSize: 13.3, fontWeight: 800, color: '#fff',
                           }}>
                             {`${result.title[0] ?? '?'}${result.artist[0] ?? ''}`.toUpperCase()}
                           </div>
                         )}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 16.5, fontWeight: 700, letterSpacing: -0.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <div style={{ fontSize: 18.2, fontWeight: 700, letterSpacing: -0.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {result.title}
                           </div>
-                          <div style={{ fontSize: 14.3, color: subFg, marginTop: 2, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <div style={{ fontSize: 15.7, color: subFg, marginTop: 2, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {result.artist}
                           </div>
                           {sortByVibes && tc && (
-                            <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9.4, color: tc.rail, letterSpacing: 1.2, marginTop: 4, fontWeight: 700 }}>
+                            <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10.3, color: tc.rail, letterSpacing: 1.2, marginTop: 4, fontWeight: 700 }}>
                               {tc.label}
                             </div>
                           )}
@@ -1037,7 +1037,7 @@ function RequestSheetInline({
                             width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
                             background: `conic-gradient(${accent} ${result.popularity}%, rgba(255,255,255,0.1) ${result.popularity}%)`,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 8.8, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, color: subFg,
+                            fontSize: 9.7, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, color: subFg,
                           }} title={`Popularity: ${result.popularity}%`}>
                             {result.popularity}
                           </div>
@@ -1072,25 +1072,25 @@ function RequestSheetInline({
                 width: 56, height: 56, borderRadius: 10, flexShrink: 0,
                 background: artGradient(selectedSong.title + selectedSong.artist),
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14.3, fontWeight: 800, color: '#fff',
+                fontSize: 15.7, fontWeight: 800, color: '#fff',
               }}>
                 {`${selectedSong.title[0] ?? '?'}${selectedSong.artist[0] ?? ''}`.toUpperCase()}
               </div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 18.7, fontWeight: 700, letterSpacing: -0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ fontSize: 20.6, fontWeight: 700, letterSpacing: -0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {selectedSong.title}
               </div>
-              <div style={{ fontSize: 15.4, color: subFg, marginTop: 2, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ fontSize: 16.9, color: subFg, marginTop: 2, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {selectedSong.artist}
               </div>
               {selectedSong.album && (
-                <div style={{ fontSize: 13.2, color: subFg2, marginTop: 1 }}>{selectedSong.album}</div>
+                <div style={{ fontSize: 14.5, color: subFg2, marginTop: 1 }}>{selectedSong.album}</div>
               )}
             </div>
             <button
               onClick={() => setSelectedSong(null)}
-              style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: `1px solid ${border}`, color: subFg, cursor: 'pointer', fontFamily: 'var(--font-mono, monospace)', fontSize: 14.3, flexShrink: 0 }}
+              style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: `1px solid ${border}`, color: subFg, cursor: 'pointer', fontFamily: 'var(--font-mono, monospace)', fontSize: 15.7, flexShrink: 0 }}
             >
               ×
             </button>
@@ -1098,7 +1098,7 @@ function RequestSheetInline({
 
           {/* Note */}
           <div style={{ marginTop: 18 }}>
-            <div style={{ fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: subFg, letterSpacing: 1.5, marginBottom: 8 }}>
+            <div style={{ fontSize: 12.1, fontFamily: 'var(--font-mono, monospace)', color: subFg, letterSpacing: 1.5, marginBottom: 8 }}>
               NOTE FOR THE DJ · OPTIONAL
             </div>
             <input
@@ -1109,7 +1109,7 @@ function RequestSheetInline({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               maxLength={500}
-              style={{ background: surface, border: `1px solid ${border}`, color: '#fff', borderRadius: 12, fontSize: 15.4 }}
+              style={{ background: surface, border: `1px solid ${border}`, color: '#fff', borderRadius: 12, fontSize: 16.9 }}
             />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
               {['🎂 birthday', '🌹 dedication', '🔥 dancefloor please', '💍 our song'].map(s => (
@@ -1119,7 +1119,7 @@ function RequestSheetInline({
                   style={{
                     padding: '7px 11px', borderRadius: 99,
                     background: 'transparent', border: `1px solid ${border}`, color: subFg,
-                    fontFamily: 'var(--font-grotesk, inherit)', fontSize: 13.2, cursor: 'pointer',
+                    fontFamily: 'var(--font-grotesk, inherit)', fontSize: 14.5, cursor: 'pointer',
                   }}
                 >{s}</button>
               ))}
@@ -1127,7 +1127,7 @@ function RequestSheetInline({
           </div>
 
           {submitError && (
-            <div style={{ color: '#ef4444', fontSize: 15.4, marginTop: 12 }}>{submitError}</div>
+            <div style={{ color: '#ef4444', fontSize: 16.9, marginTop: 12 }}>{submitError}</div>
           )}
 
           <div style={{ flex: 1 }} />
@@ -1140,7 +1140,7 @@ function RequestSheetInline({
                 flex: 1, height: 54, borderRadius: 14,
                 background: `linear-gradient(90deg, ${accent}, ${accent2})`,
                 border: 'none', color: '#000',
-                fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 16.5, fontWeight: 800, letterSpacing: 0.3,
+                fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 18.2, fontWeight: 800, letterSpacing: 0.3,
                 cursor: submitting ? 'default' : 'pointer',
                 boxShadow: `0 14px 36px -8px ${accent}90`,
                 opacity: submitting ? 0.7 : 1,
@@ -1151,9 +1151,9 @@ function RequestSheetInline({
             <button
               onClick={() => setSelectedSong(null)}
               style={{
-                width: 80, height: 54, borderRadius: 14,
+                width: 88, height: 62, borderRadius: 14,
                 background: surface, border: `1px solid ${border}`, color: '#fff',
-                fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 16.5, fontWeight: 700, cursor: 'pointer',
+                fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 18.2, fontWeight: 700, cursor: 'pointer',
               }}
             >
               Back
@@ -1176,11 +1176,11 @@ function RequestSheetInline({
               <path d="M10 20l7 7 13-15" stroke="#000" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <div style={{ fontSize: 24.2, fontWeight: 800, letterSpacing: -0.5 }}>
+          <div style={{ fontSize: 26.6, fontWeight: 800, letterSpacing: -0.5 }}>
             {submitIsDuplicate ? 'Vote Added!' : 'Request Submitted!'}
           </div>
           {selectedSong && (
-            <div style={{ fontSize: 15.4, color: subFg, marginTop: 6, maxWidth: 280 }}>
+            <div style={{ fontSize: 16.9, color: subFg, marginTop: 6, maxWidth: 280 }}>
               {submitIsDuplicate
                 ? `Someone already requested this song. Your vote has been added! ${submitVoteCount} ${submitVoteCount === 1 ? 'person wants' : 'people want'} this song.`
                 : `"${selectedSong.title}" is queued. The DJ will see it soon.`}
@@ -1189,9 +1189,9 @@ function RequestSheetInline({
           <button
             onClick={onClose}
             style={{
-              marginTop: 28, padding: '14px 32px', borderRadius: 12,
+              marginTop: 28, padding: '16px 36px', borderRadius: 12,
               background: 'transparent', color: '#fff', border: `1px solid ${border}`,
-              fontFamily: 'var(--font-mono, monospace)', fontSize: 12.1, fontWeight: 700, letterSpacing: 1.5,
+              fontFamily: 'var(--font-mono, monospace)', fontSize: 13.3, fontWeight: 700, letterSpacing: 1.5,
               cursor: 'pointer',
             }}
           >

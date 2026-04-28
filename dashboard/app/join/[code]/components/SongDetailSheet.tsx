@@ -54,13 +54,13 @@ export default function SongDetailSheet({
 
       {/* Header */}
       <div style={{ padding: '12px 16px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
-        <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9.9, color: subFg, letterSpacing: 1.5 }}>
+        <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10.9, color: subFg, letterSpacing: 1.5 }}>
           QUEUE · #{rank}
         </div>
         <button
           onClick={onClose}
           style={{
-            width: 38, height: 38, borderRadius: 11,
+            width: 44, height: 44, borderRadius: 13,
             background: surface, border: `1px solid ${border}`, color: '#fff',
             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
@@ -90,7 +90,7 @@ export default function SongDetailSheet({
             />
           ) : (
             <span style={{
-              fontSize: 70.4, fontWeight: 800, color: '#fff', letterSpacing: 1,
+              fontSize: 77.4, fontWeight: 800, color: '#fff', letterSpacing: 1,
               textShadow: '0 4px 30px rgba(0,0,0,0.3)',
             }}>
               {initials}
@@ -100,10 +100,10 @@ export default function SongDetailSheet({
 
         {/* Title + artist */}
         <div style={{ marginTop: 22 }}>
-          <div style={{ fontSize: 30.8, fontWeight: 800, letterSpacing: -0.8, lineHeight: 1.05 }}>
+          <div style={{ fontSize: 33.9, fontWeight: 800, letterSpacing: -0.8, lineHeight: 1.05 }}>
             {track.title}
           </div>
-          <div style={{ fontSize: 18.7, color: subFg, marginTop: 5, fontWeight: 500 }}>
+          <div style={{ fontSize: 20.6, color: subFg, marginTop: 5, fontWeight: 500 }}>
             {track.artist}
           </div>
         </div>
@@ -111,34 +111,34 @@ export default function SongDetailSheet({
         {/* Stats */}
         <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
           <div style={{ flex: 1, padding: 14, borderRadius: 14, background: surface, border: `1px solid ${border}` }}>
-            <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9.4, color: subFg, letterSpacing: 1.5 }}>
+            <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10.3, color: subFg, letterSpacing: 1.5 }}>
               UPVOTES
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 4 }}>
               <TickNumber
                 value={votes}
                 style={{
-                  fontFamily: 'var(--font-mono, monospace)', fontSize: 33, fontWeight: 800,
+                  fontFamily: 'var(--font-mono, monospace)', fontSize: 36.3, fontWeight: 800,
                   lineHeight: '1', color: ACCENT, fontVariantNumeric: 'tabular-nums',
                 }}
               />
-              <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11, color: subFg2 }}>
+              <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12.1, color: subFg2 }}>
                 votes
               </span>
             </div>
           </div>
           <div style={{ flex: 1, padding: 14, borderRadius: 14, background: surface, border: `1px solid ${border}` }}>
-            <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9.4, color: subFg, letterSpacing: 1.5 }}>
+            <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10.3, color: subFg, letterSpacing: 1.5 }}>
               QUEUE RANK
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 4 }}>
               <span style={{
-                fontFamily: 'var(--font-mono, monospace)', fontSize: 33, fontWeight: 800,
+                fontFamily: 'var(--font-mono, monospace)', fontSize: 36.3, fontWeight: 800,
                 lineHeight: '1', color: '#fff', fontVariantNumeric: 'tabular-nums',
               }}>
                 #{rank}
               </span>
-              <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11, color: subFg2 }}>
+              <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12.1, color: subFg2 }}>
                 of {totalCount}
               </span>
             </div>
@@ -153,18 +153,18 @@ export default function SongDetailSheet({
             display: 'flex', alignItems: 'center', gap: 12,
           }}>
             <div style={{
-              width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+              width: 46, height: 46, borderRadius: '50%', flexShrink: 0,
               background: `linear-gradient(135deg, ${ACCENT}, ${ACCENT2})`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 15.4, fontWeight: 800, color: '#000',
+              fontSize: 16.9, fontWeight: 800, color: '#000',
             }}>
               {track.nickname[0]?.toUpperCase() ?? '?'}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9.4, color: subFg, letterSpacing: 1.5 }}>
+              <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10.3, color: subFg, letterSpacing: 1.5 }}>
                 REQUESTED BY
               </div>
-              <div style={{ fontSize: 16.5, fontWeight: 700, marginTop: 2 }}>
+              <div style={{ fontSize: 18.2, fontWeight: 700, marginTop: 2 }}>
                 {track.nickname}
               </div>
             </div>
@@ -181,11 +181,11 @@ export default function SongDetailSheet({
         <button
           onClick={onVote}
           style={{
-            width: '100%', height: 56, borderRadius: 16,
+            width: '100%', height: 64, borderRadius: 18,
             background: voted ? 'transparent' : `linear-gradient(90deg, ${ACCENT}, ${ACCENT2})`,
             border: voted ? `1.5px solid ${ACCENT}` : 'none',
             color: voted ? ACCENT : '#000',
-            fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 16.5, fontWeight: 800, letterSpacing: 0.4,
+            fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 18.2, fontWeight: 800, letterSpacing: 0.4,
             cursor: 'pointer',
             boxShadow: voted ? 'none' : `0 14px 36px -8px ${ACCENT}90, 0 0 0 1px rgba(255,255,255,0.15) inset`,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,

@@ -78,7 +78,7 @@ export default function LeaderboardTabs({ rows, tab, onTabChange, onVote, votedI
             onClick={() => onTabChange(t)}
             style={{
               padding: '6px 12px', borderRadius: 99, cursor: 'pointer',
-              fontFamily: 'var(--font-mono, monospace)', fontSize: 10.5, fontWeight: 700, letterSpacing: 1.2,
+              fontFamily: 'var(--font-mono, monospace)', fontSize: 11.6, fontWeight: 700, letterSpacing: 1.2,
               background: tab === t ? '#fff' : 'transparent',
               color: tab === t ? '#06060a' : subFg,
               border: tab === t ? 'none' : `1px solid ${border}`,
@@ -89,7 +89,7 @@ export default function LeaderboardTabs({ rows, tab, onTabChange, onVote, votedI
           </button>
         ))}
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-mono, monospace)', fontSize: 9.9, color: subFg, letterSpacing: 1.2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-mono, monospace)', fontSize: 10.9, color: subFg, letterSpacing: 1.2 }}>
           <span style={{ width: 5, height: 5, borderRadius: '50%', background: ACCENT, animation: 'gst-live-pulse 1.6s infinite' }} />
           LIVE
         </div>
@@ -136,12 +136,12 @@ export default function LeaderboardTabs({ rows, tab, onTabChange, onVote, votedI
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9, width: '100%' }}>
                   {/* Rank bubble */}
                   <div style={{
-                    width: 26, height: 26, flexShrink: 0, borderRadius: 6,
+                    width: 30, height: 30, flexShrink: 0, borderRadius: 7,
                     background: isTop3 ? rankColors[i] : 'transparent',
                     border: isTop3 ? 'none' : `1px solid ${border}`,
                     color: isTop3 ? '#000' : subFg2,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: 'var(--font-mono, monospace)', fontSize: 12.1, fontWeight: 800,
+                    fontFamily: 'var(--font-mono, monospace)', fontSize: 13.3, fontWeight: 800,
                     boxShadow: i === 0 ? `0 0 12px ${ACCENT}50` : 'none',
                   }}>
                     {i + 1}
@@ -149,10 +149,10 @@ export default function LeaderboardTabs({ rows, tab, onTabChange, onVote, votedI
 
                   {/* Artwork */}
                   <div style={{
-                    width: 40, height: 40, borderRadius: 7, flexShrink: 0, overflow: 'hidden',
+                    width: 46, height: 46, borderRadius: 8, flexShrink: 0, overflow: 'hidden',
                     background: artGradient(r.title + r.artist),
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 800, color: '#fff',
+                    fontSize: 12.1, fontWeight: 800, color: '#fff',
                   }}>
                     {r.artwork_url
                       ? <img src={r.artwork_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -175,13 +175,13 @@ export default function LeaderboardTabs({ rows, tab, onTabChange, onVote, votedI
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, marginLeft: 'auto' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                       <span style={{
-                        fontFamily: 'var(--font-mono, monospace)', fontSize: 16.5, fontWeight: 800,
+                        fontFamily: 'var(--font-mono, monospace)', fontSize: 18.2, fontWeight: 800,
                         lineHeight: '1', color: isTop3 ? rankColors[i] : '#fff',
                         fontVariantNumeric: 'tabular-nums',
                       }}>
                         {votes}
                       </span>
-                      <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 7.7, color: subFg2, letterSpacing: 1, marginTop: 2 }}>
+                      <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 8.5, color: subFg2, letterSpacing: 1, marginTop: 2 }}>
                         VOTES
                       </span>
                     </div>

@@ -32,7 +32,7 @@ export default function SubmitBar({ used, cap, onOpenSearch }: Props) {
         disabled={atCap}
         onClick={onOpenSearch}
         style={{
-          flex: 1, height: 50, borderRadius: 14,
+          flex: 1, height: 58, borderRadius: 14,
           background: atCap ? 'rgba(255,255,255,0.06)' : `linear-gradient(90deg, ${ACCENT}, ${ACCENT2})`,
           border: 'none', color: atCap ? 'rgba(255,255,255,0.35)' : '#000',
           fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 14, fontWeight: 800, letterSpacing: 0.4,
