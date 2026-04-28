@@ -156,20 +156,27 @@ def get_profile(
     fingerprint: str | None = None,
     guest_id: int | None = None,
 ) -> GuestProfile | None:
+    """Find a profile by guest_id, falling back to fingerprint when both
+    are provided but guest_id has no row yet (orphan case — profile was
+    created before the wrzdj_guest cookie existed)."""
     if guest_id:
-        return (
+        row = (
             db.query(GuestProfile)
             .filter(GuestProfile.event_id == event_id, GuestProfile.guest_id == guest_id)
             .one_or_none()
         )
-    return (
-        db.query(GuestProfile)
-        .filter(
-            GuestProfile.event_id == event_id,
-            GuestProfile.client_fingerprint == fingerprint,
+        if row is not None:
+            return row
+    if fingerprint:
+        return (
+            db.query(GuestProfile)
+            .filter(
+                GuestProfile.event_id == event_id,
+                GuestProfile.client_fingerprint == fingerprint,
+            )
+            .one_or_none()
         )
-        .one_or_none()
-    )
+    return None
 
 
 def upsert_profile(
@@ -190,6 +197,10 @@ def upsert_profile(
         )
         db.add(profile)
     else:
+        if profile.guest_id is None and guest_id is not None:
+            profile.guest_id = guest_id
+        if profile.client_fingerprint is None and fingerprint is not None:
+            profile.client_fingerprint = fingerprint
         if nickname is not None:
             profile.nickname = nickname
     db.commit()
