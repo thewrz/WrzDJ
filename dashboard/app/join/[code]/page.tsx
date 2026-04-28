@@ -615,7 +615,7 @@ export default function JoinEventPage() {
                     }} />
                   )}
 
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9, width: '100%' }}>
                     {/* Rank bubble */}
                     {activeTab === 'leaderboard' && (
                       <div style={{
