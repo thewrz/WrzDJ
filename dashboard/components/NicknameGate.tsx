@@ -9,7 +9,7 @@ import EmailVerification from './EmailVerification';
 const nicknameSchema = z
   .string()
   .trim()
-  .min(1)
+  .min(2, 'Nickname must be at least 2 characters')
   .max(30)
   .regex(/^[a-zA-Z0-9 _.-]+$/, 'Letters, numbers, spaces, . _ - only');
 

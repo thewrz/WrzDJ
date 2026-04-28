@@ -14,17 +14,27 @@ def _check_nickname_profanity(v: str) -> str:
     return v
 
 
+def _check_note_profanity(v: str) -> str:
+    if contains_profanity(v):
+        raise ValueError("Note contains inappropriate content")
+    return v
+
+
 Nickname = Annotated[
     str,
     StringConstraints(
         strip_whitespace=True,
-        min_length=1,
+        min_length=2,
         max_length=30,
         pattern=r"^[a-zA-Z0-9 _.-]+$",
     ),
     AfterValidator(_check_nickname_profanity),
 ]
-Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
+Note = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, max_length=500),
+    AfterValidator(_check_note_profanity),
+]
 
 
 class CollectPhase(BaseModel):

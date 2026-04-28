@@ -87,7 +87,7 @@ def test_collect_profile_email_field_ignored(client, db, test_event):
     _enable_collection(db, test_event)
     r = client.post(
         f"/api/public/collect/{test_event.code}/profile",
-        json={"nickname": "A"},
+        json={"nickname": "AJ"},
     )
     assert r.status_code == 200
     assert r.json()["email_verified"] is False
