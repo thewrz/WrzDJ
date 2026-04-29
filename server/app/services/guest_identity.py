@@ -66,36 +66,6 @@ def _ua_signals_match(stored_ua: str | None, submitted_ua: str) -> bool:
         return s_version == n_version
 
 
-def _compute_confidence(stored_ua: str | None, submitted_ua: str) -> float:
-    """Score how likely the submitted UA belongs to the same person as stored_ua.
-
-    Weights: UA family (0.5), UA platform (0.3), version proximity (0.2).
-    """
-    if not stored_ua:
-        return 0.0
-
-    stored_family, stored_platform, stored_version = _parse_ua(stored_ua)
-    sub_family, sub_platform, sub_version = _parse_ua(submitted_ua)
-
-    score = 0.0
-
-    if stored_family == sub_family:
-        score += 0.5
-
-    if stored_platform == sub_platform:
-        score += 0.3
-
-    if stored_version and sub_version:
-        try:
-            diff = abs(int(stored_version) - int(sub_version))
-            if diff <= 2:
-                score += 0.2
-        except ValueError:
-            pass
-
-    return score
-
-
 def _parse_ua(ua: str) -> tuple[str, str, str]:
     """Extract (browser_family, platform, major_version) from UA string.
 
@@ -193,17 +163,28 @@ def identify_guest(
             )
             return IdentifyResult(guest_id=guest.id, action="cookie_hit", token=None)
 
-    # --- Flow 3: Reconciliation (no cookie, fingerprint on file) ---
+    # --- LAYER 2: fingerprint reconciliation (gated by 4 rules) ---
+    rejection_reason: str | None = None
     if fingerprint_hash:
-        existing = (
+        matches = (
             db.query(Guest)
             .filter(Guest.fingerprint_hash == fingerprint_hash)
-            .order_by(Guest.last_seen_at.desc())
-            .first()
+            .filter(Guest.last_seen_at > now - RECONCILE_FRESHNESS_WINDOW)
+            .all()
         )
-        if existing:
-            confidence = _compute_confidence(existing.user_agent, user_agent)
-            if confidence >= 0.7:
+
+        if len(matches) > 1:
+            rejection_reason = "ambiguous_match"
+        elif len(matches) == 1:
+            existing = matches[0]
+            if existing.email_verified_at is not None:
+                rejection_reason = "verified_guest"
+            elif existing.last_seen_at > now - RECONCILE_QUIET_PERIOD:
+                rejection_reason = "concurrent_activity"
+            elif not _ua_signals_match(existing.user_agent, user_agent):
+                rejection_reason = "ua_mismatch"
+            else:
+                # All gates passed — reconcile
                 existing.last_seen_at = now
                 existing.user_agent = user_agent
                 existing.fingerprint_components = components_json
@@ -211,23 +192,27 @@ def identify_guest(
                 existing.token = new_token
                 db.commit()
                 _logger.info(
-                    "guest.identify action=reconcile guest_id=%s fp=%s"
-                    " source=fingerprint confidence=%.2f",
+                    "guest.identify action=reconcile guest_id=%s fp=%s",
                     existing.id,
                     short_fp,
-                    confidence,
                 )
-                return IdentifyResult(guest_id=existing.id, action="reconcile", token=new_token)
-            else:
-                _logger.warning(
-                    "guest.identify action=reconcile_rejected fp=%s"
-                    " reason=ua_mismatch existing_guest=%s confidence=%.2f",
-                    short_fp,
-                    existing.id,
-                    confidence,
+                return IdentifyResult(
+                    guest_id=existing.id,
+                    action="reconcile",
+                    token=new_token,
+                    reconcile_hint=False,
+                    rejection_reason=None,
                 )
 
-    # --- Flow 1: New guest ---
+        if rejection_reason is not None:
+            _logger.warning(
+                "guest.identify action=reconcile_rejected fp=%s reason=%s existing_guest=%s",
+                short_fp,
+                rejection_reason,
+                matches[0].id if matches else None,
+            )
+
+    # --- LAYER 3: create new guest ---
     new_token = secrets.token_hex(32)
     guest = Guest(
         token=new_token,
@@ -241,9 +226,18 @@ def identify_guest(
     db.commit()
     db.refresh(guest)
 
+    hint = rejection_reason is not None
     _logger.info(
-        "guest.identify action=create guest_id=%s fp=%s source=new",
+        "guest.identify action=create guest_id=%s fp=%s hint=%s reason=%s",
         guest.id,
         short_fp,
+        hint,
+        rejection_reason or "no_match",
     )
-    return IdentifyResult(guest_id=guest.id, action="create", token=new_token)
+    return IdentifyResult(
+        guest_id=guest.id,
+        action="create",
+        token=new_token,
+        reconcile_hint=hint,
+        rejection_reason=rejection_reason,
+    )
