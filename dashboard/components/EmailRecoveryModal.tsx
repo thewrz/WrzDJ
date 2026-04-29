@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import EmailVerification from './EmailVerification';
 
 interface Props {
@@ -10,20 +10,54 @@ interface Props {
 }
 
 export default function EmailRecoveryModal({ open, onClose, onRecovered }: Props) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ESC closes; Tab cycles focus within the dialog.
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusables || focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
+  // Cleanup any pending close-after-recovery timeout on unmount.
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, []);
+
   if (!open) return null;
 
   const handleVerified = () => {
     onRecovered();
-    setTimeout(onClose, 1500);
+    timeoutRef.current = setTimeout(() => {
+      timeoutRef.current = null;
+      onClose();
+    }, 1500);
   };
 
   return (
@@ -42,6 +76,7 @@ export default function EmailRecoveryModal({ open, onClose, onRecovered }: Props
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-labelledby="recovery-title"
         aria-modal="true"

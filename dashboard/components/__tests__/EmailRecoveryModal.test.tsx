@@ -45,4 +45,22 @@ describe('EmailRecoveryModal', () => {
     fireEvent.click(screen.getByTestId('modal-backdrop'));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('calls onClose 1500ms after onRecovered', () => {
+    vi.useFakeTimers();
+    const onClose = vi.fn();
+    const onRecovered = vi.fn();
+    render(<EmailRecoveryModal open={true} onClose={onClose} onRecovered={onRecovered} />);
+
+    fireEvent.click(screen.getByText('simulate-verified'));
+    expect(onRecovered).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1499);
+    expect(onClose).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
 });
