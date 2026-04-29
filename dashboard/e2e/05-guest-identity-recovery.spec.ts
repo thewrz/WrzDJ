@@ -159,4 +159,75 @@ test.describe('Guest identity recovery flow', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 });
   });
+
+  test('full recovery flow: email -> code -> modal closes -> identity refreshed', async ({ page }) => {
+    // Set up baseline mocks first (event, leaderboard, profile, etc.)
+    await mockCollectApis(page, { reconcileHint: false });
+
+    // Override identify with a counter — first call returns guest 42 (initial load),
+    // subsequent calls (after merge reload) return guest 99.
+    let identifyCallCount = 0;
+    await page.route('**/api/public/guest/identify', (route) => {
+      identifyCallCount += 1;
+      const guest_id = identifyCallCount === 1 ? 42 : 99;
+      const action = identifyCallCount === 1 ? 'create' : 'cookie_hit';
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ guest_id, action, reconcile_hint: false }),
+      });
+    });
+
+    // Mock verify/request — just acknowledges the email was sent
+    await page.route('**/api/public/guest/verify/request', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ sent: true }),
+      }),
+    );
+
+    // Mock verify/confirm — returns a successful merge so merged=true triggers reload
+    await page.route('**/api/public/guest/verify/confirm', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ verified: true, guest_id: 99, merged: true }),
+      }),
+    );
+
+    await page.goto(`/collect/${eventCode}`);
+    await waitForPage(page, 2000);
+
+    // Open the recovery modal via the passive "Verify email" button
+    await page.getByRole('button', { name: /^verify email$/i }).first().click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+
+    // EmailVerification renders a plain <input type="email"> with no associated label —
+    // locate it directly by type, scoped to the dialog.
+    await dialog.locator('input[type="email"]').fill('returning@example.com');
+    await dialog.getByRole('button', { name: /send code/i }).click();
+
+    // Wait for the 6 digit inputs to appear (component transitions to 'code_sent' state).
+    // Inputs are <input type="text" inputMode="numeric"> — one per digit.
+    const digitInputs = dialog.locator('input[inputmode="numeric"]');
+    await expect(digitInputs.first()).toBeVisible({ timeout: 5000 });
+
+    // Fill each digit individually. The component auto-submits via useEffect when all
+    // 6 slots are filled — there is no explicit "Verify" button to click.
+    const code = '123456';
+    for (let i = 0; i < 6; i++) {
+      await digitInputs.nth(i).fill(code[i]);
+    }
+
+    // merged=true causes window.location.reload() inside EmailVerification.confirmCode().
+    // The reload destroys the current DOM — dialog will no longer be present.
+    // Wait for the navigation to complete (reload triggers a full page load).
+    await page.waitForLoadState('load', { timeout: 10000 });
+
+    // Identity was refreshed — the page called identify at least twice
+    // (once on initial load, at least once after the merge reload).
+    expect(identifyCallCount).toBeGreaterThanOrEqual(2);
+  });
 });
