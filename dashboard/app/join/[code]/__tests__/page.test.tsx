@@ -32,7 +32,20 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/lib/use-guest-identity', () => ({
-  useGuestIdentity: vi.fn(),
+  useGuestIdentity: vi.fn(() => ({
+    guestId: 1,
+    isReturning: false,
+    reconcileHint: false,
+    refresh: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
+vi.mock('@/components/EmailRecoveryButton', () => ({
+  default: () => null,
+}));
+
+vi.mock('@/components/EmailRecoveryModal', () => ({
+  default: () => null,
 }));
 
 vi.mock('@/lib/use-event-stream', () => ({
