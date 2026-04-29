@@ -371,11 +371,11 @@ Add `~/wrzdj-testing/11-guest-identity.sh`:
 
 ## Deployment
 
-### Two-PR rollout
+### Single-PR rollout
 
-**PR 1 — Backend hardening.** Ship the rule rewrite + schema change + tests. Observe production logs for 24–48 h to confirm rejections fire as expected and no regression in cookie-hit / new-guest flows.
+Backend hardening + frontend recovery flow ship together in one PR. Rationale: the bug is severe and bug-stopping fix shouldn't wait on a second deploy cycle. Frontend gracefully tolerates the additive `reconcile_hint` field; both ship behind the same `deploy.sh` invocation so there is no cross-version skew.
 
-**PR 2 — Frontend recovery flow.** Ship the modal + button + `useGuestIdentity` changes + e2e tests once PR 1 is stable.
+**Post-deploy validation window.** Watch logs for 24–48 h after deploy and verify the expected log-event distribution (see Observability section). If `reconcile_rejected reason=ambiguous_match` rate climbs unexpectedly, that's the strongest signal something has degraded; investigate before declaring the rollout stable.
 
 ### No migration, no env vars, no nginx changes
 
