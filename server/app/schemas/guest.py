@@ -13,3 +13,4 @@ class IdentifyRequest(BaseModel):
 class IdentifyResponse(BaseModel):
     guest_id: int
     action: Literal["create", "cookie_hit", "reconcile"]
+    reconcile_hint: bool = False

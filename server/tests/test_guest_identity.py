@@ -5,6 +5,7 @@ import secrets
 from datetime import timedelta
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.core.time import utcnow
@@ -335,3 +336,47 @@ def test_stale_match_excluded_from_reconcile_pool(db: Session):
     assert result.reconcile_hint is False
     assert result.rejection_reason is None
     assert result.guest_id != g.id
+
+
+def test_identify_response_includes_reconcile_hint(client: TestClient, db: Session):
+    """API response always includes reconcile_hint key (default false for fresh visitors)."""
+    response = client.post(
+        "/api/public/guest/identify",
+        json={"fingerprint_hash": "fresh_fp_for_api_test", "fingerprint_components": {}},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "guest_id" in body
+    assert "action" in body
+    assert "reconcile_hint" in body
+    assert body["reconcile_hint"] is False  # no FP match exists
+
+
+def test_identify_does_not_leak_rejection_reason_to_client(client: TestClient, db: Session):
+    """Even when reconciliation is rejected, rejection_reason MUST NOT be in response."""
+    fp = "leak_test_fp"
+    now = utcnow()
+    g = Guest(
+        token="z" * 64,
+        fingerprint_hash=fp,
+        fingerprint_components="{}",
+        user_agent=("Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/125.0 Safari/537.36"),
+        created_at=now - timedelta(days=1),
+        last_seen_at=now - timedelta(minutes=5),  # triggers concurrent_activity
+    )
+    db.add(g)
+    db.commit()
+
+    response = client.post(
+        "/api/public/guest/identify",
+        json={"fingerprint_hash": fp, "fingerprint_components": {}},
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/125.0 Safari/537.36"
+            ),
+        },
+    )
+    body = response.json()
+    assert body["reconcile_hint"] is True
+    assert "rejection_reason" not in body
+    assert "existing_guest" not in body
