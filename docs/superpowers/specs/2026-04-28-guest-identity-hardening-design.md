@@ -79,8 +79,9 @@ class IdentifyResult:
 | `verified_guest` | Rule 5 — matching guest has `email_verified_at IS NOT NULL` |
 | `ambiguous_match` | Rule 3 — multiple guests share this fingerprint within freshness window |
 | `ua_mismatch` | Rule 2 — UA family/platform/version doesn't match |
-| `stale_match` | Match exists but `last_seen_at` older than 90 days (excluded from reconcile pool) |
-| `none` | No fingerprint match at all |
+| `none` | No fingerprint match at all (or only stale matches were excluded by the freshness pre-filter) |
+
+Stale matches (`last_seen_at` older than `RECONCILE_FRESHNESS_WINDOW` / 90 days) are pre-filtered at the SQL query level rather than being treated as a logged rejection reason — they're functionally equivalent to "no match exists." The `RECONCILE_FRESHNESS_WINDOW` pre-filter exists to prevent old records from haunting future reconciliation, not as a per-event observability signal.
 
 **Gate sequence (replaces lines 167-220 of current file):**
 
