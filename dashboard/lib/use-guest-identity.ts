@@ -74,10 +74,19 @@ export function useGuestIdentity(): GuestIdentity {
     await doIdentify();
   }, [doIdentify]);
 
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
+
   const refresh = useCallback(async () => {
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current;
+    }
     cachedIdentity = null;
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
-    await doIdentify();
+    const promise = doIdentify().finally(() => {
+      refreshInFlightRef.current = null;
+    });
+    refreshInFlightRef.current = promise;
+    return promise;
   }, [doIdentify]);
 
   useEffect(() => {

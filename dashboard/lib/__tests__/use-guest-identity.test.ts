@@ -111,4 +111,24 @@ describe('useGuestIdentity — reconcileHint and refresh()', () => {
 
     expect(result.current.reconcileHint).toBe(false);
   });
+
+  it('refresh() surfaces fetch errors via state.error', async () => {
+    const { useGuestIdentity } = await import('../use-guest-identity');
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ guest_id: 1, action: 'create', reconcile_hint: false }),
+      })
+      .mockRejectedValueOnce(new Error('Network error'));
+
+    const { result } = renderHook(() => useGuestIdentity());
+    await waitFor(() => expect(result.current.guestId).toBe(1));
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.error).toBe('Network error');
+    expect(result.current.isLoading).toBe(false);
+  });
 });
