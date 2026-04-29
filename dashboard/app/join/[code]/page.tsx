@@ -316,11 +316,11 @@ export default function JoinEventPage() {
         selectedSong.source,
         nickname || undefined,
       );
-      setSubmitted(true);
-      setSubmitIsDuplicate(result.is_duplicate ?? false);
-      setSubmitVoteCount(result.vote_count);
       setMyRequestIds((prev) => new Set([...prev, result.id]));
       setMyRequestsRefreshKey((k) => k + 1);
+      setSubmitted(true);
+      setSubmitIsDuplicate(result.is_duplicate);
+      setSubmitVoteCount(result.vote_count);
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         setEvent((prev) => prev ? { ...prev, requests_open: false } : prev);
@@ -765,6 +765,7 @@ export default function JoinEventPage() {
           setNote={setNote}
           submitting={submitting}
           submitError={submitError}
+          setSubmitError={setSubmitError}
           sortByVibes={sortByVibes}
           setSortByVibes={setSortByVibes}
           tierInfo={tierInfo}
@@ -837,6 +838,7 @@ interface RequestSheetProps {
   setNote: (n: string) => void;
   submitting: boolean;
   submitError: string;
+  setSubmitError: (e: string) => void;
   sortByVibes: boolean;
   setSortByVibes: (v: boolean) => void;
   tierInfo: Record<string, { rail: string; label: string }>;
@@ -856,7 +858,7 @@ function RequestSheetInline({
   submitted, submitIsDuplicate, submitVoteCount,
   selectedSong, setSelectedSong,
   searchQuery, setSearchQuery, searchResults, searching,
-  note, setNote, submitting, submitError,
+  note, setNote, submitting, submitError, setSubmitError,
   sortByVibes, setSortByVibes, tierInfo,
   onSearch, onSubmit, onClose,
   accent, accent2, surface, surfaceHi, border, subFg, subFg2,
@@ -945,6 +947,10 @@ function RequestSheetInline({
             </form>
           </div>
 
+          {submitError && (
+            <div className="collect-error" style={{ margin: '0 18px 8px' }}>{submitError}</div>
+          )}
+
           <div style={{ flex: 1, overflowY: 'auto', padding: '4px 18px 120px' }}>
             {searchResults.length > 0 && (
               <>
@@ -984,7 +990,7 @@ function RequestSheetInline({
                   return (
                     <button
                       key={result.spotify_id || result.url || index}
-                      onClick={() => setSelectedSong(result)}
+                      onClick={() => { setSelectedSong(result); setSubmitError(''); }}
                       style={{
                         width: '100%', textAlign: 'left', display: 'flex', alignItems: 'stretch', gap: 0,
                         padding: 0, borderRadius: 12, marginBottom: 6,
