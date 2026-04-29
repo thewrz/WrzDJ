@@ -45,7 +45,6 @@ def create_request(
     source: str = "manual",
     source_url: str | None = None,
     artwork_url: str | None = None,
-    client_fingerprint: str | None = None,
     guest_id: int | None = None,
     raw_search_query: str | None = None,
     genre: str | None = None,
@@ -60,8 +59,8 @@ def create_request(
     existing = find_duplicate(db, event.id, artist, title)
 
     if existing:
-        if client_fingerprint or guest_id:
-            add_vote(db, existing.id, client_fingerprint, guest_id=guest_id)
+        if guest_id:
+            add_vote(db, existing.id, guest_id=guest_id)
             db.refresh(existing)
         return existing, True
 
@@ -74,13 +73,16 @@ def create_request(
         source=source,
         source_url=source_url,
         artwork_url=artwork_url,
-        client_fingerprint=client_fingerprint,
         guest_id=guest_id,
         dedupe_key=dedupe_key,
         raw_search_query=raw_search_query,
         genre=genre,
         bpm=bpm,
         musical_key=normalize_key(musical_key),
+        # Flag based on event phase so /join and /collect entry points produce
+        # equivalent rows during collection — otherwise /join submissions are
+        # invisible in the collect leaderboard despite being valid.
+        submitted_during_collection=(event.phase == "collection"),
     )
     db.add(request)
     db.commit()
@@ -249,25 +251,6 @@ def bulk_delete_requests(db: Session, event: Event, status: str | None = None) -
     count = db.query(Request).filter(Request.id.in_(request_ids)).delete(synchronize_session=False)
     db.commit()
     return count
-
-
-def get_requests_by_fingerprint(
-    db: Session,
-    event_id: int,
-    fingerprint: str,
-    limit: int = 50,
-) -> list[Request]:
-    """Get all requests submitted by a specific client fingerprint for an event."""
-    return (
-        db.query(Request)
-        .filter(
-            Request.event_id == event_id,
-            Request.client_fingerprint == fingerprint,
-        )
-        .order_by(Request.created_at.desc())
-        .limit(limit)
-        .all()
-    )
 
 
 def get_requests_by_guest(

@@ -183,7 +183,6 @@ def test_guest(db: Session) -> Guest:
         token="a" * 64,
         fingerprint_hash="fp_test_hash_123",
         fingerprint_components='{"screen":"1170x2532","timezone":"America/Chicago"}',
-        ip_address="192.168.1.100",
         user_agent=(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
             "AppleWebKit/605.1.15 (KHTML, like Gecko) "

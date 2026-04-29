@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.core.config import get_settings
-from app.core.rate_limit import get_client_ip, limiter
+from app.core.rate_limit import limiter
 from app.schemas.guest import IdentifyRequest, IdentifyResponse
 from app.services.guest_identity import identify_guest
 
@@ -22,7 +22,6 @@ def identify(
 ) -> JSONResponse:
     """Resolve guest identity via cookie token and/or browser fingerprint."""
     token_from_cookie = request.cookies.get("wrzdj_guest")
-    ip_address = get_client_ip(request)
     user_agent = (request.headers.get("user-agent") or "")[:512]
 
     result = identify_guest(
@@ -30,7 +29,6 @@ def identify(
         token_from_cookie=token_from_cookie,
         fingerprint_hash=payload.fingerprint_hash,
         fingerprint_components=payload.fingerprint_components,
-        ip_address=ip_address,
         user_agent=user_agent,
     )
 

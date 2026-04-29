@@ -82,16 +82,8 @@ def test_merge_dedup_same_vote(client: TestClient, db: Session, test_event: Even
     db.commit()
     db.refresh(req)
 
-    db.add(
-        RequestVote(
-            request_id=req.id, guest_id=phone["guest_id"], client_fingerprint="phone_fp_vote"
-        )
-    )
-    db.add(
-        RequestVote(
-            request_id=req.id, guest_id=laptop["guest_id"], client_fingerprint="laptop_fp_vote"
-        )
-    )
+    db.add(RequestVote(request_id=req.id, guest_id=phone["guest_id"]))
+    db.add(RequestVote(request_id=req.id, guest_id=laptop["guest_id"]))
     db.commit()
 
     _verify_email(client, db, phone["guest_id"], phone["cookie"], "voter@test.com")

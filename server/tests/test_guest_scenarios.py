@@ -55,7 +55,6 @@ def test_two_identical_devices_separate_via_cookies(db: Session, test_event: Eve
     guest_a = Guest(
         token="ipad_a_" + "0" * 57,
         fingerprint_hash="identical_ipad_fp",
-        ip_address="10.0.0.1",
         user_agent="Mozilla/5.0 (iPad; CPU OS 17_4) Version/17.4 Safari/604.1",
         created_at=now,
         last_seen_at=now,
@@ -63,7 +62,6 @@ def test_two_identical_devices_separate_via_cookies(db: Session, test_event: Eve
     guest_b = Guest(
         token="ipad_b_" + "0" * 57,
         fingerprint_hash="identical_ipad_fp",
-        ip_address="10.0.0.2",
         user_agent="Mozilla/5.0 (iPad; CPU OS 17_4) Version/17.4 Safari/604.1",
         created_at=now,
         last_seen_at=now,
@@ -81,14 +79,12 @@ def test_two_identical_devices_separate_via_cookies(db: Session, test_event: Eve
         db,
         token_from_cookie=guest_a.token,
         fingerprint_hash="identical_ipad_fp",
-        ip_address="10.0.0.1",
         user_agent="Mozilla/5.0 (iPad; CPU OS 17_4) Version/17.4 Safari/604.1",
     )
     result_b = identify_guest(
         db,
         token_from_cookie=guest_b.token,
         fingerprint_hash="identical_ipad_fp",
-        ip_address="10.0.0.2",
         user_agent="Mozilla/5.0 (iPad; CPU OS 17_4) Version/17.4 Safari/604.1",
     )
     assert result_a.guest_id == guest_a.id

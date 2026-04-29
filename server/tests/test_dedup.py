@@ -53,7 +53,6 @@ class TestFindDuplicate:
                 source="spotify",
                 status=RequestStatus.NEW.value,
                 dedupe_key=key,
-                client_fingerprint="user-a",
             )
         )
         db.commit()
@@ -71,7 +70,6 @@ class TestFindDuplicate:
                 source="spotify",
                 status=RequestStatus.NEW.value,
                 dedupe_key=key,
-                client_fingerprint="user-a",
             )
         )
         db.commit()
@@ -88,7 +86,6 @@ class TestFindDuplicate:
                 source="spotify",
                 status=RequestStatus.NEW.value,
                 dedupe_key=key,
-                client_fingerprint="user-a",
             )
         )
         db.commit()
@@ -104,7 +101,6 @@ class TestFindDuplicate:
             source="spotify",
             status=RequestStatus.NEW.value,
             dedupe_key=key,
-            client_fingerprint="user-a",
             created_at=utcnow() - timedelta(hours=7),
         )
         db.add(old_request)
@@ -131,7 +127,6 @@ class TestFindDuplicate:
                 source="spotify",
                 status=RequestStatus.NEW.value,
                 dedupe_key=key,
-                client_fingerprint="user-a",
             )
         )
         db.commit()

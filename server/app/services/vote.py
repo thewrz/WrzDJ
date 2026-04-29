@@ -1,4 +1,7 @@
-"""Vote service for managing request upvotes."""
+"""Vote service for managing request upvotes.
+
+Identity is `guest_id` only. See docs/RECOVERY-IP-IDENTITY.md.
+"""
 
 from sqlalchemy import case, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -15,21 +18,13 @@ class RequestNotFoundError(Exception):
 def _find_existing_vote(
     db: Session,
     request_id: int,
-    client_fingerprint: str | None,
     guest_id: int | None,
 ) -> RequestVote | None:
-    if guest_id:
-        return (
-            db.query(RequestVote)
-            .filter(RequestVote.request_id == request_id, RequestVote.guest_id == guest_id)
-            .first()
-        )
+    if guest_id is None:
+        return None
     return (
         db.query(RequestVote)
-        .filter(
-            RequestVote.request_id == request_id,
-            RequestVote.client_fingerprint == client_fingerprint,
-        )
+        .filter(RequestVote.request_id == request_id, RequestVote.guest_id == guest_id)
         .first()
     )
 
@@ -37,27 +32,28 @@ def _find_existing_vote(
 def add_vote(
     db: Session,
     request_id: int,
-    client_fingerprint: str | None = None,
     *,
     guest_id: int | None = None,
 ) -> tuple[Request, bool]:
-    """
-    Add a vote for a request.
+    """Add a vote for a request.
+
     Returns (request, is_new_vote). Idempotent: duplicate votes are no-ops.
-    Uses database constraints for concurrency safety.
+    Anonymous (no guest_id) callers are no-ops — vote is not recorded.
     """
     song_request = db.query(Request).filter(Request.id == request_id).first()
     if not song_request:
         raise RequestNotFoundError
 
-    existing = _find_existing_vote(db, request_id, client_fingerprint, guest_id)
+    if guest_id is None:
+        return song_request, False
+
+    existing = _find_existing_vote(db, request_id, guest_id)
     if existing:
         return song_request, False
 
     try:
         vote = RequestVote(
             request_id=request_id,
-            client_fingerprint=client_fingerprint,
             guest_id=guest_id,
         )
         db.add(vote)
@@ -80,19 +76,21 @@ def add_vote(
 def remove_vote(
     db: Session,
     request_id: int,
-    client_fingerprint: str | None = None,
     *,
     guest_id: int | None = None,
 ) -> tuple[Request, bool]:
-    """
-    Remove a vote for a request.
-    Returns (request, was_removed). Idempotent: removing non-existent vote is a no-op.
+    """Remove a vote for a request.
+
+    Returns (request, was_removed). Idempotent.
     """
     song_request = db.query(Request).filter(Request.id == request_id).first()
     if not song_request:
         raise RequestNotFoundError
 
-    existing = _find_existing_vote(db, request_id, client_fingerprint, guest_id)
+    if guest_id is None:
+        return song_request, False
+
+    existing = _find_existing_vote(db, request_id, guest_id)
     if not existing:
         return song_request, False
 
@@ -119,12 +117,11 @@ def remove_vote(
 def has_voted(
     db: Session,
     request_id: int,
-    client_fingerprint: str | None = None,
     *,
     guest_id: int | None = None,
 ) -> bool:
-    """Check if a fingerprint or guest has voted for a request."""
-    return _find_existing_vote(db, request_id, client_fingerprint, guest_id) is not None
+    """Check if a guest has voted for a request."""
+    return _find_existing_vote(db, request_id, guest_id) is not None
 
 
 def get_vote_count(db: Session, request_id: int) -> int:

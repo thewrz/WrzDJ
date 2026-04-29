@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { apiClient, ApiError, CollectProfileResponse } from '../lib/api';
+import { useGuestIdentity } from '../lib/use-guest-identity';
 import { ModalOverlay } from './ModalOverlay';
 import EmailVerification from './EmailVerification';
 
@@ -28,6 +29,7 @@ interface Props {
 type GateState = 'loading' | 'error' | 'nickname_input' | 'email_prompt';
 
 export function NicknameGate({ code, onComplete }: Props) {
+  const identity = useGuestIdentity();
   const [gateState, setGateState] = useState<GateState>('loading');
   const [savedNickname, setSavedNickname] = useState('');
   const [nicknameInput, setNicknameInput] = useState('');
@@ -70,9 +72,14 @@ export function NicknameGate({ code, onComplete }: Props) {
     }
   }, [code, onComplete]);
 
+  // Wait for the identify endpoint to set the wrzdj_guest cookie before we
+  // call getCollectProfile. Otherwise the backend can't resolve guest_id and
+  // (with IP fallback gone) returns the empty default — a returning guest
+  // would briefly see the nickname-input modal before settling.
   useEffect(() => {
+    if (identity.isLoading) return;
     loadProfile();
-  }, [loadProfile]);
+  }, [loadProfile, identity.isLoading]);
 
   const handleSaveNickname = async () => {
     const parsed = nicknameSchema.safeParse(nicknameInput);

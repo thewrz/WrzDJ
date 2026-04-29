@@ -17,11 +17,22 @@ vi.mock('../../lib/api', () => ({
   },
 }));
 
+vi.mock('../../lib/use-guest-identity', () => ({
+  useGuestIdentity: vi.fn(() => ({
+    guestId: 1,
+    isReturning: false,
+    isLoading: false,
+    error: null,
+  })),
+}));
+
 import { NicknameGate } from '../NicknameGate';
 import { apiClient, ApiError } from '../../lib/api';
+import { useGuestIdentity } from '../../lib/use-guest-identity';
 
 const mockGetProfile = apiClient.getCollectProfile as ReturnType<typeof vi.fn>;
 const mockSetProfile = apiClient.setCollectProfile as ReturnType<typeof vi.fn>;
+const mockUseGuestIdentity = useGuestIdentity as ReturnType<typeof vi.fn>;
 
 function baseProfile(overrides: Partial<{
   nickname: string | null;
@@ -41,6 +52,12 @@ function baseProfile(overrides: Partial<{
 describe('NicknameGate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseGuestIdentity.mockReturnValue({
+      guestId: 1,
+      isReturning: false,
+      isLoading: false,
+      error: null,
+    });
   });
 
   it('shows nickname input for a new guest (no nickname on profile)', async () => {
@@ -244,5 +261,66 @@ describe('NicknameGate', () => {
         submissionCap: 5,
       });
     });
+  });
+
+  // Race-condition tests for the IP-identity removal cleanup.
+  // See docs/RECOVERY-IP-IDENTITY.md and Phase 2f of the plan:
+  // NicknameGate must NOT call getCollectProfile until useGuestIdentity reports
+  // the cookie has been issued and the guest_id is known. Otherwise the backend
+  // sees no cookie and (pre-cleanup) falls back to IP, leaking another guest's
+  // nickname onto a fresh device.
+
+  it('does not call getCollectProfile while useGuestIdentity is loading', async () => {
+    mockUseGuestIdentity.mockReturnValue({
+      guestId: null,
+      isReturning: false,
+      isLoading: true,
+      error: null,
+    });
+    mockGetProfile.mockResolvedValue(baseProfile({ nickname: 'someone-else' }));
+
+    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
+
+    // Give React a tick or two to flush any pending effects.
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(mockGetProfile).not.toHaveBeenCalled();
+  });
+
+  it('calls getCollectProfile only after useGuestIdentity finishes loading', async () => {
+    mockUseGuestIdentity.mockReturnValue({
+      guestId: null,
+      isReturning: false,
+      isLoading: true,
+      error: null,
+    });
+    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
+
+    const { rerender } = render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
+    expect(mockGetProfile).not.toHaveBeenCalled();
+
+    mockUseGuestIdentity.mockReturnValue({
+      guestId: 42,
+      isReturning: false,
+      isLoading: false,
+      error: null,
+    });
+    rerender(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(mockGetProfile).toHaveBeenCalledWith('TEST01');
+    });
+  });
+
+  it('shows the connecting spinner while waiting for guest identity', async () => {
+    mockUseGuestIdentity.mockReturnValue({
+      guestId: null,
+      isReturning: false,
+      isLoading: true,
+      error: null,
+    });
+    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
+
+    expect(screen.getByText(/connecting/i)).toBeInTheDocument();
   });
 });

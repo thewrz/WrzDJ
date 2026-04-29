@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.time import utcnow
@@ -15,7 +15,6 @@ class RequestVote(Base):
     request_id: Mapped[int] = mapped_column(
         ForeignKey("requests.id", ondelete="CASCADE"), index=True
     )
-    client_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     guest_id: Mapped[int | None] = mapped_column(
         ForeignKey("guests.id", ondelete="SET NULL"), nullable=True, index=True
     )

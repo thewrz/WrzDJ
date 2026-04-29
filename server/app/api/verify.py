@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.core.config import get_settings
-from app.core.rate_limit import get_client_fingerprint, get_guest_id, limiter
+from app.core.rate_limit import get_guest_id, limiter
 from app.schemas.verify import (
     VerifyConfirmResponse,
     VerifyConfirmSchema,
@@ -59,14 +59,12 @@ def confirm_code(
     if guest_id is None:
         raise HTTPException(status_code=400, detail="Guest identity required")
 
-    fingerprint = get_client_fingerprint(request, action="guest.verify_confirm")
     try:
         result = confirm_verification_code(
             db,
             guest_id=guest_id,
             email=payload.email,
             code=payload.code,
-            request_fingerprint=fingerprint,
         )
     except CodeInvalidError as e:
         raise HTTPException(status_code=400, detail=str(e))
