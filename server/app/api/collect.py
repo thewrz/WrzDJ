@@ -1,4 +1,8 @@
-"""Public API endpoints for pre-event song collection (no authentication required)."""
+"""Public API endpoints for pre-event song collection (no authentication required).
+
+Identity is `guest_id` only — the wrzdj_guest cookie is required for write
+endpoints. See docs/RECOVERY-IP-IDENTITY.md.
+"""
 
 from typing import Literal
 
@@ -8,7 +12,7 @@ from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.core.rate_limit import get_client_fingerprint, get_guest_id, limiter, mask_fingerprint
+from app.core.rate_limit import get_guest_id, limiter
 from app.models.event import Event
 from app.models.request import Request as SongRequest
 from app.models.request import RequestStatus
@@ -131,17 +135,12 @@ def leaderboard(
 @router.get("/{code}/profile", response_model=CollectProfileResponse)
 @limiter.limit("60/minute")
 def get_profile(code: str, request: Request, db: Session = Depends(get_db)):
-    """Read the calling fingerprint's profile for this event. Does NOT
-    create a row if none exists — returns defaults instead. Separate from
-    POST /profile so reads and writes have different action tags in the
-    fingerprint log.
+    """Read the calling guest's profile for this event. Anonymous callers
+    (no cookie) get the default empty profile — there is no IP fallback.
     """
     event = _get_event_or_404(db, code)
-    fingerprint = get_client_fingerprint(request, action="collect.get_profile", event_code=code)
     guest_id = get_guest_id(request, db)
-    profile = collect_service.get_profile(
-        db, event_id=event.id, fingerprint=fingerprint, guest_id=guest_id
-    )
+    profile = collect_service.get_profile(db, event_id=event.id, guest_id=guest_id)
     if profile is None:
         return CollectProfileResponse(
             nickname=None,
@@ -172,12 +171,12 @@ def set_profile(
     db: Session = Depends(get_db),
 ):
     event = _get_event_or_404(db, code)
-    fingerprint = get_client_fingerprint(request, action="collect.set_profile", event_code=code)
     guest_id = get_guest_id(request, db)
+    if guest_id is None:
+        raise HTTPException(status_code=401, detail="Guest identity required")
     profile = collect_service.upsert_profile(
         db,
         event_id=event.id,
-        fingerprint=fingerprint,
         guest_id=guest_id,
         nickname=payload.nickname,
     )
@@ -186,19 +185,18 @@ def set_profile(
             db,
             level="info",
             source="collect",
-            message=f"Guest [{mask_fingerprint(fingerprint)}] updated profile: nickname",
+            message=f"Guest #{guest_id} updated profile: nickname",
             event_code=code,
         )
     is_verified = False
-    if guest_id:
-        from app.models.guest import Guest
+    from app.models.guest import Guest
 
-        guest_row = db.query(Guest).filter(Guest.id == guest_id).first()
-        is_verified = guest_row is not None and guest_row.email_verified_at is not None
+    guest_row = db.query(Guest).filter(Guest.id == guest_id).first()
+    is_verified = guest_row is not None and guest_row.email_verified_at is not None
     return CollectProfileResponse(
-        nickname=profile.nickname,
+        nickname=profile.nickname if profile is not None else payload.nickname,
         email_verified=is_verified,
-        submission_count=profile.submission_count,
+        submission_count=profile.submission_count if profile is not None else 0,
         submission_cap=event.submission_cap_per_guest,
     )
 
@@ -207,32 +205,30 @@ def set_profile(
 @limiter.limit("60/minute")
 def my_picks(code: str, request: Request, db: Session = Depends(get_db)):
     event = _get_event_or_404(db, code)
-    fingerprint = get_client_fingerprint(request, action="collect.my_picks", event_code=code)
     guest_id = get_guest_id(request, db)
 
-    submitted_filter = (
-        SongRequest.guest_id == guest_id
-        if guest_id
-        else SongRequest.client_fingerprint == fingerprint
-    )
+    if guest_id is None:
+        return CollectMyPicksResponse(
+            submitted=[],
+            upvoted=[],
+            is_top_contributor=False,
+            first_suggestion_ids=[],
+            voted_request_ids=[],
+        )
+
     submitted = (
         db.query(SongRequest)
         .filter(SongRequest.event_id == event.id)
         .filter(SongRequest.submitted_during_collection == True)  # noqa: E712
-        .filter(submitted_filter)
+        .filter(SongRequest.guest_id == guest_id)
         .order_by(SongRequest.created_at.desc())
         .all()
     )
 
-    voted_filter = (
-        RequestVote.guest_id == guest_id
-        if guest_id
-        else RequestVote.client_fingerprint == fingerprint
-    )
     voted_rows = (
         db.query(RequestVote.request_id)
         .join(SongRequest, SongRequest.id == RequestVote.request_id)
-        .filter(voted_filter)
+        .filter(RequestVote.guest_id == guest_id)
         .filter(SongRequest.event_id == event.id)
         .all()
     )
@@ -247,21 +243,19 @@ def my_picks(code: str, request: Request, db: Session = Depends(get_db)):
             .all()
         )
 
-    group_col = SongRequest.guest_id if guest_id else SongRequest.client_fingerprint
-    identity_val = guest_id if guest_id else fingerprint
     top_row = (
         db.query(
-            group_col,
+            SongRequest.guest_id,
             func.count(SongRequest.id).label("n"),
         )
         .filter(SongRequest.event_id == event.id)
         .filter(SongRequest.submitted_during_collection == True)  # noqa: E712
-        .filter(group_col.isnot(None))
-        .group_by(group_col)
+        .filter(SongRequest.guest_id.isnot(None))
+        .group_by(SongRequest.guest_id)
         .order_by(desc("n"))
         .first()
     )
-    is_top = top_row is not None and top_row[0] == identity_val and top_row[1] > 0
+    is_top = top_row is not None and top_row[0] == guest_id and top_row[1] > 0
 
     # First-to-suggest: among submitted rows, the ones where no earlier row in the
     # event shares the same dedupe_key.
@@ -312,26 +306,23 @@ def submit(
     if event.phase != "collection":
         raise HTTPException(status_code=409, detail="Collection has ended")
 
-    fingerprint = get_client_fingerprint(request, action="collect.submit", event_code=code)
     guest_id = get_guest_id(request, db)
+    if guest_id is None:
+        raise HTTPException(status_code=401, detail="Guest identity required")
 
     existing = find_duplicate(db, event.id, payload.artist, payload.song_title)
     if existing:
-        is_own = (guest_id is not None and existing.guest_id == guest_id) or (
-            existing.client_fingerprint is not None
-            and fingerprint is not None
-            and existing.client_fingerprint == fingerprint
-        )
+        is_own = existing.guest_id == guest_id
         if is_own:
             raise HTTPException(status_code=409, detail="You already picked this one!")
 
-        add_vote(db, existing.id, fingerprint, guest_id=guest_id)
+        add_vote(db, existing.id, guest_id=guest_id)
         log_activity(
             db,
             level="info",
             source="collect",
             message=(
-                f"Guest [{mask_fingerprint(fingerprint)}] duplicate-voted "
+                f"Guest #{guest_id} duplicate-voted "
                 f"'{existing.song_title}' by {existing.artist} (req #{existing.id})"
             ),
             event_code=code,
@@ -339,9 +330,7 @@ def submit(
         return JSONResponse({"id": existing.id, "is_duplicate": True}, status_code=200)
 
     try:
-        collect_service.check_and_increment_submission_count(
-            db, event=event, fingerprint=fingerprint, guest_id=guest_id
-        )
+        collect_service.check_and_increment_submission_count(db, event=event, guest_id=guest_id)
     except collect_service.SubmissionCapExceeded:
         raise HTTPException(status_code=429, detail="Picks limit reached") from None
 
@@ -349,7 +338,6 @@ def submit(
         collect_service.upsert_profile(
             db,
             event_id=event.id,
-            fingerprint=fingerprint,
             guest_id=guest_id,
             nickname=payload.nickname,
         )
@@ -365,7 +353,6 @@ def submit(
         nickname=payload.nickname,
         status=RequestStatus.NEW.value,
         dedupe_key=compute_dedupe_key(payload.artist, payload.song_title),
-        client_fingerprint=fingerprint,
         guest_id=guest_id,
         submitted_during_collection=True,
     )
@@ -376,10 +363,7 @@ def submit(
         db,
         level="info",
         source="collect",
-        message=(
-            f"Guest [{mask_fingerprint(fingerprint)}] submitted "
-            f"'{row.song_title}' by {row.artist} (req #{row.id})"
-        ),
+        message=(f"Guest #{guest_id} submitted '{row.song_title}' by {row.artist} (req #{row.id})"),
         event_code=code,
     )
     return {"id": row.id, "is_duplicate": False}
@@ -396,8 +380,9 @@ def vote(
     event = _get_event_or_404(db, code)
     if event.phase not in ("collection", "live"):
         raise HTTPException(status_code=409, detail="Voting is closed")
-    fingerprint = get_client_fingerprint(request, action="collect.vote", event_code=code)
     guest_id = get_guest_id(request, db)
+    if guest_id is None:
+        raise HTTPException(status_code=401, detail="Guest identity required")
     row = (
         db.query(SongRequest)
         .filter(SongRequest.id == payload.request_id)
@@ -406,25 +391,15 @@ def vote(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Request not found")
-    is_own = (guest_id is not None and row.guest_id == guest_id) or (
-        row.client_fingerprint is not None
-        and fingerprint is not None
-        and row.client_fingerprint == fingerprint
-    )
-    if is_own:
+    if row.guest_id == guest_id:
         raise HTTPException(status_code=409, detail="Can't vote on your own pick")
-    _, is_new_vote = add_vote(
-        db, request_id=row.id, client_fingerprint=fingerprint, guest_id=guest_id
-    )
+    _, is_new_vote = add_vote(db, request_id=row.id, guest_id=guest_id)
     if is_new_vote:
         log_activity(
             db,
             level="info",
             source="collect",
-            message=(
-                f"Guest [{mask_fingerprint(fingerprint)}] voted on "
-                f"'{row.song_title}' (req #{row.id})"
-            ),
+            message=(f"Guest #{guest_id} voted on '{row.song_title}' (req #{row.id})"),
             event_code=code,
         )
     return {"ok": True}

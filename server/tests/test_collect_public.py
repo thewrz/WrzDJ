@@ -2,8 +2,11 @@
 
 from datetime import timedelta
 
+import pytest
+
 from app.core.time import utcnow
 from app.models.event import Event
+from app.models.guest import Guest
 
 
 def _enable_collection(db, event: Event):
@@ -12,6 +15,26 @@ def _enable_collection(db, event: Event):
     event.live_starts_at = now + timedelta(hours=1)
     db.commit()
     db.refresh(event)
+
+
+@pytest.fixture(autouse=True)
+def _default_guest_cookie(client, db):
+    """Most collect endpoints require a wrzdj_guest cookie (identity is guest_id only).
+
+    See docs/RECOVERY-IP-IDENTITY.md.
+    """
+    guest = Guest(
+        token="defaultguest" + "0" * 52,
+        fingerprint_hash="fp_default",
+        created_at=utcnow(),
+        last_seen_at=utcnow(),
+    )
+    db.add(guest)
+    db.commit()
+    db.refresh(guest)
+    client.cookies.clear()
+    client.cookies.set("wrzdj_guest", guest.token)
+    return guest
 
 
 def test_collect_preview_returns_phase(client, db, test_event: Event):
@@ -271,7 +294,6 @@ def test_collect_activity_log_entries_for_state_changes(client, db, test_event):
         source="spotify",
         status="new",
         dedupe_key=key,
-        client_fingerprint="someone-else",
         submitted_during_collection=True,
     )
     db.add(other_row)
@@ -312,10 +334,12 @@ def test_collect_activity_log_entries_for_state_changes(client, db, test_event):
     assert "'Log Me'" in rows[0].message
     assert "voted" in rows[1].message
     assert "updated profile" in rows[2].message
+    # Log messages reference Guest #<id>; no IP/hashed-IP tags ever appear.
+    # See docs/RECOVERY-IP-IDENTITY.md.
     import re
 
     for row in rows:
-        assert re.search(r"\[[0-9a-f]{12}\]", row.message), f"missing masked fp: {row.message}"
+        assert re.search(r"Guest #\d+", row.message), f"missing guest tag: {row.message}"
 
 
 def test_collect_get_profile_does_not_create_row(client, db, test_event):
@@ -411,7 +435,6 @@ def test_collect_submit_different_user_duplicate_auto_votes(client, db, test_eve
         source="spotify",
         status="new",
         dedupe_key=key,
-        client_fingerprint="other-user-ip",
         submitted_during_collection=True,
     )
     db.add(row)
@@ -450,7 +473,6 @@ def test_collect_submit_different_user_duplicate_no_pick_slot(client, db, test_e
             source="spotify",
             status="new",
             dedupe_key=key,
-            client_fingerprint="other-user-ip",
             submitted_during_collection=True,
         )
     )
@@ -519,7 +541,6 @@ def test_collect_vote_other_user_still_works(client, db, test_event):
         source="spotify",
         status="new",
         dedupe_key=key,
-        client_fingerprint="different-user",
         submitted_during_collection=True,
     )
     db.add(row)

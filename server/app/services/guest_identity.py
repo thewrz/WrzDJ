@@ -13,11 +13,21 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
-from app.core.rate_limit import mask_fingerprint
 from app.core.time import utcnow
 from app.models.guest import Guest
 
 _logger = logging.getLogger("app.guest.identity")
+
+
+def _short_fp(fp: str | None) -> str:
+    """Truncate the (already-hashed) browser fingerprint to 12 chars for log correlation.
+
+    The fingerprint_hash from ThumbmarkJS is a hex string; this is a safe truncation
+    for log correlation, never an IP. See docs/RECOVERY-IP-IDENTITY.md.
+    """
+    if not fp:
+        return "-"
+    return fp[:12]
 
 
 @dataclass
@@ -119,7 +129,6 @@ def identify_guest(
     token_from_cookie: str | None,
     fingerprint_hash: str,
     fingerprint_components: dict | None = None,
-    ip_address: str,
     user_agent: str,
 ) -> IdentifyResult:
     """Resolve a guest's identity using cookie token and/or browser fingerprint.
@@ -129,7 +138,7 @@ def identify_guest(
     """
     components_json = json.dumps(fingerprint_components) if fingerprint_components else None
     now = utcnow()
-    masked_fp = mask_fingerprint(fingerprint_hash)
+    short_fp = _short_fp(fingerprint_hash)
 
     # --- Flow 2: Cookie present ---
     if token_from_cookie:
@@ -137,14 +146,13 @@ def identify_guest(
         if guest:
             old_fp = guest.fingerprint_hash
             guest.last_seen_at = now
-            guest.ip_address = ip_address
             guest.user_agent = user_agent
             if fingerprint_hash and fingerprint_hash != guest.fingerprint_hash:
                 _logger.warning(
                     "guest.identify action=fingerprint_drift guest_id=%s old_fp=%s new_fp=%s",
                     guest.id,
-                    mask_fingerprint(old_fp) if old_fp else "-",
-                    masked_fp,
+                    _short_fp(old_fp),
+                    short_fp,
                 )
                 guest.fingerprint_hash = fingerprint_hash
                 guest.fingerprint_components = components_json
@@ -152,7 +160,7 @@ def identify_guest(
             _logger.info(
                 "guest.identify action=cookie_hit guest_id=%s fp=%s source=cookie",
                 guest.id,
-                masked_fp,
+                short_fp,
             )
             return IdentifyResult(guest_id=guest.id, action="cookie_hit", token=None)
 
@@ -168,7 +176,6 @@ def identify_guest(
             confidence = _compute_confidence(existing.user_agent, user_agent)
             if confidence >= 0.7:
                 existing.last_seen_at = now
-                existing.ip_address = ip_address
                 existing.user_agent = user_agent
                 existing.fingerprint_components = components_json
                 new_token = secrets.token_hex(32)
@@ -178,7 +185,7 @@ def identify_guest(
                     "guest.identify action=reconcile guest_id=%s fp=%s"
                     " source=fingerprint confidence=%.2f",
                     existing.id,
-                    masked_fp,
+                    short_fp,
                     confidence,
                 )
                 return IdentifyResult(guest_id=existing.id, action="reconcile", token=new_token)
@@ -186,7 +193,7 @@ def identify_guest(
                 _logger.warning(
                     "guest.identify action=reconcile_rejected fp=%s"
                     " reason=ua_mismatch existing_guest=%s confidence=%.2f",
-                    masked_fp,
+                    short_fp,
                     existing.id,
                     confidence,
                 )
@@ -197,7 +204,6 @@ def identify_guest(
         token=new_token,
         fingerprint_hash=fingerprint_hash,
         fingerprint_components=components_json,
-        ip_address=ip_address,
         user_agent=user_agent,
         created_at=now,
         last_seen_at=now,
@@ -209,6 +215,6 @@ def identify_guest(
     _logger.info(
         "guest.identify action=create guest_id=%s fp=%s source=new",
         guest.id,
-        masked_fp,
+        short_fp,
     )
     return IdentifyResult(guest_id=guest.id, action="create", token=new_token)

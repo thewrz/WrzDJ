@@ -9,10 +9,29 @@ Each test asserts the exact set of keys in the JSON response, not the values.
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
+from app.core.time import utcnow
 from app.models.event import Event
+from app.models.guest import Guest
 from app.models.request import Request
 from app.models.user import User
+
+
+def _set_guest_cookie(client: TestClient, db: Session, suffix: str = "vote") -> Guest:
+    g = Guest(
+        token=suffix.ljust(64, "0"),
+        fingerprint_hash=f"fp_{suffix}",
+        created_at=utcnow(),
+        last_seen_at=utcnow(),
+    )
+    db.add(g)
+    db.commit()
+    db.refresh(g)
+    client.cookies.clear()
+    client.cookies.set("wrzdj_guest", g.token)
+    return g
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -277,13 +296,14 @@ class TestRequestContracts:
 
 
 class TestVoteContracts:
-    def test_vote_response_shape(self, client: TestClient, test_request: Request):
+    def test_vote_response_shape(self, client: TestClient, db: Session, test_request: Request):
+        _set_guest_cookie(client, db, "v1")
         resp = client.post(f"/api/requests/{test_request.id}/vote")
         assert resp.status_code == 200
         _assert_keys(resp.json(), VOTE_RESPONSE_KEYS, "POST /api/requests/{id}/vote")
 
-    def test_unvote_response_shape(self, client: TestClient, test_request: Request):
-        # Vote first, then unvote
+    def test_unvote_response_shape(self, client: TestClient, db: Session, test_request: Request):
+        _set_guest_cookie(client, db, "v2")
         client.post(f"/api/requests/{test_request.id}/vote")
         resp = client.delete(f"/api/requests/{test_request.id}/vote")
         assert resp.status_code == 200

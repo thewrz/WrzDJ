@@ -101,7 +101,6 @@ class TestBulkDeleteRequests:
         req = _create_request(db, test_event, "Song", "new")
         vote = RequestVote(
             request_id=req.id,
-            client_fingerprint="test-fp",
         )
         db.add(vote)
         db.commit()
@@ -318,7 +317,7 @@ class TestBulkDeleteEvents:
         req_id = req.id
         event_id = event.id
 
-        vote = RequestVote(request_id=req_id, client_fingerprint="fp123")
+        vote = RequestVote(request_id=req_id)
         db.add(vote)
         db.commit()
 

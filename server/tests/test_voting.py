@@ -3,10 +3,25 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.core.time import utcnow
 from app.models.event import Event
+from app.models.guest import Guest
 from app.models.request import Request, RequestStatus
 from app.models.request_vote import RequestVote
 from app.services.vote import RequestNotFoundError, add_vote, get_vote_count, has_voted, remove_vote
+
+
+def _make_guest(db: Session, suffix: str) -> Guest:
+    g = Guest(
+        token=suffix.ljust(64, "0"),
+        fingerprint_hash=f"fp_{suffix}",
+        created_at=utcnow(),
+        last_seen_at=utcnow(),
+    )
+    db.add(g)
+    db.commit()
+    db.refresh(g)
+    return g
 
 
 class TestVoteService:
@@ -14,7 +29,8 @@ class TestVoteService:
 
     def test_add_vote_creates_vote(self, db: Session, test_request: Request):
         """Test that add_vote creates a vote and increments count."""
-        request, is_new = add_vote(db, test_request.id, "192.168.1.1")
+        guest = _make_guest(db, "a")
+        request, is_new = add_vote(db, test_request.id, guest_id=guest.id)
         assert is_new is True
         assert request.vote_count == 1
 
@@ -23,59 +39,65 @@ class TestVoteService:
             db.query(RequestVote)
             .filter(
                 RequestVote.request_id == test_request.id,
-                RequestVote.client_fingerprint == "192.168.1.1",
+                RequestVote.guest_id == guest.id,
             )
             .first()
         )
         assert vote is not None
 
     def test_add_vote_idempotent(self, db: Session, test_request: Request):
-        """Test that voting twice from same IP is idempotent."""
-        add_vote(db, test_request.id, "192.168.1.1")
-        request, is_new = add_vote(db, test_request.id, "192.168.1.1")
+        """Test that voting twice from same guest is idempotent."""
+        guest = _make_guest(db, "a")
+        add_vote(db, test_request.id, guest_id=guest.id)
+        request, is_new = add_vote(db, test_request.id, guest_id=guest.id)
         assert is_new is False
         assert request.vote_count == 1
 
-    def test_add_vote_multiple_fingerprints(self, db: Session, test_request: Request):
-        """Test that different IPs can vote independently."""
-        add_vote(db, test_request.id, "192.168.1.1")
-        add_vote(db, test_request.id, "192.168.1.2")
-        request, is_new = add_vote(db, test_request.id, "192.168.1.3")
-        assert is_new is True
-        assert request.vote_count == 3
+    def test_add_vote_multiple_guests(self, db: Session, test_request: Request):
+        """Test that different guests can vote independently."""
+        for suffix in ("a", "b", "c"):
+            g = _make_guest(db, suffix)
+            add_vote(db, test_request.id, guest_id=g.id)
+        db.refresh(test_request)
+        assert test_request.vote_count == 3
 
     def test_add_vote_request_not_found(self, db: Session):
         """Test that voting for nonexistent request raises error."""
+        guest = _make_guest(db, "a")
         try:
-            add_vote(db, 99999, "192.168.1.1")
+            add_vote(db, 99999, guest_id=guest.id)
             assert False, "Should have raised RequestNotFoundError"
         except RequestNotFoundError:
             pass
 
     def test_remove_vote(self, db: Session, test_request: Request):
         """Test removing a vote decrements count."""
-        add_vote(db, test_request.id, "192.168.1.1")
-        request, was_removed = remove_vote(db, test_request.id, "192.168.1.1")
+        guest = _make_guest(db, "a")
+        add_vote(db, test_request.id, guest_id=guest.id)
+        request, was_removed = remove_vote(db, test_request.id, guest_id=guest.id)
         assert was_removed is True
         assert request.vote_count == 0
 
     def test_remove_vote_idempotent(self, db: Session, test_request: Request):
         """Test removing non-existent vote is idempotent."""
-        request, was_removed = remove_vote(db, test_request.id, "192.168.1.1")
+        guest = _make_guest(db, "a")
+        request, was_removed = remove_vote(db, test_request.id, guest_id=guest.id)
         assert was_removed is False
         assert request.vote_count == 0
 
     def test_has_voted(self, db: Session, test_request: Request):
         """Test has_voted returns correct status."""
-        assert has_voted(db, test_request.id, "192.168.1.1") is False
-        add_vote(db, test_request.id, "192.168.1.1")
-        assert has_voted(db, test_request.id, "192.168.1.1") is True
+        guest = _make_guest(db, "a")
+        assert has_voted(db, test_request.id, guest_id=guest.id) is False
+        add_vote(db, test_request.id, guest_id=guest.id)
+        assert has_voted(db, test_request.id, guest_id=guest.id) is True
 
     def test_get_vote_count(self, db: Session, test_request: Request):
         """Test get_vote_count returns correct count."""
         assert get_vote_count(db, test_request.id) == 0
-        add_vote(db, test_request.id, "192.168.1.1")
-        add_vote(db, test_request.id, "192.168.1.2")
+        for suffix in ("a", "b"):
+            g = _make_guest(db, suffix)
+            add_vote(db, test_request.id, guest_id=g.id)
         assert get_vote_count(db, test_request.id) == 2
 
     def test_get_vote_count_nonexistent(self, db: Session):
@@ -84,29 +106,37 @@ class TestVoteService:
 
     def test_vote_count_never_negative(self, db: Session, test_request: Request):
         """Test vote_count never goes below 0."""
-        remove_vote(db, test_request.id, "192.168.1.1")
+        guest = _make_guest(db, "a")
+        remove_vote(db, test_request.id, guest_id=guest.id)
         assert test_request.vote_count == 0
 
     def test_vote_count_clamped_at_zero_on_remove(self, db: Session, test_request: Request):
         """Test that vote_count stays at 0 when removing a vote with count already at 0."""
-        # Add a vote then manually set count to 0 to simulate inconsistency
-        add_vote(db, test_request.id, "192.168.1.50")
+        guest = _make_guest(db, "a")
+        add_vote(db, test_request.id, guest_id=guest.id)
         test_request.vote_count = 0
         db.commit()
         db.refresh(test_request)
         assert test_request.vote_count == 0
 
         # Remove the vote — SQL should clamp to 0, not go to -1
-        request, was_removed = remove_vote(db, test_request.id, "192.168.1.50")
+        request, was_removed = remove_vote(db, test_request.id, guest_id=guest.id)
         assert was_removed is True
         assert request.vote_count == 0
 
 
 class TestVoteEndpoints:
-    """Tests for vote API endpoints."""
+    """Tests for vote API endpoints (cookie-required after IP-identity removal)."""
 
-    def test_vote_success(self, client: TestClient, test_request: Request):
-        """Test POST /api/requests/{id}/vote succeeds."""
+    def _set_cookie(self, client: TestClient, db: Session, suffix: str = "a") -> Guest:
+        guest = _make_guest(db, suffix)
+        client.cookies.clear()
+        client.cookies.set("wrzdj_guest", guest.token)
+        return guest
+
+    def test_vote_success(self, client: TestClient, db: Session, test_request: Request):
+        """Test POST /api/requests/{id}/vote succeeds with cookie."""
+        self._set_cookie(client, db)
         response = client.post(f"/api/requests/{test_request.id}/vote")
         assert response.status_code == 200
         data = response.json()
@@ -114,8 +144,9 @@ class TestVoteEndpoints:
         assert data["vote_count"] == 1
         assert data["has_voted"] is True
 
-    def test_vote_idempotent(self, client: TestClient, test_request: Request):
-        """Test voting twice from same client is idempotent."""
+    def test_vote_idempotent(self, client: TestClient, db: Session, test_request: Request):
+        """Test voting twice from same guest is idempotent."""
+        self._set_cookie(client, db)
         client.post(f"/api/requests/{test_request.id}/vote")
         response = client.post(f"/api/requests/{test_request.id}/vote")
         assert response.status_code == 200
@@ -123,13 +154,15 @@ class TestVoteEndpoints:
         assert data["status"] == "already_voted"
         assert data["vote_count"] == 1
 
-    def test_vote_not_found(self, client: TestClient):
+    def test_vote_not_found(self, client: TestClient, db: Session):
         """Test voting for nonexistent request returns 404."""
+        self._set_cookie(client, db)
         response = client.post("/api/requests/99999/vote")
         assert response.status_code == 404
 
-    def test_unvote_success(self, client: TestClient, test_request: Request):
+    def test_unvote_success(self, client: TestClient, db: Session, test_request: Request):
         """Test DELETE /api/requests/{id}/vote removes vote."""
+        self._set_cookie(client, db)
         client.post(f"/api/requests/{test_request.id}/vote")
         response = client.delete(f"/api/requests/{test_request.id}/vote")
         assert response.status_code == 200
@@ -138,8 +171,9 @@ class TestVoteEndpoints:
         assert data["vote_count"] == 0
         assert data["has_voted"] is False
 
-    def test_unvote_not_voted(self, client: TestClient, test_request: Request):
+    def test_unvote_not_voted(self, client: TestClient, db: Session, test_request: Request):
         """Test unvoting when not voted is idempotent."""
+        self._set_cookie(client, db)
         response = client.delete(f"/api/requests/{test_request.id}/vote")
         assert response.status_code == 200
         data = response.json()
@@ -150,9 +184,15 @@ class TestVoteEndpoints:
 class TestDuplicateAutoVote:
     """Tests for auto-voting on duplicate request submission."""
 
-    def test_duplicate_request_auto_votes(self, client: TestClient, test_event: Event):
+    def _set_cookie(self, client: TestClient, db: Session, suffix: str = "a") -> Guest:
+        guest = _make_guest(db, suffix)
+        client.cookies.clear()
+        client.cookies.set("wrzdj_guest", guest.token)
+        return guest
+
+    def test_duplicate_request_auto_votes(self, client: TestClient, db: Session, test_event: Event):
         """Test that submitting a duplicate request auto-votes."""
-        # First request
+        self._set_cookie(client, db, "a")
         response1 = client.post(
             f"/api/events/{test_event.code}/requests",
             json={"artist": "Vote Artist", "title": "Vote Song", "source": "manual"},
@@ -160,7 +200,8 @@ class TestDuplicateAutoVote:
         assert response1.status_code == 200
         assert response1.json()["is_duplicate"] is False
 
-        # Duplicate submission should auto-vote
+        # Different guest, duplicate submission should auto-vote
+        self._set_cookie(client, db, "b")
         response2 = client.post(
             f"/api/events/{test_event.code}/requests",
             json={"artist": "Vote Artist", "title": "Vote Song", "source": "manual"},
@@ -170,33 +211,44 @@ class TestDuplicateAutoVote:
         assert data["is_duplicate"] is True
         assert data["vote_count"] >= 1
 
-    def test_duplicate_auto_vote_idempotent(self, client: TestClient, test_event: Event):
-        """Test that repeated duplicate submissions from same IP don't double-vote."""
-        # First request
+    def test_duplicate_auto_vote_idempotent(
+        self, client: TestClient, db: Session, test_event: Event
+    ):
+        """Test that repeated duplicate submissions from same guest don't double-vote."""
+        self._set_cookie(client, db, "a")
         client.post(
             f"/api/events/{test_event.code}/requests",
             json={"artist": "Idempotent Artist", "title": "Idempotent Song", "source": "manual"},
         )
-        # Duplicate #1
+        # Same guest re-submits the same song
         client.post(
             f"/api/events/{test_event.code}/requests",
             json={"artist": "Idempotent Artist", "title": "Idempotent Song", "source": "manual"},
         )
-        # Duplicate #2 from same IP
         response = client.post(
             f"/api/events/{test_event.code}/requests",
             json={"artist": "Idempotent Artist", "title": "Idempotent Song", "source": "manual"},
         )
         data = response.json()
-        # Vote count should be 1 (same IP, idempotent)
+        # Vote count should be 1 (first duplicate submission auto-votes;
+        # subsequent duplicates from same guest are idempotent — guest_id-keyed)
         assert data["vote_count"] == 1
 
 
 class TestVoteCountInResponses:
     """Tests for vote counts in various API responses."""
 
-    def test_submit_response_includes_vote_count(self, client: TestClient, test_event: Event):
+    def _set_cookie(self, client: TestClient, db: Session, suffix: str = "a") -> Guest:
+        guest = _make_guest(db, suffix)
+        client.cookies.clear()
+        client.cookies.set("wrzdj_guest", guest.token)
+        return guest
+
+    def test_submit_response_includes_vote_count(
+        self, client: TestClient, db: Session, test_event: Event
+    ):
         """Test that submit request response includes vote_count."""
+        self._set_cookie(client, db)
         response = client.post(
             f"/api/events/{test_event.code}/requests",
             json={"artist": "Count Artist", "title": "Count Song", "source": "manual"},
@@ -261,7 +313,6 @@ class TestVoteCountInResponses:
         self, client: TestClient, test_event: Event, db: Session
     ):
         """Test that kiosk accepted queue is sorted by vote_count descending."""
-        # Create requests with different vote counts
         for title, votes in [("Low Song", 1), ("High Song", 10), ("Mid Song", 5)]:
             request = Request(
                 event_id=test_event.id,

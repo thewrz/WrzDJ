@@ -12,7 +12,6 @@ def _create_guest(db: Session, fingerprint_hash: str, user_agent: str) -> Guest:
     guest = Guest(
         token="t_" + fingerprint_hash.ljust(62, "0"),
         fingerprint_hash=fingerprint_hash,
-        ip_address="10.0.0.1",
         user_agent=user_agent,
         created_at=utcnow(),
         last_seen_at=utcnow(),
@@ -38,7 +37,6 @@ def test_high_confidence_same_ua_family(db: Session):
         token_from_cookie=None,
         fingerprint_hash="shared_fp_aaa",
         fingerprint_components={},
-        ip_address="10.0.0.2",
         user_agent=(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5) "
             "AppleWebKit/605.1.15 Version/17.5 Safari/604.1"
@@ -60,7 +58,6 @@ def test_low_confidence_different_ua_family(db: Session):
         token_from_cookie=None,
         fingerprint_hash="shared_fp_bbb",
         fingerprint_components={},
-        ip_address="10.0.0.2",
         user_agent=("Mozilla/5.0 (Linux; Android 14) Chrome/125.0.6422.52 Mobile Safari/537.36"),
     )
     assert result.guest_id != guest.id
@@ -79,7 +76,6 @@ def test_medium_confidence_same_ua_different_version(db: Session):
         token_from_cookie=None,
         fingerprint_hash="shared_fp_ccc",
         fingerprint_components={},
-        ip_address="10.0.0.2",
         user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) Version/18 Safari/604.1",
     )
     assert result.guest_id == guest.id
@@ -97,7 +93,6 @@ def test_identical_devices_different_guests_via_cookies(db: Session):
     guest_b = Guest(
         token="b_" + "0" * 62,
         fingerprint_hash="school_ipad_fp",
-        ip_address="10.0.0.3",
         user_agent="Mozilla/5.0 (iPad; CPU OS 17_4) Version/17.4 Safari/604.1",
         created_at=utcnow(),
         last_seen_at=utcnow(),
@@ -111,7 +106,6 @@ def test_identical_devices_different_guests_via_cookies(db: Session):
         token_from_cookie=guest_b.token,
         fingerprint_hash="school_ipad_fp",
         fingerprint_components={},
-        ip_address="10.0.0.3",
         user_agent="Mozilla/5.0 (iPad; CPU OS 17_4) Version/17.4 Safari/604.1",
     )
     assert result.guest_id == guest_b.id
