@@ -216,7 +216,7 @@ export default function CollectPage() {
   if (event.phase === 'pre_announce') {
     const opens = event.collection_opens_at ? new Date(event.collection_opens_at) : null;
     return (
-      <main className="collect-page">
+      <main className="collect-page tower">
         {bannerNode}
         <div className="collect-container">
           <div className="collect-preannounce">
@@ -234,29 +234,70 @@ export default function CollectPage() {
   }
 
   const liveStarts = event.live_starts_at ? new Date(event.live_starts_at) : null;
+  const accent = '#00f0ff';
+  const accent2 = '#ff2bd6';
+  const surface = 'rgba(255,255,255,0.04)';
+  const border = 'rgba(255,255,255,0.08)';
+  const subFg = 'rgba(255,255,255,0.5)';
 
   return (
-    <main className="collect-page">
+    <main className="collect-page tower">
+      {/* Ambient glows */}
+      <div style={{ position: 'fixed', top: 40, left: -80, width: 280, height: 280, borderRadius: '50%', background: `radial-gradient(circle, ${accent2}28, transparent 70%)`, filter: 'blur(40px)', pointerEvents: 'none', zIndex: 0 }} />
+      <div style={{ position: 'fixed', bottom: 40, right: -80, width: 280, height: 280, borderRadius: '50%', background: `radial-gradient(circle, ${accent}28, transparent 70%)`, filter: 'blur(40px)', pointerEvents: 'none', zIndex: 0 }} />
+
       {nickname && (
         <IdentityBar
           nickname={nickname}
           emailVerified={emailVerified}
           onVerified={() => setEmailVerified(true)}
+          picksLabel={
+            event.submission_cap_per_guest === 0
+              ? 'Unlimited picks'
+              : `${profile?.submission_count ?? 0} of ${event.submission_cap_per_guest} picks used`
+          }
         />
       )}
       {bannerNode}
-      <div className="collect-container">
-        <header className="collect-header">
-          <div className="collect-phase-badge">
+      <div className="collect-container" style={{ position: 'relative', zIndex: 1 }}>
+        <header style={{ padding: '10px 0 14px' }}>
+          {/* Phase badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '5px 11px', borderRadius: 99,
+            background: `${accent}14`, border: `1px solid ${accent}40`,
+            fontFamily: 'var(--font-mono, monospace)', fontSize: 11.6, fontWeight: 700,
+            color: accent, letterSpacing: 1.2, marginBottom: 10,
+          }}>
             <span>🎟️</span>
             <span>Pre-event voting is open</span>
           </div>
-          <h1 className="collect-title">{event.name}</h1>
-          {liveStarts && (
-            <p className="collect-countdown">
-              Live show in <strong>{formatCountdown(liveStarts)}</strong>
-            </p>
-          )}
+
+          {/* Top bar row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h1 style={{
+                fontSize: 31.5, fontWeight: 800, letterSpacing: -0.7, lineHeight: 1.05,
+                margin: 0, color: '#fff',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {event.name}
+              </h1>
+              {liveStarts && (
+                <p style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 12.1, color: subFg, marginTop: 6, letterSpacing: 0.5 }}>
+                  Live show in <strong style={{ color: '#fff' }}>{formatCountdown(liveStarts)}</strong>
+                </p>
+              )}
+            </div>
+            <div style={{ padding: '5px 10px', borderRadius: 7, border: `1px solid ${border}`, flexShrink: 0 }}>
+              <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 15.7, fontWeight: 800, color: '#fff' }}>
+                {(leaderboard?.requests ?? []).length}
+              </span>
+              <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9, color: subFg, letterSpacing: 1.2, marginTop: 2 }}>
+                SONGS
+              </div>
+            </div>
+          </div>
         </header>
 
         <section className="collect-section">
@@ -280,59 +321,95 @@ export default function CollectPage() {
 
       {searchOpen && (
         <div
-          className="collect-search-overlay"
+          className="gst-request-sheet"
           onClick={closeSearch}
           role="dialog"
-          aria-label="Add a song"
+          aria-label="Request a song"
+          style={{ background: '#0a0a12' }}
         >
-          <div className="collect-search-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="collect-search-header">
-              <h2 style={{ margin: 0, fontSize: '1.1rem', flex: 1 }}>Add a song</h2>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+          >
+            {/* Header */}
+            <div style={{ padding: '12px 18px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 1 }}>
+              <div style={{ fontSize: 26.6, fontWeight: 800, letterSpacing: -0.5, color: '#fff' }}>Request a song</div>
               <button
                 type="button"
-                className="btn btn-sm collect-optin-dismiss"
                 onClick={closeSearch}
                 aria-label="Close search"
+                style={{
+                  width: 36, height: 36, borderRadius: 10,
+                  background: surface, border: `1px solid ${border}`, color: '#fff',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
               >
-                ✕
+                <svg width="14" height="14" viewBox="0 0 14 14">
+                  <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                </svg>
               </button>
             </div>
 
-            {submitError && <div className="collect-error">{submitError}</div>}
+            {submitError && <div className="collect-error" style={{ margin: '0 18px 8px' }}>{submitError}</div>}
 
-            <form onSubmit={handleSearch}>
-              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="Search for a song or artist…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  required
-                  autoFocus
-                  data-testid="collect-search-input"
-                />
-              </div>
-              <button
-                type="submit"
-                className="btn btn-primary btn-sm"
-                style={{ width: '100%' }}
-                disabled={searching}
-              >
-                {searching ? 'Searching…' : 'Search'}
-              </button>
-            </form>
+            <div style={{ padding: '6px 18px 12px', position: 'relative', zIndex: 1 }}>
+              <form onSubmit={handleSearch}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '12px 14px', borderRadius: 14,
+                  background: surface, border: `1px solid ${border}`,
+                  boxShadow: `inset 0 0 0 1px ${accent}30`,
+                }}>
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, color: subFg }}>
+                    <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5"/>
+                    <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Search for a song or artist…"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    required
+                    autoFocus
+                    data-testid="collect-search-input"
+                    style={{
+                      flex: 1, background: 'transparent', border: 'none',
+                      color: '#fff', fontFamily: 'var(--font-grotesk, inherit)', fontSize: 18.2, fontWeight: 500,
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  style={{
+                    width: '100%', marginTop: 8, height: 44, borderRadius: 10,
+                    background: `linear-gradient(90deg, ${accent}, ${accent2})`,
+                    border: 'none', color: '#000',
+                    fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 16.9, fontWeight: 800,
+                    cursor: searching ? 'default' : 'pointer', opacity: searching ? 0.7 : 1,
+                  }}
+                  disabled={searching}
+                >
+                  {searching ? 'Searching…' : 'Search'}
+                </button>
+              </form>
+            </div>
 
             {searchResults.length > 0 && (
-              <div className="collect-search-results">
+              <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px 80px', position: 'relative', zIndex: 1 }}>
                 {searchResults.map((result, index) => (
                   <button
                     type="button"
                     key={result.spotify_id ?? result.url ?? index}
-                    className="collect-search-result"
                     disabled={submitting}
                     onClick={() => handleSelectSong(result)}
                     data-testid="collect-search-result"
+                    style={{
+                      width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '11px 12px', borderRadius: 12, marginBottom: 6,
+                      background: surface, border: `1px solid ${border}`,
+                      color: '#fff', cursor: 'pointer',
+                    }}
                   >
                     {result.album_art ? (
                       <img

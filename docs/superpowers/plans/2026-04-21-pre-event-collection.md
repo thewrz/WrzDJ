@@ -3081,14 +3081,14 @@ describe("SubmitBar", () => {
     render(
       <SubmitBar used={15} cap={15} onOpenSearch={vi.fn()} />
     );
-    expect(screen.getByRole("button", { name: /add a song/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Request a song/i })).toBeDisabled();
   });
 
   it("button enabled when cap is 0 (unlimited)", () => {
     render(
       <SubmitBar used={99} cap={0} onOpenSearch={vi.fn()} />
     );
-    expect(screen.getByRole("button", { name: /add a song/i })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: /Request a song/i })).not.toBeDisabled();
   });
 });
 ```
@@ -3131,7 +3131,7 @@ export default function SubmitBar({ used, cap, onOpenSearch }: Props) {
     >
       <span>{label}</span>
       <button disabled={atCap} onClick={onOpenSearch}>
-        + Add a song
+        + Request a song
       </button>
     </div>
   );

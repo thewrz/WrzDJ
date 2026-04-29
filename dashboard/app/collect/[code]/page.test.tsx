@@ -198,11 +198,11 @@ describe("CollectPage", () => {
 
     // Wait for collection phase to render the SubmitBar
     await waitFor(() => {
-      expect(screen.getByText(/add a song/i)).toBeInTheDocument();
+      expect(screen.getByText(/Request a song/i)).toBeInTheDocument();
     });
 
     // Open search modal
-    fireEvent.click(screen.getByText(/add a song/i));
+    fireEvent.click(screen.getByText(/Request a song/i));
 
     await waitFor(() => {
       expect(screen.getByTestId("collect-search-input")).toBeInTheDocument();

@@ -7,9 +7,10 @@ interface Props {
   nickname: string;
   emailVerified: boolean;
   onVerified: () => void;
+  picksLabel?: string;
 }
 
-export function IdentityBar({ nickname, emailVerified, onVerified }: Props) {
+export function IdentityBar({ nickname, emailVerified, onVerified, picksLabel }: Props) {
   const [showEmailForm, setShowEmailForm] = useState(false);
 
   return (
@@ -37,6 +38,18 @@ export function IdentityBar({ nickname, emailVerified, onVerified }: Props) {
           <span className="identity-bar-pulse" aria-hidden="true" />
           + Add email →
         </button>
+      )}
+      {picksLabel && (
+        <span style={{
+          marginLeft: 'auto',
+          fontFamily: 'var(--font-mono, monospace)',
+          fontSize: '0.75rem',
+          color: 'rgba(255,255,255,0.45)',
+          letterSpacing: '0.04em',
+          whiteSpace: 'nowrap',
+        }}>
+          {picksLabel}
+        </span>
       )}
     </div>
   );

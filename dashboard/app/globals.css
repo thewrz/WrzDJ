@@ -1586,7 +1586,8 @@ h1, .display-heading {
 }
 
 .collect-row-title {
-  font-weight: 500;
+  font-size: 1rem;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1594,14 +1595,14 @@ h1, .display-heading {
 
 .collect-row-artist {
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .collect-row-nickname {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: #a78bfa;
   margin-top: 0.125rem;
   white-space: nowrap;
@@ -2104,4 +2105,235 @@ h1, .display-heading {
 @keyframes identity-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
+}
+
+/* ── Guest Tower UI ──────────────────────────────── */
+
+@keyframes gst-spark {
+  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; }
+}
+
+@keyframes gst-sheet-in {
+  0%   { transform: translateY(24px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes gst-live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+@keyframes gst-eq-bar {
+  0%   { height: 20%; }
+  100% { height: 95%; }
+}
+
+@keyframes gst-badge-in {
+  0%   { transform: scale(0.7); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Tower page wrapper */
+.guest-tower {
+  position: relative;
+  min-height: 100dvh;
+  overflow: hidden;
+  font-family: var(--font-grotesk, 'Space Grotesk', system-ui, sans-serif);
+  background: #06060a;
+  color: #fff;
+}
+
+.guest-tower-inner {
+  position: relative;
+  height: 100dvh;
+  overflow-y: auto;
+  padding-bottom: 100px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Ambient corner glows */
+.gst-glow-top {
+  position: absolute;
+  top: 40px;
+  left: -80px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  filter: blur(40px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.gst-glow-bottom {
+  position: absolute;
+  bottom: 40px;
+  right: -80px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  filter: blur(40px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Tower row */
+.gst-tower-row {
+  position: relative;
+  margin-bottom: 6px;
+  padding: 13px 12px 13px 14px;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: transform 360ms cubic-bezier(.2,.8,.2,1), background 240ms;
+  cursor: pointer;
+}
+
+.gst-tower-row:active {
+  transform: scale(0.985);
+}
+
+/* Tower now-playing strip */
+.gst-now-playing {
+  margin: 4px 12px 8px;
+  padding: 11px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Tower tab strip */
+.gst-tabs {
+  padding: 4px 12px 8px;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.gst-tab {
+  padding: 6px 11px;
+  border-radius: 99px;
+  background: transparent;
+  font-family: var(--font-mono, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  cursor: pointer;
+  transition: background 150ms, color 150ms;
+}
+
+.gst-tab.active {
+  background: #fff;
+  color: #06060a;
+  border: none;
+}
+
+/* Tower bottom CTA */
+.gst-cta-wrap {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(transparent, #06060a 35%);
+  z-index: 20;
+  pointer-events: none;
+}
+
+.gst-cta-wrap > * {
+  pointer-events: auto;
+}
+
+/* Request sheet overlay */
+.gst-request-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  animation: gst-sheet-in 280ms cubic-bezier(.2,.8,.2,1);
+  font-family: var(--font-grotesk, 'Space Grotesk', system-ui, sans-serif);
+  background: #0a0a12;
+  color: #fff;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Song detail sheet overlay */
+.gst-detail-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  animation: gst-sheet-in 280ms cubic-bezier(.2,.8,.2,1);
+  font-family: var(--font-grotesk, 'Space Grotesk', system-ui, sans-serif);
+  background: #0a0a12;
+  color: #fff;
+  padding-top: env(safe-area-inset-top, 0px);
+  overflow: hidden;
+}
+
+/* Status tags */
+.gst-tag {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono, monospace);
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  padding: 1.5px 4.5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  animation: gst-badge-in 200ms ease-out;
+}
+
+/* Collect page Tower-style */
+.collect-page.tower {
+  min-height: 100dvh;
+  background: #06060a;
+  font-family: var(--font-grotesk, 'Space Grotesk', system-ui, sans-serif);
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+
+.collect-page.tower .collect-container {
+  padding-bottom: 100px;
+}
+
+/* Collect Tower rows */
+.gst-collect-row {
+  position: relative;
+  margin-bottom: 6px;
+  padding: 13px 12px 13px 14px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  overflow: hidden;
+  cursor: default;
+}
+
+.gst-collect-vote-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 160ms;
+}
+
+.gst-collect-vote-btn.voted {
+  background: #00f0ff;
+  border-color: #00f0ff;
+  color: #000;
+  box-shadow: 0 0 14px #00f0ff80;
 }
