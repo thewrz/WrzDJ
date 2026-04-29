@@ -79,6 +79,10 @@ def create_request(
         genre=genre,
         bpm=bpm,
         musical_key=normalize_key(musical_key),
+        # Flag based on event phase so /join and /collect entry points produce
+        # equivalent rows during collection — otherwise /join submissions are
+        # invisible in the collect leaderboard despite being valid.
+        submitted_during_collection=(event.phase == "collection"),
     )
     db.add(request)
     db.commit()
