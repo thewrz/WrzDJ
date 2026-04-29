@@ -3,10 +3,11 @@
 import json
 import secrets
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.models.guest import Guest
-from app.services.guest_identity import identify_guest
+from app.services.guest_identity import _ua_signals_match, identify_guest
 
 
 def test_create_guest_new_visitor(db: Session):
@@ -119,3 +120,36 @@ def test_fingerprint_components_stored_as_json(db: Session):
     )
     guest = db.query(Guest).filter(Guest.id == result.guest_id).one()
     assert json.loads(guest.fingerprint_components) == components
+
+
+CHROME_WIN = "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/125.0 Safari/537.36"
+CHROME_WIN_NEXT = "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/126.0 Safari/537.36"
+CHROME_WIN_FAR = "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"
+CHROME_MAC = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/125.0 Safari/537.36"
+)
+SAFARI_IOS = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
+    "AppleWebKit/605.1.15 Version/17.4 Mobile Safari/604.1"
+)
+FIREFOX_LINUX = "Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/124.0"
+UNKNOWN_BOT = "PythonRequests/2.0"
+
+
+@pytest.mark.parametrize(
+    "stored,submitted,expected",
+    [
+        (CHROME_WIN, CHROME_WIN, True),  # exact same
+        (CHROME_WIN, CHROME_WIN_NEXT, True),  # +1 version
+        (CHROME_WIN, CHROME_WIN_FAR, False),  # +5 versions
+        (CHROME_WIN, CHROME_MAC, False),  # different platform
+        (CHROME_WIN, SAFARI_IOS, False),  # different family + platform
+        (SAFARI_IOS, CHROME_MAC, False),  # different family
+        (None, CHROME_WIN, False),  # stored=None
+        (CHROME_WIN, UNKNOWN_BOT, False),  # unparseable submitted
+        (UNKNOWN_BOT, CHROME_WIN, False),  # unparseable stored
+        (FIREFOX_LINUX, FIREFOX_LINUX, True),  # firefox same
+    ],
+)
+def test_ua_signals_match_strict(stored, submitted, expected):
+    assert _ua_signals_match(stored, submitted) is expected

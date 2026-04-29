@@ -43,6 +43,29 @@ class IdentifyResult:
     rejection_reason: str | None = None  # internal-only — never sent to clients
 
 
+def _ua_signals_match(stored_ua: str | None, submitted_ua: str) -> bool:
+    """Strict equality on UA family, platform, and ±1 major version.
+
+    Replaces the weighted confidence score with hard-coded gates. Used by
+    fingerprint reconciliation to decide whether two UA strings are
+    consistent enough to plausibly be the same device.
+    """
+    if not stored_ua:
+        return False
+    s_family, s_platform, s_version = _parse_ua(stored_ua)
+    n_family, n_platform, n_version = _parse_ua(submitted_ua)
+    if s_family == "unknown" or n_family == "unknown":
+        return False
+    if s_family != n_family or s_platform != n_platform:
+        return False
+    if not s_version or not n_version:
+        return False
+    try:
+        return abs(int(s_version) - int(n_version)) <= 1
+    except ValueError:
+        return s_version == n_version
+
+
 def _compute_confidence(stored_ua: str | None, submitted_ua: str) -> float:
     """Score how likely the submitted UA belongs to the same person as stored_ua.
 
