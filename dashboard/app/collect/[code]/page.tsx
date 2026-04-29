@@ -13,6 +13,8 @@ import {
 import { useGuestIdentity } from '../../../lib/use-guest-identity';
 import { IdentityBar } from '../../../components/IdentityBar';
 import { NicknameGate, GateResult } from '../../../components/NicknameGate';
+import EmailRecoveryButton from '../../../components/EmailRecoveryButton';
+import EmailRecoveryModal from '../../../components/EmailRecoveryModal';
 import LeaderboardTabs from './components/LeaderboardTabs';
 import MyPicksPanel from './components/MyPicksPanel';
 import SubmitBar from './components/SubmitBar';
@@ -23,7 +25,7 @@ export default function CollectPage() {
   const router = useRouter();
   const params = useParams<{ code: string }>();
   const code = params?.code ?? '';
-  useGuestIdentity();
+  const { reconcileHint, refresh: refreshIdentity } = useGuestIdentity();
 
   const [event, setEvent] = useState<CollectEventPreview | null>(null);
   const [leaderboard, setLeaderboard] = useState<CollectLeaderboardResponse | null>(null);
@@ -44,6 +46,7 @@ export default function CollectPage() {
     submission_cap: number;
   } | null>(null);
 
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [gateComplete, setGateComplete] = useState(false);
   const handleGateComplete = (result: GateResult) => {
     setNickname(result.nickname || null);
@@ -300,6 +303,11 @@ export default function CollectPage() {
           </div>
         </header>
 
+        <EmailRecoveryButton
+          reconcileHint={reconcileHint}
+          onOpen={() => setRecoveryOpen(true)}
+        />
+
         <section className="collect-section">
           <LeaderboardTabs
             rows={leaderboard?.requests ?? []}
@@ -317,6 +325,18 @@ export default function CollectPage() {
         used={profile?.submission_count ?? 0}
         cap={event.submission_cap_per_guest}
         onOpenSearch={openSearch}
+      />
+
+      <EmailRecoveryModal
+        open={recoveryOpen}
+        onClose={() => setRecoveryOpen(false)}
+        onRecovered={async () => {
+          await refreshIdentity();
+          // The polling loop (useEffect keyed on code/tab/gateComplete) re-uses
+          // the updated cookie on its next tick (~5 s). No explicit refetch
+          // needed — the merged guest_id propagates automatically via the
+          // cookie on the next apiClient.getCollectMyPicks() call.
+        }}
       />
 
       {searchOpen && (
