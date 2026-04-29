@@ -318,14 +318,9 @@ export default function JoinEventPage() {
       );
       setMyRequestIds((prev) => new Set([...prev, result.id]));
       setMyRequestsRefreshKey((k) => k + 1);
-      if (result.is_duplicate) {
-        setSelectedSong(null);
-        setSubmitError('Great minds think alike! Your vote has been added.');
-      } else {
-        setSubmitted(true);
-        setSubmitIsDuplicate(false);
-        setSubmitVoteCount(result.vote_count);
-      }
+      setSubmitted(true);
+      setSubmitIsDuplicate(result.is_duplicate);
+      setSubmitVoteCount(result.vote_count);
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         setEvent((prev) => prev ? { ...prev, requests_open: false } : prev);
