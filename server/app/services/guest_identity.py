@@ -9,6 +9,7 @@ import json
 import logging
 import secrets
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Literal
 
 from sqlalchemy.orm import Session
@@ -17,6 +18,9 @@ from app.core.time import utcnow
 from app.models.guest import Guest
 
 _logger = logging.getLogger("app.guest.identity")
+
+RECONCILE_QUIET_PERIOD = timedelta(hours=12)
+RECONCILE_FRESHNESS_WINDOW = timedelta(days=90)
 
 
 def _short_fp(fp: str | None) -> str:
@@ -35,6 +39,8 @@ class IdentifyResult:
     guest_id: int
     action: Literal["create", "cookie_hit", "reconcile"]
     token: str | None  # set only when a new cookie should be issued
+    reconcile_hint: bool = False  # true when create happened but a FP match existed
+    rejection_reason: str | None = None  # internal-only — never sent to clients
 
 
 def _compute_confidence(stored_ua: str | None, submitted_ua: str) -> float:
