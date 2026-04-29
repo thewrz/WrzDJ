@@ -29,10 +29,9 @@ export function useGuestIdentity(): GuestIdentity {
     calledRef.current = true;
 
     try {
-      const { setOption, getFingerprint } = await import(
+      const { getFingerprint } = await import(
         "@thumbmarkjs/thumbmarkjs"
       );
-      setOption("exclude", ["canvas", "webgl"]);
 
       const fp = await getFingerprint(true);
 
