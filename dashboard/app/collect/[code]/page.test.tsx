@@ -11,7 +11,7 @@ vi.mock("../../../components/NicknameGate", () => ({
   NicknameGate: ({ onComplete }: { onComplete: (r: { nickname: string; emailVerified: boolean; submissionCount: number; submissionCap: number }) => void }) => {
     useEffect(() => {
       onComplete({ nickname: '', emailVerified: false, submissionCount: 0, submissionCap: 15 });
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, []);  
     return null;
   },
 }));

@@ -22,7 +22,7 @@ export default function Sparks({ accent, accent2, fire, onDone }: Props) {
       onDone?.();
     }, 900);
     return () => clearTimeout(t);
-  }, [fire]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fire]);  
 
   if (!active) return null;
 

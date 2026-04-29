@@ -187,7 +187,7 @@ export default function CollectPage() {
       if (timer) clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [code, tab, gateComplete]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [code, tab, gateComplete]);  
 
   if (!gateComplete) {
     return <NicknameGate code={code} onComplete={handleGateComplete} />;

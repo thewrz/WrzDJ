@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { apiClient, ApiError } from "../api";
+import { apiClient } from "../api";
 
 const OK_RESPONSE = (body: unknown) =>
   ({ ok: true, status: 200, json: async () => body }) as Response;
