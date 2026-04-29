@@ -1,9 +1,16 @@
-"""Rate limiting middleware using slowapi."""
+"""Rate limiting middleware using slowapi.
+
+Identity is `guest_id` only (cookie + ThumbmarkJS reconciliation in
+app/services/guest_identity.py). The slowapi rate-limiter is the lone
+IP consumer in this codebase — IP is read ephemerally per request as
+the rate-limit bucket key and is never stored, never logged.
+
+To restore IP-based identity, see docs/RECOVERY-IP-IDENTITY.md.
+"""
 
 from __future__ import annotations
 
 import ipaddress
-import logging
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
@@ -54,7 +61,10 @@ def _is_trusted_proxy(ip: str) -> bool:
 
 
 def get_client_ip(request: Request) -> str:
-    """Get client IP, preferring X-Real-IP set by nginx over X-Forwarded-For.
+    """EPHEMERAL ONLY — never store or log this value.
+
+    Used solely as the slowapi rate-limit bucket key. To restore IP-based
+    identity, see docs/RECOVERY-IP-IDENTITY.md.
 
     Priority:
     1. X-Real-IP (nginx overwrites this with the actual connecting client IP)
@@ -63,13 +73,10 @@ def get_client_ip(request: Request) -> str:
     """
     direct_ip = get_remote_address(request)
 
-    # Prefer X-Real-IP — nginx sets this to the real client IP and it cannot be
-    # spoofed by the client (nginx overwrites, not appends)
     real_ip = request.headers.get("X-Real-IP")
     if real_ip and _is_trusted_proxy(direct_ip):
         return real_ip.strip()
 
-    # Fallback: X-Forwarded-For from a trusted proxy
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for and _is_trusted_proxy(direct_ip):
         return forwarded_for.split(",")[0].strip()
@@ -77,67 +84,7 @@ def get_client_ip(request: Request) -> str:
     return direct_ip
 
 
-MAX_FINGERPRINT_LENGTH = 64
-
-_fp_logger = logging.getLogger("app.fingerprint")
-
-
-def mask_fingerprint(fp: str) -> str:
-    """Return a short, non-reversible tag for a fingerprint — safe for logs
-    and activity-log messages.
-
-    SHA-256 truncated to 12 hex chars: enough to correlate actions by the
-    same guest across events in logs, but not enough to recover the original
-    IP. The raw value stays in the DB for legitimate abuse investigation.
-    """
-    import hashlib
-
-    return hashlib.sha256(fp.encode("utf-8")).hexdigest()[:12]
-
-
-def _fp_source(request: Request) -> str:
-    """Identify which header/layer supplied the fingerprint for this request."""
-    direct_ip = get_remote_address(request)
-    if request.headers.get("X-Real-IP") and _is_trusted_proxy(direct_ip):
-        return "x-real-ip"
-    if request.headers.get("X-Forwarded-For") and _is_trusted_proxy(direct_ip):
-        return "x-forwarded-for"
-    return "direct"
-
-
-def get_client_fingerprint(
-    request: Request,
-    *,
-    action: str | None = None,
-    event_code: str | None = None,
-) -> str:
-    """Extract client fingerprint (IP) from the request, truncated to safe length.
-
-    The returned value is the raw client IP. It is stored in plain text in
-    the `client_fingerprint` columns of `requests`, `request_votes`, and
-    `guest_profiles`. **Any export of those tables (CSV, backup, analytics)
-    must scrub or hash this column** — `mask_fingerprint()` is the helper
-    for that.
-
-    When `action` is provided, emits a structured INFO log line:
-        action=collect.vote event=PB5TTP source=x-real-ip fp=a1b2c3d4e5f6
-
-    The logged `fp` is a hashed tag — the raw IP stays in the DB for
-    legitimate abuse investigation but never appears in log output.
-    """
-    raw = get_client_ip(request)[:MAX_FINGERPRINT_LENGTH]
-    if action is not None:
-        _fp_logger.info(
-            "fp_resolve action=%s event=%s source=%s fp=%s",
-            action,
-            event_code or "-",
-            _fp_source(request),
-            mask_fingerprint(raw),
-        )
-    return raw
-
-
-# Create limiter instance with IP-based key function
+# Create limiter instance with IP-based key function (ephemeral, in-memory).
 limiter = Limiter(key_func=get_client_ip, enabled=get_settings().is_rate_limit_enabled)
 
 

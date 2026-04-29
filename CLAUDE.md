@@ -111,7 +111,7 @@ npm test -- --run         # Vitest
 - Config: `server/pyproject.toml` under `[tool.pytest.ini_options]`
 - Test DB: SQLite in-memory (not PostgreSQL)
 - Fixtures in `server/tests/conftest.py`: `db`, `client`, `test_user`, `auth_headers`, `admin_user`, `admin_headers`, `pending_user`, `pending_headers`, `test_event`, `test_request`
-- TestClient's default host is `"testclient"` — use this for client_fingerprint in test fixtures
+- TestClient's default host is `"testclient"` — visible to slowapi as the rate-limit key; not stored anywhere else
 - Coverage minimum: 80% (`--cov-fail-under=80`)
 - Run single file: `.venv/bin/pytest tests/test_requests.py -v`
 
@@ -158,8 +158,8 @@ This section exists because a previous OAuth token implementation stored tokens 
 ### User Data Protection
 - Encrypt PII and sensitive user data at rest wherever feasible. Default to encrypted; plaintext storage of sensitive fields requires explicit justification.
 - Minimize data collection — don't store data you don't need.
-- Client fingerprinting (IP-based) should not be logged in a way that creates a tracking database.
-- The `client_fingerprint` column on `requests`, `request_votes`, and `guest_profiles` is the raw client IP truncated to 64 chars. Scrub or hash this column on any export (event CSV, play-history CSV, backups, analytics dumps) — use `mask_fingerprint()` from `app.core.rate_limit`. Search for any new export endpoints that select this column and apply the same treatment.
+- Guest identity is `guest_id` only (cookie + ThumbmarkJS reconciliation in `services/guest_identity.py`). The codebase has no IP-derived columns or logs; the slowapi rate limiter (`get_client_ip` in `core/rate_limit.py`) is the lone IP consumer and uses it ephemerally per request — never stored, never logged.
+- To restore IP-based identity, see [docs/RECOVERY-IP-IDENTITY.md](docs/RECOVERY-IP-IDENTITY.md).
 
 ### Dependency CVE Vigilance
 - **Before adding any new package**, check for known CVEs and recent security advisories. Do not add packages with unpatched critical or high-severity vulnerabilities.

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.core.config import get_settings
-from app.core.rate_limit import get_client_fingerprint, get_guest_id, limiter
+from app.core.rate_limit import get_guest_id, limiter
 from app.core.time import utcnow
 from app.models.request import Request as SongRequest
 from app.models.request import RequestStatus
@@ -18,7 +18,6 @@ from app.services.event import EventLookupResult, get_event_by_code_with_status
 from app.services.now_playing import get_now_playing, is_now_playing_hidden
 from app.services.request import (
     get_guest_visible_requests,
-    get_requests_by_fingerprint,
     get_requests_by_guest,
 )
 
@@ -251,27 +250,17 @@ def check_has_requested(
     if lookup_result == EventLookupResult.ARCHIVED:
         raise HTTPException(status_code=410, detail="Event has been archived")
 
-    fingerprint = get_client_fingerprint(request)
     guest_id = get_guest_id(request, db)
 
-    if guest_id:
-        has_requested = (
-            db.query(SongRequest)
-            .filter(SongRequest.event_id == event.id, SongRequest.guest_id == guest_id)
-            .first()
-            is not None
-        )
-    else:
-        has_requested = (
-            db.query(SongRequest)
-            .filter(
-                SongRequest.event_id == event.id,
-                SongRequest.client_fingerprint == fingerprint,
-            )
-            .first()
-            is not None
-        )
+    if guest_id is None:
+        return HasRequestedResponse(has_requested=False)
 
+    has_requested = (
+        db.query(SongRequest)
+        .filter(SongRequest.event_id == event.id, SongRequest.guest_id == guest_id)
+        .first()
+        is not None
+    )
     return HasRequestedResponse(has_requested=has_requested)
 
 
@@ -294,13 +283,12 @@ def get_my_requests(
     if lookup_result == EventLookupResult.ARCHIVED:
         raise HTTPException(status_code=410, detail="Event has been archived")
 
-    fingerprint = get_client_fingerprint(request)
     guest_id = get_guest_id(request, db)
 
-    if guest_id:
-        requests_list = get_requests_by_guest(db, event.id, guest_id)
-    else:
-        requests_list = get_requests_by_fingerprint(db, event.id, fingerprint)
+    if guest_id is None:
+        return MyRequestsResponse(requests=[])
+
+    requests_list = get_requests_by_guest(db, event.id, guest_id)
 
     return MyRequestsResponse(
         requests=[

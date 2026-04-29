@@ -187,7 +187,6 @@ class TestDeleteEvent:
         # Add votes on requests
         vote = RequestVote(
             request_id=req1.id,
-            client_fingerprint="voter1",
         )
         db.add(vote)
 

@@ -39,7 +39,6 @@ def _create_request(
         musical_key=musical_key,
         genre=genre,
         dedupe_key=f"dedupe_{title}_{artist}".lower().replace(" ", "_"),
-        client_fingerprint="testclient",
     )
     db.add(req)
     db.commit()

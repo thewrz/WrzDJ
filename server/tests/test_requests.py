@@ -648,3 +648,61 @@ def test_live_submit_persists_guest_id_from_cookie(client, test_event, db):
     assert row.guest_id == guest_id, (
         f"Expected guest_id={guest_id} on persisted request, got {row.guest_id}"
     )
+
+
+class TestSubmitRequestCollectionFlag:
+    """The /join entry point and /collect entry point must produce equivalent
+    rows during collection phase — otherwise /join submissions are invisible
+    in the collect leaderboard.
+    """
+
+    def _enable_collection(self, db: Session, event: Event) -> None:
+        from datetime import timedelta
+
+        from app.core.time import utcnow
+
+        now = utcnow()
+        event.collection_opens_at = now - timedelta(hours=1)
+        event.live_starts_at = now + timedelta(hours=1)
+        db.commit()
+        db.refresh(event)
+
+    def test_submit_via_join_during_collection_flags_row(
+        self, client: TestClient, test_event: Event, db: Session
+    ):
+        """POST /api/events/{code}/requests during collection phase MUST set
+        submitted_during_collection=True so the collect leaderboard sees it.
+        """
+        self._enable_collection(db, test_event)
+        resp = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={
+                "artist": "Nine Inch Nails",
+                "title": "All The Love In The World",
+                "source": "manual",
+            },
+        )
+        assert resp.status_code == 200, resp.json()
+        row = db.query(Request).filter(Request.id == resp.json()["id"]).one()
+        assert row.submitted_during_collection is True, (
+            "join-flow submissions during collection must be flagged so the "
+            "collect leaderboard surfaces them"
+        )
+
+    def test_submit_via_join_during_live_does_not_flag_row(
+        self, client: TestClient, test_event: Event, db: Session
+    ):
+        """During live phase, submissions must NOT be flagged as collection."""
+        # Default test_event has no collection_opens_at / live_starts_at,
+        # so phase computes to "live".
+        resp = client.post(
+            f"/api/events/{test_event.code}/requests",
+            json={
+                "artist": "Live Artist",
+                "title": "Live Song",
+                "source": "manual",
+            },
+        )
+        assert resp.status_code == 200
+        row = db.query(Request).filter(Request.id == resp.json()["id"]).one()
+        assert row.submitted_during_collection is False
