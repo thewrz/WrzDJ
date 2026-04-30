@@ -9,6 +9,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import desc, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -30,6 +31,7 @@ from app.schemas.collect import (
 )
 from app.services import collect as collect_service
 from app.services.activity_log import log_activity
+from app.services.collect import NicknameConflictError, upsert_profile
 from app.services.dedup import compute_dedupe_key, find_duplicate
 from app.services.system_settings import get_system_settings
 from app.services.vote import add_vote
@@ -174,12 +176,24 @@ def set_profile(
     guest_id = get_guest_id(request, db)
     if guest_id is None:
         raise HTTPException(status_code=401, detail="Guest identity required")
-    profile = collect_service.upsert_profile(
-        db,
-        event_id=event.id,
-        guest_id=guest_id,
-        nickname=payload.nickname,
-    )
+    try:
+        profile = upsert_profile(
+            db,
+            event_id=event.id,
+            guest_id=guest_id,
+            nickname=payload.nickname,
+        )
+    except NicknameConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "nickname_taken", "claimed": exc.claimed},
+        )
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "nickname_taken", "claimed": False},
+        )
     if payload.nickname is not None:
         log_activity(
             db,

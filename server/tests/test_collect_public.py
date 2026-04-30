@@ -554,3 +554,123 @@ def test_collect_vote_other_user_still_works(client, db, test_event):
     assert r.status_code == 200
     db.refresh(row)
     assert row.vote_count == 1
+
+
+# ── Nickname uniqueness tests ──────────────────────────────────────────────
+
+
+class TestNicknameUniqueness:
+    """Tests for per-event nickname collision detection."""
+
+    def _make_guest(self, db, token_suffix: str, verified: bool = False):
+        from app.core.time import utcnow
+
+        g = Guest(
+            token="guest" + token_suffix.ljust(59, "0"),
+            fingerprint_hash=f"fp_{token_suffix}",
+            created_at=utcnow(),
+            last_seen_at=utcnow(),
+        )
+        if verified:
+            g.email_verified_at = utcnow()
+        db.add(g)
+        db.commit()
+        db.refresh(g)
+        return g
+
+    def test_available_nickname_succeeds(self, client, db, test_event):
+        r = client.post(
+            f"/api/public/collect/{test_event.code}/profile",
+            json={"nickname": "UniqueNick"},
+        )
+        assert r.status_code == 200
+        assert r.json()["nickname"] == "UniqueNick"
+
+    def test_collision_unclaimed_returns_409_claimed_false(self, client, db, test_event):
+        # default guest (autouse) claims "Alex"
+        client.post(
+            f"/api/public/collect/{test_event.code}/profile",
+            json={"nickname": "Alex"},
+        )
+        # second guest tries "Alex"
+        guest2 = self._make_guest(db, "two")
+        r = client.post(
+            f"/api/public/collect/{test_event.code}/profile",
+            json={"nickname": "Alex"},
+            cookies={"wrzdj_guest": guest2.token},
+        )
+        assert r.status_code == 409
+        body = r.json()["detail"]
+        assert body["code"] == "nickname_taken"
+        assert body["claimed"] is False
+
+    def test_collision_claimed_returns_409_claimed_true(self, client, db, test_event):
+        # email-verified guest claims "Alex"
+        verified_guest = self._make_guest(db, "verified", verified=True)
+        client.post(
+            f"/api/public/collect/{test_event.code}/profile",
+            json={"nickname": "Alex"},
+            cookies={"wrzdj_guest": verified_guest.token},
+        )
+        # second guest tries same name
+        guest2 = self._make_guest(db, "two")
+        r = client.post(
+            f"/api/public/collect/{test_event.code}/profile",
+            json={"nickname": "Alex"},
+            cookies={"wrzdj_guest": guest2.token},
+        )
+        assert r.status_code == 409
+        body = r.json()["detail"]
+        assert body["code"] == "nickname_taken"
+        assert body["claimed"] is True
+
+    def test_self_collision_is_idempotent(self, client, db, test_event):
+        client.post(
+            f"/api/public/collect/{test_event.code}/profile",
+            json={"nickname": "Alex"},
+        )
+        r = client.post(
+            f"/api/public/collect/{test_event.code}/profile",
+            json={"nickname": "Alex"},
+        )
+        assert r.status_code == 200
+
+    def test_collision_is_case_insensitive(self, client, db, test_event):
+        client.post(
+            f"/api/public/collect/{test_event.code}/profile",
+            json={"nickname": "Alex"},
+        )
+        for variant in ["alex", "ALEX", "aLeX"]:
+            g = self._make_guest(db, variant)
+            r = client.post(
+                f"/api/public/collect/{test_event.code}/profile",
+                json={"nickname": variant},
+                cookies={"wrzdj_guest": g.token},
+            )
+            assert r.status_code == 409, f"Expected 409 for variant '{variant}'"
+
+    def test_race_condition_integrity_error_maps_to_409(self, client, db, test_event, monkeypatch):
+        from sqlalchemy.exc import IntegrityError
+
+        import app.api.collect as collect_api
+
+        def raise_integrity(db, *, event_id, guest_id=None, nickname=None):
+            raise IntegrityError("unique constraint", None, Exception())
+
+        monkeypatch.setattr(collect_api, "upsert_profile", raise_integrity)
+
+        r = client.post(
+            f"/api/public/collect/{test_event.code}/profile",
+            json={"nickname": "Alex"},
+        )
+        assert r.status_code == 409
+        body = r.json()["detail"]
+        assert body["code"] == "nickname_taken"
+        assert body["claimed"] is False
+
+    def test_null_nickname_skips_uniqueness_check(self, client, db, test_event):
+        r = client.post(
+            f"/api/public/collect/{test_event.code}/profile",
+            json={},
+        )
+        assert r.status_code == 200

@@ -83,7 +83,13 @@ def merge_guests(db: Session, *, source_guest_id: int, target_guest_id: int) -> 
         if target_profile:
             target_profile.submission_count += profile.submission_count
             if not target_profile.nickname and profile.nickname:
-                target_profile.nickname = profile.nickname
+                # Null out source nickname first to avoid a transient uniqueness
+                # violation on the case-insensitive index before the source row is
+                # deleted within the same transaction.
+                source_nick = profile.nickname
+                profile.nickname = None
+                db.flush()
+                target_profile.nickname = source_nick
             db.delete(profile)
             profiles_merged += 1
         else:
