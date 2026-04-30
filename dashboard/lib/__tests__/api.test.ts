@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { api, ApiError } from '../api';
+import { api, ApiError, NicknameConflictError } from '../api';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -2217,6 +2217,36 @@ describe('ApiClient', () => {
       await expect(api.confirmVerificationCode('fan@test.com', '123456')).rejects.toThrow(
         'Verification failed'
       );
+    });
+  });
+
+  describe('setCollectProfile — nickname collision', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it('throws NicknameConflictError with claimed=true on 409', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ detail: { code: 'nickname_taken', claimed: true } }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+      await expect(api.setCollectProfile('EVT01', { nickname: 'Alex' })).rejects.toMatchObject({
+        name: 'NicknameConflictError',
+        claimed: true,
+      });
+    });
+
+    it('throws NicknameConflictError with claimed=false on 409', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ detail: { code: 'nickname_taken', claimed: false } }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+      await expect(api.setCollectProfile('EVT01', { nickname: 'Alex' })).rejects.toMatchObject({
+        name: 'NicknameConflictError',
+        claimed: false,
+      });
     });
   });
 });

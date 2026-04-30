@@ -188,6 +188,15 @@ export class ApiError extends Error {
   }
 }
 
+export class NicknameConflictError extends Error {
+  claimed: boolean;
+  constructor(claimed: boolean) {
+    super('nickname_taken');
+    this.name = 'NicknameConflictError';
+    this.claimed = claimed;
+  }
+}
+
 function getApiUrl(): string {
   // Use explicit env var if set
   if (process.env.NEXT_PUBLIC_API_URL) {
@@ -1048,6 +1057,10 @@ class ApiClient {
       credentials: 'include',
       body: JSON.stringify(data),
     });
+    if (res.status === 409) {
+      const body = await res.json().catch(() => ({})) as { detail?: { claimed?: boolean } };
+      throw new NicknameConflictError(body.detail?.claimed ?? false);
+    }
     if (!res.ok) throw new ApiError(`setCollectProfile failed: ${res.status}`, res.status);
     return res.json();
   }
