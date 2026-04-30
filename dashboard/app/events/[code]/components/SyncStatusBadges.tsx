@@ -59,7 +59,7 @@ export function SyncStatusBadges({
 }
 
 function TidalBadge({
-  request,
+  request: _request,
   syncResult,
   syncing,
   onSync,

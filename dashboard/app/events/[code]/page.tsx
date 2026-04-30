@@ -539,7 +539,7 @@ export default function EventQueuePage() {
   const handleSyncToTidal = async (requestId: number) => {
     setSyncingRequest(requestId);
     try {
-      const result = await api.syncRequestToTidal(requestId);
+      const _result = await api.syncRequestToTidal(requestId);
       setRequests((prev) =>
         prev.map((r) =>
           r.id === requestId

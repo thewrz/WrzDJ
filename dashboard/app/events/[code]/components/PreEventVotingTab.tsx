@@ -71,7 +71,7 @@ export default function PreEventVotingTab({ event, onEventChange }: Props) {
 
   useEffect(() => {
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [event.code]);
 
   async function refresh() {

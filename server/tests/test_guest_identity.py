@@ -2,11 +2,15 @@
 
 import json
 import secrets
+from datetime import timedelta
 
+import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.core.time import utcnow
 from app.models.guest import Guest
-from app.services.guest_identity import identify_guest
+from app.services.guest_identity import _ua_signals_match, identify_guest
 
 
 def test_create_guest_new_visitor(db: Session):
@@ -119,3 +123,260 @@ def test_fingerprint_components_stored_as_json(db: Session):
     )
     guest = db.query(Guest).filter(Guest.id == result.guest_id).one()
     assert json.loads(guest.fingerprint_components) == components
+
+
+CHROME_WIN = "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/125.0 Safari/537.36"
+CHROME_WIN_NEXT = "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/126.0 Safari/537.36"
+CHROME_WIN_FAR = "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"
+CHROME_MAC = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/125.0 Safari/537.36"
+)
+SAFARI_IOS = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
+    "AppleWebKit/605.1.15 Version/17.4 Mobile Safari/604.1"
+)
+FIREFOX_LINUX = "Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/124.0"
+UNKNOWN_BOT = "PythonRequests/2.0"
+
+
+@pytest.mark.parametrize(
+    "stored,submitted,expected",
+    [
+        (CHROME_WIN, CHROME_WIN, True),  # exact same
+        (CHROME_WIN, CHROME_WIN_NEXT, True),  # +1 version
+        (CHROME_WIN, CHROME_WIN_FAR, False),  # +5 versions
+        (CHROME_WIN, CHROME_MAC, False),  # different platform
+        (CHROME_WIN, SAFARI_IOS, False),  # different family + platform
+        (SAFARI_IOS, CHROME_MAC, False),  # different family
+        (None, CHROME_WIN, False),  # stored=None
+        (CHROME_WIN, UNKNOWN_BOT, False),  # unparseable submitted
+        (UNKNOWN_BOT, CHROME_WIN, False),  # unparseable stored
+        (FIREFOX_LINUX, FIREFOX_LINUX, True),  # firefox same
+    ],
+)
+def test_ua_signals_match_strict(stored, submitted, expected):
+    assert _ua_signals_match(stored, submitted) is expected
+
+
+def test_create_when_ambiguous_match(db: Session):
+    """Two guests with same FP within freshness window -> new guest, hint=True."""
+    fp = "shared_fp_collision_xyz"
+    now = utcnow()
+    _chrome_linux = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/125.0 Safari/537.36"
+    for token_prefix in ("a", "b"):
+        g = Guest(
+            token=token_prefix * 64,
+            fingerprint_hash=fp,
+            fingerprint_components="{}",
+            user_agent=_chrome_linux,
+            created_at=now - timedelta(days=1),
+            last_seen_at=now - timedelta(days=1),
+        )
+        db.add(g)
+    db.commit()
+
+    result = identify_guest(
+        db,
+        token_from_cookie=None,
+        fingerprint_hash=fp,
+        fingerprint_components={},
+        user_agent=_chrome_linux,
+    )
+    assert result.action == "create"
+    assert result.reconcile_hint is True
+    assert result.rejection_reason == "ambiguous_match"
+    assert db.query(Guest).filter(Guest.fingerprint_hash == fp).count() == 3
+
+
+def test_create_when_verified_guest(db: Session):
+    """Verified guest never auto-reconciles -> new guest, hint=True."""
+    fp = "verified_user_fp"
+    now = utcnow()
+    _chrome_win = "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/125.0 Safari/537.36"
+    g = Guest(
+        token="v" * 64,
+        fingerprint_hash=fp,
+        fingerprint_components="{}",
+        user_agent=_chrome_win,
+        created_at=now - timedelta(days=30),
+        last_seen_at=now - timedelta(days=2),  # outside quiet period
+        email_verified_at=now - timedelta(days=29),
+        email_hash="x" * 64,
+    )
+    db.add(g)
+    db.commit()
+
+    result = identify_guest(
+        db,
+        token_from_cookie=None,
+        fingerprint_hash=fp,
+        fingerprint_components={},
+        user_agent=_chrome_win,
+    )
+    assert result.action == "create"
+    assert result.reconcile_hint is True
+    assert result.rejection_reason == "verified_guest"
+    assert result.guest_id != g.id
+
+
+def test_create_when_concurrent_activity_5min(db: Session):
+    """Existing guest active 5 min ago -> rejected, new guest created."""
+    fp = "active_user_fp"
+    now = utcnow()
+    _chrome_win = "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/125.0 Safari/537.36"
+    g = Guest(
+        token="c" * 64,
+        fingerprint_hash=fp,
+        fingerprint_components="{}",
+        user_agent=_chrome_win,
+        created_at=now - timedelta(hours=2),
+        last_seen_at=now - timedelta(minutes=5),
+    )
+    db.add(g)
+    db.commit()
+
+    result = identify_guest(
+        db,
+        token_from_cookie=None,
+        fingerprint_hash=fp,
+        fingerprint_components={},
+        user_agent=_chrome_win,
+    )
+    assert result.action == "create"
+    assert result.reconcile_hint is True
+    assert result.rejection_reason == "concurrent_activity"
+    assert result.guest_id != g.id
+
+
+def test_reconcile_when_quiet_period_passed_13h(db: Session):
+    """Existing guest active 13 hours ago, all gates pass -> reconcile."""
+    fp = "returning_user_fp"
+    now = utcnow()
+    _chrome_win = "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/125.0 Safari/537.36"
+    g = Guest(
+        token="d" * 64,
+        fingerprint_hash=fp,
+        fingerprint_components="{}",
+        user_agent=_chrome_win,
+        created_at=now - timedelta(days=7),
+        last_seen_at=now - timedelta(hours=13),
+    )
+    db.add(g)
+    db.commit()
+    original_id = g.id
+
+    result = identify_guest(
+        db,
+        token_from_cookie=None,
+        fingerprint_hash=fp,
+        fingerprint_components={},
+        user_agent=_chrome_win,
+    )
+    assert result.action == "reconcile"
+    assert result.guest_id == original_id
+    assert result.reconcile_hint is False
+    assert result.token is not None
+
+
+def test_create_when_ua_mismatch_phone_vs_pc(db: Session):
+    """Same FP but different UA platform -> rejected, new guest created."""
+    fp = "ua_collision_fp"
+    now = utcnow()
+    g = Guest(
+        token="e" * 64,
+        fingerprint_hash=fp,
+        fingerprint_components="{}",
+        user_agent="Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/125.0 Safari/537.36",
+        created_at=now - timedelta(days=2),
+        last_seen_at=now - timedelta(days=1),  # outside quiet period
+    )
+    db.add(g)
+    db.commit()
+
+    result = identify_guest(
+        db,
+        token_from_cookie=None,
+        fingerprint_hash=fp,
+        fingerprint_components={},
+        user_agent=(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) "
+            "AppleWebKit/605.1.15 Version/17.4 Mobile Safari/604.1"
+        ),
+    )
+    assert result.action == "create"
+    assert result.reconcile_hint is True
+    assert result.rejection_reason == "ua_mismatch"
+    assert result.guest_id != g.id
+
+
+def test_stale_match_excluded_from_reconcile_pool(db: Session):
+    """Match older than 90 days is filtered out at query level -> no rejection reason."""
+    fp = "stale_user_fp"
+    now = utcnow()
+    _chrome_win = "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
+    g = Guest(
+        token="f" * 64,
+        fingerprint_hash=fp,
+        fingerprint_components="{}",
+        user_agent=_chrome_win,
+        created_at=now - timedelta(days=120),
+        last_seen_at=now - timedelta(days=91),  # stale
+    )
+    db.add(g)
+    db.commit()
+
+    result = identify_guest(
+        db,
+        token_from_cookie=None,
+        fingerprint_hash=fp,
+        fingerprint_components={},
+        user_agent=_chrome_win,
+    )
+    assert result.action == "create"
+    assert result.reconcile_hint is False
+    assert result.rejection_reason is None
+    assert result.guest_id != g.id
+
+
+def test_identify_response_includes_reconcile_hint(client: TestClient, db: Session):
+    """API response always includes reconcile_hint key (default false for fresh visitors)."""
+    response = client.post(
+        "/api/public/guest/identify",
+        json={"fingerprint_hash": "fresh_fp_for_api_test", "fingerprint_components": {}},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "guest_id" in body
+    assert "action" in body
+    assert "reconcile_hint" in body
+    assert body["reconcile_hint"] is False  # no FP match exists
+
+
+def test_identify_does_not_leak_rejection_reason_to_client(client: TestClient, db: Session):
+    """Even when reconciliation is rejected, rejection_reason MUST NOT be in response."""
+    fp = "leak_test_fp"
+    now = utcnow()
+    g = Guest(
+        token="z" * 64,
+        fingerprint_hash=fp,
+        fingerprint_components="{}",
+        user_agent=("Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/125.0 Safari/537.36"),
+        created_at=now - timedelta(days=1),
+        last_seen_at=now - timedelta(minutes=5),  # triggers concurrent_activity
+    )
+    db.add(g)
+    db.commit()
+
+    response = client.post(
+        "/api/public/guest/identify",
+        json={"fingerprint_hash": fp, "fingerprint_components": {}},
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/125.0 Safari/537.36"
+            ),
+        },
+    )
+    body = response.json()
+    assert body["reconcile_hint"] is True
+    assert "rejection_reason" not in body
+    assert "existing_guest" not in body

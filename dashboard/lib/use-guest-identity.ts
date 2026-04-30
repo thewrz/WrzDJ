@@ -5,34 +5,29 @@ import { useCallback, useEffect, useRef, useState } from "react";
 interface GuestIdentity {
   guestId: number | null;
   isReturning: boolean;
+  reconcileHint: boolean;
   isLoading: boolean;
   error: string | null;
+  refresh: () => Promise<void>;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
-let cachedIdentity: { guestId: number; isReturning: boolean } | null = null;
+let cachedIdentity: { guestId: number; isReturning: boolean; reconcileHint: boolean } | null = null;
 
 export function useGuestIdentity(): GuestIdentity {
-  const [state, setState] = useState<GuestIdentity>({
+  const [state, setState] = useState<Omit<GuestIdentity, "refresh">>({
     guestId: cachedIdentity?.guestId ?? null,
     isReturning: cachedIdentity?.isReturning ?? false,
+    reconcileHint: cachedIdentity?.reconcileHint ?? false,
     isLoading: !cachedIdentity,
     error: null,
   });
   const calledRef = useRef(false);
 
-  const identify = useCallback(async () => {
-    if (cachedIdentity || calledRef.current) {
-      return;
-    }
-    calledRef.current = true;
-
+  const doIdentify = useCallback(async () => {
     try {
-      const { setOption, getFingerprint } = await import(
-        "@thumbmarkjs/thumbmarkjs"
-      );
-      setOption("exclude", ["canvas", "webgl"]);
+      const { getFingerprint } = await import("@thumbmarkjs/thumbmarkjs");
 
       const fp = await getFingerprint(true);
 
@@ -50,10 +45,15 @@ export function useGuestIdentity(): GuestIdentity {
         throw new Error(`Identify failed: ${resp.status}`);
       }
 
-      const data = (await resp.json()) as { guest_id: number; action: "create" | "cookie_hit" | "reconcile" };
+      const data = (await resp.json()) as {
+        guest_id: number;
+        action: "create" | "cookie_hit" | "reconcile";
+        reconcile_hint?: boolean;
+      };
       const identity = {
         guestId: data.guest_id,
         isReturning: data.action !== "create",
+        reconcileHint: data.reconcile_hint ?? false,
       };
       cachedIdentity = identity;
       setState({ ...identity, isLoading: false, error: null });
@@ -66,9 +66,32 @@ export function useGuestIdentity(): GuestIdentity {
     }
   }, []);
 
+  const identify = useCallback(async () => {
+    if (cachedIdentity || calledRef.current) {
+      return;
+    }
+    calledRef.current = true;
+    await doIdentify();
+  }, [doIdentify]);
+
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (refreshInFlightRef.current) {
+      return refreshInFlightRef.current;
+    }
+    cachedIdentity = null;
+    setState((prev) => ({ ...prev, isLoading: true, error: null }));
+    const promise = doIdentify().finally(() => {
+      refreshInFlightRef.current = null;
+    });
+    refreshInFlightRef.current = promise;
+    return promise;
+  }, [doIdentify]);
+
   useEffect(() => {
     identify();
   }, [identify]);
 
-  return state;
+  return { ...state, refresh };
 }

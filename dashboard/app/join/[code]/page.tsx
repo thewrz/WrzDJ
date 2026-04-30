@@ -6,6 +6,8 @@ import { api, ApiError, Event, GuestNowPlaying, GuestRequestInfo, SearchResult }
 import { useEventStream } from '@/lib/use-event-stream';
 import { useGuestIdentity } from '@/lib/use-guest-identity';
 import { NicknameGate, GateResult } from '@/components/NicknameGate';
+import EmailRecoveryButton from '@/components/EmailRecoveryButton';
+import EmailRecoveryModal from '@/components/EmailRecoveryModal';
 import { IdentityBar } from '@/components/IdentityBar';
 import MyRequestsTracker from './components/MyRequestsTracker';
 import CelebrationOverlay from './components/CelebrationOverlay';
@@ -51,7 +53,8 @@ export default function JoinEventPage() {
   const params = useParams();
   const code = params.code as string;
 
-  useGuestIdentity();
+  const { reconcileHint, refresh: refreshIdentity } = useGuestIdentity();
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
 
   const [event, setEvent] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
@@ -516,6 +519,14 @@ export default function JoinEventPage() {
           </div>
         </div>
 
+        {/* ── Recovery hint ─────────────────────────────────── */}
+        <div style={{ padding: '0 16px 6px', position: 'relative', zIndex: 1 }}>
+          <EmailRecoveryButton
+            reconcileHint={reconcileHint}
+            onOpen={() => setRecoveryOpen(true)}
+          />
+        </div>
+
         {/* ── Now Playing strip ─────────────────────────────── */}
         {nowPlaying && (
           <div className="gst-now-playing" style={{ background: surface, border: `1px solid ${border}`, position: 'relative', zIndex: 1 }}>
@@ -794,6 +805,21 @@ export default function JoinEventPage() {
           onClose={() => setSongDetail(null)}
         />
       )}
+
+      {/* ── Email recovery modal ─────────────────────────────────── */}
+      <EmailRecoveryModal
+        open={recoveryOpen}
+        onClose={() => setRecoveryOpen(false)}
+        onRecovered={async () => {
+          await refreshIdentity();
+          // The polling loop (useEffect keyed on event/loadRequests/pollInterval)
+          // re-uses the updated guest cookie on its next tick (~10 s). Calling
+          // loadRequests() here triggers an immediate refetch so guest-scoped
+          // data (MyRequestsTracker, vote state) reflects the merged identity
+          // without waiting for the next poll cycle.
+          await loadRequests();
+        }}
+      />
     </div>
   );
 }

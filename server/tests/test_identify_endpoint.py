@@ -1,6 +1,12 @@
 """Integration tests for POST /api/public/guest/identify."""
 
+from datetime import timedelta
+
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app.core.time import utcnow
+from app.models.guest import Guest
 
 
 def test_identify_sets_cookie(client: TestClient):
@@ -43,18 +49,27 @@ def test_identify_with_cookie_returns_same_guest(client: TestClient):
     assert guest_id_1 == guest_id_2
 
 
-def test_identify_without_cookie_reconciles(client: TestClient):
-    """Second call without cookie but with same fingerprint -> same guest."""
+def test_identify_without_cookie_reconciles(client: TestClient, db: Session):
+    """Second call without cookie but with same fingerprint, after the quiet period
+    has elapsed -> same guest (reconcile)."""
+    _chrome_ua = "Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/125.0 Safari/537.36"
     resp1 = client.post(
         "/api/public/guest/identify",
         json={"fingerprint_hash": "test_fp_reconcile"},
+        headers={"User-Agent": _chrome_ua},
     )
     guest_id_1 = resp1.json()["guest_id"]
+
+    # Backdate so the guest is outside the 12-hour concurrent-activity window
+    g = db.query(Guest).filter(Guest.id == guest_id_1).one()
+    g.last_seen_at = utcnow() - timedelta(hours=13)
+    db.commit()
 
     client.cookies.clear()
     resp2 = client.post(
         "/api/public/guest/identify",
         json={"fingerprint_hash": "test_fp_reconcile"},
+        headers={"User-Agent": _chrome_ua},
     )
     guest_id_2 = resp2.json()["guest_id"]
 

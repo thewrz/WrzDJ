@@ -38,7 +38,7 @@ export default function AdminIntegrationsPage() {
   const [checking, setChecking] = useState<Record<string, boolean>>({});
   const [toggling, setToggling] = useState<Record<string, boolean>>({});
 
-  const { data: services, loading, error: loadError, setData: setServices, reload } = useAdminPage<IntegrationServiceStatus[]>({
+  const { data: services, loading, error: loadError, setData: setServices, reload: _reload } = useAdminPage<IntegrationServiceStatus[]>({
     pageId: PAGE_ID,
     loader: () => api.getIntegrations().then((d) => d.services),
     onError: () => 'Failed to load integration status',
