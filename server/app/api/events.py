@@ -1070,6 +1070,19 @@ def bulk_review(
     return BulkReviewResponse(accepted=accepted, rejected=rejected, unchanged=0)
 
 
+@router.post("/{code}/enrich-all")
+def enrich_all_requests(
+    background_tasks: BackgroundTasks,
+    event: Event = Depends(get_event_for_dj_or_admin),
+    db: Session = Depends(get_db),
+):
+    """Queue enrichment for every request on this event that is missing BPM, key, or genre."""
+    rows = [r for r in event.requests if r.bpm is None or r.musical_key is None or r.genre is None]
+    for row in rows:
+        background_tasks.add_task(enrich_request_metadata, db, row.id)
+    return {"queued": len(rows)}
+
+
 @router.delete("/{code}/banner", response_model=EventOut)
 @limiter.limit("10/minute")
 def delete_banner(

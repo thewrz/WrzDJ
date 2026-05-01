@@ -31,6 +31,7 @@ interface RequestQueueSectionProps {
   onBulkDelete?: (status?: string) => Promise<void>;
   onDeleteRequest?: (requestId: number) => Promise<void>;
   onRefreshMetadata?: (requestId: number) => Promise<void>;
+  onEnrichAll?: () => Promise<{ queued: number }>;
   rejectingAll?: boolean;
   deletingRequest?: number | null;
   refreshingRequest?: number | null;
@@ -55,6 +56,7 @@ export function RequestQueueSection({
   onBulkDelete,
   onDeleteRequest,
   onRefreshMetadata,
+  onEnrichAll,
   rejectingAll,
   deletingRequest,
   refreshingRequest,
@@ -65,6 +67,7 @@ export function RequestQueueSection({
   const [advancedMode, setAdvancedMode] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
   const [refreshingAll, setRefreshingAll] = useState(false);
+  const [enrichingAll, setEnrichingAll] = useState(false);
 
   const statusCounts = useMemo(() => {
     const counts = { all: requests.length, new: 0, accepted: 0, playing: 0, played: 0, rejected: 0 };
@@ -182,6 +185,28 @@ export function RequestQueueSection({
             )}
             {advancedMode && (
               <>
+                {onEnrichAll && (
+                  <button
+                    className="btn btn-sm"
+                    style={{ background: '#1e3a5f', fontSize: '0.7rem' }}
+                    onClick={async () => {
+                      setEnrichingAll(true);
+                      try {
+                        const { queued } = await onEnrichAll();
+                        if (queued === 0) {
+                          alert('All tracks already have BPM, key, and genre.');
+                        } else {
+                          alert(`Queued enrichment for ${queued} track${queued === 1 ? '' : 's'}. Metadata will fill in over the next minute.`);
+                        }
+                      } finally {
+                        setEnrichingAll(false);
+                      }
+                    }}
+                    disabled={enrichingAll}
+                  >
+                    {enrichingAll ? 'Queuing…' : 'Enrich All'}
+                  </button>
+                )}
                 <button
                   className="btn btn-sm"
                   style={{ background: '#374151', fontSize: '0.7rem' }}

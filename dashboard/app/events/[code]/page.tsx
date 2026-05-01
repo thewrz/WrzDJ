@@ -740,6 +740,10 @@ export default function EventQueuePage() {
     }
   };
 
+  const handleEnrichAll = async () => {
+    return api.enrichAllRequests(code);
+  };
+
   const handleRejectAll = async () => {
     setRejectingAll(true);
     try {
@@ -1046,6 +1050,7 @@ export default function EventQueuePage() {
               onBulkDelete={handleBulkDelete}
               onDeleteRequest={handleDeleteRequest}
               onRefreshMetadata={handleRefreshMetadata}
+              onEnrichAll={handleEnrichAll}
               rejectingAll={rejectingAll}
               deletingRequest={deletingRequest}
               refreshingRequest={refreshingRequest}
