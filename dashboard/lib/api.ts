@@ -1116,16 +1116,19 @@ class ApiClient {
     }
   }
 
+  // Note: returns `key` (not `musical_key`) to match EnrichPreviewResult schema —
+  // callers merging results into SearchResult use `.key`; leaderboard fields use `.musical_key`.
   async enrichPreview(
     code: string,
     items: Array<{ title: string; artist: string; source_url?: string }>,
   ): Promise<Array<{ title: string; artist: string; bpm?: number | null; key?: string | null; genre?: string | null }>> {
     try {
       const res = await fetch(
-        `${getApiUrl()}/api/public/collect/${encodeURIComponent(code)}/enrich-preview`,
+        `${getApiUrl()}/api/public/collect/${code}/enrich-preview`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          // No credentials: endpoint is stateless (best-effort BPM lookup, no guest cookie needed)
           body: JSON.stringify({ items }),
         },
       );
