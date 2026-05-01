@@ -41,7 +41,7 @@ interface SongManagementTabProps {
   onBulkDelete?: (status?: string) => Promise<void>;
   onDeleteRequest?: (requestId: number) => Promise<void>;
   onRefreshMetadata?: (requestId: number) => Promise<void>;
-  onEnrichAll?: () => Promise<{ queued: number }>;
+  onEnrichAll?: () => Promise<{ queued: number; remaining: number }>;
   rejectingAll?: boolean;
   deletingRequest?: number | null;
   refreshingRequest?: number | null;

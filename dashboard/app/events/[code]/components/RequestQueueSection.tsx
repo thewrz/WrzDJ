@@ -31,7 +31,7 @@ interface RequestQueueSectionProps {
   onBulkDelete?: (status?: string) => Promise<void>;
   onDeleteRequest?: (requestId: number) => Promise<void>;
   onRefreshMetadata?: (requestId: number) => Promise<void>;
-  onEnrichAll?: () => Promise<{ queued: number }>;
+  onEnrichAll?: () => Promise<{ queued: number; remaining: number }>;
   rejectingAll?: boolean;
   deletingRequest?: number | null;
   refreshingRequest?: number | null;
@@ -192,9 +192,11 @@ export function RequestQueueSection({
                     onClick={async () => {
                       setEnrichingAll(true);
                       try {
-                        const { queued } = await onEnrichAll();
+                        const { queued, remaining } = await onEnrichAll();
                         if (queued === 0) {
                           alert('All tracks already have BPM, key, and genre.');
+                        } else if (remaining > 0) {
+                          alert(`Queued ${queued} tracks. ${remaining} more remaining — wait ~1 min for these to finish, then click again.`);
                         } else {
                           alert(`Queued enrichment for ${queued} track${queued === 1 ? '' : 's'}. Metadata will fill in over the next minute.`);
                         }
