@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   apiClient,
   ApiError,
@@ -67,6 +67,9 @@ export default function CollectPage() {
   const [searching, setSearching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [sortByVibes, setSortByVibes] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+  const [enrichedResults, setEnrichedResults] = useState<SearchResult[]>([]);
 
   const openSearch = () => {
     setSearchOpen(true);
@@ -80,6 +83,9 @@ export default function CollectPage() {
     setSearchQuery('');
     setSearchResults([]);
     setSubmitError(null);
+    setSortByVibes(false);
+    setEnrichedResults([]);
+    setEnriching(false);
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -143,6 +149,43 @@ export default function CollectPage() {
     }
   };
 
+  const handleVibesToggle = async () => {
+    if (sortByVibes) {
+      setSortByVibes(false);
+      setEnrichedResults([]);
+      return;
+    }
+    setSortByVibes(true);
+    const needsEnrich = searchResults.slice(0, 10).filter((r) => r.bpm == null);
+    if (needsEnrich.length === 0) return;
+    setEnriching(true);
+    try {
+      const results = await apiClient.enrichPreview(
+        code,
+        searchResults.slice(0, 10).map((r) => ({
+          title: r.title,
+          artist: r.artist,
+          source_url: r.url ?? undefined,
+        })),
+      );
+      const merged = searchResults.map((r, i) => {
+        const enriched = results[i];
+        if (!enriched) return r;
+        return {
+          ...r,
+          bpm: r.bpm ?? enriched.bpm ?? null,
+          key: r.key ?? enriched.key ?? null,
+          genre: r.genre ?? enriched.genre ?? null,
+        };
+      });
+      setEnrichedResults(merged as SearchResult[]);
+    } catch {
+      // swallow — vibes still works with whatever bpm data is already on results
+    } finally {
+      setEnriching(false);
+    }
+  };
+
   const redirectToJoin = () => {
     sessionStorage.setItem(`wrzdj_live_splash_${code}`, '1');
     router.replace(`/join/${code}`);
@@ -192,7 +235,33 @@ export default function CollectPage() {
       if (timer) clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [code, tab, gateComplete]);  
+  }, [code, tab, gateComplete]);
+
+  const leaderboardAvgBpm = useMemo(() => {
+    const withBpm = (leaderboard?.requests ?? []).filter((r) => r.bpm != null);
+    return withBpm.length > 0
+      ? withBpm.reduce((s, r) => s + (r.bpm ?? 0), 0) / withBpm.length
+      : 128;
+  }, [leaderboard]);
+
+  const tierInfo: Record<string, { rail: string; label: string }> = {
+    perfect: { rail: '#00f0ff', label: 'IN THE POCKET' },
+    good:    { rail: '#ff2bd6', label: 'BLENDS WELL' },
+    ok:      { rail: 'rgba(255,255,255,0.4)', label: 'SLIGHT SHIFT' },
+    far:     { rail: 'rgba(255,255,255,0.2)', label: 'TEMPO JUMP' },
+  };
+
+  const vibeScored = useMemo(() => {
+    const base = enrichedResults.length > 0 ? enrichedResults : searchResults;
+    if (!base.length) return base;
+    return base.map((r) => {
+      const dBpm = Math.abs((r.bpm ?? leaderboardAvgBpm) - leaderboardAvgBpm);
+      const score = dBpm / 8;
+      const tier: 'perfect' | 'good' | 'ok' | 'far' =
+        score <= 1 ? 'perfect' : score <= 2.5 ? 'good' : score <= 4 ? 'ok' : 'far';
+      return { ...r, _score: score, _tier: tier };
+    }).sort((a, b) => sortByVibes ? (a._score ?? 0) - (b._score ?? 0) : 0);
+  }, [searchResults, enrichedResults, sortByVibes, leaderboardAvgBpm]);
 
   if (!gateComplete) {
     return <NicknameGate code={code} onComplete={handleGateComplete} />;
@@ -441,37 +510,109 @@ export default function CollectPage() {
               </form>
             </div>
 
-            {searchResults.length > 0 && (
+            {vibeScored.length > 0 && (
               <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px 80px', position: 'relative', zIndex: 1 }}>
-                {searchResults.map((result, index) => (
+                {/* Results header with vibes toggle */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0 10px' }}>
+                  <span style={{ fontSize: 10.9, fontFamily: 'var(--font-mono, monospace)', color: 'rgba(255,255,255,0.35)', letterSpacing: 1.5 }}>
+                    {searchResults.length} RESULTS
+                  </span>
+                  <div style={{ flex: 1 }} />
                   <button
                     type="button"
-                    key={result.spotify_id ?? result.url ?? index}
-                    disabled={submitting}
-                    onClick={() => handleSelectSong(result)}
-                    data-testid="collect-search-result"
+                    onClick={handleVibesToggle}
                     style={{
-                      width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12,
-                      padding: '11px 12px', borderRadius: 12, marginBottom: 6,
-                      background: surface, border: `1px solid ${border}`,
-                      color: '#fff', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 7,
+                      padding: '6px 11px', borderRadius: 99,
+                      background: sortByVibes ? 'rgba(0,240,255,0.12)' : 'transparent',
+                      border: `1px solid ${sortByVibes ? accent : border}`,
+                      color: sortByVibes ? accent : subFg,
+                      fontFamily: 'var(--font-mono, monospace)', fontSize: 10.9, fontWeight: 700, letterSpacing: 1.2,
+                      cursor: 'pointer',
                     }}
                   >
-                    {result.album_art ? (
-                      <img
-                        src={result.album_art}
-                        alt={result.album ?? result.title}
-                        className="collect-row-art"
-                      />
-                    ) : (
-                      <div className="collect-row-art" aria-hidden="true" />
-                    )}
-                    <div className="collect-row-info">
-                      <div className="collect-row-title">{result.title}</div>
-                      <div className="collect-row-artist">{result.artist}</div>
-                    </div>
+                    {enriching
+                      ? <><span className="vbs-scan-icon">🔍</span> READING VIBES…</>
+                      : <><span style={{
+                          width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                          background: sortByVibes ? accent : 'transparent',
+                          border: sortByVibes ? 'none' : `1px solid ${subFg}`,
+                          boxShadow: sortByVibes ? `0 0 6px ${accent}` : 'none',
+                          display: 'inline-block',
+                        }} /> HIGHLIGHT BY VIBES</>
+                    }
                   </button>
-                ))}
+                </div>
+
+                {/* Result rows */}
+                {vibeScored.map((result, index) => {
+                  const tier = sortByVibes ? (result as SearchResult & { _tier?: string })._tier : undefined;
+                  const tc = tier ? tierInfo[tier] : null;
+
+                  return (
+                    <button
+                      type="button"
+                      key={result.spotify_id ?? result.url ?? index}
+                      disabled={submitting}
+                      onClick={() => handleSelectSong(result)}
+                      data-testid="collect-search-result"
+                      className={enriching ? 'vbs-scanning' : ''}
+                      style={{
+                        width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 0,
+                        padding: 0, borderRadius: 12, marginBottom: 6,
+                        background: surface, border: `1px solid ${border}`,
+                        color: '#fff', cursor: 'pointer', overflow: 'hidden',
+                      }}
+                    >
+                      {sortByVibes && !enriching && tc && (
+                        <div style={{ width: 4, flexShrink: 0, background: tc.rail, alignSelf: 'stretch' }} />
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', flex: 1, minWidth: 0 }}>
+                        {result.album_art ? (
+                          <img
+                            src={result.album_art}
+                            alt={result.album ?? result.title}
+                            style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+                          />
+                        ) : (
+                          <div style={{
+                            width: 44, height: 44, borderRadius: 8, flexShrink: 0,
+                            background: 'linear-gradient(135deg, #ff006e, #8338ec)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 13.3, fontWeight: 800, color: '#fff',
+                          }}>
+                            {`${result.title[0] ?? '?'}${result.artist[0] ?? ''}`.toUpperCase()}
+                          </div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 16.9, fontWeight: 700, letterSpacing: -0.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {result.title}
+                          </div>
+                          <div style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.5)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {result.artist}
+                          </div>
+                          {enriching ? (
+                            <div className="vbs-analyzing" style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9.7, color: 'rgba(0,240,255,0.6)', letterSpacing: 1, marginTop: 4 }}>
+                              ANALYZING…
+                            </div>
+                          ) : sortByVibes && tc ? (
+                            <div className="vbs-tier-in" style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 9.7, color: tc.rail, letterSpacing: 1.2, marginTop: 4, fontWeight: 700 }}>
+                              {tc.label}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div style={{
+                          width: enriching ? 0 : 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                          background: `conic-gradient(rgba(0,240,255,0.8) ${result.popularity}%, rgba(255,255,255,0.1) ${result.popularity}%)`,
+                          display: enriching ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 9.7, fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, color: 'rgba(255,255,255,0.5)',
+                        }} title={`Popularity: ${result.popularity}%`}>
+                          {result.popularity}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
