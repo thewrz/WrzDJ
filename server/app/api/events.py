@@ -1070,17 +1070,43 @@ def bulk_review(
     return BulkReviewResponse(accepted=accepted, rejected=rejected, unchanged=0)
 
 
+ENRICH_ALL_BATCH_LIMIT = 25
+
+
+def _enrich_with_fresh_session(request_id: int) -> None:
+    """Run enrichment in its own DB session.
+
+    The request-scoped `db` from `get_db` stays open until all background tasks finish — for a
+    large batch this exhausts the SQLAlchemy connection pool. A fresh `SessionLocal()` per task
+    releases its connection as soon as the task ends.
+    """
+    from app.db.session import SessionLocal
+
+    session = SessionLocal()
+    try:
+        enrich_request_metadata(session, request_id)
+    finally:
+        session.close()
+
+
 @router.post("/{code}/enrich-all")
 def enrich_all_requests(
     background_tasks: BackgroundTasks,
     event: Event = Depends(get_event_for_dj_or_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db),  # noqa: ARG001 — kept for auth dependency consistency
 ):
-    """Queue enrichment for every request on this event that is missing BPM, key, or genre."""
-    rows = [r for r in event.requests if r.bpm is None or r.musical_key is None or r.genre is None]
-    for row in rows:
-        background_tasks.add_task(enrich_request_metadata, db, row.id)
-    return {"queued": len(rows)}
+    """Queue enrichment for up to ENRICH_ALL_BATCH_LIMIT requests missing BPM, key, or genre.
+
+    Batched to avoid exhausting the connection pool when many tracks need enrichment.
+    Returns `remaining` so the caller can re-invoke until 0.
+    """
+    candidates = [
+        r for r in event.requests if r.bpm is None or r.musical_key is None or r.genre is None
+    ]
+    batch = candidates[:ENRICH_ALL_BATCH_LIMIT]
+    for row in batch:
+        background_tasks.add_task(_enrich_with_fresh_session, row.id)
+    return {"queued": len(batch), "remaining": max(0, len(candidates) - len(batch))}
 
 
 @router.delete("/{code}/banner", response_model=EventOut)
