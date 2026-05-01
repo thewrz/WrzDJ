@@ -3,7 +3,7 @@
 **Status:** Approved (brainstorming complete, awaiting implementation plan)
 **Date:** 2026-04-21
 **Branch:** `feat/pre-event-requests`
-**Author:** brainstorming session with djfreaq
+**Author:** brainstorming session with thewrz
 
 ## Summary
 
