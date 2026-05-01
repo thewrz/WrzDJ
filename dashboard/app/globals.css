@@ -2337,3 +2337,14 @@ h1, .display-heading {
   color: #000;
   box-shadow: 0 0 14px #00f0ff80;
 }
+
+/* CollectDetailSheet desktop dialog animations */
+@keyframes cds-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes cds-card-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: none; }
+}

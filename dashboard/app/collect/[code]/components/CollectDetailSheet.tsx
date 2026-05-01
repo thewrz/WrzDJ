@@ -34,7 +34,7 @@ function artGradient(seed: string) {
 export default function CollectDetailSheet({
   row, rank, totalCount, voted, onVote, onClose,
 }: Props) {
-  const [isWide, setIsWide] = useState(false);
+  const [isWide, setIsWide] = useState<boolean | null>(null);
 
   useEffect(() => {
     const check = () => setIsWide(window.innerWidth >= 640);
@@ -97,7 +97,7 @@ export default function CollectDetailSheet({
         border: voted ? `1.5px solid ${ACCENT}` : 'none',
         color: voted ? ACCENT : '#000',
         fontFamily: 'var(--font-grotesk, system-ui)', fontSize: 16.9, fontWeight: 800,
-        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        cursor: voted ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         transition: 'all 160ms',
         boxShadow: voted ? 'none' : `0 12px 32px -8px ${ACCENT}90`,
       }}
@@ -151,6 +151,8 @@ export default function CollectDetailSheet({
     </div>
   );
 
+  if (isWide === null) return null;
+
   /* ── Desktop: centered dialog ─────────────────────────────── */
   if (isWide) {
     return (
@@ -160,6 +162,7 @@ export default function CollectDetailSheet({
           background: 'rgba(0,0,0,0.7)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: '20px',
+          animation: 'cds-backdrop-in 220ms ease',
         }}
         onClick={onClose}
       >
@@ -171,6 +174,7 @@ export default function CollectDetailSheet({
             boxShadow: '0 40px 100px rgba(0,0,0,0.6)',
             fontFamily: 'var(--font-grotesk, system-ui)',
             color: '#fff', overflow: 'hidden',
+            animation: 'cds-card-in 260ms cubic-bezier(.2,.8,.2,1)',
           }}
         >
           {header}
