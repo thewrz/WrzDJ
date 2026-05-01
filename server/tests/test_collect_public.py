@@ -784,3 +784,86 @@ def test_my_picks_includes_enrichment_fields(
     assert submitted[0]["bpm"] == 128
     assert submitted[0]["musical_key"] == "8A"
     assert submitted[0]["genre"] == "Progressive House"
+
+
+# ── Enrich-preview tests ──────────────────────────────────────────────────────
+
+
+def test_enrich_preview_returns_nulls_without_beatport_token(client, db, test_event: Event):
+    """When the DJ has no Beatport token, all results have null bpm/key/genre."""
+    _enable_collection(db, test_event)
+    dj = test_event.created_by
+    dj.beatport_access_token = None
+    db.commit()
+
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/enrich-preview",
+        json={"items": [{"title": "Levels", "artist": "Avicii"}]},
+    )
+    assert r.status_code == 200
+    results = r.json()["results"]
+    assert len(results) == 1
+    assert results[0]["title"] == "Levels"
+    assert results[0]["artist"] == "Avicii"
+    assert results[0]["bpm"] is None
+    assert results[0]["key"] is None
+    assert results[0]["genre"] is None
+
+
+def test_enrich_preview_returns_bpm_from_beatport(client, db, test_event: Event):
+    """When Beatport search returns a match, bpm/key/genre are populated."""
+    from unittest.mock import MagicMock, patch
+
+    _enable_collection(db, test_event)
+
+    dj = test_event.created_by
+    dj.beatport_access_token = "fake_token"  # nosec B106
+    db.commit()
+
+    mock_match = MagicMock()
+    mock_match.title = "Levels"
+    mock_match.artist = "Avicii"
+    mock_match.bpm = 128
+    mock_match.key = "8A"
+    mock_match.genre = "Progressive House"
+    mock_match.mix_name = "Original Mix"
+
+    with (
+        patch("app.api.collect.search_beatport_tracks", return_value=[mock_match]),
+        patch("app.api.collect._find_best_match", return_value=mock_match),
+    ):
+        r = client.post(
+            f"/api/public/collect/{test_event.code}/enrich-preview",
+            json={"items": [{"title": "Levels", "artist": "Avicii"}]},
+        )
+
+    assert r.status_code == 200
+    results = r.json()["results"]
+    assert len(results) == 1
+    assert results[0]["bpm"] == 128
+    assert results[0]["key"] == "8A"
+    assert results[0]["genre"] == "Progressive House"
+
+
+def test_enrich_preview_caps_at_10_items(client, db, test_event: Event):
+    """Requests with >10 items are silently capped — only first 10 processed."""
+    _enable_collection(db, test_event)
+    dj = test_event.created_by
+    dj.beatport_access_token = None
+    db.commit()
+
+    items = [{"title": f"Song {i}", "artist": f"Artist {i}"} for i in range(15)]
+    r = client.post(
+        f"/api/public/collect/{test_event.code}/enrich-preview",
+        json={"items": items},
+    )
+    assert r.status_code == 200
+    assert len(r.json()["results"]) == 10
+
+
+def test_enrich_preview_404_for_unknown_event(client):
+    r = client.post(
+        "/api/public/collect/ZZZZZZ/enrich-preview",
+        json={"items": [{"title": "X", "artist": "Y"}]},
+    )
+    assert r.status_code == 404

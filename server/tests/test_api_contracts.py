@@ -157,7 +157,17 @@ KIOSK_DISPLAY_KEYS = {
 
 PUBLIC_EVENT_INFO_KEYS = {"code", "name"}
 
-PUBLIC_REQUEST_INFO_KEYS = {"id", "title", "artist", "artwork_url", "nickname", "vote_count"}
+PUBLIC_REQUEST_INFO_KEYS = {
+    "id",
+    "title",
+    "artist",
+    "artwork_url",
+    "nickname",
+    "vote_count",
+    "bpm",
+    "musical_key",
+    "genre",
+}
 
 GUEST_REQUEST_INFO_KEYS = PUBLIC_REQUEST_INFO_KEYS | {"status"}
 

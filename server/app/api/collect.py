@@ -28,11 +28,16 @@ from app.schemas.collect import (
     CollectProfileResponse,
     CollectSubmitRequest,
     CollectVoteRequest,
+    EnrichPreviewRequest,
+    EnrichPreviewResponse,
+    EnrichPreviewResult,
 )
 from app.services import collect as collect_service
 from app.services.activity_log import log_activity
+from app.services.beatport import search_beatport_tracks
 from app.services.collect import NicknameConflictError, upsert_profile
 from app.services.dedup import compute_dedupe_key, find_duplicate
+from app.services.sync.enrichment_pipeline import _find_best_match
 from app.services.sync.orchestrator import enrich_request_metadata
 from app.services.system_settings import get_system_settings
 from app.services.vote import add_vote
@@ -427,3 +432,47 @@ def vote(
             event_code=code,
         )
     return {"ok": True}
+
+
+@router.post("/{code}/enrich-preview", response_model=EnrichPreviewResponse)
+@limiter.limit("10/minute")
+def enrich_preview(
+    code: str,
+    payload: EnrichPreviewRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> EnrichPreviewResponse:
+    """Lightweight Beatport BPM/key lookup for search-time vibes — no DB writes."""
+    event = _get_event_or_404(db, code)
+    user = event.created_by
+    items = payload.items[:10]
+    results: list[EnrichPreviewResult] = []
+
+    for item in items:
+        bpm = None
+        key = None
+        genre = None
+
+        if user and user.beatport_access_token:
+            try:
+                matches = search_beatport_tracks(db, user, f"{item.artist} {item.title}", limit=5)
+                if matches:
+                    best = _find_best_match(matches, item.title, item.artist)
+                    if best:
+                        bpm = int(best.bpm) if best.bpm is not None else None
+                        key = best.key or None
+                        genre = best.genre or None
+            except Exception:
+                pass  # nosec B110 — best-effort, callers handle null fields
+
+        results.append(
+            EnrichPreviewResult(
+                title=item.title,
+                artist=item.artist,
+                bpm=bpm,
+                key=key,
+                genre=genre,
+            )
+        )
+
+    return EnrichPreviewResponse(results=results)
