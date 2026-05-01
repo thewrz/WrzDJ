@@ -6,7 +6,7 @@ endpoints. See docs/RECOVERY-IP-IDENTITY.md.
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import desc, func
 from sqlalchemy.exc import IntegrityError
@@ -33,6 +33,7 @@ from app.services import collect as collect_service
 from app.services.activity_log import log_activity
 from app.services.collect import NicknameConflictError, upsert_profile
 from app.services.dedup import compute_dedupe_key, find_duplicate
+from app.services.sync.enrichment_pipeline import enrich_request_metadata
 from app.services.system_settings import get_system_settings
 from app.services.vote import add_vote
 
@@ -320,6 +321,7 @@ def submit(
     code: str,
     payload: CollectSubmitRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     event = _get_event_or_404(db, code)
@@ -379,6 +381,7 @@ def submit(
     db.add(row)
     db.commit()
     db.refresh(row)
+    background_tasks.add_task(enrich_request_metadata, db, row.id)
     log_activity(
         db,
         level="info",

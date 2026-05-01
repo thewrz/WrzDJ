@@ -731,6 +731,29 @@ def test_leaderboard_row_enrichment_fields_null_when_missing(client, db, test_ev
     assert rows[0]["genre"] is None
 
 
+def test_collect_submit_triggers_enrichment(client, db, test_event: Event):
+    """Submitting a pick fires enrich_request_metadata as a background task."""
+    from unittest.mock import patch
+
+    _enable_collection(db, test_event)
+
+    with patch("app.api.collect.enrich_request_metadata") as mock_enrich:
+        r = client.post(
+            f"/api/public/collect/{test_event.code}/requests",
+            json={
+                "song_title": "Levels",
+                "artist": "Avicii",
+                "source": "spotify",
+            },
+        )
+
+    assert r.status_code == 201
+    assert r.json()["is_duplicate"] is False
+    mock_enrich.assert_called_once()
+    _, request_id = mock_enrich.call_args[0]
+    assert isinstance(request_id, int)
+
+
 def test_my_picks_includes_enrichment_fields(
     client, db, test_event: Event, _default_guest_cookie: Guest
 ):
