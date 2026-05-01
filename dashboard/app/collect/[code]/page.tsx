@@ -379,6 +379,7 @@ export default function CollectPage() {
 
         <EmailRecoveryButton
           reconcileHint={reconcileHint}
+          emailVerified={emailVerified}
           onOpen={() => setRecoveryOpen(true)}
         />
 
