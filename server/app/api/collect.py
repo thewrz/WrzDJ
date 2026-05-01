@@ -28,6 +28,7 @@ from app.schemas.collect import (
     CollectProfileResponse,
     CollectSubmitRequest,
     CollectVoteRequest,
+    EnrichPreviewItem,  # noqa: F401
     EnrichPreviewRequest,
     EnrichPreviewResponse,
     EnrichPreviewResult,
