@@ -457,6 +457,12 @@ class ApiClient {
     });
   }
 
+  async enrichAllRequests(code: string): Promise<{ queued: number }> {
+    return this.fetch(`/api/events/${encodeURIComponent(code)}/enrich-all`, {
+      method: 'POST',
+    });
+  }
+
   async submitRequest(
     code: string,
     artist: string,

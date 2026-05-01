@@ -41,6 +41,7 @@ interface SongManagementTabProps {
   onBulkDelete?: (status?: string) => Promise<void>;
   onDeleteRequest?: (requestId: number) => Promise<void>;
   onRefreshMetadata?: (requestId: number) => Promise<void>;
+  onEnrichAll?: () => Promise<{ queued: number }>;
   rejectingAll?: boolean;
   deletingRequest?: number | null;
   refreshingRequest?: number | null;
@@ -84,6 +85,7 @@ export function SongManagementTab(props: SongManagementTabProps) {
         onBulkDelete={props.onBulkDelete}
         onDeleteRequest={props.onDeleteRequest}
         onRefreshMetadata={props.onRefreshMetadata}
+        onEnrichAll={props.onEnrichAll}
         rejectingAll={props.rejectingAll}
         deletingRequest={props.deletingRequest}
         refreshingRequest={props.refreshingRequest}
