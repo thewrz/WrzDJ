@@ -37,6 +37,9 @@ class PublicRequestInfo(BaseModel):
     artwork_url: str | None
     nickname: str | None = None
     vote_count: int = 0
+    bpm: int | None = None
+    musical_key: str | None = None
+    genre: str | None = None
 
 
 class GuestRequestInfo(PublicRequestInfo):
@@ -224,6 +227,9 @@ def get_public_requests(
                 nickname=r.nickname,
                 vote_count=r.vote_count,
                 status=r.status,
+                bpm=int(r.bpm) if r.bpm is not None else None,
+                musical_key=r.musical_key,
+                genre=r.genre,
             )
             for r in requests_list
         ],

@@ -303,6 +303,61 @@ class TestGuestRequestList:
         assert data["requests"][0]["nickname"] is None
 
 
+class TestPublicRequestsEnrichmentFields:
+    """bpm/musical_key/genre are exposed in /events/{code}/requests response."""
+
+    def test_enrichment_fields_present_when_set(
+        self, client: TestClient, test_event: Event, db: Session
+    ):
+        from app.models.request import Request, RequestStatus
+
+        req = Request(
+            event_id=test_event.id,
+            song_title="Levels",
+            artist="Avicii",
+            source="beatport",
+            status=RequestStatus.NEW.value,
+            dedupe_key="levels_avicii_001",
+            bpm=128.0,
+            musical_key="8A",
+            genre="Progressive House",
+        )
+        db.add(req)
+        db.commit()
+
+        response = client.get(f"/api/public/events/{test_event.code}/requests")
+        assert response.status_code == 200
+        requests = response.json()["requests"]
+        assert len(requests) == 1
+        assert requests[0]["bpm"] == 128
+        assert requests[0]["musical_key"] == "8A"
+        assert requests[0]["genre"] == "Progressive House"
+
+    def test_enrichment_fields_null_when_not_set(
+        self, client: TestClient, test_event: Event, db: Session
+    ):
+        from app.models.request import Request, RequestStatus
+
+        req = Request(
+            event_id=test_event.id,
+            song_title="Unknown",
+            artist="Someone",
+            source="spotify",
+            status=RequestStatus.NEW.value,
+            dedupe_key="unknown_someone_001",
+        )
+        db.add(req)
+        db.commit()
+
+        response = client.get(f"/api/public/events/{test_event.code}/requests")
+        assert response.status_code == 200
+        requests = response.json()["requests"]
+        assert len(requests) == 1
+        assert requests[0]["bpm"] is None
+        assert requests[0]["musical_key"] is None
+        assert requests[0]["genre"] is None
+
+
 class TestSubmitRequestNickname:
     """Tests for nickname field in POST /api/events/{code}/requests."""
 
