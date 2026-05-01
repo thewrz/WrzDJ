@@ -7,6 +7,7 @@ import {
   ApiError,
   CollectEventPreview,
   CollectLeaderboardResponse,
+  CollectLeaderboardRow,
   CollectMyPicksResponse,
   SearchResult,
 } from '../../../lib/api';
@@ -15,6 +16,7 @@ import { IdentityBar } from '../../../components/IdentityBar';
 import { NicknameGate, GateResult } from '../../../components/NicknameGate';
 import EmailRecoveryButton from '../../../components/EmailRecoveryButton';
 import EmailRecoveryModal from '../../../components/EmailRecoveryModal';
+import CollectDetailSheet from './components/CollectDetailSheet';
 import LeaderboardTabs from './components/LeaderboardTabs';
 import MyPicksPanel from './components/MyPicksPanel';
 import SubmitBar from './components/SubmitBar';
@@ -54,6 +56,9 @@ export default function CollectPage() {
     setProfile({ submission_count: result.submissionCount, submission_cap: result.submissionCap });
     setGateComplete(true);
   };
+
+  const [detailRow, setDetailRow] = useState<CollectLeaderboardRow | null>(null);
+  const [detailVoted, setDetailVoted] = useState(false);
 
   // Search modal state
   const [searchOpen, setSearchOpen] = useState(false);
@@ -315,6 +320,7 @@ export default function CollectPage() {
             onTabChange={setTab}
             onVote={(id) => apiClient.voteCollectRequest(code, id)}
             votedIds={votedIds}
+            onRowClick={setDetailRow}
           />
         </section>
 
@@ -338,6 +344,22 @@ export default function CollectPage() {
           // cookie on the next apiClient.getCollectMyPicks() call.
         }}
       />
+
+      {detailRow && (
+        <CollectDetailSheet
+          row={detailRow}
+          rank={(leaderboard?.requests ?? []).findIndex((r) => r.id === detailRow.id) + 1 || 1}
+          totalCount={leaderboard?.requests.length ?? 0}
+          voted={detailVoted || votedIds.has(detailRow.id)}
+          onVote={async () => {
+            if (!detailVoted && !votedIds.has(detailRow.id)) {
+              setDetailVoted(true);
+              await apiClient.voteCollectRequest(code, detailRow.id);
+            }
+          }}
+          onClose={() => { setDetailRow(null); setDetailVoted(false); }}
+        />
+      )}
 
       {searchOpen && (
         <div

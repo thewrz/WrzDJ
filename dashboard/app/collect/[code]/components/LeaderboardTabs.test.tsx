@@ -1,8 +1,9 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import LeaderboardTabs from './LeaderboardTabs';
+import type { CollectLeaderboardRow } from '@/lib/api';
 
-const rows = [
+const rows: CollectLeaderboardRow[] = [
   {
     id: 1,
     title: 'A',
@@ -12,6 +13,9 @@ const rows = [
     nickname: 'alex',
     status: 'new' as const,
     created_at: '2026-04-21',
+    bpm: null,
+    musical_key: null,
+    genre: null,
   },
   {
     id: 2,
@@ -22,8 +26,25 @@ const rows = [
     nickname: 'jo',
     status: 'new' as const,
     created_at: '2026-04-21',
+    bpm: null,
+    musical_key: null,
+    genre: null,
   },
 ];
+
+const mockRow: CollectLeaderboardRow = {
+  id: 1,
+  title: 'Levels',
+  artist: 'Avicii',
+  artwork_url: null,
+  vote_count: 5,
+  nickname: null,
+  status: 'new',
+  created_at: new Date().toISOString(),
+  bpm: null,
+  musical_key: null,
+  genre: null,
+};
 
 describe('LeaderboardTabs', () => {
   it('renders rows and switches tabs', () => {
@@ -92,5 +113,38 @@ describe('LeaderboardTabs', () => {
     await waitFor(() => {
       expect(onVote).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('calls onRowClick when a row is clicked', () => {
+    const onRowClick = vi.fn();
+    render(
+      <LeaderboardTabs
+        rows={[mockRow]}
+        tab="all"
+        onTabChange={vi.fn()}
+        onVote={vi.fn().mockResolvedValue(undefined)}
+        votedIds={new Set()}
+        onRowClick={onRowClick}
+      />,
+    );
+    fireEvent.click(screen.getByText('Levels'));
+    expect(onRowClick).toHaveBeenCalledWith(mockRow);
+  });
+
+  it('does not call onRowClick when vote button is clicked', () => {
+    const onRowClick = vi.fn();
+    render(
+      <LeaderboardTabs
+        rows={[mockRow]}
+        tab="all"
+        onTabChange={vi.fn()}
+        onVote={vi.fn().mockResolvedValue(undefined)}
+        votedIds={new Set()}
+        onRowClick={onRowClick}
+      />,
+    );
+    const voteBtn = screen.getByRole('button', { name: /upvote/i });
+    fireEvent.click(voteBtn);
+    expect(onRowClick).not.toHaveBeenCalled();
   });
 });
