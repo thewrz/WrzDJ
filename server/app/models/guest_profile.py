@@ -1,6 +1,16 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.time import utcnow
@@ -24,5 +34,17 @@ class GuestProfile(Base):
             "event_id",
             "guest_id",
             name="uq_guest_profile_event_guest",
+        ),
+        # Functional unique index: case-insensitive nickname uniqueness per event.
+        # Created by migration 040_add_nickname_uniqueness via raw op.execute().
+        # This Index() annotation exists solely to suppress alembic autogenerate drift —
+        # without it, alembic sees the DB index but not the model and generates a spurious
+        # remove_index operation. Do NOT remove it.
+        Index(
+            "uq_guest_profile_event_nickname",
+            "event_id",
+            func.lower(Column("nickname")),
+            unique=True,
+            postgresql_where=text("nickname IS NOT NULL"),
         ),
     )

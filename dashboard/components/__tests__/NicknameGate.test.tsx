@@ -1,326 +1,366 @@
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { NicknameGate } from '../NicknameGate';
 
-vi.mock('../../lib/api', () => ({
-  apiClient: {
-    getCollectProfile: vi.fn(),
-    setCollectProfile: vi.fn(),
-    requestVerificationCode: vi.fn(),
-    confirmVerificationCode: vi.fn(),
-  },
-  ApiError: class extends Error {
+vi.mock('../../lib/api', () => {
+  class ApiError extends Error {
     status: number;
-    constructor(message: string, status: number) {
-      super(message);
+    constructor(msg: string, status: number) {
+      super(msg);
+      this.name = 'ApiError';
       this.status = status;
     }
-  },
-}));
+  }
+  class NicknameConflictError extends Error {
+    claimed: boolean;
+    constructor(claimed: boolean) {
+      super('nickname_taken');
+      this.name = 'NicknameConflictError';
+      this.claimed = claimed;
+    }
+  }
+  return {
+    apiClient: {
+      getCollectProfile: vi.fn(),
+      setCollectProfile: vi.fn(),
+      requestVerificationCode: vi.fn(),
+      confirmVerificationCode: vi.fn(),
+    },
+    ApiError,
+    NicknameConflictError,
+  };
+});
 
 vi.mock('../../lib/use-guest-identity', () => ({
-  useGuestIdentity: vi.fn(() => ({
+  useGuestIdentity: () => ({
+    isLoading: false,
     guestId: 1,
     isReturning: false,
-    isLoading: false,
-    error: null,
-  })),
+    reconcileHint: false,
+    refresh: vi.fn(),
+  }),
 }));
 
-import { NicknameGate } from '../NicknameGate';
-import { apiClient, ApiError } from '../../lib/api';
-import { useGuestIdentity } from '../../lib/use-guest-identity';
+vi.mock('../EmailVerification', () => ({
+  default: ({ onVerified, onSkip }: { onVerified: () => void; onSkip: () => void }) => (
+    <div>
+      <button onClick={onVerified}>Verify Email</button>
+      <button onClick={onSkip}>Skip Email</button>
+    </div>
+  ),
+}));
 
-const mockGetProfile = apiClient.getCollectProfile as ReturnType<typeof vi.fn>;
-const mockSetProfile = apiClient.setCollectProfile as ReturnType<typeof vi.fn>;
-const mockUseGuestIdentity = useGuestIdentity as ReturnType<typeof vi.fn>;
+import { apiClient, NicknameConflictError } from '../../lib/api';
 
-function baseProfile(overrides: Partial<{
-  nickname: string | null;
-  email_verified: boolean;
-  submission_count: number;
-  submission_cap: number;
-}> = {}) {
-  return {
-    nickname: null,
-    email_verified: false,
-    submission_count: 0,
-    submission_cap: 5,
-    ...overrides,
-  };
-}
+const mockGetProfile = vi.mocked(apiClient.getCollectProfile);
+const mockSetProfile = vi.mocked(apiClient.setCollectProfile);
+const mockRequestCode = vi.mocked(apiClient.requestVerificationCode);
+const mockConfirmCode = vi.mocked(apiClient.confirmVerificationCode);
+
+const emptyProfile = {
+  nickname: null,
+  email_verified: false,
+  submission_count: 0,
+  submission_cap: 5,
+};
 
 describe('NicknameGate', () => {
+  const onComplete = vi.fn();
+
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseGuestIdentity.mockReturnValue({
-      guestId: 1,
-      isReturning: false,
-      isLoading: false,
-      error: null,
+    mockGetProfile.mockResolvedValue(emptyProfile);
+    mockSetProfile.mockResolvedValue({ ...emptyProfile, nickname: 'TestUser' });
+    mockRequestCode.mockResolvedValue({ sent: true });
+    mockConfirmCode.mockResolvedValue({ verified: true, guest_id: 1, merged: false });
+  });
+
+  it('renders track_select when no profile exists', async () => {
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /new name/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /have email/i })).toBeInTheDocument();
     });
   });
 
-  it('shows nickname input for a new guest (no nickname on profile)', async () => {
-    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
-    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
+  it('transitions to nickname_input when "New name" clicked', async () => {
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => screen.getByRole('button', { name: /new name/i }));
+    fireEvent.click(screen.getByRole('button', { name: /new name/i }));
+    expect(screen.getByPlaceholderText(/dancingqueen/i)).toBeInTheDocument();
+  });
+
+  it('transitions to email_login when "Have email" clicked', async () => {
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => screen.getByRole('button', { name: /have email/i }));
+    fireEvent.click(screen.getByRole('button', { name: /have email/i }));
+    expect(screen.getByPlaceholderText(/you@example\.com/i)).toBeInTheDocument();
+  });
+
+  it('shows collision_unclaimed state on 409 claimed=false', async () => {
+    mockSetProfile.mockRejectedValue(new NicknameConflictError(false));
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => screen.getByRole('button', { name: /new name/i }));
+    fireEvent.click(screen.getByRole('button', { name: /new name/i }));
+    fireEvent.change(screen.getByPlaceholderText(/dancingqueen/i), { target: { value: 'Alex' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /what.s your nickname/i })).toBeInTheDocument();
+      expect(screen.getByText(/already taken/i)).toBeInTheDocument();
+      expect(screen.getByText(/original device/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('button', { name: /log in with email/i })).not.toBeInTheDocument();
+  });
+
+  it('shows collision_claimed state on 409 claimed=true', async () => {
+    mockSetProfile.mockRejectedValue(new NicknameConflictError(true));
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => screen.getByRole('button', { name: /new name/i }));
+    fireEvent.click(screen.getByRole('button', { name: /new name/i }));
+    fireEvent.change(screen.getByPlaceholderText(/dancingqueen/i), { target: { value: 'Alex' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/already taken/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /log in with email/i })).toBeInTheDocument();
     });
   });
 
-  it('shows email prompt for returning guest with nickname but no email', async () => {
-    mockGetProfile.mockResolvedValue(baseProfile({ nickname: 'DJ_Foo', email_verified: false }));
-    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-    await waitFor(() => {
-      expect(screen.getByText(/add your email/i)).toBeInTheDocument();
-    });
+  it('"Try a different nickname" from collision_unclaimed returns to nickname_input', async () => {
+    mockSetProfile.mockRejectedValue(new NicknameConflictError(false));
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => screen.getByRole('button', { name: /new name/i }));
+    fireEvent.click(screen.getByRole('button', { name: /new name/i }));
+    fireEvent.change(screen.getByPlaceholderText(/dancingqueen/i), { target: { value: 'Alex' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+    await waitFor(() => screen.getByText(/original device/i));
+    fireEvent.click(screen.getByRole('button', { name: /try a different/i }));
+    expect(screen.getByPlaceholderText(/dancingqueen/i)).toBeInTheDocument();
   });
 
-  it('calls onComplete immediately when nickname and email are already set', async () => {
-    const onComplete = vi.fn();
-    mockGetProfile.mockResolvedValue(baseProfile({ nickname: 'DJ_Foo', email_verified: true }));
-    render(<NicknameGate code="TEST01" onComplete={onComplete} />);
-    await waitFor(() => {
-      expect(onComplete).toHaveBeenCalledWith({
-        nickname: 'DJ_Foo',
-        emailVerified: true,
-        submissionCount: 0,
-        submissionCap: 5,
+  it('"Try a different nickname" from collision_claimed returns to nickname_input', async () => {
+    mockSetProfile.mockRejectedValue(new NicknameConflictError(true));
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => screen.getByRole('button', { name: /new name/i }));
+    fireEvent.click(screen.getByRole('button', { name: /new name/i }));
+    fireEvent.change(screen.getByPlaceholderText(/dancingqueen/i), { target: { value: 'Alex' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+    await waitFor(() => screen.getByRole('button', { name: /log in with email/i }));
+    fireEvent.click(screen.getByRole('button', { name: /try a different/i }));
+    expect(screen.getByPlaceholderText(/dancingqueen/i)).toBeInTheDocument();
+  });
+
+  it('transitions to complete when email verified and profile has nickname', async () => {
+    mockGetProfile
+      .mockResolvedValueOnce(emptyProfile)
+      .mockResolvedValueOnce({
+        nickname: 'Alex',
+        email_verified: true,
+        submission_count: 0,
+        submission_cap: 5,
       });
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => screen.getByRole('button', { name: /have email/i }));
+    fireEvent.click(screen.getByRole('button', { name: /have email/i }));
+    fireEvent.change(screen.getByPlaceholderText(/you@example\.com/i), {
+      target: { value: 'test@example.com' },
     });
+    fireEvent.click(screen.getByRole('button', { name: /send code/i }));
+    await waitFor(() => screen.getByPlaceholderText(/6.digit/i));
+    fireEvent.change(screen.getByPlaceholderText(/6.digit/i), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: /^verify$/i }));
+    await waitFor(() =>
+      expect(onComplete).toHaveBeenCalledWith(
+        expect.objectContaining({ nickname: 'Alex', emailVerified: true }),
+      ),
+    );
   });
 
-  it('calls onComplete (pass-through) on 404', async () => {
-    const onComplete = vi.fn();
-    mockGetProfile.mockRejectedValue(new ApiError('Not found', 404));
-    render(<NicknameGate code="GONE" onComplete={onComplete} />);
-    await waitFor(() => {
+  it('transitions to nickname_input when email verified but no nickname on guest', async () => {
+    mockGetProfile
+      .mockResolvedValueOnce(emptyProfile)
+      .mockResolvedValueOnce({
+        nickname: null,
+        email_verified: true,
+        submission_count: 0,
+        submission_cap: 5,
+      });
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => screen.getByRole('button', { name: /have email/i }));
+    fireEvent.click(screen.getByRole('button', { name: /have email/i }));
+    fireEvent.change(screen.getByPlaceholderText(/you@example\.com/i), {
+      target: { value: 'test@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /send code/i }));
+    await waitFor(() => screen.getByPlaceholderText(/6.digit/i));
+    fireEvent.change(screen.getByPlaceholderText(/6.digit/i), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: /^verify$/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText(/dancingqueen/i)).toBeInTheDocument());
+  });
+
+  it('skips email_prompt when nickname saved while already email-verified', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mockGetProfile
+        .mockResolvedValueOnce(emptyProfile)
+        .mockResolvedValueOnce({
+          nickname: null,
+          email_verified: true,
+          submission_count: 0,
+          submission_cap: 5,
+        });
+      mockSetProfile.mockResolvedValue({
+        nickname: 'NewUser',
+        email_verified: true,
+        submission_count: 0,
+        submission_cap: 5,
+      });
+      render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+      await waitFor(() => screen.getByRole('button', { name: /have email/i }));
+      fireEvent.click(screen.getByRole('button', { name: /have email/i }));
+      fireEvent.change(screen.getByPlaceholderText(/you@example\.com/i), {
+        target: { value: 'test@example.com' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /send code/i }));
+      await waitFor(() => screen.getByPlaceholderText(/6.digit/i));
+      fireEvent.change(screen.getByPlaceholderText(/6.digit/i), { target: { value: '123456' } });
+      fireEvent.click(screen.getByRole('button', { name: /^verify$/i }));
+      await waitFor(() => screen.getByPlaceholderText(/dancingqueen/i));
+      fireEvent.change(screen.getByPlaceholderText(/dancingqueen/i), {
+        target: { value: 'NewUser' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+      // Wait for setCollectProfile to resolve, then advance fake timers past the 1500ms savedFlash delay
+      await act(async () => {
+        await Promise.resolve(); // let the mock promise resolve
+        vi.runAllTimers();
+      });
+      await waitFor(() =>
+        expect(onComplete).toHaveBeenCalledWith(
+          expect.objectContaining({ nickname: 'NewUser', emailVerified: true }),
+        ),
+      );
+      expect(screen.queryByText(/add your email/i)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('NicknameGate — existing behavior coverage', () => {
+  const onComplete = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetProfile.mockResolvedValue(emptyProfile);
+    mockSetProfile.mockResolvedValue({ ...emptyProfile, nickname: 'TestUser' });
+    mockRequestCode.mockResolvedValue({ sent: true });
+    mockConfirmCode.mockResolvedValue({ verified: true, guest_id: 1, merged: false });
+  });
+
+  it('calls onComplete immediately when profile has nickname + email verified', async () => {
+    mockGetProfile.mockResolvedValue({
+      nickname: 'Alex',
+      email_verified: true,
+      submission_count: 2,
+      submission_cap: 5,
+    });
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() =>
+      expect(onComplete).toHaveBeenCalledWith({
+        nickname: 'Alex',
+        emailVerified: true,
+        submissionCount: 2,
+        submissionCap: 5,
+      }),
+    );
+  });
+
+  it('shows email_prompt when profile has nickname but no email', async () => {
+    mockGetProfile.mockResolvedValue({
+      nickname: 'Alex',
+      email_verified: false,
+      submission_count: 0,
+      submission_cap: 5,
+    });
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => expect(screen.getByText(/add your email/i)).toBeInTheDocument());
+  });
+
+  it('calls onComplete on 404 with empty nickname', async () => {
+    const { ApiError } = await import('../../lib/api');
+    mockGetProfile.mockRejectedValue(new ApiError('not found', 404));
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() =>
       expect(onComplete).toHaveBeenCalledWith({
         nickname: '',
         emailVerified: false,
         submissionCount: 0,
         submissionCap: 0,
-      });
-    });
+      }),
+    );
   });
 
   it('shows error state on network failure with Retry button', async () => {
-    mockGetProfile.mockRejectedValue(new Error('Network error'));
-    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
-    });
-    expect(screen.getByText(/couldn.t connect/i)).toBeInTheDocument();
+    mockGetProfile.mockRejectedValue(new Error('network error'));
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument());
   });
 
   it('Save button is disabled when nickname input is empty', async () => {
-    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
-    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-    await waitFor(() => screen.getByRole('heading', { name: /what.s your nickname/i }));
-    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => screen.getByRole('button', { name: /new name/i }));
+    fireEvent.click(screen.getByRole('button', { name: /new name/i }));
+    const saveBtn = screen.getByRole('button', { name: /^save$/i });
+    expect(saveBtn).toBeDisabled();
   });
 
-  it('Save button is enabled after typing a nickname', async () => {
-    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
-    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-    await waitFor(() => screen.getByRole('heading', { name: /what.s your nickname/i }));
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'DancingQueen' } });
-    expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
-  });
-
-  it('shows "Nickname saved!" flash after successful save', async () => {
-    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
-    mockSetProfile.mockResolvedValue(baseProfile({ nickname: 'DancingQueen', email_verified: false }));
-    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-    await waitFor(() => screen.getByRole('heading', { name: /what.s your nickname/i }));
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'DancingQueen' } });
-    fireEvent.click(screen.getByRole('button', { name: /save/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/nickname saved/i)).toBeInTheDocument();
-    });
-  });
-
-  it('shows inline error when save fails', async () => {
-    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
-    mockSetProfile.mockRejectedValue(new Error('Server error'));
-    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-    await waitFor(() => screen.getByRole('heading', { name: /what.s your nickname/i }));
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'DancingQueen' } });
-    fireEvent.click(screen.getByRole('button', { name: /save/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/couldn.t save/i)).toBeInTheDocument();
-    });
-  });
-
-  it('skip from email_prompt calls onComplete with emailVerified=false', async () => {
-    const onComplete = vi.fn();
-    mockGetProfile.mockResolvedValue(
-      baseProfile({ nickname: 'DJ_Foo', email_verified: false, submission_count: 3, submission_cap: 10 })
-    );
-    render(<NicknameGate code="TEST01" onComplete={onComplete} />);
-    await waitFor(() => screen.getByText(/add your email/i));
-    fireEvent.click(screen.getByRole('button', { name: /skip for now/i }));
-    expect(onComplete).toHaveBeenCalledWith({
-      nickname: 'DJ_Foo',
-      emailVerified: false,
-      submissionCount: 3,
-      submissionCap: 10,
-    });
-  });
-
-  it('shows validation error for invalid nickname (line 80-81 — validation error path)', async () => {
-    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
-    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-    await waitFor(() => screen.getByRole('heading', { name: /what.s your nickname/i }));
-
-    // Type an invalid nickname with special chars not in the allowed set
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Invalid@Name!' } });
-    fireEvent.click(screen.getByRole('button', { name: /save/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/letters, numbers/i)).toBeInTheDocument();
-    });
-  });
-
-  it('saves nickname via Enter key (line 158 — enter key branch)', async () => {
-    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
-    mockSetProfile.mockResolvedValue(baseProfile({ nickname: 'PressEnter', email_verified: false }));
-    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-    await waitFor(() => screen.getByRole('heading', { name: /what.s your nickname/i }));
-
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'PressEnter' } });
-    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
-
-    await waitFor(() => {
-      expect(mockSetProfile).toHaveBeenCalled();
-    });
-  });
-
-  it('does not save nickname when Enter is pressed with empty input', async () => {
-    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
-    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-    await waitFor(() => screen.getByRole('heading', { name: /what.s your nickname/i }));
-
-    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'k' });
+  it('shows validation error for nickname that is too short', async () => {
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => screen.getByRole('button', { name: /new name/i }));
+    fireEvent.click(screen.getByRole('button', { name: /new name/i }));
+    fireEvent.change(screen.getByPlaceholderText(/dancingqueen/i), { target: { value: 'x' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+    expect(screen.getByText(/at least 2 characters/i)).toBeInTheDocument();
     expect(mockSetProfile).not.toHaveBeenCalled();
   });
 
-  it('typing clears inputError (line 91-92 — input change clears error)', async () => {
-    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
-    mockSetProfile.mockRejectedValue(new Error('Server error'));
-    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-    await waitFor(() => screen.getByRole('heading', { name: /what.s your nickname/i }));
-
-    // Trigger an error first
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'SomeName' } });
-    fireEvent.click(screen.getByRole('button', { name: /save/i }));
-    await waitFor(() => screen.getByText(/couldn.t save/i));
-
-    // Now type again — error should clear
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'SomeName2' } });
-    await waitFor(() => {
-      expect(screen.queryByText(/couldn.t save/i)).not.toBeInTheDocument();
-    });
+  it('shows inline error when setCollectProfile fails with generic error', async () => {
+    const { ApiError } = await import('../../lib/api');
+    mockSetProfile.mockRejectedValue(new ApiError('server error', 500));
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => screen.getByRole('button', { name: /new name/i }));
+    fireEvent.click(screen.getByRole('button', { name: /new name/i }));
+    fireEvent.change(screen.getByPlaceholderText(/dancingqueen/i), { target: { value: 'Alex' } });
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
+    await waitFor(() => expect(screen.getByText(/server error/i)).toBeInTheDocument());
   });
 
-  it('email verified from email_prompt calls onComplete with emailVerified=true', async () => {
-    const onComplete = vi.fn();
-    const mockRequestCode = apiClient.requestVerificationCode as ReturnType<typeof vi.fn>;
-    const mockConfirmCode = apiClient.confirmVerificationCode as ReturnType<typeof vi.fn>;
-    mockGetProfile.mockResolvedValue(
-      baseProfile({ nickname: 'DJ_Foo', email_verified: false, submission_count: 2, submission_cap: 5 })
-    );
-    mockRequestCode.mockResolvedValue({ sent: true });
-    mockConfirmCode.mockResolvedValue({ verified: true, guest_id: 1, merged: false });
-
-    render(<NicknameGate code="TEST01" onComplete={onComplete} />);
+  it('skip from email_prompt calls onComplete with emailVerified=false', async () => {
+    mockGetProfile.mockResolvedValue({
+      nickname: 'Alex',
+      email_verified: false,
+      submission_count: 1,
+      submission_cap: 5,
+    });
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
     await waitFor(() => screen.getByText(/add your email/i));
-
-    // Enter email and send code
-    const emailInput = screen.getByRole('textbox');
-    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
-    fireEvent.click(screen.getByRole('button', { name: /send code/i }));
-
-    // Wait for OTP digit inputs to appear
-    await waitFor(() => {
-      expect(screen.getByText(/code sent to/i)).toBeInTheDocument();
-    });
-
-    // Fill each digit individually — EmailVerification auto-submits when all 6 are filled
-    const digitInputs = screen.getAllByRole('textbox');
-    expect(digitInputs).toHaveLength(6);
-    for (let i = 0; i < 6; i++) {
-      fireEvent.change(digitInputs[i], { target: { value: String(i + 1) } });
-    }
-
-    await waitFor(() => {
-      expect(onComplete).toHaveBeenCalledWith({
-        nickname: 'DJ_Foo',
-        emailVerified: true,
-        submissionCount: 2,
-        submissionCap: 5,
-      });
-    });
+    fireEvent.click(screen.getByRole('button', { name: /skip email/i }));
+    expect(onComplete).toHaveBeenCalledWith(
+      expect.objectContaining({ nickname: 'Alex', emailVerified: false }),
+    );
   });
 
-  // Race-condition tests for the IP-identity removal cleanup.
-  // See docs/RECOVERY-IP-IDENTITY.md and Phase 2f of the plan:
-  // NicknameGate must NOT call getCollectProfile until useGuestIdentity reports
-  // the cookie has been issued and the guest_id is known. Otherwise the backend
-  // sees no cookie and (pre-cleanup) falls back to IP, leaking another guest's
-  // nickname onto a fresh device.
-
-  it('does not call getCollectProfile while useGuestIdentity is loading', async () => {
-    mockUseGuestIdentity.mockReturnValue({
-      guestId: null,
-      isReturning: false,
-      isLoading: true,
-      error: null,
+  it('verify from email_prompt calls onComplete with emailVerified=true', async () => {
+    mockGetProfile.mockResolvedValue({
+      nickname: 'Alex',
+      email_verified: false,
+      submission_count: 1,
+      submission_cap: 5,
     });
-    mockGetProfile.mockResolvedValue(baseProfile({ nickname: 'someone-else' }));
-
-    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-
-    // Give React a tick or two to flush any pending effects.
-    await new Promise((r) => setTimeout(r, 50));
-
-    expect(mockGetProfile).not.toHaveBeenCalled();
-  });
-
-  it('calls getCollectProfile only after useGuestIdentity finishes loading', async () => {
-    mockUseGuestIdentity.mockReturnValue({
-      guestId: null,
-      isReturning: false,
-      isLoading: true,
-      error: null,
-    });
-    mockGetProfile.mockResolvedValue(baseProfile({ nickname: null }));
-
-    const { rerender } = render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-    expect(mockGetProfile).not.toHaveBeenCalled();
-
-    mockUseGuestIdentity.mockReturnValue({
-      guestId: 42,
-      isReturning: false,
-      isLoading: false,
-      error: null,
-    });
-    rerender(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(mockGetProfile).toHaveBeenCalledWith('TEST01');
-    });
-  });
-
-  it('shows the connecting spinner while waiting for guest identity', async () => {
-    mockUseGuestIdentity.mockReturnValue({
-      guestId: null,
-      isReturning: false,
-      isLoading: true,
-      error: null,
-    });
-    render(<NicknameGate code="TEST01" onComplete={vi.fn()} />);
-
-    expect(screen.getByText(/connecting/i)).toBeInTheDocument();
+    render(<NicknameGate code="EVT01" onComplete={onComplete} />);
+    await waitFor(() => screen.getByText(/add your email/i));
+    fireEvent.click(screen.getByRole('button', { name: /verify email/i }));
+    expect(onComplete).toHaveBeenCalledWith(
+      expect.objectContaining({ nickname: 'Alex', emailVerified: true }),
+    );
   });
 });

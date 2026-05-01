@@ -3,12 +3,22 @@
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.event import Event
+from app.models.guest import Guest
 from app.models.guest_profile import GuestProfile
 from app.models.request import Request as SongRequest
 from app.schemas.collect import BulkReviewRequest, UpdateCollectionSettings
+
+
+class NicknameConflictError(Exception):
+    """Raised when a nickname is already in use by another guest in the event."""
+
+    def __init__(self, claimed: bool) -> None:
+        self.claimed = claimed
+        super().__init__("nickname_taken")
 
 
 def _to_naive_utc(dt: datetime) -> datetime:
@@ -176,9 +186,28 @@ def upsert_profile(
 ) -> GuestProfile | None:
     """Create or update a profile keyed on (event_id, guest_id). Returns None
     when no guest_id is provided — anonymous callers cannot persist profile state.
+
+    Raises NicknameConflictError when the requested nickname is already held by
+    a different guest in the same event. claimed=True when the owner is email-verified.
     """
     if guest_id is None:
         return None
+
+    if nickname is not None:
+        existing = (
+            db.query(GuestProfile)
+            .filter(
+                GuestProfile.event_id == event_id,
+                GuestProfile.guest_id != guest_id,
+                func.lower(GuestProfile.nickname) == nickname.lower(),
+            )
+            .first()
+        )
+        if existing:
+            owner = db.get(Guest, existing.guest_id)
+            claimed = owner is not None and owner.email_verified_at is not None
+            raise NicknameConflictError(claimed=claimed)
+
     profile = get_profile(db, event_id=event_id, guest_id=guest_id)
     if profile is None:
         profile = GuestProfile(
