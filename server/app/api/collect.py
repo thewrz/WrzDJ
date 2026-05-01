@@ -127,6 +127,9 @@ def leaderboard(
                 nickname=r.nickname,
                 status=r.status,
                 created_at=r.created_at,
+                bpm=int(r.bpm) if r.bpm is not None else None,
+                musical_key=r.musical_key,
+                genre=r.genre,
             )
             for r in rows
         ],

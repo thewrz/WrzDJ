@@ -674,3 +674,58 @@ class TestNicknameUniqueness:
             json={},
         )
         assert r.status_code == 200
+
+
+def test_leaderboard_row_includes_enrichment_fields(client, db, test_event: Event):
+    """Leaderboard rows expose bpm/musical_key/genre when set on the request."""
+    from app.models.request import Request, RequestStatus
+
+    _enable_collection(db, test_event)
+    req = Request(
+        event_id=test_event.id,
+        song_title="Levels",
+        artist="Avicii",
+        source="beatport",
+        status=RequestStatus.NEW.value,
+        vote_count=3,
+        dedupe_key="levels_avicii_enriched",
+        submitted_during_collection=True,
+        bpm=128.0,
+        musical_key="8A",
+        genre="Progressive House",
+    )
+    db.add(req)
+    db.commit()
+
+    r = client.get(f"/api/public/collect/{test_event.code}/leaderboard?tab=all")
+    assert r.status_code == 200
+    rows = r.json()["requests"]
+    assert len(rows) == 1
+    assert rows[0]["bpm"] == 128
+    assert rows[0]["musical_key"] == "8A"
+    assert rows[0]["genre"] == "Progressive House"
+
+
+def test_leaderboard_row_enrichment_fields_null_when_missing(client, db, test_event: Event):
+    from app.models.request import Request, RequestStatus
+
+    _enable_collection(db, test_event)
+    req = Request(
+        event_id=test_event.id,
+        song_title="Unknown",
+        artist="Someone",
+        source="spotify",
+        status=RequestStatus.NEW.value,
+        dedupe_key="unknown_someone_collect",
+        submitted_during_collection=True,
+    )
+    db.add(req)
+    db.commit()
+
+    r = client.get(f"/api/public/collect/{test_event.code}/leaderboard?tab=all")
+    assert r.status_code == 200
+    rows = r.json()["requests"]
+    assert len(rows) == 1
+    assert rows[0]["bpm"] is None
+    assert rows[0]["musical_key"] is None
+    assert rows[0]["genre"] is None
