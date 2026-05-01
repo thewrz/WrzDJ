@@ -729,3 +729,35 @@ def test_leaderboard_row_enrichment_fields_null_when_missing(client, db, test_ev
     assert rows[0]["bpm"] is None
     assert rows[0]["musical_key"] is None
     assert rows[0]["genre"] is None
+
+
+def test_my_picks_includes_enrichment_fields(
+    client, db, test_event: Event, _default_guest_cookie: Guest
+):
+    """my_picks response populates bpm/musical_key/genre from enriched requests."""
+    from app.models.request import Request, RequestStatus
+
+    _enable_collection(db, test_event)
+    req = Request(
+        event_id=test_event.id,
+        song_title="Levels",
+        artist="Avicii",
+        source="beatport",
+        status=RequestStatus.NEW.value,
+        dedupe_key="levels_avicii_mypicks",
+        submitted_during_collection=True,
+        guest_id=_default_guest_cookie.id,
+        bpm=128.0,
+        musical_key="8A",
+        genre="Progressive House",
+    )
+    db.add(req)
+    db.commit()
+
+    r = client.get(f"/api/public/collect/{test_event.code}/profile/me")
+    assert r.status_code == 200
+    submitted = r.json()["submitted"]
+    assert len(submitted) == 1
+    assert submitted[0]["bpm"] == 128
+    assert submitted[0]["musical_key"] == "8A"
+    assert submitted[0]["genre"] == "Progressive House"

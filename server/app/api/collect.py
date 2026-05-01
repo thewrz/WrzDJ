@@ -299,6 +299,9 @@ def my_picks(code: str, request: Request, db: Session = Depends(get_db)):
             status=r.status,
             created_at=r.created_at,
             interaction=interaction,
+            bpm=int(r.bpm) if r.bpm is not None else None,
+            musical_key=r.musical_key,
+            genre=r.genre,
         )
 
     submitted_ids = {s.id for s in submitted}
