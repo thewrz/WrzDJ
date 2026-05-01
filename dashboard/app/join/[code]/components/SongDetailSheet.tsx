@@ -76,7 +76,7 @@ export default function SongDetailSheet({
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px 18px 140px', position: 'relative', zIndex: 1 }}>
         {/* Artwork */}
         <div style={{
-          width: 160, height: 160, borderRadius: 22, marginTop: 6, margin: '6px auto 0',
+          width: 160, height: 160, borderRadius: 22, margin: '6px auto 0',
           background: track.artwork_url ? undefined : artGradient(track.title + track.artist),
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           overflow: 'hidden',
