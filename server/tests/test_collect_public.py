@@ -867,3 +867,25 @@ def test_enrich_preview_404_for_unknown_event(client):
         json={"items": [{"title": "X", "artist": "Y"}]},
     )
     assert r.status_code == 404
+
+
+def test_enrich_preview_returns_nulls_when_beatport_raises(client, db, test_event: Event):
+    """When Beatport search raises an exception, result fields are null (best-effort)."""
+    from unittest.mock import patch
+
+    _enable_collection(db, test_event)
+    dj = test_event.created_by
+    dj.beatport_access_token = "fake_token"  # nosec B106
+    db.commit()
+
+    with patch("app.api.collect.search_beatport_tracks", side_effect=Exception("timeout")):
+        r = client.post(
+            f"/api/public/collect/{test_event.code}/enrich-preview",
+            json={"items": [{"title": "Levels", "artist": "Avicii"}]},
+        )
+
+    assert r.status_code == 200
+    result = r.json()["results"][0]
+    assert result["bpm"] is None
+    assert result["key"] is None
+    assert result["genre"] is None

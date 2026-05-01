@@ -4,6 +4,7 @@ Identity is `guest_id` only — the wrzdj_guest cookie is required for write
 endpoints. See docs/RECOVERY-IP-IDENTITY.md.
 """
 
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -42,6 +43,8 @@ from app.services.sync.enrichment_pipeline import _find_best_match
 from app.services.sync.orchestrator import enrich_request_metadata
 from app.services.system_settings import get_system_settings
 from app.services.vote import add_vote
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -463,8 +466,13 @@ def enrich_preview(
                         bpm = int(best.bpm) if best.bpm is not None else None
                         key = best.key or None
                         genre = best.genre or None
-            except Exception:
-                pass  # nosec B110 — best-effort, callers handle null fields
+            except Exception as exc:
+                logger.warning(
+                    "enrich_preview: Beatport lookup failed for '%s' by '%s': %s",
+                    item.title,
+                    item.artist,
+                    exc,
+                )  # nosec B110 — best-effort, callers handle null fields
 
         results.append(
             EnrichPreviewResult(
