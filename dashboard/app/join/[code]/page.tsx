@@ -523,6 +523,7 @@ export default function JoinEventPage() {
         <div style={{ padding: '0 16px 6px', position: 'relative', zIndex: 1 }}>
           <EmailRecoveryButton
             reconcileHint={reconcileHint}
+            emailVerified={emailVerified}
             onOpen={() => setRecoveryOpen(true)}
           />
         </div>

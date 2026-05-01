@@ -122,6 +122,9 @@ export interface CollectLeaderboardRow {
   nickname: string | null;
   status: 'new' | 'accepted' | 'playing' | 'played' | 'rejected';
   created_at: string;
+  bpm?: number | null;
+  musical_key?: string | null;
+  genre?: string | null;
 }
 
 export interface CollectLeaderboardResponse {
@@ -1110,6 +1113,30 @@ class ApiClient {
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new ApiError(body.detail ?? `Vote failed: ${res.status}`, res.status);
+    }
+  }
+
+  // Note: returns `key` (not `musical_key`) to match EnrichPreviewResult schema —
+  // callers merging results into SearchResult use `.key`; leaderboard fields use `.musical_key`.
+  async enrichPreview(
+    code: string,
+    items: Array<{ title: string; artist: string; source_url?: string }>,
+  ): Promise<Array<{ title: string; artist: string; bpm?: number | null; key?: string | null; genre?: string | null }>> {
+    try {
+      const res = await fetch(
+        `${getApiUrl()}/api/public/collect/${code}/enrich-preview`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // No credentials: endpoint is stateless (best-effort BPM lookup, no guest cookie needed)
+          body: JSON.stringify({ items }),
+        },
+      );
+      if (!res.ok) return items.map((i) => ({ title: i.title, artist: i.artist }));
+      const data = await res.json();
+      return data.results ?? [];
+    } catch {
+      return items.map((i) => ({ title: i.title, artist: i.artist }));
     }
   }
 

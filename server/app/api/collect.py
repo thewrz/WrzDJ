@@ -4,9 +4,10 @@ Identity is `guest_id` only — the wrzdj_guest cookie is required for write
 endpoints. See docs/RECOVERY-IP-IDENTITY.md.
 """
 
+import logging
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import desc, func
 from sqlalchemy.exc import IntegrityError
@@ -28,13 +29,22 @@ from app.schemas.collect import (
     CollectProfileResponse,
     CollectSubmitRequest,
     CollectVoteRequest,
+    EnrichPreviewItem,  # noqa: F401
+    EnrichPreviewRequest,
+    EnrichPreviewResponse,
+    EnrichPreviewResult,
 )
 from app.services import collect as collect_service
 from app.services.activity_log import log_activity
+from app.services.beatport import search_beatport_tracks
 from app.services.collect import NicknameConflictError, upsert_profile
 from app.services.dedup import compute_dedupe_key, find_duplicate
+from app.services.sync.enrichment_pipeline import _find_best_match
+from app.services.sync.orchestrator import enrich_request_metadata
 from app.services.system_settings import get_system_settings
 from app.services.vote import add_vote
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -127,6 +137,9 @@ def leaderboard(
                 nickname=r.nickname,
                 status=r.status,
                 created_at=r.created_at,
+                bpm=int(r.bpm) if r.bpm is not None else None,
+                musical_key=r.musical_key,
+                genre=r.genre,
             )
             for r in rows
         ],
@@ -296,6 +309,9 @@ def my_picks(code: str, request: Request, db: Session = Depends(get_db)):
             status=r.status,
             created_at=r.created_at,
             interaction=interaction,
+            bpm=int(r.bpm) if r.bpm is not None else None,
+            musical_key=r.musical_key,
+            genre=r.genre,
         )
 
     submitted_ids = {s.id for s in submitted}
@@ -314,6 +330,7 @@ def submit(
     code: str,
     payload: CollectSubmitRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     event = _get_event_or_404(db, code)
@@ -373,6 +390,8 @@ def submit(
     db.add(row)
     db.commit()
     db.refresh(row)
+    if not (row.genre and row.bpm and row.musical_key):
+        background_tasks.add_task(enrich_request_metadata, db, row.id)
     log_activity(
         db,
         level="info",
@@ -417,3 +436,52 @@ def vote(
             event_code=code,
         )
     return {"ok": True}
+
+
+@router.post("/{code}/enrich-preview", response_model=EnrichPreviewResponse)
+@limiter.limit("10/minute")
+def enrich_preview(
+    code: str,
+    payload: EnrichPreviewRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> EnrichPreviewResponse:
+    """Lightweight Beatport BPM/key lookup for search-time vibes — no DB writes."""
+    event = _get_event_or_404(db, code)
+    user = event.created_by
+    items = payload.items[:10]
+    results: list[EnrichPreviewResult] = []
+
+    for item in items:
+        bpm = None
+        key = None
+        genre = None
+
+        if user and user.beatport_access_token:
+            try:
+                matches = search_beatport_tracks(db, user, f"{item.artist} {item.title}", limit=5)
+                if matches:
+                    best = _find_best_match(matches, item.title, item.artist)
+                    if best:
+                        bpm = int(best.bpm) if best.bpm is not None else None
+                        key = best.key or None
+                        genre = best.genre or None
+            except Exception as exc:
+                logger.warning(
+                    "enrich_preview: Beatport lookup failed for '%s' by '%s': %s",
+                    item.title,
+                    item.artist,
+                    exc,
+                )  # nosec B110 — best-effort, callers handle null fields
+
+        results.append(
+            EnrichPreviewResult(
+                title=item.title,
+                artist=item.artist,
+                bpm=bpm,
+                key=key,
+                genre=genre,
+            )
+        )
+
+    return EnrichPreviewResponse(results=results)

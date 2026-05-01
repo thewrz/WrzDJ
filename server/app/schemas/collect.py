@@ -67,6 +67,9 @@ class CollectLeaderboardRow(BaseModel):
     nickname: str | None
     status: Literal["new", "accepted", "playing", "played", "rejected"]
     created_at: datetime
+    bpm: int | None = None
+    musical_key: str | None = None
+    genre: str | None = None
 
 
 class CollectLeaderboardResponse(BaseModel):
@@ -162,3 +165,25 @@ class BulkReviewResponse(BaseModel):
     accepted: int
     rejected: int
     unchanged: int
+
+
+class EnrichPreviewItem(BaseModel):
+    title: str
+    artist: str
+    source_url: str | None = None
+
+
+class EnrichPreviewResult(BaseModel):
+    title: str
+    artist: str
+    bpm: int | None = None
+    key: str | None = None
+    genre: str | None = None
+
+
+class EnrichPreviewRequest(BaseModel):
+    items: list[EnrichPreviewItem]
+
+
+class EnrichPreviewResponse(BaseModel):
+    results: list[EnrichPreviewResult]

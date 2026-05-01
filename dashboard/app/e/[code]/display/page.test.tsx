@@ -41,8 +41,8 @@ const mockKioskDisplay = {
   event: { code: 'TEST123', name: 'Test Event' },
   qr_join_url: 'https://example.com/join/TEST123',
   accepted_queue: [
-    { id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, nickname: null, vote_count: 0 },
-    { id: 2, title: 'Song 2', artist: 'Artist 2', artwork_url: null, nickname: null, vote_count: 0 },
+    { id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, nickname: null, vote_count: 0, bpm: null, musical_key: null, genre: null },
+    { id: 2, title: 'Song 2', artist: 'Artist 2', artwork_url: null, nickname: null, vote_count: 0, bpm: null, musical_key: null, genre: null },
   ],
   now_playing: null,
   now_playing_hidden: false,
@@ -533,7 +533,7 @@ describe('KioskDisplayPage', () => {
       // Initial: 1 item
       vi.mocked(api.getKioskDisplay).mockResolvedValue({
         ...mockKioskDisplay,
-        accepted_queue: [{ id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, nickname: null, vote_count: 0 }],
+        accepted_queue: [{ id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, nickname: null, vote_count: 0, bpm: null, musical_key: null, genre: null }],
       });
       vi.mocked(api.getNowPlaying).mockResolvedValue(null);
       vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
@@ -545,8 +545,8 @@ describe('KioskDisplayPage', () => {
       vi.mocked(api.getKioskDisplay).mockResolvedValue({
         ...mockKioskDisplay,
         accepted_queue: [
-          { id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, nickname: null, vote_count: 0 },
-          { id: 3, title: 'Song 3', artist: 'Artist 3', artwork_url: null, nickname: null, vote_count: 0 },
+          { id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, nickname: null, vote_count: 0, bpm: null, musical_key: null, genre: null },
+          { id: 3, title: 'Song 3', artist: 'Artist 3', artwork_url: null, nickname: null, vote_count: 0, bpm: null, musical_key: null, genre: null },
         ],
       });
       await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
@@ -559,7 +559,7 @@ describe('KioskDisplayPage', () => {
       vi.useFakeTimers();
       vi.mocked(api.getKioskDisplay).mockResolvedValue({
         ...mockKioskDisplay,
-        accepted_queue: [{ id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, nickname: null, vote_count: 0 }],
+        accepted_queue: [{ id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, nickname: null, vote_count: 0, bpm: null, musical_key: null, genre: null }],
       });
       vi.mocked(api.getNowPlaying).mockResolvedValue(null);
       vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
@@ -571,8 +571,8 @@ describe('KioskDisplayPage', () => {
       vi.mocked(api.getKioskDisplay).mockResolvedValue({
         ...mockKioskDisplay,
         accepted_queue: [
-          { id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, nickname: null, vote_count: 0 },
-          { id: 3, title: 'Song 3', artist: 'Artist 3', artwork_url: null, nickname: null, vote_count: 0 },
+          { id: 1, title: 'Song 1', artist: 'Artist 1', artwork_url: null, nickname: null, vote_count: 0, bpm: null, musical_key: null, genre: null },
+          { id: 3, title: 'Song 3', artist: 'Artist 3', artwork_url: null, nickname: null, vote_count: 0, bpm: null, musical_key: null, genre: null },
         ],
       });
       await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
@@ -594,7 +594,7 @@ describe('KioskDisplayPage', () => {
       vi.mocked(api.getKioskDisplay).mockResolvedValue({
         ...mockKioskDisplay,
         accepted_queue: [
-          { id: 1, title: 'Popular Song', artist: 'Artist', artwork_url: null, nickname: null, vote_count: 5 },
+          { id: 1, title: 'Popular Song', artist: 'Artist', artwork_url: null, nickname: null, vote_count: 5, bpm: null, musical_key: null, genre: null },
         ],
       });
       vi.mocked(api.getNowPlaying).mockResolvedValue(null);
@@ -610,7 +610,7 @@ describe('KioskDisplayPage', () => {
       vi.mocked(api.getKioskDisplay).mockResolvedValue({
         ...mockKioskDisplay,
         accepted_queue: [
-          { id: 1, title: 'Song', artist: 'Artist', artwork_url: null, nickname: null, vote_count: 1 },
+          { id: 1, title: 'Song', artist: 'Artist', artwork_url: null, nickname: null, vote_count: 1, bpm: null, musical_key: null, genre: null },
         ],
       });
       vi.mocked(api.getNowPlaying).mockResolvedValue(null);
@@ -626,7 +626,7 @@ describe('KioskDisplayPage', () => {
       vi.mocked(api.getKioskDisplay).mockResolvedValue({
         ...mockKioskDisplay,
         accepted_queue: [
-          { id: 1, title: 'Song', artist: 'Artist', artwork_url: null, nickname: null, vote_count: 0 },
+          { id: 1, title: 'Song', artist: 'Artist', artwork_url: null, nickname: null, vote_count: 0, bpm: null, musical_key: null, genre: null },
         ],
       });
       vi.mocked(api.getNowPlaying).mockResolvedValue(null);
@@ -836,7 +836,7 @@ describe('KioskDisplayPage', () => {
     it('shows request-based now_playing when no bridge now-playing', async () => {
       vi.mocked(api.getKioskDisplay).mockResolvedValue({
         ...mockKioskDisplay,
-        now_playing: { id: 1, title: 'Request Song', artist: 'Request Artist', artwork_url: null, nickname: null, vote_count: 0 },
+        now_playing: { id: 1, title: 'Request Song', artist: 'Request Artist', artwork_url: null, nickname: null, vote_count: 0, bpm: null, musical_key: null, genre: null },
       });
       vi.mocked(api.getNowPlaying).mockResolvedValue(null);
       vi.mocked(api.getPlayHistory).mockResolvedValue({ items: [], total: 0 });
@@ -852,7 +852,7 @@ describe('KioskDisplayPage', () => {
     it('hides now-playing when now_playing_hidden is true', async () => {
       vi.mocked(api.getKioskDisplay).mockResolvedValue({
         ...mockKioskDisplay,
-        now_playing: { id: 1, title: 'Hidden Song', artist: 'Hidden Artist', artwork_url: null, nickname: null, vote_count: 0 },
+        now_playing: { id: 1, title: 'Hidden Song', artist: 'Hidden Artist', artwork_url: null, nickname: null, vote_count: 0, bpm: null, musical_key: null, genre: null },
         now_playing_hidden: true,
       });
       vi.mocked(api.getNowPlaying).mockResolvedValue(null);

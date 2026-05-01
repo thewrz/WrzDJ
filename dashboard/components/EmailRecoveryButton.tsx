@@ -3,9 +3,12 @@
 interface Props {
   reconcileHint: boolean
   onOpen: () => void
+  emailVerified?: boolean
 }
 
-export default function EmailRecoveryButton({ reconcileHint, onOpen }: Props) {
+export default function EmailRecoveryButton({ reconcileHint, onOpen, emailVerified }: Props) {
+  if (emailVerified) return null
+
   if (reconcileHint) {
     return (
       <div

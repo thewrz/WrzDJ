@@ -28,9 +28,10 @@ interface Props {
   onTabChange: (tab: 'trending' | 'all') => void;
   onVote: (requestId: number) => Promise<void>;
   votedIds: ReadonlySet<number>;
+  onRowClick?: (row: CollectLeaderboardRow) => void;
 }
 
-export default function LeaderboardTabs({ rows, tab, onTabChange, onVote, votedIds }: Props) {
+export default function LeaderboardTabs({ rows, tab, onTabChange, onVote, votedIds, onRowClick }: Props) {
   const [optimistic, setOptimistic] = useState<Record<number, number>>({});
   const [justVoted, setJustVoted] = useState<ReadonlySet<number>>(new Set());
 
@@ -117,7 +118,9 @@ export default function LeaderboardTabs({ rows, tab, onTabChange, onVote, votedI
                 style={{
                   background: surface,
                   border: `1px solid ${border}`,
+                  cursor: onRowClick ? 'pointer' : 'default',
                 }}
+                onClick={() => onRowClick?.(r)}
               >
                 {/* Vote bar fill */}
                 <div style={{
@@ -191,7 +194,10 @@ export default function LeaderboardTabs({ rows, tab, onTabChange, onVote, votedI
                       aria-pressed={voted}
                       className={`gst-collect-vote-btn${voted ? ' voted' : ''}`}
                       disabled={voted}
-                      onClick={() => handleVote(r.id, r.vote_count)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleVote(r.id, r.vote_count);
+                      }}
                     >
                       <svg width="11" height="7" viewBox="0 0 11 7" fill="none">
                         <path d="M1 6L5.5 1L10 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>

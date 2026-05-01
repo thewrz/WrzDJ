@@ -1216,14 +1216,47 @@
             ],
             "title": "Artwork Url"
           },
+          "bpm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bpm"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
+          "genre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genre"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "musical_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Musical Key"
           },
           "nickname": {
             "anyOf": [
@@ -1259,8 +1292,11 @@
         "required": [
           "artist",
           "artwork_url",
+          "bpm",
           "created_at",
+          "genre",
           "id",
+          "musical_key",
           "nickname",
           "status",
           "title",
@@ -1286,10 +1322,32 @@
             ],
             "title": "Artwork Url"
           },
+          "bpm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bpm"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "genre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genre"
           },
           "id": {
             "title": "Id",
@@ -1302,6 +1360,17 @@
             ],
             "title": "Interaction",
             "type": "string"
+          },
+          "musical_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Musical Key"
           },
           "nickname": {
             "anyOf": [
@@ -1337,9 +1406,12 @@
         "required": [
           "artist",
           "artwork_url",
+          "bpm",
           "created_at",
+          "genre",
           "id",
           "interaction",
+          "musical_key",
           "nickname",
           "status",
           "title",
@@ -1395,23 +1467,11 @@
       },
       "CollectProfileRequest": {
         "properties": {
-          "email": {
-            "anyOf": [
-              {
-                "format": "email",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
           "nickname": {
             "anyOf": [
               {
                 "maxLength": 30,
-                "minLength": 1,
+                "minLength": 2,
                 "pattern": "^[a-zA-Z0-9 _.-]+$",
                 "type": "string"
               },
@@ -1427,8 +1487,8 @@
       },
       "CollectProfileResponse": {
         "properties": {
-          "has_email": {
-            "title": "Has Email",
+          "email_verified": {
+            "title": "Email Verified",
             "type": "boolean"
           },
           "nickname": {
@@ -1452,7 +1512,7 @@
           }
         },
         "required": [
-          "has_email",
+          "email_verified",
           "nickname",
           "submission_cap",
           "submission_count"
@@ -1484,7 +1544,7 @@
             "anyOf": [
               {
                 "maxLength": 30,
-                "minLength": 1,
+                "minLength": 2,
                 "pattern": "^[a-zA-Z0-9 _.-]+$",
                 "type": "string"
               },
@@ -1645,6 +1705,121 @@
           }
         },
         "title": "DisplaySettingsUpdate",
+        "type": "object"
+      },
+      "EnrichPreviewItem": {
+        "properties": {
+          "artist": {
+            "title": "Artist",
+            "type": "string"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "artist"
+        ],
+        "title": "EnrichPreviewItem",
+        "type": "object"
+      },
+      "EnrichPreviewRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EnrichPreviewItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "EnrichPreviewRequest",
+        "type": "object"
+      },
+      "EnrichPreviewResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/EnrichPreviewResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "EnrichPreviewResponse",
+        "type": "object"
+      },
+      "EnrichPreviewResult": {
+        "properties": {
+          "artist": {
+            "title": "Artist",
+            "type": "string"
+          },
+          "bpm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bpm"
+          },
+          "genre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genre"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artist",
+          "bpm",
+          "genre",
+          "key",
+          "title"
+        ],
+        "title": "EnrichPreviewResult",
         "type": "object"
       },
       "EventCreate": {
@@ -2044,9 +2219,42 @@
             ],
             "title": "Artwork Url"
           },
+          "bpm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bpm"
+          },
+          "genre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genre"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "musical_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Musical Key"
           },
           "nickname": {
             "anyOf": [
@@ -2080,7 +2288,10 @@
         "required": [
           "artist",
           "artwork_url",
+          "bpm",
+          "genre",
           "id",
+          "musical_key",
           "nickname",
           "status",
           "title",
@@ -2163,6 +2374,62 @@
           "page"
         ],
         "title": "HelpPageSeenRequest",
+        "type": "object"
+      },
+      "IdentifyRequest": {
+        "properties": {
+          "fingerprint_components": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fingerprint Components"
+          },
+          "fingerprint_hash": {
+            "maxLength": 64,
+            "minLength": 8,
+            "title": "Fingerprint Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fingerprint_hash"
+        ],
+        "title": "IdentifyRequest",
+        "type": "object"
+      },
+      "IdentifyResponse": {
+        "properties": {
+          "action": {
+            "enum": [
+              "create",
+              "cookie_hit",
+              "reconcile"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "guest_id": {
+            "title": "Guest Id",
+            "type": "integer"
+          },
+          "reconcile_hint": {
+            "default": false,
+            "title": "Reconcile Hint",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action",
+          "guest_id",
+          "reconcile_hint"
+        ],
+        "title": "IdentifyResponse",
         "type": "object"
       },
       "IntegrationCheckResponse": {
@@ -3153,9 +3420,42 @@
             ],
             "title": "Artwork Url"
           },
+          "bpm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bpm"
+          },
+          "genre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genre"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "musical_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Musical Key"
           },
           "nickname": {
             "anyOf": [
@@ -3181,7 +3481,10 @@
         "required": [
           "artist",
           "artwork_url",
+          "bpm",
+          "genre",
           "id",
+          "musical_key",
           "nickname",
           "title",
           "vote_count"
@@ -4718,6 +5021,75 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VerifyConfirmResponse": {
+        "properties": {
+          "guest_id": {
+            "title": "Guest Id",
+            "type": "integer"
+          },
+          "merged": {
+            "title": "Merged",
+            "type": "boolean"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "guest_id",
+          "merged",
+          "verified"
+        ],
+        "title": "VerifyConfirmResponse",
+        "type": "object"
+      },
+      "VerifyConfirmSchema": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "code"
+        ],
+        "title": "VerifyConfirmSchema",
+        "type": "object"
+      },
+      "VerifyRequestResponse": {
+        "properties": {
+          "sent": {
+            "title": "Sent",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sent"
+        ],
+        "title": "VerifyRequestResponse",
+        "type": "object"
+      },
+      "VerifyRequestSchema": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "VerifyRequestSchema",
         "type": "object"
       },
       "VoteResponse": {
@@ -8207,6 +8579,59 @@
         ]
       }
     },
+    "/api/public/collect/{code}/enrich-preview": {
+      "post": {
+        "description": "Lightweight Beatport BPM/key lookup for search-time vibes \u2014 no DB writes.",
+        "operationId": "enrich_preview_api_public_collect__code__enrich_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrichPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enrich Preview",
+        "tags": [
+          "collect"
+        ]
+      }
+    },
     "/api/public/collect/{code}/leaderboard": {
       "get": {
         "operationId": "leaderboard_api_public_collect__code__leaderboard_get",
@@ -8265,7 +8690,7 @@
     },
     "/api/public/collect/{code}/profile": {
       "get": {
-        "description": "Read the calling fingerprint's profile for this event. Does NOT\ncreate a row if none exists \u2014 returns defaults instead. Separate from\nPOST /profile so reads and writes have different action tags in the\nfingerprint log.",
+        "description": "Read the calling guest's profile for this event. Anonymous callers\n(no cookie) get the default empty profile \u2014 there is no IP fallback.",
         "operationId": "get_profile_api_public_collect__code__profile_get",
         "parameters": [
           {
@@ -8871,6 +9296,132 @@
         ]
       }
     },
+    "/api/public/guest/identify": {
+      "post": {
+        "description": "Resolve guest identity via cookie token and/or browser fingerprint.",
+        "operationId": "identify_api_public_guest_identify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentifyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Identify",
+        "tags": [
+          "guest"
+        ]
+      }
+    },
+    "/api/public/guest/verify/confirm": {
+      "post": {
+        "description": "Confirm a verification code. May trigger guest merge.",
+        "operationId": "confirm_code_api_public_guest_verify_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyConfirmSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyConfirmResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Code",
+        "tags": [
+          "verify"
+        ]
+      }
+    },
+    "/api/public/guest/verify/request": {
+      "post": {
+        "description": "Send a verification code to the provided email.",
+        "operationId": "request_verification_code_api_public_guest_verify_request_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyRequestSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Verification Code",
+        "tags": [
+          "verify"
+        ]
+      }
+    },
     "/api/public/kiosk/pair": {
       "post": {
         "description": "Create a new kiosk pairing session.",
@@ -9104,7 +9655,7 @@
     },
     "/api/requests/{request_id}/vote": {
       "delete": {
-        "description": "Remove vote from a song request. Idempotent.",
+        "description": "Remove vote from a song request. Idempotent.\n\nRequires a guest cookie. Anonymous callers receive 401.",
         "operationId": "unvote_request_api_requests__request_id__vote_delete",
         "parameters": [
           {
@@ -9146,7 +9697,7 @@
         ]
       },
       "post": {
-        "description": "Upvote a song request. Idempotent: voting twice has no effect.",
+        "description": "Upvote a song request. Idempotent: voting twice has no effect.\n\nRequires a guest cookie. Anonymous callers receive 401.",
         "operationId": "vote_for_request_api_requests__request_id__vote_post",
         "parameters": [
           {

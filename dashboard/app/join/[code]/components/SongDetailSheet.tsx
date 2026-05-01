@@ -76,11 +76,11 @@ export default function SongDetailSheet({
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px 18px 140px', position: 'relative', zIndex: 1 }}>
         {/* Artwork */}
         <div style={{
-          width: '100%', aspectRatio: '1', borderRadius: 22, marginTop: 6,
+          width: 160, height: 160, borderRadius: 22, margin: '6px auto 0',
           background: track.artwork_url ? undefined : artGradient(track.title + track.artist),
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           overflow: 'hidden',
-          boxShadow: `0 30px 70px -20px ${ACCENT}70, 0 0 0 1px ${border}`,
+          boxShadow: `0 20px 50px -12px ${ACCENT}70, 0 0 0 1px ${border}`,
         }}>
           {track.artwork_url ? (
             <img
@@ -90,7 +90,7 @@ export default function SongDetailSheet({
             />
           ) : (
             <span style={{
-              fontSize: 77.4, fontWeight: 800, color: '#fff', letterSpacing: 1,
+              fontSize: 48, fontWeight: 800, color: '#fff', letterSpacing: 1,
               textShadow: '0 4px 30px rgba(0,0,0,0.3)',
             }}>
               {initials}
@@ -99,13 +99,37 @@ export default function SongDetailSheet({
         </div>
 
         {/* Title + artist */}
-        <div style={{ marginTop: 22 }}>
+        <div style={{ marginTop: 22, textAlign: 'center' }}>
           <div style={{ fontSize: 33.9, fontWeight: 800, letterSpacing: -0.8, lineHeight: 1.05 }}>
             {track.title}
           </div>
           <div style={{ fontSize: 20.6, color: subFg, marginTop: 5, fontWeight: 500 }}>
             {track.artist}
           </div>
+          {(track.bpm || track.musical_key) && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {track.bpm && (
+                <span style={{
+                  fontFamily: 'var(--font-mono, monospace)', fontSize: 10.9, fontWeight: 700,
+                  padding: '3px 9px', borderRadius: 6,
+                  background: `${ACCENT}18`, border: `1px solid ${ACCENT}50`, color: ACCENT,
+                  letterSpacing: 1,
+                }}>
+                  {track.bpm} BPM
+                </span>
+              )}
+              {track.musical_key && (
+                <span style={{
+                  fontFamily: 'var(--font-mono, monospace)', fontSize: 10.9, fontWeight: 700,
+                  padding: '3px 9px', borderRadius: 6,
+                  background: 'rgba(255,255,255,0.06)', border: `1px solid ${border}`,
+                  color: 'rgba(255,255,255,0.7)', letterSpacing: 1,
+                }}>
+                  {track.musical_key}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Stats */}

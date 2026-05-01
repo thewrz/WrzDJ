@@ -1201,6 +1201,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/collect/{code}/enrich-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enrich Preview
+         * @description Lightweight Beatport BPM/key lookup for search-time vibes — no DB writes.
+         */
+        post: operations["enrich_preview_api_public_collect__code__enrich_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/collect/{code}/leaderboard": {
         parameters: {
             query?: never;
@@ -1227,10 +1247,8 @@ export interface paths {
         };
         /**
          * Get Profile
-         * @description Read the calling fingerprint's profile for this event. Does NOT
-         *     create a row if none exists — returns defaults instead. Separate from
-         *     POST /profile so reads and writes have different action tags in the
-         *     fingerprint log.
+         * @description Read the calling guest's profile for this event. Anonymous callers
+         *     (no cookie) get the default empty profile — there is no IP fallback.
          */
         get: operations["get_profile_api_public_collect__code__profile_get"];
         put?: never;
@@ -1472,6 +1490,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/guest/identify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Identify
+         * @description Resolve guest identity via cookie token and/or browser fingerprint.
+         */
+        post: operations["identify_api_public_guest_identify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/guest/verify/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Code
+         * @description Confirm a verification code. May trigger guest merge.
+         */
+        post: operations["confirm_code_api_public_guest_verify_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/guest/verify/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Verification Code
+         * @description Send a verification code to the provided email.
+         */
+        post: operations["request_verification_code_api_public_guest_verify_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/kiosk/pair": {
         parameters: {
             query?: never;
@@ -1588,11 +1666,15 @@ export interface paths {
         /**
          * Vote For Request
          * @description Upvote a song request. Idempotent: voting twice has no effect.
+         *
+         *     Requires a guest cookie. Anonymous callers receive 401.
          */
         post: operations["vote_for_request_api_requests__request_id__vote_post"];
         /**
          * Unvote Request
          * @description Remove vote from a song request. Idempotent.
+         *
+         *     Requires a guest cookie. Anonymous callers receive 401.
          */
         delete: operations["unvote_request_api_requests__request_id__vote_delete"];
         options?: never;
@@ -2280,13 +2362,19 @@ export interface components {
             artist: string;
             /** Artwork Url */
             artwork_url: string | null;
+            /** Bpm */
+            bpm: number | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Genre */
+            genre: string | null;
             /** Id */
             id: number;
+            /** Musical Key */
+            musical_key: string | null;
             /** Nickname */
             nickname: string | null;
             /**
@@ -2305,11 +2393,15 @@ export interface components {
             artist: string;
             /** Artwork Url */
             artwork_url: string | null;
+            /** Bpm */
+            bpm: number | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Genre */
+            genre: string | null;
             /** Id */
             id: number;
             /**
@@ -2317,6 +2409,8 @@ export interface components {
              * @enum {string}
              */
             interaction: "submitted" | "upvoted";
+            /** Musical Key */
+            musical_key: string | null;
             /** Nickname */
             nickname: string | null;
             /**
@@ -2344,15 +2438,13 @@ export interface components {
         };
         /** CollectProfileRequest */
         CollectProfileRequest: {
-            /** Email */
-            email?: string | null;
             /** Nickname */
             nickname?: string | null;
         };
         /** CollectProfileResponse */
         CollectProfileResponse: {
-            /** Has Email */
-            has_email: boolean;
+            /** Email Verified */
+            email_verified: boolean;
             /** Nickname */
             nickname: string | null;
             /** Submission Cap */
@@ -2426,6 +2518,38 @@ export interface components {
             now_playing_hidden?: boolean | null;
             /** Requests Open */
             requests_open?: boolean | null;
+        };
+        /** EnrichPreviewItem */
+        EnrichPreviewItem: {
+            /** Artist */
+            artist: string;
+            /** Source Url */
+            source_url?: string | null;
+            /** Title */
+            title: string;
+        };
+        /** EnrichPreviewRequest */
+        EnrichPreviewRequest: {
+            /** Items */
+            items: components["schemas"]["EnrichPreviewItem"][];
+        };
+        /** EnrichPreviewResponse */
+        EnrichPreviewResponse: {
+            /** Results */
+            results: components["schemas"]["EnrichPreviewResult"][];
+        };
+        /** EnrichPreviewResult */
+        EnrichPreviewResult: {
+            /** Artist */
+            artist: string;
+            /** Bpm */
+            bpm: number | null;
+            /** Genre */
+            genre: string | null;
+            /** Key */
+            key: string | null;
+            /** Title */
+            title: string;
         };
         /** EventCreate */
         EventCreate: {
@@ -2554,8 +2678,14 @@ export interface components {
             artist: string;
             /** Artwork Url */
             artwork_url: string | null;
+            /** Bpm */
+            bpm: number | null;
+            /** Genre */
+            genre: string | null;
             /** Id */
             id: number;
+            /** Musical Key */
+            musical_key: string | null;
             /** Nickname */
             nickname: string | null;
             /**
@@ -2592,6 +2722,30 @@ export interface components {
         HelpPageSeenRequest: {
             /** Page */
             page: string;
+        };
+        /** IdentifyRequest */
+        IdentifyRequest: {
+            /** Fingerprint Components */
+            fingerprint_components?: {
+                [key: string]: unknown;
+            } | null;
+            /** Fingerprint Hash */
+            fingerprint_hash: string;
+        };
+        /** IdentifyResponse */
+        IdentifyResponse: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "create" | "cookie_hit" | "reconcile";
+            /** Guest Id */
+            guest_id: number;
+            /**
+             * Reconcile Hint
+             * @default false
+             */
+            reconcile_hint: boolean;
         };
         /**
          * IntegrationCheckResponse
@@ -2941,8 +3095,14 @@ export interface components {
             artist: string;
             /** Artwork Url */
             artwork_url: string | null;
+            /** Bpm */
+            bpm: number | null;
+            /** Genre */
+            genre: string | null;
             /** Id */
             id: number;
+            /** Musical Key */
+            musical_key: string | null;
             /** Nickname */
             nickname: string | null;
             /** Title */
@@ -3424,6 +3584,38 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VerifyConfirmResponse */
+        VerifyConfirmResponse: {
+            /** Guest Id */
+            guest_id: number;
+            /** Merged */
+            merged: boolean;
+            /** Verified */
+            verified: boolean;
+        };
+        /** VerifyConfirmSchema */
+        VerifyConfirmSchema: {
+            /** Code */
+            code: string;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+        };
+        /** VerifyRequestResponse */
+        VerifyRequestResponse: {
+            /** Sent */
+            sent: boolean;
+        };
+        /** VerifyRequestSchema */
+        VerifyRequestSchema: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
         };
         /** VoteResponse */
         VoteResponse: {
@@ -5651,6 +5843,41 @@ export interface operations {
             };
         };
     };
+    enrich_preview_api_public_collect__code__enrich_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrichPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrichPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     leaderboard_api_public_collect__code__leaderboard_get: {
         parameters: {
             query?: {
@@ -6089,6 +6316,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    identify_api_public_guest_identify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentifyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_code_api_public_guest_verify_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyConfirmSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifyConfirmResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_verification_code_api_public_guest_verify_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyRequestSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerifyRequestResponse"];
                 };
             };
             /** @description Validation Error */
