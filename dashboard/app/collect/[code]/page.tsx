@@ -354,7 +354,11 @@ export default function CollectPage() {
           onVote={async () => {
             if (!detailVoted && !votedIds.has(detailRow.id)) {
               setDetailVoted(true);
-              await apiClient.voteCollectRequest(code, detailRow.id);
+              try {
+                await apiClient.voteCollectRequest(code, detailRow.id);
+              } catch {
+                setDetailVoted(false);
+              }
             }
           }}
           onClose={() => { setDetailRow(null); setDetailVoted(false); }}
