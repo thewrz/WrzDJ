@@ -237,6 +237,13 @@ jobs:
           ASSET_URL: https://github.com/thewrz/WrzDJ/releases/download/${{ github.ref_name }}/WrzDJ-Bridge.exe
         run: ./.github/scripts/winget/wait-for-asset.ps1 -Url $env:ASSET_URL
 
+      - name: Sync fork with upstream microsoft/winget-pkgs
+        # wingetcreate fails with "forked repository could not be synced with the
+        # upstream commits" when our fork has drifted. Sync first so submit succeeds.
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_PAT }}
+        run: gh repo sync thewrz/winget-pkgs
+
       - name: Update winget package
         shell: pwsh
         env:
