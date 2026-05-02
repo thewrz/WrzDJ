@@ -34,6 +34,11 @@ A real-time song request system for DJs. Guests scan a QR code to submit request
 - QR code join, no app install or login required
 - Search songs via Spotify, submit requests with notes, upvote others
 - Live request queue and kiosk display showing what's playing now
+- Cloudflare Turnstile human verification (invisible managed challenge) on `/join` and `/collect`
+- Mandatory nickname gate with profanity filter and letter-padding bypass protection
+- Email verification with one-time codes (Resend API) and cross-device guest profile merge
+- Pre-event song collection (`/collect`) — guests vote on suggestions before the night, DJs bulk-review
+- Tower v2 UI on `/join` and `/collect` with banner art, song detail panels, and vibes enrichment
 
 **DJ dashboard**
 - Accept, reject, and manage requests in real-time (SSE push updates)
@@ -45,6 +50,8 @@ A real-time song request system for DJs. Guests scan a QR code to submit request
 - Multi-service playlist sync to Tidal and Beatport with version-aware matching
 - Manual track linking when auto-match fails
 - Event banners, play history with source badges, CSV export
+- "Enrich All" advanced action to backfill BPM/key/genre on existing requests in batches
+- Pre-event collection toggle per event (enable guest voting before doors open)
 - Bridge connection status, activity log, contextual help system
 - Cloud provider OAuth (Tidal, Beatport) with per-event playlist sync toggles
 
@@ -58,6 +65,14 @@ A real-time song request system for DJs. Guests scan a QR code to submit request
 - User management with role-based access (admin/dj/pending) and self-registration
 - Integration health dashboard with per-service enable/disable toggles
 - AI/LLM settings, search rate limits, system settings (all DB-backed, no restart needed)
+- Human verification enforcement toggle (soft mode for rollout, hard mode post-rollout)
+
+**Security & identity**
+- Fernet-encrypted OAuth tokens at rest (MultiFernet for key rotation)
+- Pinned base image SHAs in production Dockerfiles (supply-chain hardening)
+- IP-free guest identity (cookie + ThumbmarkJS reconciliation, no IP storage or logging)
+- HMAC-signed `wrzdj_human` cookie with 60-min sliding window after Turnstile pass
+- IP-bound nonce flow for kiosk-pair (no Turnstile on input-less Pi devices)
 
 **Kiosk display**
 - Full-screen three-column layout: Now Playing, Up Next, Recently Played
@@ -244,6 +259,11 @@ TIDAL_CLIENT_ID / TIDAL_CLIENT_SECRET
 BEATPORT_CLIENT_ID / BEATPORT_CLIENT_SECRET
 BRIDGE_API_KEY=<openssl rand -hex 32>
 ANTHROPIC_API_KEY=<optional, enables AI Assist recommendations>
+TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY  # Cloudflare Turnstile (human verification + DJ self-reg)
+HUMAN_COOKIE_SECRET=<openssl rand -base64 32>  # signs wrzdj_human cookie
+RESEND_API_KEY  # email verification provider
+EMAIL_FROM_ADDRESS=noreply@send.yourdomain.com
+SOUNDCHARTS_APP_ID / SOUNDCHARTS_API_KEY  # discovery API
 CORS_ORIGINS=https://app.yourdomain.com
 PUBLIC_URL=https://app.yourdomain.com
 ```

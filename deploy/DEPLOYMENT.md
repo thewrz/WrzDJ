@@ -111,8 +111,17 @@ openssl rand -hex 32
 Fill in all required values in `deploy/.env`:
 - `POSTGRES_PASSWORD` - secure database password
 - `JWT_SECRET` - generated secret above
-- `SPOTIFY_CLIENT_ID` - from Spotify Developer Dashboard
-- `SPOTIFY_CLIENT_SECRET` - from Spotify Developer Dashboard
+- `TOKEN_ENCRYPTION_KEY` - `openssl rand -hex 32` (Fernet key for OAuth tokens at rest)
+- `HUMAN_COOKIE_SECRET` - `openssl rand -base64 32` (signs `wrzdj_human` verification cookie)
+- `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` - Spotify Developer Dashboard
+- `TIDAL_CLIENT_ID` / `TIDAL_CLIENT_SECRET` - Tidal Developer Portal (playlist sync)
+- `BEATPORT_CLIENT_ID` / `BEATPORT_CLIENT_SECRET` - Beatport API (electronic music search/sync)
+- `BRIDGE_API_KEY` - shared secret for the bridge → API auth
+- `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` - Cloudflare Turnstile (human verification + DJ self-reg CAPTCHA)
+- `RESEND_API_KEY` - Resend transactional email (guest email verification + cross-device merge)
+- `EMAIL_FROM_ADDRESS` - verified send-from address (e.g. `noreply@send.yourdomain.com`)
+- `ANTHROPIC_API_KEY` - optional, enables AI Assist recommendations
+- `SOUNDCHARTS_APP_ID` / `SOUNDCHARTS_API_KEY` - optional, third candidate source for recommendations
 
 ### 3. Configure nginx
 
