@@ -22,6 +22,7 @@ from app.api.deps import (
     get_db,
     get_event_for_dj_or_admin,
     get_owned_event,
+    require_verified_human_soft,
 )
 from app.core.config import get_settings
 from app.core.rate_limit import get_guest_id, limiter
@@ -372,6 +373,7 @@ def event_search(
     request: Request,
     q: str = Query(..., min_length=2, max_length=200),
     db: Session = Depends(get_db),
+    _human: int | None = Depends(require_verified_human_soft),
 ) -> list[SearchResult]:
     """Public search endpoint for event guests.
 
@@ -607,6 +609,7 @@ def submit_request(
     request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    _human: int | None = Depends(require_verified_human_soft),
 ) -> RequestOut:
     event, lookup_result = get_event_by_code_with_status(db, code)
 

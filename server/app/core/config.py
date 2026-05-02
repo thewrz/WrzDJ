@@ -98,6 +98,15 @@ class Settings(BaseSettings):
     turnstile_site_key: str = ""
     registration_rate_limit_per_minute: int = 3
 
+    # Cloudflare Turnstile session bootstrap for guest pages
+    # HMAC-SHA256 key for wrzdj_human cookie signing.
+    # Production: REQUIRED — startup fatal if missing.
+    # Dev: auto-generates ephemeral key if empty (logs warning).
+    # Generate via:
+    #   python -c "import secrets, base64; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"  # noqa: E501
+    human_cookie_secret: str = ""
+    human_cookie_ttl_seconds: int = 3600  # 60 min sliding window
+
     # OAuth token encryption (Fernet key, 44 chars base64)
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key()...)"
     token_encryption_key: str = ""
@@ -152,6 +161,30 @@ class Settings(BaseSettings):
     bootstrap_admin_password: str | None = None
 
     @property
+    def effective_human_cookie_secret(self) -> bytes:
+        """Return the HMAC key as bytes. In dev, auto-generates an ephemeral
+        key on first call and caches it on the settings instance."""
+        import base64
+        import secrets
+
+        if self.human_cookie_secret:
+            return base64.urlsafe_b64decode(self.human_cookie_secret)
+
+        if self.is_production:
+            msg = "HUMAN_COOKIE_SECRET is required in production"
+            raise RuntimeError(msg)
+
+        cached = getattr(self, "_dev_human_cookie_secret", None)
+        if cached is None:
+            cached = secrets.token_bytes(32)
+            object.__setattr__(self, "_dev_human_cookie_secret", cached)
+            logging.getLogger(__name__).warning(
+                "HUMAN_COOKIE_SECRET not set; generated ephemeral key (dev only). "
+                "wrzdj_human cookies will not survive a server restart."
+            )
+        return cached
+
+    @property
     def is_production(self) -> bool:
         return self.env == "production"
 
@@ -174,6 +207,12 @@ def validate_settings(settings: Settings) -> None:
                 "TOKEN_ENCRYPTION_KEY must be set in production. "
                 'Generate with: python -c "from cryptography.fernet import Fernet; '
                 'print(Fernet.generate_key().decode())"'
+            )
+        if not settings.human_cookie_secret:
+            errors.append(
+                "HUMAN_COOKIE_SECRET must be set in production. "
+                'Generate with: python -c "import secrets, base64; '
+                'print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"'
             )
 
     if not settings.is_production:

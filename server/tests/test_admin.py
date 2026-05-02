@@ -359,6 +359,45 @@ class TestAdminLLMSettings:
         assert response.status_code == 422
 
 
+class TestAdminHumanVerificationSettings:
+    def test_get_settings_includes_human_verification_enforced(
+        self, client: TestClient, admin_headers: dict
+    ):
+        response = client.get("/api/admin/settings", headers=admin_headers)
+        assert response.status_code == 200
+        assert "human_verification_enforced" in response.json()
+
+    def test_admin_can_toggle_human_verification_enforced(
+        self, client: TestClient, admin_headers: dict
+    ):
+        # Initially defaults to False
+        response = client.get("/api/admin/settings", headers=admin_headers)
+        assert response.json()["human_verification_enforced"] is False
+
+        # Flip to True
+        response = client.patch(
+            "/api/admin/settings",
+            headers=admin_headers,
+            json={"human_verification_enforced": True},
+        )
+        assert response.status_code == 200
+        assert response.json()["human_verification_enforced"] is True
+
+        # Verify persisted on subsequent GET
+        response = client.get("/api/admin/settings", headers=admin_headers)
+        assert response.json()["human_verification_enforced"] is True
+
+    def test_dj_cannot_toggle_human_verification_enforced(
+        self, client: TestClient, auth_headers: dict
+    ):
+        response = client.patch(
+            "/api/admin/settings",
+            headers=auth_headers,
+            json={"human_verification_enforced": True},
+        )
+        assert response.status_code == 403
+
+
 class TestAuthMeRole:
     def test_me_returns_role_for_admin(self, client: TestClient, admin_headers: dict):
         response = client.get("/api/auth/me", headers=admin_headers)

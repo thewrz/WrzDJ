@@ -154,6 +154,7 @@ This section exists because a previous OAuth token implementation stored tokens 
 - Validate and sanitize all user-supplied input: file uploads (type, size, path traversal), query parameters, request bodies. Never trust client-side validation alone.
 - Use parameterized queries exclusively — never construct SQL via string concatenation or f-strings.
 - Never use `eval()`, `exec()`, or dynamic code execution on user-supplied data.
+- **Human verification on guest pages**: Public guest endpoints (`/join`, `/collect`) require a `wrzdj_human` HMAC-signed cookie issued after Cloudflare Turnstile verification on page load. Apply via `Depends(require_verified_human_soft)` (rollout) or `Depends(require_verified_human)` (post-rollout). The cookie has a 60-min sliding window. OTP send (`POST /api/public/guest/verify/request`) requires a fresh Turnstile token per call. Kiosk-pair (`POST /api/public/kiosk/pair`) uses an IP-bound 10-second nonce instead of Turnstile (Pi has no input device). See `docs/HUMAN-VERIFICATION.md` for details.
 
 ### User Data Protection
 - Encrypt PII and sensitive user data at rest wherever feasible. Default to encrypted; plaintext storage of sensitive fields requires explicit justification.
@@ -227,6 +228,16 @@ This section exists because a previous OAuth token implementation stored tokens 
 - Frontend pages: `dashboard/app/kiosk-pair/page.tsx` (device-side), `dashboard/app/kiosk-link/[code]/page.tsx` (DJ-side event picker with auth gate)
 - Session persistence: kiosk stores `session_token` in localStorage, survives power cycles via `/api/public/kiosk/session/{token}/assignment` polling
 - DJ management: `PairedKiosksCard` component on event page — list, rename, reassign, unpair kiosks
+
+### Human Verification (Guest Pages)
+- New endpoint: `POST /api/public/guest/verify-human` accepts a Turnstile token, sets HMAC-signed `wrzdj_human` cookie via `services/human_verification.py`.
+- Dependency `require_verified_human_soft` (in `api/deps.py`) gates: event_search, submit_request, public vote/unvote, collect profile/requests/vote/enrich-preview.
+- Soft-mode flag: `SystemSettings.human_verification_enforced` — when False, missing cookie logs warning; when True, returns 403 with `detail.code = "human_verification_required"`. Toggle from admin Settings page (mirrors `registration_enabled`).
+- OTP `POST /api/public/guest/verify/request` requires a `turnstile_token` field per call (fresh token, separate from session cookie). Frontend renders an inline Turnstile widget for the "Send code" button.
+- Kiosk-pair: `GET /api/public/kiosk/pair-challenge` issues an IP-bound nonce (10s TTL, in-memory dict). `POST /api/public/kiosk/pair` requires the `X-Pair-Nonce` header. Rate limit on POST: `3/minute`.
+- Required env var in production: `HUMAN_COOKIE_SECRET` (32 bytes, base64). Dev auto-generates ephemeral key with startup warning.
+- Frontend hook: `lib/useHumanVerification.ts` mounts on `/join` and `/collect`, runs Turnstile in `appearance: 'interaction-only'` mode (invisible managed). Hidden challenge widget renders only when Cloudflare escalates.
+- Frontend retry: `lib/api.ts` exposes `withHumanRetry` — public-guest fetch wrapper that catches 403 with `detail.code = 'human_verification_required'`, re-runs the bootstrap, retries once.
 
 ### API Structure
 - Admin endpoints: `server/app/api/admin.py` — endpoints under `/api/admin/` (includes integration health/toggle)
@@ -401,6 +412,7 @@ REJECTED → NEW (re-open)
 - Request status transitions are enforced by a state machine — invalid transitions (e.g., NEW → PLAYED) return 400
 - Alembic migrations must stay in sync with models — CI runs `alembic check` to detect drift
 - Services that call only sync APIs (Spotify, Beatport search) should not be `async` — avoids unnecessary `await`
+- Three Turnstile widgets coexist on the frontend: (1) `/register` (DJ self-reg), (2) session bootstrap on `/join` + `/collect` via `useHumanVerification` hook, (3) per-action OTP widget in `EmailVerification.tsx` and `NicknameGate.tsx`. They share `lib/turnstile.ts` for script loading + site-key caching but are independent widget instances.
 
 ## Kiosk (Raspberry Pi)
 

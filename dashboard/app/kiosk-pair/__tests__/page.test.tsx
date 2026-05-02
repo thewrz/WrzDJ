@@ -16,11 +16,13 @@ vi.mock('qrcode.react', () => ({
 }));
 
 // Mock API
+const mockGetKioskPairChallenge = vi.fn();
 const mockCreateKioskPairing = vi.fn();
 const mockGetKioskPairStatus = vi.fn();
 const mockGetKioskAssignment = vi.fn();
 vi.mock('@/lib/api', () => ({
   api: {
+    getKioskPairChallenge: (...args: unknown[]) => mockGetKioskPairChallenge(...args),
     createKioskPairing: (...args: unknown[]) => mockCreateKioskPairing(...args),
     getKioskPairStatus: (...args: unknown[]) => mockGetKioskPairStatus(...args),
     getKioskAssignment: (...args: unknown[]) => mockGetKioskAssignment(...args),
@@ -40,6 +42,10 @@ describe('KioskPairPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     Object.keys(mockStorage).forEach(k => delete mockStorage[k]);
+    mockGetKioskPairChallenge.mockResolvedValue({
+      nonce: 'test-nonce-abc123',
+      expires_in: 10,
+    });
     mockCreateKioskPairing.mockResolvedValue({
       pair_code: 'ABC234',
       session_token: 'a'.repeat(64),
@@ -83,6 +89,15 @@ describe('KioskPairPage', () => {
         'kiosk_session_token',
         'a'.repeat(64)
       );
+    });
+  });
+
+  it('fetches challenge nonce and passes it to createKioskPairing', async () => {
+    render(<KioskPairPage />);
+
+    await waitFor(() => {
+      expect(mockGetKioskPairChallenge).toHaveBeenCalled();
+      expect(mockCreateKioskPairing).toHaveBeenCalledWith('test-nonce-abc123');
     });
   });
 

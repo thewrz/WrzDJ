@@ -30,7 +30,7 @@ def test_request_code_returns_sent(client: TestClient, db: Session):
     with patch("app.services.email_verification.send_verification_email"):
         resp = client.post(
             "/api/public/guest/verify/request",
-            json={"email": "test@example.com"},
+            json={"email": "test@example.com", "turnstile_token": "test-token"},
         )
     assert resp.status_code == 200
     assert resp.json()["sent"] is True
@@ -41,7 +41,7 @@ def test_request_code_without_cookie_fails(client: TestClient):
     client.cookies.clear()
     resp = client.post(
         "/api/public/guest/verify/request",
-        json={"email": "test@example.com"},
+        json={"email": "test@example.com", "turnstile_token": "test-token"},
     )
     assert resp.status_code in (400, 401)
 
@@ -54,7 +54,7 @@ def test_confirm_code_sets_email_on_guest(client: TestClient, db: Session):
     with patch("app.services.email_verification.send_verification_email"):
         client.post(
             "/api/public/guest/verify/request",
-            json={"email": "verified@test.com"},
+            json={"email": "verified@test.com", "turnstile_token": "test-token"},
         )
 
     from app.models.email_verification_code import EmailVerificationCode
@@ -87,7 +87,7 @@ def test_confirm_code_returns_merged_true(client: TestClient, db: Session):
     with patch("app.services.email_verification.send_verification_email"):
         client.post(
             "/api/public/guest/verify/request",
-            json={"email": "shared@test.com"},
+            json={"email": "shared@test.com", "turnstile_token": "test-token"},
         )
 
     from app.models.email_verification_code import EmailVerificationCode
@@ -109,7 +109,7 @@ def test_confirm_code_returns_merged_true(client: TestClient, db: Session):
     with patch("app.services.email_verification.send_verification_email"):
         client.post(
             "/api/public/guest/verify/request",
-            json={"email": "shared@test.com"},
+            json={"email": "shared@test.com", "turnstile_token": "test-token"},
         )
 
     code_b = (
@@ -136,7 +136,7 @@ def test_confirm_wrong_code_returns_error(client: TestClient, db: Session):
     with patch("app.services.email_verification.send_verification_email"):
         client.post(
             "/api/public/guest/verify/request",
-            json={"email": "wrong@test.com"},
+            json={"email": "wrong@test.com", "turnstile_token": "test-token"},
         )
 
     resp = client.post(

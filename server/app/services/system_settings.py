@@ -15,6 +15,7 @@ def get_system_settings(db: Session) -> SystemSettings:
             tidal_enabled=True,
             beatport_enabled=True,
             bridge_enabled=True,
+            human_verification_enforced=False,
             llm_enabled=True,
             llm_model="claude-haiku-4-5-20251001",
             llm_rate_limit_per_minute=3,
@@ -33,6 +34,7 @@ def update_system_settings(
     tidal_enabled: bool | None = None,
     beatport_enabled: bool | None = None,
     bridge_enabled: bool | None = None,
+    human_verification_enforced: bool | None = None,
     llm_enabled: bool | None = None,
     llm_model: str | None = None,
     llm_rate_limit_per_minute: int | None = None,
@@ -51,6 +53,8 @@ def update_system_settings(
         settings.beatport_enabled = beatport_enabled
     if bridge_enabled is not None:
         settings.bridge_enabled = bridge_enabled
+    if human_verification_enforced is not None:
+        settings.human_verification_enforced = human_verification_enforced
     if llm_enabled is not None:
         settings.llm_enabled = llm_enabled
     if llm_model is not None:

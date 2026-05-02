@@ -17,6 +17,10 @@ class SystemSettings(Base):
     beatport_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     bridge_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Human verification (Turnstile gate on guest pages)
+    # Soft-warn-only when False; hard-enforce 403 when True. See docs/HUMAN-VERIFICATION.md.
+    human_verification_enforced: Mapped[bool] = mapped_column(Boolean, default=False)
+
     # LLM / AI settings
     llm_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     llm_model: Mapped[str] = mapped_column(String(100), default="claude-haiku-4-5-20251001")

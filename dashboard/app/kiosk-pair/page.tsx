@@ -91,7 +91,8 @@ export default function KioskPairPage() {
     setState('loading');
     setErrorMsg('');
     try {
-      const result = await api.createKioskPairing();
+      const challenge = await api.getKioskPairChallenge();
+      const result = await api.createKioskPairing(challenge.nonce);
       setPairCode(result.pair_code);
       localStorage.setItem(SESSION_TOKEN_KEY, result.session_token);
       localStorage.setItem(PAIR_CODE_KEY, result.pair_code);

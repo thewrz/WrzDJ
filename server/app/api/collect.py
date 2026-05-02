@@ -13,7 +13,7 @@ from sqlalchemy import desc, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_db, require_verified_human_soft
 from app.core.rate_limit import get_guest_id, limiter
 from app.models.event import Event
 from app.models.request import Request as SongRequest
@@ -184,6 +184,7 @@ def set_profile(
     payload: CollectProfileRequest,
     request: Request,
     db: Session = Depends(get_db),
+    _human: int | None = Depends(require_verified_human_soft),
 ):
     event = _get_event_or_404(db, code)
     guest_id = get_guest_id(request, db)
@@ -332,6 +333,7 @@ def submit(
     request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    _human: int | None = Depends(require_verified_human_soft),
 ):
     event = _get_event_or_404(db, code)
     if event.phase != "collection":
@@ -409,6 +411,7 @@ def vote(
     payload: CollectVoteRequest,
     request: Request,
     db: Session = Depends(get_db),
+    _human: int | None = Depends(require_verified_human_soft),
 ):
     event = _get_event_or_404(db, code)
     if event.phase not in ("collection", "live"):
@@ -445,6 +448,7 @@ def enrich_preview(
     payload: EnrichPreviewRequest,
     request: Request,
     db: Session = Depends(get_db),
+    _human: int | None = Depends(require_verified_human_soft),
 ) -> EnrichPreviewResponse:
     """Lightweight Beatport BPM/key lookup for search-time vibes — no DB writes."""
     event = _get_event_or_404(db, code)

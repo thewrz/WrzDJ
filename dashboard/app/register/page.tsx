@@ -3,18 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-
-declare global {
-  interface Window {
-    turnstile?: {
-      render: (
-        container: string | HTMLElement,
-        options: { sitekey: string; callback: (token: string) => void }
-      ) => string;
-      reset: (widgetId: string) => void;
-    };
-  }
-}
+import '@/lib/turnstile';
 
 export default function RegisterPage() {
   const [username, setUsername] = useState('');

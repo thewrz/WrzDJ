@@ -200,6 +200,39 @@ export class NicknameConflictError extends Error {
   }
 }
 
+export class HumanVerificationRequiredError extends ApiError {
+  constructor() {
+    super('Human verification required', 403);
+    this.name = 'HumanVerificationRequiredError';
+  }
+}
+
+/**
+ * Wrap a guest-public fetch in 403-human-verification-required retry logic.
+ * Caller passes a `reverify` async function that re-runs the Turnstile
+ * bootstrap and resolves once `wrzdj_human` cookie is set. On a 403 with
+ * `detail.code === 'human_verification_required'`, the wrapper calls
+ * `reverify()` and retries the fetch once.
+ */
+export async function withHumanRetry<T>(
+  doFetch: () => Promise<Response>,
+  reverify: () => Promise<void>,
+): Promise<T> {
+  let res = await doFetch();
+  if (res.status === 403) {
+    const body = await res.clone().json().catch(() => null);
+    if (body?.detail?.code === 'human_verification_required') {
+      await reverify();
+      res = await doFetch();
+    }
+  }
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Request failed' }));
+    throw new ApiError(error.detail || 'Request failed', res.status);
+  }
+  return res.json();
+}
+
 function getApiUrl(): string {
   // Use explicit env var if set
   if (process.env.NEXT_PUBLIC_API_URL) {
@@ -358,6 +391,20 @@ class ApiClient {
     return this.publicFetch(`${getApiUrl()}/api/auth/settings`);
   }
 
+  async verifyHuman(turnstileToken: string): Promise<{ verified: boolean; expires_in: number }> {
+    const res = await fetch(`${getApiUrl()}/api/public/guest/verify-human`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ turnstile_token: turnstileToken }),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: 'Request failed' }));
+      throw new ApiError(error.detail || 'Verify failed', res.status);
+    }
+    return res.json();
+  }
+
   async register(data: {
     username: string;
     email: string;
@@ -474,27 +521,33 @@ class ApiClient {
     metadata?: { source?: string; genre?: string; bpm?: number; musical_key?: string },
     source?: string,
     nickname?: string,
+    reverify?: () => Promise<void>,
   ): Promise<SongRequest> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
-    const res = await fetch(`${getApiUrl()}/api/events/${code}/requests`, {
-      method: 'POST',
-      headers,
-      credentials: 'include',
-      body: JSON.stringify({
-        artist,
-        title,
-        note,
-        nickname,
-        source: metadata?.source ?? source ?? 'spotify',
-        source_url: sourceUrl,
-        artwork_url: artworkUrl,
-        raw_search_query: rawSearchQuery,
-        genre: metadata?.genre,
-        bpm: metadata?.bpm,
-        musical_key: metadata?.musical_key,
-      }),
-    });
+    const doFetch = () =>
+      fetch(`${getApiUrl()}/api/events/${code}/requests`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({
+          artist,
+          title,
+          note,
+          nickname,
+          source: metadata?.source ?? source ?? 'spotify',
+          source_url: sourceUrl,
+          artwork_url: artworkUrl,
+          raw_search_query: rawSearchQuery,
+          genre: metadata?.genre,
+          bpm: metadata?.bpm,
+          musical_key: metadata?.musical_key,
+        }),
+      });
+    if (reverify) {
+      return withHumanRetry<SongRequest>(doFetch, reverify);
+    }
+    const res = await doFetch();
     if (!res.ok) {
       if (res.status === 401 && this.onUnauthorized) {
         this.onUnauthorized();
@@ -509,11 +562,19 @@ class ApiClient {
     return this.fetch(`/api/search?q=${encodeURIComponent(query)}`);
   }
 
-  async eventSearch(code: string, query: string): Promise<SearchResult[]> {
-    const res = await fetch(
-      `${getApiUrl()}/api/events/${code}/search?q=${encodeURIComponent(query)}`,
-      { credentials: 'include' },
-    );
+  async eventSearch(
+    code: string,
+    query: string,
+    reverify?: () => Promise<void>,
+  ): Promise<SearchResult[]> {
+    const doFetch = () =>
+      fetch(`${getApiUrl()}/api/events/${code}/search?q=${encodeURIComponent(query)}`, {
+        credentials: 'include',
+      });
+    if (reverify) {
+      return withHumanRetry<SearchResult[]>(doFetch, reverify);
+    }
+    const res = await doFetch();
     if (!res.ok) {
       const error = await res.json().catch(() => ({ detail: 'Request failed' }));
       throw new ApiError(error.detail || 'Request failed', res.status);
@@ -529,11 +590,19 @@ class ApiClient {
     return this.fetch(`/api/requests/${requestId}/vote`, { method: 'DELETE' });
   }
 
-  async publicVoteRequest(requestId: number): Promise<VoteResponse> {
-    const res = await fetch(`${getApiUrl()}/api/requests/${requestId}/vote`, {
-      method: 'POST',
-      credentials: 'include',
-    });
+  async publicVoteRequest(
+    requestId: number,
+    reverify?: () => Promise<void>,
+  ): Promise<VoteResponse> {
+    const doFetch = () =>
+      fetch(`${getApiUrl()}/api/requests/${requestId}/vote`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    if (reverify) {
+      return withHumanRetry<VoteResponse>(doFetch, reverify);
+    }
+    const res = await doFetch();
     if (!res.ok) {
       const error = await res.json().catch(() => ({ detail: 'Vote failed' }));
       throw new ApiError(error.detail || 'Vote failed', res.status);
@@ -964,9 +1033,22 @@ class ApiClient {
 
   // ========== Kiosk Pairing ==========
 
-  async createKioskPairing(): Promise<KioskPairResponse> {
+  async getKioskPairChallenge(): Promise<{ nonce: string; expires_in: number }> {
+    const response = await fetch(`${getApiUrl()}/api/public/kiosk/pair-challenge`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to fetch pair challenge' }));
+      throw new ApiError(error.detail || 'Failed to fetch pair challenge', response.status);
+    }
+    return response.json();
+  }
+
+  async createKioskPairing(nonce: string): Promise<KioskPairResponse> {
     const response = await fetch(`${getApiUrl()}/api/public/kiosk/pair`, {
       method: 'POST',
+      headers: { 'X-Pair-Nonce': nonce },
+      credentials: 'include',
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Pairing failed' }));
@@ -1059,13 +1141,19 @@ class ApiClient {
   async setCollectProfile(
     code: string,
     data: { nickname?: string },
+    reverify?: () => Promise<void>,
   ): Promise<CollectProfileResponse> {
-    const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/profile`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(data),
-    });
+    const doFetch = () =>
+      fetch(`${getApiUrl()}/api/public/collect/${code}/profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+    if (reverify) {
+      return withHumanRetry<CollectProfileResponse>(doFetch, reverify);
+    }
+    const res = await doFetch();
     if (res.status === 409) {
       const body = await res.json().catch(() => ({})) as { detail?: { claimed?: boolean } };
       throw new NicknameConflictError(body.detail?.claimed ?? false);
@@ -1095,13 +1183,19 @@ class ApiClient {
       note?: string;
       nickname?: string;
     },
+    reverify?: () => Promise<void>,
   ): Promise<{ id: number; is_duplicate: boolean }> {
-    const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/requests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(data),
-    });
+    const doFetch = () =>
+      fetch(`${getApiUrl()}/api/public/collect/${code}/requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+    if (reverify) {
+      return withHumanRetry<{ id: number; is_duplicate: boolean }>(doFetch, reverify);
+    }
+    const res = await doFetch();
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new ApiError(body.detail ?? `Submit failed: ${res.status}`, res.status);
@@ -1109,13 +1203,22 @@ class ApiClient {
     return res.json();
   }
 
-  async voteCollectRequest(code: string, requestId: number): Promise<void> {
-    const res = await fetch(`${getApiUrl()}/api/public/collect/${code}/vote`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ request_id: requestId }),
-    });
+  async voteCollectRequest(
+    code: string,
+    requestId: number,
+    reverify?: () => Promise<void>,
+  ): Promise<void> {
+    const doFetch = () =>
+      fetch(`${getApiUrl()}/api/public/collect/${code}/vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ request_id: requestId }),
+      });
+    if (reverify) {
+      return withHumanRetry<void>(doFetch, reverify);
+    }
+    const res = await doFetch();
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new ApiError(body.detail ?? `Vote failed: ${res.status}`, res.status);
@@ -1193,12 +1296,15 @@ class ApiClient {
 
   // ========== Guest Email Verification ==========
 
-  async requestVerificationCode(email: string): Promise<{ sent: boolean }> {
+  async requestVerificationCode(
+    email: string,
+    turnstileToken: string,
+  ): Promise<{ sent: boolean }> {
     const resp = await fetch(`${getApiUrl()}/api/public/guest/verify/request`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, turnstile_token: turnstileToken }),
     });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));

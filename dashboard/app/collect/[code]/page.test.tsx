@@ -7,6 +7,15 @@ vi.mock("./components/EmailVerification", () => ({
   default: () => <div data-testid="email-verification-stub" />,
 }));
 
+vi.mock("@/lib/useHumanVerification", () => ({
+  useHumanVerification: () => ({
+    state: 'verified',
+    reverify: vi.fn().mockResolvedValue(undefined),
+    ensureVerified: vi.fn().mockResolvedValue(undefined),
+    widgetContainerRef: { current: null },
+  }),
+}));
+
 vi.mock("../../../components/NicknameGate", () => ({
   NicknameGate: ({ onComplete }: { onComplete: (r: { nickname: string; emailVerified: boolean; submissionCount: number; submissionCap: number }) => void }) => {
     useEffect(() => {
@@ -234,7 +243,7 @@ describe("CollectPage", () => {
         source_url: track.url,
         artwork_url: undefined,
         nickname: undefined,
-      });
+      }, expect.any(Function));
     });
 
     // Profile should have been refreshed after submit (via getCollectProfile).

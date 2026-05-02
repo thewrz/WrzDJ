@@ -40,6 +40,7 @@ const defaultSettings = {
   tidal_enabled: true,
   beatport_enabled: true,
   bridge_enabled: true,
+  human_verification_enforced: false,
   llm_enabled: true,
   llm_model: 'claude-haiku-4-5-20251001',
   llm_rate_limit_per_minute: 6,
@@ -91,11 +92,26 @@ describe('AdminSettingsPage', () => {
     renderWithProviders();
     await act(async () => { await vi.advanceTimersByTimeAsync(100); });
 
-    const checkbox = screen.getByRole('checkbox');
-    expect(checkbox).toBeChecked();
+    const checkboxes = screen.getAllByRole('checkbox');
+    const registrationCheckbox = checkboxes[0];
+    expect(registrationCheckbox).toBeChecked();
 
-    fireEvent.click(checkbox);
-    expect(checkbox).not.toBeChecked();
+    fireEvent.click(registrationCheckbox);
+    expect(registrationCheckbox).not.toBeChecked();
+  });
+
+  it('toggles human verification checkbox', async () => {
+    vi.mocked(api.getAdminSettings).mockResolvedValue(defaultSettings);
+
+    renderWithProviders();
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+
+    const checkboxes = screen.getAllByRole('checkbox');
+    const hvCheckbox = checkboxes[1];
+    expect(hvCheckbox).not.toBeChecked();
+
+    fireEvent.click(hvCheckbox);
+    expect(hvCheckbox).toBeChecked();
   });
 
   it('changes rate limit input', async () => {
@@ -114,13 +130,14 @@ describe('AdminSettingsPage', () => {
     vi.mocked(api.updateAdminSettings).mockResolvedValue({
       ...defaultSettings,
       registration_enabled: false,
+      human_verification_enforced: false,
     });
 
     renderWithProviders();
     await act(async () => { await vi.advanceTimersByTimeAsync(100); });
 
     // Toggle registration off
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getAllByRole('checkbox')[0]);
 
     // Click save and flush async
     await act(async () => {

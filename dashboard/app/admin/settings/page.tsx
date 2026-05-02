@@ -86,7 +86,26 @@ export default function AdminSettingsPage() {
           </div>
         </HelpSpot>
 
-        <HelpSpot spotId="admin-rate-limit" page={PAGE_ID} order={2} title="Search Rate Limit" description="Throttle music search queries per IP to prevent API abuse.">
+        <HelpSpot spotId="admin-human-verification" page={PAGE_ID} order={2} title="Human Verification" description="Require guests to complete a Turnstile CAPTCHA before interacting.">
+          <div className="form-group" style={{ marginTop: '1.5rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={settings.human_verification_enforced}
+                onChange={(e) => setSettings({ ...settings, human_verification_enforced: e.target.checked })}
+                style={{ width: '1.25rem', height: '1.25rem' }}
+              />
+              <div>
+                <div style={{ fontWeight: 500 }}>Enforce human verification on guest pages</div>
+                <div style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+                  When ON, guests must complete a Cloudflare Turnstile check before submitting requests, voting, or searching. Default OFF (soft mode logs warnings only).
+                </div>
+              </div>
+            </label>
+          </div>
+        </HelpSpot>
+
+        <HelpSpot spotId="admin-rate-limit" page={PAGE_ID} order={3} title="Search Rate Limit" description="Throttle music search queries per IP to prevent API abuse.">
           <div className="form-group" style={{ marginTop: '1.5rem' }}>
             <label htmlFor="rate-limit">Search Rate Limit (per minute per IP)</label>
             <div style={{ color: '#9ca3af', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
@@ -110,7 +129,7 @@ export default function AdminSettingsPage() {
           </div>
         </HelpSpot>
 
-        <HelpSpot spotId="admin-save-settings" page={PAGE_ID} order={3} title="Save" description="Settings are stored in the database and take effect immediately.">
+        <HelpSpot spotId="admin-save-settings" page={PAGE_ID} order={4} title="Save" description="Settings are stored in the database and take effect immediately.">
           <button
             className="btn btn-primary"
             style={{ marginTop: '1.5rem' }}

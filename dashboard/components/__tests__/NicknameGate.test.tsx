@@ -50,6 +50,11 @@ vi.mock('../EmailVerification', () => ({
   ),
 }));
 
+vi.mock('../../lib/turnstile', () => ({
+  getTurnstileSiteKey: vi.fn().mockResolvedValue(''),
+  loadTurnstileScript: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { apiClient, NicknameConflictError } from '../../lib/api';
 
 const mockGetProfile = vi.mocked(apiClient.getCollectProfile);
@@ -163,6 +168,9 @@ describe('NicknameGate', () => {
     fireEvent.change(screen.getByPlaceholderText(/you@example\.com/i), {
       target: { value: 'test@example.com' },
     });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /send code/i })).not.toBeDisabled()
+    );
     fireEvent.click(screen.getByRole('button', { name: /send code/i }));
     await waitFor(() => screen.getByPlaceholderText(/6.digit/i));
     fireEvent.change(screen.getByPlaceholderText(/6.digit/i), { target: { value: '123456' } });
@@ -189,6 +197,9 @@ describe('NicknameGate', () => {
     fireEvent.change(screen.getByPlaceholderText(/you@example\.com/i), {
       target: { value: 'test@example.com' },
     });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /send code/i })).not.toBeDisabled()
+    );
     fireEvent.click(screen.getByRole('button', { name: /send code/i }));
     await waitFor(() => screen.getByPlaceholderText(/6.digit/i));
     fireEvent.change(screen.getByPlaceholderText(/6.digit/i), { target: { value: '123456' } });
@@ -219,6 +230,9 @@ describe('NicknameGate', () => {
       fireEvent.change(screen.getByPlaceholderText(/you@example\.com/i), {
         target: { value: 'test@example.com' },
       });
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /send code/i })).not.toBeDisabled()
+      );
       fireEvent.click(screen.getByRole('button', { name: /send code/i }));
       await waitFor(() => screen.getByPlaceholderText(/6.digit/i));
       fireEvent.change(screen.getByPlaceholderText(/6.digit/i), { target: { value: '123456' } });

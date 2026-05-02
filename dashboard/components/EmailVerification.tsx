@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient, ApiError } from '../lib/api';
+import { getTurnstileSiteKey, loadTurnstileScript } from '../lib/turnstile';
 
 type VerifyState = 'input' | 'code_sent' | 'verified';
 
@@ -21,6 +22,39 @@ export default function EmailVerification({ isVerified, onVerified, onSkip }: Pr
   const [expiresAt, setExpiresAt] = useState<number>(0);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [otpTurnstileToken, setOtpTurnstileToken] = useState<string>('');
+  const otpWidgetRef = useRef<HTMLDivElement | null>(null);
+  const otpWidgetIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!otpWidgetRef.current) return;
+    let cancelled = false;
+    void (async () => {
+      const sitekey = await getTurnstileSiteKey();
+      if (!sitekey || cancelled) {
+        // Dev / Turnstile-disabled — set a placeholder so the form can submit
+        setOtpTurnstileToken('dev-bypass');
+        return;
+      }
+      await loadTurnstileScript();
+      if (cancelled || !window.turnstile || !otpWidgetRef.current) return;
+      otpWidgetIdRef.current = window.turnstile.render(otpWidgetRef.current, {
+        sitekey,
+        appearance: 'interaction-only',
+        size: 'normal',
+        callback: (token: string) => setOtpTurnstileToken(token),
+        'error-callback': () => setOtpTurnstileToken(''),
+        'expired-callback': () => setOtpTurnstileToken(''),
+      });
+    })();
+    return () => {
+      cancelled = true;
+      if (otpWidgetIdRef.current && window.turnstile) {
+        window.turnstile.remove(otpWidgetIdRef.current);
+        otpWidgetIdRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (state !== 'code_sent' || expiresAt === 0) return;
@@ -36,20 +70,29 @@ export default function EmailVerification({ isVerified, onVerified, onSkip }: Pr
 
   const sendCode = useCallback(async () => {
     if (!email.trim()) return;
+    if (!otpTurnstileToken) {
+      setError('Please complete the human-verification check.');
+      return;
+    }
     setSending(true);
     setError(null);
     try {
-      await apiClient.requestVerificationCode(email.trim());
+      await apiClient.requestVerificationCode(email.trim(), otpTurnstileToken);
       setState('code_sent');
       setExpiresAt(Date.now() + 15 * 60 * 1000);
       setDigits(['', '', '', '', '', '']);
+      // Reset widget for next attempt (fresh token per send)
+      if (otpWidgetIdRef.current && window.turnstile) {
+        window.turnstile.reset(otpWidgetIdRef.current);
+      }
+      setOtpTurnstileToken('');
       setTimeout(() => inputRefs.current[0]?.focus(), 100);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to send code');
     } finally {
       setSending(false);
     }
-  }, [email]);
+  }, [email, otpTurnstileToken]);
 
   const handleDigitChange = useCallback(
     (index: number, value: string) => {
@@ -204,12 +247,13 @@ export default function EmailVerification({ isVerified, onVerified, onSkip }: Pr
           onKeyDown={(e) => { if (e.key === 'Enter') sendCode(); }}
         />
       </div>
+      <div ref={otpWidgetRef} style={{ margin: '1rem 0' }} />
       {error && <p className="collection-fieldset-error">{error}</p>}
       <button
         type="button"
         className="btn btn-primary btn-sm"
         onClick={sendCode}
-        disabled={sending || !email.trim()}
+        disabled={sending || !email.trim() || !otpTurnstileToken}
       >
         {sending ? 'Sending...' : 'Send Code'}
       </button>

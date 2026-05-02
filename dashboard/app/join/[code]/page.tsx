@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { api, ApiError, Event, GuestNowPlaying, GuestRequestInfo, SearchResult } from '@/lib/api';
 import { useEventStream } from '@/lib/use-event-stream';
 import { useGuestIdentity } from '@/lib/use-guest-identity';
+import { useHumanVerification } from '@/lib/useHumanVerification';
 import { NicknameGate, GateResult } from '@/components/NicknameGate';
 import EmailRecoveryButton from '@/components/EmailRecoveryButton';
 import EmailRecoveryModal from '@/components/EmailRecoveryModal';
@@ -54,6 +55,7 @@ export default function JoinEventPage() {
   const code = params.code as string;
 
   const { reconcileHint, refresh: refreshIdentity } = useGuestIdentity();
+  const { state: humanState, reverify, widgetContainerRef } = useHumanVerification();
   const [recoveryOpen, setRecoveryOpen] = useState(false);
 
   const [event, setEvent] = useState<Event | null>(null);
@@ -254,7 +256,7 @@ export default function JoinEventPage() {
     setLocalVoteDeltas(afterDeltas);
     setVotingId(requestId);
     try {
-      const result = await api.publicVoteRequest(requestId);
+      const result = await api.publicVoteRequest(requestId, reverify);
       setVotedIds((prev) => new Set([...prev, requestId]));
       setGuestRequests((prev) =>
         prev.map((r) => r.id === requestId ? { ...r, vote_count: result.vote_count } : r)
@@ -287,7 +289,7 @@ export default function JoinEventPage() {
     setSearching(true);
     setSearchResults([]);
     try {
-      const results = await api.eventSearch(code, searchQuery);
+      const results = await api.eventSearch(code, searchQuery, reverify);
       setSearchResults(results);
     } catch {
       try {
@@ -318,6 +320,7 @@ export default function JoinEventPage() {
         { genre: selectedSong.genre ?? undefined, bpm: selectedSong.bpm ?? undefined, musical_key: selectedSong.key ?? undefined },
         selectedSong.source,
         nickname || undefined,
+        reverify,
       );
       setMyRequestIds((prev) => new Set([...prev, result.id]));
       setMyRequestsRefreshKey((k) => k + 1);
@@ -384,7 +387,7 @@ export default function JoinEventPage() {
   /* ── Early returns ──────────────────────────────────────────── */
 
   if (!gateComplete) {
-    return <NicknameGate code={code} onComplete={handleGateComplete} />;
+    return <NicknameGate code={code} onComplete={handleGateComplete} reverify={reverify} />;
   }
 
   if (loading) {
@@ -732,6 +735,20 @@ export default function JoinEventPage() {
           )}
         </div>
       </div>
+
+      {/* ── Human verification widget ────────────────────────────── */}
+      <div
+        ref={widgetContainerRef}
+        style={{
+          display: humanState === 'challenge' ? 'block' : 'none',
+          margin: '1rem 0',
+        }}
+      />
+      {humanState === 'failed' && (
+        <div style={{ color: '#ef4444', marginTop: '0.5rem', fontSize: '0.9rem', textAlign: 'center' }}>
+          Verification failed. Please refresh the page.
+        </div>
+      )}
 
       {/* ── Bottom CTA ───────────────────────────────────────────── */}
       <div className="gst-cta-wrap">
