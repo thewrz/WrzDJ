@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -127,3 +127,30 @@ def get_owned_request(
     if song_request.event.created_by_user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Request not found")
     return song_request
+
+
+def require_verified_human(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> int:
+    """Require a valid wrzdj_human cookie tied to the current wrzdj_guest.
+
+    Refreshes (slides) the cookie on every successful call. Raises 403 with
+    structured detail {"code": "human_verification_required"} so the frontend
+    can distinguish this from generic forbidden errors and trigger a re-bootstrap.
+    """
+    from app.core.rate_limit import get_guest_id
+    from app.services.human_verification import issue_human_cookie, verify_human_cookie
+
+    guest_id_cookie = verify_human_cookie(request)
+    guest_id_db = get_guest_id(request, db)
+
+    if guest_id_cookie is None or guest_id_db is None or guest_id_cookie != guest_id_db:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "human_verification_required"},
+        )
+
+    issue_human_cookie(response, guest_id_db)
+    return guest_id_db
