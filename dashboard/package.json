@@ -9,7 +9,7 @@
     "lint": "eslint app/ lib/",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
-    "screenshots": "playwright test --config playwright.config.ts",
+    "screenshots": "playwright test --config playwright.config.ts && bash ../scripts/png-to-webp.sh",
     "e2e": "playwright test --config playwright-e2e.config.ts",
     "types:export": "cd ../server && .venv/bin/python scripts/export_openapi.py",
     "types:generate": "openapi-typescript ../server/openapi.json -o lib/api-types.generated.ts"
