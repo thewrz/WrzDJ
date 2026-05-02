@@ -358,6 +358,20 @@ class ApiClient {
     return this.publicFetch(`${getApiUrl()}/api/auth/settings`);
   }
 
+  async verifyHuman(turnstileToken: string): Promise<{ verified: boolean; expires_in: number }> {
+    const res = await fetch(`${getApiUrl()}/api/public/guest/verify-human`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ turnstile_token: turnstileToken }),
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: 'Request failed' }));
+      throw new ApiError(error.detail || 'Verify failed', res.status);
+    }
+    return res.json();
+  }
+
   async register(data: {
     username: string;
     email: string;
