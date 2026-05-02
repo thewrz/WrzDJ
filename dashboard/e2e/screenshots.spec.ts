@@ -30,19 +30,18 @@ test.beforeAll(async ({ playwright }, testInfo) => {
   const loginData = await loginRes.json();
   jwt = loginData.access_token;
 
-  // Find or create an event
-  const eventsRes = await api.get('/api/events', {
+  // Use the pre-seeded "demo" event (server/scripts/seed_demo_event.py) so screenshots
+  // show realistic data: 4 enriched requests (BPM/key/genre) + 1 upvoted by a guest.
+  // Falls back to creating a fresh event if the seed hasn't been run.
+  const seedRes = await api.get('/api/events/DEMO01', {
     headers: { Authorization: `Bearer ${jwt}` },
   });
-  expect(eventsRes.ok()).toBeTruthy();
-  const events = await eventsRes.json();
-
-  if (events.length > 0) {
-    eventCode = events[0].code;
+  if (seedRes.ok()) {
+    eventCode = 'DEMO01';
   } else {
     const createRes = await api.post('/api/events', {
       headers: { Authorization: `Bearer ${jwt}` },
-      data: { name: 'Screenshot Test Event' },
+      data: { name: 'demo' },
     });
     expect(createRes.ok()).toBeTruthy();
     const created = await createRes.json();
@@ -167,6 +166,32 @@ test.describe('Public pages', () => {
     await page.goto(`/join/${eventCode}`);
     await waitForPage(page);
     await capture(page, 'guest-join-mobile');
+    await ctx.close();
+  });
+
+  test('Guest Collect (mobile)', async ({ browser, playwright }, testInfo) => {
+    // Force the event into collection phase so /collect renders the Tower v2 UI.
+    const base = testInfo.project.use.baseURL || 'https://app.local';
+    const apiUrl = new URL(base);
+    apiUrl.port = API_PORT;
+    const api = await playwright.request.newContext({
+      baseURL: apiUrl.origin,
+      ignoreHTTPSErrors: true,
+    });
+    await api.patch(`/api/events/${eventCode}/collection`, {
+      headers: { Authorization: `Bearer ${jwt}` },
+      data: { collection_phase_override: 'force_collection' },
+    });
+    await api.dispose();
+
+    const ctx = await browser.newContext({
+      viewport: { width: 430, height: 844 },
+      ignoreHTTPSErrors: true,
+    });
+    const page = await ctx.newPage();
+    await page.goto(`/collect/${eventCode}`);
+    await waitForPage(page);
+    await capture(page, 'guest-collect-mobile');
     await ctx.close();
   });
 
