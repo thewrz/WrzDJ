@@ -134,6 +134,7 @@ SYSTEM_SETTINGS_KEYS = {
     "tidal_enabled",
     "beatport_enabled",
     "bridge_enabled",
+    "human_verification_enforced",
     "llm_enabled",
     "llm_model",
     "llm_rate_limit_per_minute",

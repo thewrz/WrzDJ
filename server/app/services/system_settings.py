@@ -34,6 +34,7 @@ def update_system_settings(
     tidal_enabled: bool | None = None,
     beatport_enabled: bool | None = None,
     bridge_enabled: bool | None = None,
+    human_verification_enforced: bool | None = None,
     llm_enabled: bool | None = None,
     llm_model: str | None = None,
     llm_rate_limit_per_minute: int | None = None,
@@ -52,6 +53,8 @@ def update_system_settings(
         settings.beatport_enabled = beatport_enabled
     if bridge_enabled is not None:
         settings.bridge_enabled = bridge_enabled
+    if human_verification_enforced is not None:
+        settings.human_verification_enforced = human_verification_enforced
     if llm_enabled is not None:
         settings.llm_enabled = llm_enabled
     if llm_model is not None:

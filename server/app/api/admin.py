@@ -279,6 +279,7 @@ def admin_update_settings(
         tidal_enabled=update_data.tidal_enabled,
         beatport_enabled=update_data.beatport_enabled,
         bridge_enabled=update_data.bridge_enabled,
+        human_verification_enforced=update_data.human_verification_enforced,
         llm_enabled=update_data.llm_enabled,
         llm_model=update_data.llm_model,
         llm_rate_limit_per_minute=update_data.llm_rate_limit_per_minute,

@@ -10,6 +10,7 @@ class SystemSettingsOut(BaseSchema):
     tidal_enabled: bool
     beatport_enabled: bool
     bridge_enabled: bool
+    human_verification_enforced: bool
     llm_enabled: bool
     llm_model: str
     llm_rate_limit_per_minute: int
@@ -22,6 +23,7 @@ class SystemSettingsUpdate(BaseModel):
     tidal_enabled: bool | None = None
     beatport_enabled: bool | None = None
     bridge_enabled: bool | None = None
+    human_verification_enforced: bool | None = None
     llm_enabled: bool | None = None
     llm_model: str | None = None
     llm_rate_limit_per_minute: int | None = Field(None, ge=1, le=30)

@@ -3349,6 +3349,8 @@ export interface components {
             beatport_enabled: boolean;
             /** Bridge Enabled */
             bridge_enabled: boolean;
+            /** Human Verification Enforced */
+            human_verification_enforced: boolean;
             /** Llm Enabled */
             llm_enabled: boolean;
             /** Llm Model */
@@ -3370,6 +3372,8 @@ export interface components {
             beatport_enabled?: boolean | null;
             /** Bridge Enabled */
             bridge_enabled?: boolean | null;
+            /** Human Verification Enforced */
+            human_verification_enforced?: boolean | null;
             /** Llm Enabled */
             llm_enabled?: boolean | null;
             /** Llm Model */
