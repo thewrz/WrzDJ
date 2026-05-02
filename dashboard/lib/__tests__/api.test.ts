@@ -2139,19 +2139,19 @@ describe('ApiClient', () => {
   });
 
   describe('email verification', () => {
-    it('requestVerificationCode sends email and returns sent', async () => {
+    it('requestVerificationCode sends email and turnstile token and returns sent', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ sent: true }),
       });
 
-      const result = await api.requestVerificationCode('fan@test.com');
+      const result = await api.requestVerificationCode('fan@test.com', 'test-token');
       expect(result.sent).toBe(true);
 
       const [url, options] = mockFetch.mock.calls[0];
       expect(url).toContain('/api/public/guest/verify/request');
       expect(options.credentials).toBe('include');
-      expect(JSON.parse(options.body)).toEqual({ email: 'fan@test.com' });
+      expect(JSON.parse(options.body)).toEqual({ email: 'fan@test.com', turnstile_token: 'test-token' });
     });
 
     it('requestVerificationCode throws on error', async () => {
@@ -2161,7 +2161,7 @@ describe('ApiClient', () => {
         json: async () => ({ detail: 'Too many codes requested' }),
       });
 
-      await expect(api.requestVerificationCode('fan@test.com')).rejects.toThrow(
+      await expect(api.requestVerificationCode('fan@test.com', 'test-token')).rejects.toThrow(
         'Too many codes requested'
       );
     });
@@ -2173,7 +2173,7 @@ describe('ApiClient', () => {
         json: async () => { throw new Error('not json'); },
       });
 
-      await expect(api.requestVerificationCode('fan@test.com')).rejects.toThrow(
+      await expect(api.requestVerificationCode('fan@test.com', 'test-token')).rejects.toThrow(
         'Failed to send code'
       );
     });

@@ -387,7 +387,7 @@ export default function JoinEventPage() {
   /* ── Early returns ──────────────────────────────────────────── */
 
   if (!gateComplete) {
-    return <NicknameGate code={code} onComplete={handleGateComplete} />;
+    return <NicknameGate code={code} onComplete={handleGateComplete} reverify={reverify} />;
   }
 
   if (loading) {

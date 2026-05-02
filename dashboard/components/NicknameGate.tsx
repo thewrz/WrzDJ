@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { apiClient, ApiError, CollectProfileResponse, NicknameConflictError } from '../lib/api';
 import { useGuestIdentity } from '../lib/use-guest-identity';
+import { getTurnstileSiteKey, loadTurnstileScript } from '../lib/turnstile';
 import { ModalOverlay } from './ModalOverlay';
 import EmailVerification from './EmailVerification';
 
@@ -24,6 +25,7 @@ export interface GateResult {
 interface Props {
   code: string;
   onComplete: (result: GateResult) => void;
+  reverify?: () => Promise<void>;
 }
 
 type GateState =
@@ -37,7 +39,7 @@ type GateState =
   | 'email_code'
   | 'email_prompt';
 
-export function NicknameGate({ code, onComplete }: Props) {
+export function NicknameGate({ code, onComplete, reverify }: Props) {
   const identity = useGuestIdentity();
   const [gateState, setGateState] = useState<GateState>('loading');
   const [savedNickname, setSavedNickname] = useState('');
@@ -53,12 +55,46 @@ export function NicknameGate({ code, onComplete }: Props) {
   const [savedFlash, setSavedFlash] = useState(false);
   const [profileCache, setProfileCache] = useState<CollectProfileResponse | null>(null);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [otpTurnstileToken, setOtpTurnstileToken] = useState<string>('');
+  const otpWidgetRef = useRef<HTMLDivElement | null>(null);
+  const otpWidgetIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     return () => {
       if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (gateState !== 'email_login') return;
+    if (!otpWidgetRef.current) return;
+    let cancelled = false;
+    void (async () => {
+      const sitekey = await getTurnstileSiteKey();
+      if (!sitekey || cancelled) {
+        setOtpTurnstileToken('dev-bypass');
+        return;
+      }
+      await loadTurnstileScript();
+      if (cancelled || !window.turnstile || !otpWidgetRef.current) return;
+      otpWidgetIdRef.current = window.turnstile.render(otpWidgetRef.current, {
+        sitekey,
+        appearance: 'interaction-only',
+        size: 'normal',
+        callback: (token: string) => setOtpTurnstileToken(token),
+        'error-callback': () => setOtpTurnstileToken(''),
+        'expired-callback': () => setOtpTurnstileToken(''),
+      });
+    })();
+    return () => {
+      cancelled = true;
+      if (otpWidgetIdRef.current && window.turnstile) {
+        window.turnstile.remove(otpWidgetIdRef.current);
+        otpWidgetIdRef.current = null;
+      }
+      setOtpTurnstileToken('');
+    };
+  }, [gateState]);
 
   const loadProfile = useCallback(async () => {
     setGateState('loading');
@@ -105,7 +141,7 @@ export function NicknameGate({ code, onComplete }: Props) {
     setSaving(true);
     setInputError(null);
     try {
-      const p = await apiClient.setCollectProfile(code, { nickname: parsed.data });
+      const p = await apiClient.setCollectProfile(code, { nickname: parsed.data }, reverify);
       setProfileCache(p);
       setSavedNickname(parsed.data);
       setSavedFlash(true);
@@ -135,10 +171,19 @@ export function NicknameGate({ code, onComplete }: Props) {
   };
 
   const handleSendCode = async () => {
+    if (!otpTurnstileToken) {
+      setInputError('Please complete the human-verification check.');
+      return;
+    }
     setSendingCode(true);
     setInputError(null);
     try {
-      await apiClient.requestVerificationCode(emailInput);
+      await apiClient.requestVerificationCode(emailInput, otpTurnstileToken);
+      // Reset widget for next attempt (fresh token per send)
+      if (otpWidgetIdRef.current && window.turnstile) {
+        window.turnstile.reset(otpWidgetIdRef.current);
+      }
+      setOtpTurnstileToken('');
       setGateState('email_code');
     } catch (err) {
       setInputError(err instanceof ApiError ? err.message : 'Failed to send code. Try again.');
@@ -386,11 +431,12 @@ export function NicknameGate({ code, onComplete }: Props) {
             autoFocus
           />
         </div>
+        <div ref={otpWidgetRef} style={{ margin: '1rem 0' }} />
         {inputError && <p className="collection-fieldset-error">{inputError}</p>}
         <button
           className="btn btn-primary"
           style={{ width: '100%', marginBottom: '0.75rem' }}
-          disabled={!emailInput.trim() || sendingCode}
+          disabled={!emailInput.trim() || sendingCode || !otpTurnstileToken}
           onClick={handleSendCode}
         >
           {sendingCode ? 'Sending…' : 'Send code'}

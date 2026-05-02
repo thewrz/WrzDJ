@@ -9,6 +9,11 @@ vi.mock('../../lib/api', () => ({
   ApiError: class extends Error { status = 0; },
 }));
 
+vi.mock('../../lib/turnstile', () => ({
+  getTurnstileSiteKey: vi.fn().mockResolvedValue(''),
+  loadTurnstileScript: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { IdentityBar } from '../IdentityBar';
 import { apiClient } from '../../lib/api';
 
@@ -62,8 +67,11 @@ describe('IdentityBar', () => {
     // Open email form
     fireEvent.click(screen.getByRole('button', { name: /add email/i }));
 
-    // Enter email and send code
+    // Enter email and wait for dev-bypass token before clicking send code
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'dj@example.com' } });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /send code/i })).not.toBeDisabled()
+    );
     fireEvent.click(screen.getByRole('button', { name: /send code/i }));
 
     // Fill 6 OTP digits — EmailVerification auto-submits when all filled

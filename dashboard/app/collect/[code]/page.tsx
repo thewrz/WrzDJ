@@ -266,7 +266,7 @@ export default function CollectPage() {
   }, [searchResults, enrichedResults, sortByVibes, leaderboardAvgBpm]);
 
   if (!gateComplete) {
-    return <NicknameGate code={code} onComplete={handleGateComplete} />;
+    return <NicknameGate code={code} onComplete={handleGateComplete} reverify={reverify} />;
   }
 
   if (error) {

@@ -16,6 +16,11 @@ vi.mock('../../lib/api', () => ({
   },
 }));
 
+vi.mock('../../lib/turnstile', () => ({
+  getTurnstileSiteKey: vi.fn().mockResolvedValue(''),
+  loadTurnstileScript: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { apiClient, ApiError } from '../../lib/api';
 
 const mockRequestCode = apiClient.requestVerificationCode as ReturnType<typeof vi.fn>;
@@ -70,12 +75,15 @@ describe('EmailVerification — send code flow', () => {
     expect(screen.getByRole('button', { name: /send code/i })).toBeDisabled();
   });
 
-  it('send code button is enabled after typing email', () => {
+  it('send code button is enabled after typing email (and Turnstile dev-bypass resolves)', async () => {
     render(<EmailVerification isVerified={false} onVerified={vi.fn()} />);
     fireEvent.change(screen.getByPlaceholderText(/you@example.com/i), {
       target: { value: 'test@example.com' },
     });
-    expect(screen.getByRole('button', { name: /send code/i })).not.toBeDisabled();
+    // Wait for the async Turnstile effect to set the dev-bypass token
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /send code/i })).not.toBeDisabled()
+    );
   });
 
   it('sends code when Enter key is pressed in email input', async () => {
@@ -85,10 +93,14 @@ describe('EmailVerification — send code flow', () => {
     fireEvent.change(screen.getByPlaceholderText(/you@example.com/i), {
       target: { value: 'press@example.com' },
     });
+    // Wait for dev-bypass token before triggering send
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /send code/i })).not.toBeDisabled()
+    );
     fireEvent.keyDown(screen.getByPlaceholderText(/you@example.com/i), { key: 'Enter' });
 
     await waitFor(() => {
-      expect(mockRequestCode).toHaveBeenCalledWith('press@example.com');
+      expect(mockRequestCode).toHaveBeenCalledWith('press@example.com', 'dev-bypass');
     });
   });
 
@@ -99,6 +111,9 @@ describe('EmailVerification — send code flow', () => {
     fireEvent.change(screen.getByPlaceholderText(/you@example.com/i), {
       target: { value: 'test@example.com' },
     });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /send code/i })).not.toBeDisabled()
+    );
     fireEvent.click(screen.getByRole('button', { name: /send code/i }));
 
     await waitFor(() => {
@@ -114,6 +129,9 @@ describe('EmailVerification — send code flow', () => {
     fireEvent.change(screen.getByPlaceholderText(/you@example.com/i), {
       target: { value: 'bad@example.com' },
     });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /send code/i })).not.toBeDisabled()
+    );
     fireEvent.click(screen.getByRole('button', { name: /send code/i }));
 
     await waitFor(() => {
@@ -128,6 +146,9 @@ describe('EmailVerification — send code flow', () => {
     fireEvent.change(screen.getByPlaceholderText(/you@example.com/i), {
       target: { value: 'net@example.com' },
     });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /send code/i })).not.toBeDisabled()
+    );
     fireEvent.click(screen.getByRole('button', { name: /send code/i }));
 
     await waitFor(() => {
@@ -147,6 +168,9 @@ describe('EmailVerification — code confirmation flow', () => {
     fireEvent.change(screen.getByPlaceholderText(/you@example.com/i), {
       target: { value: 'verify@example.com' },
     });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /send code/i })).not.toBeDisabled()
+    );
     fireEvent.click(screen.getByRole('button', { name: /send code/i }));
     await waitFor(() => screen.getByText(/code sent to/i));
     return screen.getAllByRole('textbox');
@@ -160,6 +184,9 @@ describe('EmailVerification — code confirmation flow', () => {
     fireEvent.change(screen.getByPlaceholderText(/you@example.com/i), {
       target: { value: 'auto@example.com' },
     });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /send code/i })).not.toBeDisabled()
+    );
     fireEvent.click(screen.getByRole('button', { name: /send code/i }));
     await waitFor(() => screen.getByText(/code sent to/i));
 

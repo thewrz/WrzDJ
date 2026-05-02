@@ -1283,12 +1283,15 @@ class ApiClient {
 
   // ========== Guest Email Verification ==========
 
-  async requestVerificationCode(email: string): Promise<{ sent: boolean }> {
+  async requestVerificationCode(
+    email: string,
+    turnstileToken: string,
+  ): Promise<{ sent: boolean }> {
     const resp = await fetch(`${getApiUrl()}/api/public/guest/verify/request`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, turnstile_token: turnstileToken }),
     });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
