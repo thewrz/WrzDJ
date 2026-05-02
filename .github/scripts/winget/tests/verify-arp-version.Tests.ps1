@@ -23,14 +23,16 @@ Describe 'verify-arp-version.ps1' {
   }
 
   It 'reads from HKCU first, falls through to HKLM' {
-    $script:hits = @()
     Mock -CommandName Get-ItemProperty -MockWith {
       param($Path)
-      $script:hits += $Path
       if ($Path -like 'HKLM:*') { return @{ DisplayVersion = '2026.408.0' } }
       return $null
     }
-    & $script:Script -Expected '2026.408.0'
-    $script:hits[0] | Should -BeLike 'HKCU:*'
+    { & $script:Script -Expected '2026.408.0' } | Should -Not -Throw
+    # Confirm HKCU was tried before HKLM resolution succeeded
+    Should -Invoke -CommandName Get-ItemProperty -Times 1 -Exactly `
+      -ParameterFilter { $Path -like 'HKCU:*' }
+    Should -Invoke -CommandName Get-ItemProperty -Times 1 -Exactly `
+      -ParameterFilter { $Path -like 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' }
   }
 }

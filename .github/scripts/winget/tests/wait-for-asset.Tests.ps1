@@ -14,16 +14,16 @@ Describe 'wait-for-asset.ps1' {
   }
 
   It 'retries on failure then succeeds' {
-    $script:calls = 0
+    $callRef = [ref]0
     Mock -CommandName Invoke-WebRequest -MockWith {
-      $script:calls++
-      if ($script:calls -lt 3) { throw [System.Net.WebException]::new('404 Not Found') }
+      $callRef.Value++
+      if ($callRef.Value -lt 3) { throw [System.Net.WebException]::new('404 Not Found') }
       return @{ StatusCode = 200 }
     }
     Mock -CommandName Start-Sleep -MockWith {}
     { & $script:Script -Url 'http://example.com/x.exe' -MaxAttempts 5 -BackoffSeconds 0 } |
       Should -Not -Throw
-    $script:calls | Should -Be 3
+    Should -Invoke -CommandName Invoke-WebRequest -Times 3 -Exactly
   }
 
   It 'throws after MaxAttempts exhausted' {
@@ -35,15 +35,14 @@ Describe 'wait-for-asset.ps1' {
 
   It 'uses exponential backoff between attempts' {
     Mock -CommandName Invoke-WebRequest -MockWith { throw '404' }
-    $script:sleeps = @()
-    Mock -CommandName Start-Sleep -MockWith {
-      param($Seconds)
-      $script:sleeps += $Seconds
-    }
+    Mock -CommandName Start-Sleep -MockWith {}
     try {
       & $script:Script -Url 'http://example.com/x.exe' -MaxAttempts 4 -BackoffSeconds 1
     } catch { }
     # attempts 1,2,3 sleep with bases 1,2,4 (attempt 4 throws before sleeping)
-    $script:sleeps | Should -Be @(1, 2, 4)
+    Should -Invoke -CommandName Start-Sleep -Times 1 -Exactly -ParameterFilter { $Seconds -eq 1 }
+    Should -Invoke -CommandName Start-Sleep -Times 1 -Exactly -ParameterFilter { $Seconds -eq 2 }
+    Should -Invoke -CommandName Start-Sleep -Times 1 -Exactly -ParameterFilter { $Seconds -eq 4 }
+    Should -Invoke -CommandName Start-Sleep -Times 3 -Exactly
   }
 }
