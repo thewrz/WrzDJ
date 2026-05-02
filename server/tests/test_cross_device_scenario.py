@@ -28,7 +28,10 @@ def _verify_email(client: TestClient, db: Session, guest_id: int, cookie: str, e
     """Helper: request code + confirm it."""
     client.cookies.set("wrzdj_guest", cookie)
     with patch("app.services.email_verification.send_verification_email"):
-        client.post("/api/public/guest/verify/request", json={"email": email})
+        client.post(
+            "/api/public/guest/verify/request",
+            json={"email": email, "turnstile_token": "test-token"},
+        )
     code_row = (
         db.query(EmailVerificationCode)
         .filter(EmailVerificationCode.guest_id == guest_id)

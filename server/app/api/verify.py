@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.core.config import get_settings
-from app.core.rate_limit import get_guest_id, limiter
+from app.core.rate_limit import get_client_ip, get_guest_id, limiter
 from app.schemas.verify import (
     VerifyConfirmResponse,
     VerifyConfirmSchema,
@@ -21,18 +21,27 @@ from app.services.email_verification import (
     confirm_verification_code,
     create_verification_code,
 )
+from app.services.turnstile import verify_turnstile_token
 
 router = APIRouter()
 
 
 @router.post("/verify/request", response_model=VerifyRequestResponse)
 @limiter.limit("10/minute")
-def request_verification_code(
+async def request_verification_code(
     payload: VerifyRequestSchema,
     request: Request,
     db: Session = Depends(get_db),
 ) -> VerifyRequestResponse:
-    """Send a verification code to the provided email."""
+    """Send a verification code to the provided email.
+
+    Requires a fresh Turnstile token (separate from the session cookie) to
+    protect against email-cost / sender-reputation abuse.
+    """
+    is_valid = await verify_turnstile_token(payload.turnstile_token, get_client_ip(request))
+    if not is_valid:
+        raise HTTPException(status_code=400, detail="CAPTCHA verification failed")
+
     guest_id = get_guest_id(request, db)
     if guest_id is None:
         raise HTTPException(status_code=400, detail="Guest identity required")
