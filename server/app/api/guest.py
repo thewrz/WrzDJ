@@ -14,6 +14,7 @@ from app.services.human_verification import issue_human_cookie
 from app.services.turnstile import verify_turnstile_token
 
 router = APIRouter()
+settings = get_settings()
 
 
 @router.post("/guest/identify", response_model=IdentifyResponse)
@@ -44,7 +45,7 @@ def identify(
     )
 
     if result.token:
-        is_prod = get_settings().env == "production"
+        is_prod = settings.env == "production"
         response.set_cookie(
             key="wrzdj_guest",
             value=result.token,
@@ -78,5 +79,4 @@ async def verify_human(
 
     issue_human_cookie(response, guest_id)
 
-    settings = get_settings()
     return VerifyHumanResponse(verified=True, expires_in=settings.human_cookie_ttl_seconds)

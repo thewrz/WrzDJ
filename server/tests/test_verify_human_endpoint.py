@@ -37,6 +37,23 @@ class TestVerifyHumanEndpoint:
         assert body["expires_in"] == 3600
         assert COOKIE_NAME in response.cookies
 
+        # Verify the cookie binds to THIS guest, not an arbitrary one
+        from fastapi import Request as FastAPIRequest
+
+        from app.services.human_verification import verify_human_cookie
+
+        cookie_value = response.cookies[COOKIE_NAME]
+        scope = {
+            "type": "http",
+            "headers": [],
+            "method": "GET",
+            "path": "/",
+            "query_string": b"",
+        }
+        verify_request = FastAPIRequest(scope)
+        verify_request._cookies = {COOKIE_NAME: cookie_value}
+        assert verify_human_cookie(verify_request) == guest.id
+
     @patch(
         "app.api.guest.verify_turnstile_token",
         new_callable=AsyncMock,
