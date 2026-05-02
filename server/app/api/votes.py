@@ -7,7 +7,7 @@ See docs/RECOVERY-IP-IDENTITY.md.
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_db, require_verified_human_soft
 from app.core.rate_limit import get_guest_id, limiter
 from app.models.request import Request as SongRequest
 from app.schemas.vote import VoteResponse
@@ -38,6 +38,7 @@ def vote_for_request(
     request_id: int = Path(..., gt=0),
     request: Request = None,
     db: Session = Depends(get_db),
+    _human: int | None = Depends(require_verified_human_soft),
 ) -> VoteResponse:
     """Upvote a song request. Idempotent: voting twice has no effect.
 
@@ -66,6 +67,7 @@ def unvote_request(
     request_id: int = Path(..., gt=0),
     request: Request = None,
     db: Session = Depends(get_db),
+    _human: int | None = Depends(require_verified_human_soft),
 ) -> VoteResponse:
     """Remove vote from a song request. Idempotent.
 
