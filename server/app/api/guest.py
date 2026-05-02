@@ -1,14 +1,17 @@
 """Public API endpoint for guest identity resolution."""
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.core.config import get_settings
-from app.core.rate_limit import limiter
+from app.core.rate_limit import get_client_ip, get_guest_id, limiter
 from app.schemas.guest import IdentifyRequest, IdentifyResponse
+from app.schemas.human_verification import VerifyHumanRequest, VerifyHumanResponse
 from app.services.guest_identity import identify_guest
+from app.services.human_verification import issue_human_cookie
+from app.services.turnstile import verify_turnstile_token
 
 router = APIRouter()
 
@@ -53,3 +56,27 @@ def identify(
         )
 
     return response
+
+
+@router.post("/guest/verify-human", response_model=VerifyHumanResponse)
+@limiter.limit("10/minute")
+async def verify_human(
+    payload: VerifyHumanRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> VerifyHumanResponse:
+    """Validate a Turnstile token and issue a wrzdj_human session cookie."""
+    guest_id = get_guest_id(request, db)
+    if guest_id is None:
+        raise HTTPException(status_code=400, detail="Guest identity required")
+
+    client_ip = get_client_ip(request)
+    is_valid = await verify_turnstile_token(payload.turnstile_token, client_ip)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail="CAPTCHA verification failed")
+
+    issue_human_cookie(response, guest_id)
+
+    settings = get_settings()
+    return VerifyHumanResponse(verified=True, expires_in=settings.human_cookie_ttl_seconds)
