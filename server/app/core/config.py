@@ -102,7 +102,8 @@ class Settings(BaseSettings):
     # HMAC-SHA256 key for wrzdj_human cookie signing.
     # Production: REQUIRED — startup fatal if missing.
     # Dev: auto-generates ephemeral key if empty (logs warning).
-    # Generate: python -c "import secrets,base64; print(base64.urlsafe_b64encode(secrets.token_bytes(32))...)"  # noqa: E501
+    # Generate via:
+    #   python -c "import secrets, base64; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"  # noqa: E501
     human_cookie_secret: str = ""
     human_cookie_ttl_seconds: int = 3600  # 60 min sliding window
 
@@ -164,7 +165,6 @@ class Settings(BaseSettings):
         """Return the HMAC key as bytes. In dev, auto-generates an ephemeral
         key on first call and caches it on the settings instance."""
         import base64
-        import logging
         import secrets
 
         if self.human_cookie_secret:
@@ -207,6 +207,12 @@ def validate_settings(settings: Settings) -> None:
                 "TOKEN_ENCRYPTION_KEY must be set in production. "
                 'Generate with: python -c "from cryptography.fernet import Fernet; '
                 'print(Fernet.generate_key().decode())"'
+            )
+        if not settings.human_cookie_secret:
+            errors.append(
+                "HUMAN_COOKIE_SECRET must be set in production. "
+                'Generate with: python -c "import secrets, base64; '
+                'print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"'
             )
 
     if not settings.is_production:
