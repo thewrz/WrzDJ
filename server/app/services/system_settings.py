@@ -15,6 +15,7 @@ def get_system_settings(db: Session) -> SystemSettings:
             tidal_enabled=True,
             beatport_enabled=True,
             bridge_enabled=True,
+            human_verification_enforced=False,
             llm_enabled=True,
             llm_model="claude-haiku-4-5-20251001",
             llm_rate_limit_per_minute=3,
