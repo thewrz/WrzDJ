@@ -161,6 +161,23 @@ class TestVerifyHumanCookie:
             request = _make_request_with_cookie(cookie_value)
             assert verify_human_cookie(request) is None, f"bad value {bad_value!r} was accepted"
 
+    def test_validly_signed_non_json_payload_returns_none(self, mock_settings):
+        """A signed payload that isn't valid JSON returns None (not 500)."""
+        mock_settings.return_value.effective_human_cookie_secret = b"x" * 32
+        mock_settings.return_value.is_production = False
+        mock_settings.return_value.human_cookie_ttl_seconds = 3600
+
+        from app.services.human_verification import _b64encode, _sign
+
+        key = b"x" * 32
+        # Sign garbage bytes — sig check passes, json.loads fails
+        garbage = b"not-valid-json-at-all"
+        sig = _sign(garbage, key)
+        cookie_value = f"{_b64encode(garbage)}.{_b64encode(sig)}"
+
+        request = _make_request_with_cookie(cookie_value)
+        assert verify_human_cookie(request) is None
+
     def test_malformed_cookie_returns_none(self, mock_settings):
         mock_settings.return_value.effective_human_cookie_secret = b"x" * 32
 

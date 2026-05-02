@@ -99,7 +99,7 @@ def verify_human_cookie(request: Request) -> int | None:
         exp = payload["exp"]
         if not isinstance(exp, int) or isinstance(exp, bool):
             return None
-    except (KeyError, TypeError):
+    except (ValueError, KeyError, TypeError):
         return None
 
     if exp < int(utcnow().timestamp()):
