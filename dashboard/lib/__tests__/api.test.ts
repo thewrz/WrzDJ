@@ -827,13 +827,14 @@ describe('ApiClient', () => {
         }),
       });
 
-      const result = await api.createKioskPairing();
+      const result = await api.createKioskPairing('test-nonce-xyz');
       expect(result.pair_code).toBe('ABC234');
       expect(result.session_token).toHaveLength(64);
 
       const [url, options] = mockFetch.mock.calls[0];
       expect(url).toContain('/api/public/kiosk/pair');
       expect(options.method).toBe('POST');
+      expect(options.headers['X-Pair-Nonce']).toBe('test-nonce-xyz');
     });
 
     it('polls pairing status', async () => {

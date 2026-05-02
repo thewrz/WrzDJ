@@ -1033,9 +1033,22 @@ class ApiClient {
 
   // ========== Kiosk Pairing ==========
 
-  async createKioskPairing(): Promise<KioskPairResponse> {
+  async getKioskPairChallenge(): Promise<{ nonce: string; expires_in: number }> {
+    const response = await fetch(`${getApiUrl()}/api/public/kiosk/pair-challenge`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Failed to fetch pair challenge' }));
+      throw new ApiError(error.detail || 'Failed to fetch pair challenge', response.status);
+    }
+    return response.json();
+  }
+
+  async createKioskPairing(nonce: string): Promise<KioskPairResponse> {
     const response = await fetch(`${getApiUrl()}/api/public/kiosk/pair`, {
       method: 'POST',
+      headers: { 'X-Pair-Nonce': nonce },
+      credentials: 'include',
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Pairing failed' }));
