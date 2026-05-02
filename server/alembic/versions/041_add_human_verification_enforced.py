@@ -29,8 +29,6 @@ def upgrade() -> None:
             server_default=sa.text("false"),
         ),
     )
-    # Drop server_default so future inserts use the SQLAlchemy default
-    op.alter_column("system_settings", "human_verification_enforced", server_default=None)
 
 
 def downgrade() -> None:
