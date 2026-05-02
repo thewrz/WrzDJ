@@ -1,10 +1,15 @@
 """Kiosk pairing and management API endpoints."""
 
+import hmac
+import secrets
+import time
+
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db
-from app.core.rate_limit import limiter
+from app.core.rate_limit import get_client_ip, limiter
 from app.models.event import Event
 from app.models.user import User
 from app.schemas.kiosk import (
@@ -29,6 +34,18 @@ from app.services.kiosk import (
     rename_kiosk,
     update_kiosk_last_seen,
 )
+
+# In-memory nonce cache for kiosk pairing. Safe under single-worker uvicorn.
+# {client_ip: (nonce_str, expires_at_unix_timestamp)}
+# If deploy ever moves to multi-worker, replace with KioskPairChallenge DB model.
+_pair_nonces: dict[str, tuple[str, float]] = {}
+_NONCE_TTL_SECONDS = 10
+
+
+class KioskPairChallengeResponse(BaseModel):
+    nonce: str
+    expires_in: int
+
 
 # Public endpoints (no auth) — for kiosk devices
 public_router = APIRouter()
@@ -61,10 +78,43 @@ def _assert_caller_owns_event(event: Event, user: User) -> None:
 # ── Public endpoints ───────────────────────────────────────────────────
 
 
-@public_router.post("/pair", response_model=KioskPairResponse)
+@public_router.get("/pair-challenge", response_model=KioskPairChallengeResponse)
 @limiter.limit("10/minute")
+def get_pair_challenge(request: Request) -> KioskPairChallengeResponse:
+    """Issue a one-time IP-bound nonce required for kiosk pairing."""
+    client_ip = get_client_ip(request)
+    now = time.time()
+    # Opportunistic prune of expired entries
+    expired = [ip for ip, (_, exp) in _pair_nonces.items() if exp < now]
+    for ip in expired:
+        _pair_nonces.pop(ip, None)
+
+    nonce = secrets.token_urlsafe(16)
+    _pair_nonces[client_ip] = (nonce, now + _NONCE_TTL_SECONDS)
+    return KioskPairChallengeResponse(nonce=nonce, expires_in=_NONCE_TTL_SECONDS)
+
+
+@public_router.post("/pair", response_model=KioskPairResponse)
+@limiter.limit("3/minute")
 def create_pairing(request: Request, db: Session = Depends(get_db)):
-    """Create a new kiosk pairing session."""
+    """Create a new kiosk pairing session.
+
+    Requires a valid X-Pair-Nonce header obtained from /pair-challenge,
+    bound to the same client IP. Nonce is consumed on use.
+    """
+    client_ip = get_client_ip(request)
+    nonce_header = request.headers.get("X-Pair-Nonce")
+    entry = _pair_nonces.pop(client_ip, None)
+
+    if not nonce_header or entry is None:
+        raise HTTPException(400, "Missing or unknown pairing nonce")
+
+    nonce, expires_at = entry
+    if not hmac.compare_digest(nonce_header, nonce):
+        raise HTTPException(400, "Invalid pairing nonce")
+    if time.time() > expires_at:
+        raise HTTPException(400, "Pairing nonce expired")
+
     kiosk = create_kiosk(db)
     return KioskPairResponse(
         pair_code=kiosk.pair_code,

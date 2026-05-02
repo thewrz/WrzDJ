@@ -15,7 +15,11 @@ class TestKioskPairing:
     """POST /api/public/kiosk/pair"""
 
     def test_creates_pairing_session(self, client: TestClient):
-        resp = client.post("/api/public/kiosk/pair")
+        challenge = client.get("/api/public/kiosk/pair-challenge").json()
+        resp = client.post(
+            "/api/public/kiosk/pair",
+            headers={"X-Pair-Nonce": challenge["nonce"]},
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["pair_code"]) == 6
@@ -23,7 +27,11 @@ class TestKioskPairing:
         assert "expires_at" in data
 
     def test_pair_code_is_alphanumeric(self, client: TestClient):
-        resp = client.post("/api/public/kiosk/pair")
+        challenge = client.get("/api/public/kiosk/pair-challenge").json()
+        resp = client.post(
+            "/api/public/kiosk/pair",
+            headers={"X-Pair-Nonce": challenge["nonce"]},
+        )
         code = resp.json()["pair_code"]
         assert code.isalnum()
         assert code == code.upper()
