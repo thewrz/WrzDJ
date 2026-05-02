@@ -9,19 +9,19 @@
 A real-time song request system for DJs. Guests scan a QR code to submit requests. DJs manage everything from a live dashboard with automatic track detection from their equipment via plugins for Denon, Pioneer, Serato, and Traktor.
 
 <p align="center">
-  <img src="docs/images/event-management.png" alt="WrzDJ Song Management" width="800">
+  <img src="docs/images/screenshot-event-management.png" alt="WrzDJ Song Management" width="800">
   <br>
   <em>Song Management: request queue with BPM/key/genre metadata, accept/reject, song suggestions</em>
 </p>
 
 <p align="center">
-  <img src="docs/images/event-management-tab.png" alt="WrzDJ Event Management" width="800">
+  <img src="docs/images/screenshot-event-management-tab.png" alt="WrzDJ Event Management" width="800">
   <br>
   <em>Event Management: kiosk controls, bridge status with admin commands, cloud provider sync</em>
 </p>
 
 <p align="center">
-  <img src="docs/images/guest-join-mobile.png" alt="WrzDJ Guest Join Page (Mobile)" width="300">
+  <img src="docs/images/screenshot-join-mobile.png" alt="WrzDJ Guest Join Page (Mobile)" width="300">
   <br>
   <em>Guest join page: scan a QR code, browse the queue, request a song</em>
 </p>

@@ -92,7 +92,7 @@ test.describe('Authenticated pages', () => {
     await page.goto('/dashboard');
     await waitForPage(page);
     await ensureCleanUI(page);
-    await capture(page, 'dj-dashboard');
+    await capture(page, 'screenshot-dashboard');
   });
 
   test('Events List', async ({ page }) => {
@@ -100,7 +100,7 @@ test.describe('Authenticated pages', () => {
     await page.goto('/events');
     await waitForPage(page);
     await ensureCleanUI(page);
-    await capture(page, 'events-list');
+    await capture(page, 'screenshot-events-list');
   });
 
   test('Event Management — Song Tab', async ({ page }) => {
@@ -108,7 +108,7 @@ test.describe('Authenticated pages', () => {
     await page.goto(`/events/${eventCode}`);
     await waitForPage(page);
     await ensureCleanUI(page);
-    await capture(page, 'event-management');
+    await capture(page, 'screenshot-event-management');
   });
 
   test('Event Management — Manage Tab', async ({ page }) => {
@@ -118,7 +118,7 @@ test.describe('Authenticated pages', () => {
     await ensureCleanUI(page);
     await page.click('.event-tab:has-text("Event Management")');
     await page.waitForTimeout(500);
-    await capture(page, 'event-management-tab');
+    await capture(page, 'screenshot-event-management-tab');
   });
 
   test('Admin Overview', async ({ page }) => {
@@ -126,7 +126,7 @@ test.describe('Authenticated pages', () => {
     await page.goto('/admin');
     await waitForPage(page);
     await ensureCleanUI(page);
-    await capture(page, 'admin-overview');
+    await capture(page, 'screenshot-admin-overview');
   });
 
   test('Admin Users', async ({ page }) => {
@@ -134,7 +134,7 @@ test.describe('Authenticated pages', () => {
     await page.goto('/admin/users');
     await waitForPage(page);
     await ensureCleanUI(page);
-    await capture(page, 'admin-users');
+    await capture(page, 'screenshot-admin-users');
   });
 
   test('Admin Integrations', async ({ page }) => {
@@ -142,7 +142,7 @@ test.describe('Authenticated pages', () => {
     await page.goto('/admin/integrations');
     await waitForPage(page);
     await ensureCleanUI(page);
-    await capture(page, 'admin-integrations');
+    await capture(page, 'screenshot-admin-integrations');
   });
 
   test('Admin Settings', async ({ page }) => {
@@ -150,7 +150,7 @@ test.describe('Authenticated pages', () => {
     await page.goto('/admin/settings');
     await waitForPage(page);
     await ensureCleanUI(page);
-    await capture(page, 'admin-settings');
+    await capture(page, 'screenshot-admin-settings');
   });
 });
 
@@ -190,7 +190,7 @@ test.describe('Public pages', () => {
     const page = await ctx.newPage();
     await page.goto(`/join/${eventCode}`);
     await waitForPage(page);
-    await capture(page, 'guest-join-gate-mobile');
+    await capture(page, 'screenshot-join-gate-mobile');
     await ctx.close();
   });
 
@@ -201,14 +201,14 @@ test.describe('Public pages', () => {
     await page.goto(`/join/${eventCode}`);
     await waitForPage(page);
     await page.waitForTimeout(700);
-    await capture(page, 'guest-join-mobile');
+    await capture(page, 'screenshot-join-mobile');
 
     // Open song detail sheet — first request row.
     const firstRow = page.locator('.gst-tower-row').first();
     if ((await firstRow.count()) > 0) {
       await firstRow.click();
       await page.waitForTimeout(500);
-      await capture(page, 'guest-join-detail-mobile');
+      await capture(page, 'screenshot-join-detail-mobile');
     }
     await ctx.close();
   });
@@ -220,13 +220,13 @@ test.describe('Public pages', () => {
     await page.goto(`/collect/${eventCode}`);
     await waitForPage(page);
     await page.waitForTimeout(700);
-    await capture(page, 'guest-collect-mobile');
+    await capture(page, 'screenshot-collect-mobile');
 
     const firstRow = page.locator('.gst-collect-row').first();
     if ((await firstRow.count()) > 0) {
       await firstRow.click();
       await page.waitForTimeout(500);
-      await capture(page, 'guest-collect-detail-mobile');
+      await capture(page, 'screenshot-collect-detail-mobile');
     }
     await ctx.close();
   });
@@ -239,7 +239,7 @@ test.describe('Public pages', () => {
     const page = await ctx.newPage();
     await page.goto(`/e/${eventCode}/display`);
     await waitForPage(page);
-    await capture(page, 'kiosk-display', { fullPage: false });
+    await capture(page, 'screenshot-kiosk', { fullPage: false });
     await ctx.close();
   });
 });
