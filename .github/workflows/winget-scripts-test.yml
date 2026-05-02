@@ -1,0 +1,49 @@
+name: winget-scripts-test
+
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/winget/**'
+      - '.github/workflows/winget-scripts-test.yml'
+      - '.github/workflows/release.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/winget/**'
+      - '.github/workflows/winget-scripts-test.yml'
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  bats:
+    name: Bash unit tests (bats)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+      - name: Run bats tests
+        run: bats .github/scripts/winget/tests/*.bats
+
+  pester:
+    name: PowerShell unit tests (Pester)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Ensure Pester v5 is installed
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable -Name Pester | Where-Object Version -ge ([version]'5.0.0'))) {
+            Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          }
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          Import-Module Pester -MinimumVersion 5.0.0
+          $config = New-PesterConfiguration
+          $config.Run.Path = '.github/scripts/winget/tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config
