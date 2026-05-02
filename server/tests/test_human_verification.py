@@ -1,7 +1,7 @@
 """Tests for human-verification cookie sign/verify."""
 
 import base64
-import time
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 from fastapi import Request, Response
@@ -123,23 +123,43 @@ class TestVerifyHumanCookie:
         assert result is None
 
     def test_expired_cookie_returns_none(self, mock_settings):
-        # Issue with ttl=0 so it's already expired
+        """A cookie whose exp is in the past returns None."""
         mock_settings.return_value.effective_human_cookie_secret = b"x" * 32
         mock_settings.return_value.is_production = False
-        mock_settings.return_value.human_cookie_ttl_seconds = 0
-
-        response = Response()
-        issue_human_cookie(response, guest_id=42)
-        set_cookie = response.headers.get("set-cookie")
-        cookie_value = set_cookie.split("=", 1)[1].split(";", 1)[0]
-        # Sleep beyond exp
-        time.sleep(1.1)
-
-        # Restore real ttl for the verify call (doesn't matter, exp is in the cookie)
         mock_settings.return_value.human_cookie_ttl_seconds = 3600
+
+        # Issue cookie at a fixed past timestamp
+        past = datetime(2000, 1, 1, tzinfo=UTC)
+        with patch("app.services.human_verification.utcnow", return_value=past):
+            response = Response()
+            issue_human_cookie(response, guest_id=42)
+            set_cookie = response.headers.get("set-cookie")
+            cookie_value = set_cookie.split("=", 1)[1].split(";", 1)[0]
+
+        # Verify under real (current) time — exp is far in the past
         request = _make_request_with_cookie(cookie_value)
         result = verify_human_cookie(request)
         assert result is None
+
+    def test_guest_id_must_be_strict_int(self, mock_settings):
+        """Cookies with bool, str, or float guest_id are rejected."""
+        import json as _json
+
+        mock_settings.return_value.effective_human_cookie_secret = b"x" * 32
+        mock_settings.return_value.is_production = False
+        mock_settings.return_value.human_cookie_ttl_seconds = 3600
+
+        from app.services.human_verification import _b64encode, _sign
+
+        key = b"x" * 32
+        for bad_value in [True, False, "42", 42.5, [42], {"id": 42}, None]:
+            payload = {"guest_id": bad_value, "exp": 9999999999}
+            payload_bytes = _json.dumps(payload, separators=(",", ":")).encode()
+            sig = _sign(payload_bytes, key)
+            cookie_value = f"{_b64encode(payload_bytes)}.{_b64encode(sig)}"
+
+            request = _make_request_with_cookie(cookie_value)
+            assert verify_human_cookie(request) is None, f"bad value {bad_value!r} was accepted"
 
     def test_malformed_cookie_returns_none(self, mock_settings):
         mock_settings.return_value.effective_human_cookie_secret = b"x" * 32

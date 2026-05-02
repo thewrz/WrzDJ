@@ -92,9 +92,14 @@ def verify_human_cookie(request: Request) -> int | None:
 
     try:
         payload = json.loads(payload_bytes)
-        guest_id = int(payload["guest_id"])
-        exp = int(payload["exp"])
-    except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+        guest_id_raw = payload["guest_id"]
+        if not isinstance(guest_id_raw, int) or isinstance(guest_id_raw, bool):
+            return None
+        guest_id = guest_id_raw
+        exp = payload["exp"]
+        if not isinstance(exp, int) or isinstance(exp, bool):
+            return None
+    except (KeyError, TypeError):
         return None
 
     if exp < int(utcnow().timestamp()):
