@@ -168,7 +168,11 @@ class Settings(BaseSettings):
         import secrets
 
         if self.human_cookie_secret:
-            return base64.urlsafe_b64decode(self.human_cookie_secret)
+            # Accept both padded (openssl rand -base64 32 → 44 chars) and
+            # unpadded (secrets.token_urlsafe(32) → 43 chars) forms.
+            s = self.human_cookie_secret
+            pad = "=" * (-len(s) % 4)
+            return base64.urlsafe_b64decode(s + pad)
 
         if self.is_production:
             msg = "HUMAN_COOKIE_SECRET is required in production"
