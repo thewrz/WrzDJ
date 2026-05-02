@@ -156,8 +156,33 @@ test.describe('Authenticated pages', () => {
 
 // --- Public pages ---
 
+// Token from server/scripts/seed_demo_event.py — drops the NicknameGate so we capture
+// the actual Tower v2 styled UI behind it.
+const DEMO_GUEST_TOKEN =
+  'demoguest0000000000000000000000000000000000000000000000000demo';
+
+async function newGuestContext(browser: import('@playwright/test').Browser, baseURL: string) {
+  const ctx = await browser.newContext({
+    viewport: { width: 430, height: 844 },
+    ignoreHTTPSErrors: true,
+  });
+  const url = new URL(baseURL);
+  await ctx.addCookies([
+    {
+      name: 'wrzdj_guest',
+      value: DEMO_GUEST_TOKEN,
+      domain: url.hostname,
+      path: '/',
+      secure: true,
+      sameSite: 'Lax',
+    },
+  ]);
+  return ctx;
+}
+
 test.describe('Public pages', () => {
-  test('Guest Join (mobile)', async ({ browser }) => {
+  test('Guest Join — gate (mobile)', async ({ browser }) => {
+    // No cookie — captures the unauthenticated NicknameGate.
     const ctx = await browser.newContext({
       viewport: { width: 430, height: 844 },
       ignoreHTTPSErrors: true,
@@ -165,33 +190,44 @@ test.describe('Public pages', () => {
     const page = await ctx.newPage();
     await page.goto(`/join/${eventCode}`);
     await waitForPage(page);
-    await capture(page, 'guest-join-mobile');
+    await capture(page, 'guest-join-gate-mobile');
     await ctx.close();
   });
 
-  test('Guest Collect (mobile)', async ({ browser, playwright }, testInfo) => {
-    // Force the event into collection phase so /collect renders the Tower v2 UI.
-    const base = testInfo.project.use.baseURL || 'https://app.local';
-    const apiUrl = new URL(base);
-    apiUrl.port = API_PORT;
-    const api = await playwright.request.newContext({
-      baseURL: apiUrl.origin,
-      ignoreHTTPSErrors: true,
-    });
-    await api.patch(`/api/events/${eventCode}/collection`, {
-      headers: { Authorization: `Bearer ${jwt}` },
-      data: { collection_phase_override: 'force_collection' },
-    });
-    await api.dispose();
+  test('Guest Join — Tower (mobile)', async ({ browser }, testInfo) => {
+    const baseURL = testInfo.project.use.baseURL || 'https://app.local';
+    const ctx = await newGuestContext(browser, baseURL);
+    const page = await ctx.newPage();
+    await page.goto(`/join/${eventCode}`);
+    await waitForPage(page);
+    await page.waitForTimeout(700);
+    await capture(page, 'guest-join-mobile');
 
-    const ctx = await browser.newContext({
-      viewport: { width: 430, height: 844 },
-      ignoreHTTPSErrors: true,
-    });
+    // Open song detail sheet — first request row.
+    const firstRow = page.locator('.gst-tower-row').first();
+    if ((await firstRow.count()) > 0) {
+      await firstRow.click();
+      await page.waitForTimeout(500);
+      await capture(page, 'guest-join-detail-mobile');
+    }
+    await ctx.close();
+  });
+
+  test('Guest Collect — Tower (mobile)', async ({ browser }, testInfo) => {
+    const baseURL = testInfo.project.use.baseURL || 'https://app.local';
+    const ctx = await newGuestContext(browser, baseURL);
     const page = await ctx.newPage();
     await page.goto(`/collect/${eventCode}`);
     await waitForPage(page);
+    await page.waitForTimeout(700);
     await capture(page, 'guest-collect-mobile');
+
+    const firstRow = page.locator('.gst-collect-row').first();
+    if ((await firstRow.count()) > 0) {
+      await firstRow.click();
+      await page.waitForTimeout(500);
+      await capture(page, 'guest-collect-detail-mobile');
+    }
     await ctx.close();
   });
 

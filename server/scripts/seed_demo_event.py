@@ -1,4 +1,8 @@
-"""Seed a 'demo' event with 4 enriched requests + 1 upvoted, for screenshot fixtures."""
+"""Seed a 'demo' event with 4 enriched requests + 1 upvoted, for screenshot fixtures.
+
+Also seeds a verified guest + per-event profile so Playwright fixtures can drop a
+`wrzdj_guest` cookie and bypass the NicknameGate to capture the Tower v2 UI.
+"""
 
 import hashlib
 from datetime import timedelta
@@ -6,8 +10,13 @@ from datetime import timedelta
 from app.core.time import utcnow
 from app.db.session import SessionLocal
 from app.models.event import Event
+from app.models.guest import Guest
+from app.models.guest_profile import GuestProfile
 from app.models.request import Request as SongRequest
 from app.models.user import User
+
+DEMO_GUEST_TOKEN = "demoguest0000000000000000000000000000000000000000000000000demo"
+DEMO_GUEST_NICKNAME = "Marcus"
 
 
 def _dedupe_key(artist: str, title: str) -> str:
@@ -38,6 +47,9 @@ def main() -> None:
             event.is_active = True
             event.archived_at = None
 
+        # Force collection phase so /collect renders the leaderboard, not the live queue.
+        event.collection_phase_override = "force_collection"
+
         db.query(SongRequest).filter(SongRequest.event_id == event.id).delete()
         db.flush()
 
@@ -47,6 +59,20 @@ def main() -> None:
             ("CamelPhat", "Cola", "Tech House", 124.0, "5A", "Tyler", 0),
             ("Disclosure", "Latch", "Future Garage", 121.0, "10B", "Sasha", 0),
         ]
+
+        # Verified demo guest needs to exist before requests so we can link Marcus's pick.
+        guest = db.query(Guest).filter(Guest.token == DEMO_GUEST_TOKEN).first()
+        if guest is None:
+            guest = Guest(
+                token=DEMO_GUEST_TOKEN,
+                nickname=DEMO_GUEST_NICKNAME,
+                email_verified_at=utcnow(),
+            )
+            db.add(guest)
+            db.flush()
+        else:
+            guest.email_verified_at = utcnow()
+            guest.nickname = DEMO_GUEST_NICKNAME
 
         for artist, title, genre, bpm, key, nick, votes in seeds:
             req = SongRequest(
@@ -61,11 +87,37 @@ def main() -> None:
                 musical_key=key,
                 vote_count=votes,
                 dedupe_key=_dedupe_key(artist, title),
+                # Link Marcus's pick to demo guest so /join doesn't auto-open the
+                # "submit a request" sheet over the screenshot.
+                guest_id=guest.id if nick == DEMO_GUEST_NICKNAME else None,
+                # Surface in /collect leaderboard.
+                submitted_during_collection=True,
             )
             db.add(req)
 
+        # Per-event profile (the Guest row is created above, before requests).
+        profile = (
+            db.query(GuestProfile)
+            .filter(GuestProfile.event_id == event.id, GuestProfile.guest_id == guest.id)
+            .first()
+        )
+        if profile is None:
+            db.add(
+                GuestProfile(
+                    event_id=event.id,
+                    guest_id=guest.id,
+                    nickname=DEMO_GUEST_NICKNAME,
+                    submission_count=1,
+                )
+            )
+        else:
+            profile.nickname = DEMO_GUEST_NICKNAME
+
         db.commit()
-        print(f"seeded event '{event.name}' code={event.code} id={event.id}")
+        print(
+            f"seeded event '{event.name}' code={event.code} id={event.id} "
+            f"guest_token={DEMO_GUEST_TOKEN}"
+        )
     finally:
         db.close()
 
