@@ -11,8 +11,25 @@ on:
         default: 'all'
 
 jobs:
+  validate-tag:
+    name: Validate tag format
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Reject malformed tags
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          chmod +x .github/scripts/winget/validate-tag.sh
+          .github/scripts/winget/validate-tag.sh "$TAG"
+
   build-bridge-app:
     name: Build Bridge App (${{ matrix.platform }}${{ matrix.arch && format('-{0}', matrix.arch) || '' }})
+    needs: [validate-tag]
+    if: |
+      always() &&
+      (needs.validate-tag.result == 'success' || needs.validate-tag.result == 'skipped')
     strategy:
       matrix:
         include:
@@ -60,22 +77,22 @@ jobs:
 
       - name: Set version from tag
         if: steps.filter.outputs.skip != 'true'
-        working-directory: bridge-app
         shell: bash
+        env:
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            # Convert date tag (2026.02.08.12) to valid semver (2026.208.12)
-            # NuGet/Squirrel requires 3-part semver, not 4-part date versions
-            TAG="${GITHUB_REF_NAME#v}"
-            IFS='.' read -r Y M D R <<< "$TAG"
-            SEMVER="${Y}.$((10#${M} * 100 + 10#${D})).${R:-0}"
-            echo "Tag $TAG → semver $SEMVER"
+          chmod +x .github/scripts/winget/tag-to-semver.sh
+          if [[ "$REF" == refs/tags/v* ]]; then
+            SEMVER="$(.github/scripts/winget/tag-to-semver.sh "$REF_NAME")"
+            echo "Tag $REF_NAME → semver $SEMVER"
           else
-            # Manual dispatch — use dev version with short SHA
-            SEMVER="0.0.0-dev.${GITHUB_SHA::7}"
+            SEMVER="0.0.0-dev.${SHA:0:7}"
             echo "No tag — using dev version $SEMVER"
           fi
-          npm version "$SEMVER" --no-git-tag-version --allow-same-version
+          echo "SEMVER=$SEMVER" >> "$GITHUB_ENV"
+          (cd bridge-app && npm version "$SEMVER" --no-git-tag-version --allow-same-version)
 
       - name: Build installers
         if: steps.filter.outputs.skip != 'true'
@@ -89,28 +106,22 @@ jobs:
           $exe = Get-ChildItem -Path "bridge-app/out/make/squirrel.windows/x64/WrzDJ-Bridge.exe" -ErrorAction Stop
           Write-Host "Installer found: $($exe.FullName) ($([math]::Round($exe.Length/1MB, 1)) MB)"
 
-          # Run silent install — should exit with code 0 and no GUI
           $proc = Start-Process -FilePath $exe.FullName -ArgumentList "--silent" -Wait -PassThru -NoNewWindow
           if ($proc.ExitCode -ne 0) {
             Write-Error "Silent install failed with exit code $($proc.ExitCode)"
             exit 1
           }
-          Write-Host "Silent install completed successfully (exit code 0)"
+          Write-Host "Silent install completed (exit code 0)"
 
-          # Verify the app appears in installed programs
-          $installed = Get-ChildItem "$env:LOCALAPPDATA\wrzdj-bridge" -ErrorAction SilentlyContinue
-          if ($installed) {
-            Write-Host "App installed to: $env:LOCALAPPDATA\wrzdj-bridge"
-          } else {
-            Write-Host "WARNING: Install directory not found at expected location"
-          }
+      - name: Verify ARP DisplayVersion matches semver (Windows)
+        if: steps.filter.outputs.skip != 'true' && matrix.platform == 'win32' && startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: ./.github/scripts/winget/verify-arp-version.ps1 -Expected $env:SEMVER
 
-          # Clean up — run uninstall
-          $update = "$env:LOCALAPPDATA\wrzdj-bridge\Update.exe"
-          if (Test-Path $update) {
-            Start-Process -FilePath $update -ArgumentList "--uninstall" -Wait -NoNewWindow
-            Write-Host "Uninstall completed"
-          }
+      - name: Verify silent uninstall (Windows)
+        if: steps.filter.outputs.skip != 'true' && matrix.platform == 'win32'
+        shell: pwsh
+        run: ./.github/scripts/winget/verify-uninstall.ps1
 
       - name: Upload build artifacts
         if: steps.filter.outputs.skip != 'true'
@@ -199,26 +210,42 @@ jobs:
 
   update-winget:
     name: Update winget manifest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: |
+      startsWith(github.ref, 'refs/tags/v') &&
+      (github.event_name != 'workflow_dispatch' ||
+       inputs.platforms == null ||
+       inputs.platforms == '' ||
+       inputs.platforms == 'all' ||
+       contains(inputs.platforms, 'win32'))
     needs: [create-release]
     runs-on: windows-latest
+    env:
+      REF_NAME: ${{ github.ref_name }}
     steps:
-      - name: Update winget package
+      - uses: actions/checkout@v6
+
+      - name: Compute semver from tag
         shell: pwsh
         run: |
-          iwr https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
-          # Convert date tag (2026.02.08.12) to semver (2026.208.12) to match ARP
-          $tag = "${{ github.ref_name }}".TrimStart("v")
-          $parts = $tag.Split(".")
-          $y = [int]$parts[0]
-          $m = [int]$parts[1]
-          $d = [int]$parts[2]
-          $r = if ($parts.Length -gt 3) { [int]$parts[3] } else { 0 }
-          $version = "$y.$($m * 100 + $d).$r"
-          Write-Host "Tag $tag -> semver $version"
-          $url = "https://github.com/thewrz/WrzDJ/releases/download/${{ github.ref_name }}/WrzDJ-Bridge.exe"
+          $version = & ./.github/scripts/winget/tag-to-semver.ps1 -Tag $env:REF_NAME
+          Write-Host "Tag $env:REF_NAME -> semver $version"
+          "SEMVER=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Wait for release asset to be reachable
+        shell: pwsh
+        env:
+          ASSET_URL: https://github.com/thewrz/WrzDJ/releases/download/${{ github.ref_name }}/WrzDJ-Bridge.exe
+        run: ./.github/scripts/winget/wait-for-asset.ps1 -Url $env:ASSET_URL
+
+      - name: Update winget package
+        shell: pwsh
+        env:
+          ASSET_URL: https://github.com/thewrz/WrzDJ/releases/download/${{ github.ref_name }}/WrzDJ-Bridge.exe
+          WINGET_PAT: ${{ secrets.WINGET_PAT }}
+        run: |
+          Invoke-WebRequest -Uri https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
           .\wingetcreate.exe update WrzDJ.WrzDJ-Bridge `
-            --urls "$url|x64" `
-            --version $version `
-            --token ${{ secrets.WINGET_PAT }} `
+            --urls "$env:ASSET_URL|x64" `
+            --version $env:SEMVER `
+            --token $env:WINGET_PAT `
             --submit
