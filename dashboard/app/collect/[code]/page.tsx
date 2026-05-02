@@ -12,6 +12,7 @@ import {
   SearchResult,
 } from '../../../lib/api';
 import { useGuestIdentity } from '../../../lib/use-guest-identity';
+import { useHumanVerification } from '@/lib/useHumanVerification';
 import { IdentityBar } from '../../../components/IdentityBar';
 import { NicknameGate, GateResult } from '../../../components/NicknameGate';
 import EmailRecoveryButton from '../../../components/EmailRecoveryButton';
@@ -28,6 +29,7 @@ export default function CollectPage() {
   const params = useParams<{ code: string }>();
   const code = params?.code ?? '';
   const { reconcileHint, refresh: refreshIdentity } = useGuestIdentity();
+  const { state: humanState, reverify, widgetContainerRef } = useHumanVerification();
 
   const [event, setEvent] = useState<CollectEventPreview | null>(null);
   const [leaderboard, setLeaderboard] = useState<CollectLeaderboardResponse | null>(null);
@@ -120,7 +122,7 @@ export default function CollectPage() {
         source_url: song.url ?? undefined,
         artwork_url: song.album_art ?? undefined,
         nickname: submitNickname,
-      });
+      }, reverify);
 
       if (result.is_duplicate) {
         setSubmitError('Great minds think alike! Your vote has been added.');
@@ -388,7 +390,7 @@ export default function CollectPage() {
             rows={leaderboard?.requests ?? []}
             tab={tab}
             onTabChange={setTab}
-            onVote={(id) => apiClient.voteCollectRequest(code, id)}
+            onVote={(id) => apiClient.voteCollectRequest(code, id, reverify)}
             votedIds={votedIds}
             onRowClick={setDetailRow}
           />
@@ -396,6 +398,20 @@ export default function CollectPage() {
 
         {myPicks && <MyPicksPanel picks={myPicks} />}
       </div>
+
+      {/* ── Human verification widget ────────────────────────────── */}
+      <div
+        ref={widgetContainerRef}
+        style={{
+          display: humanState === 'challenge' ? 'block' : 'none',
+          margin: '1rem 0',
+        }}
+      />
+      {humanState === 'failed' && (
+        <div style={{ color: '#ef4444', marginTop: '0.5rem', fontSize: '0.9rem', textAlign: 'center' }}>
+          Verification failed. Please refresh the page.
+        </div>
+      )}
 
       <SubmitBar
         used={profile?.submission_count ?? 0}
@@ -425,7 +441,7 @@ export default function CollectPage() {
             if (!detailVoted && !votedIds.has(detailRow.id)) {
               setDetailVoted(true);
               try {
-                await apiClient.voteCollectRequest(code, detailRow.id);
+                await apiClient.voteCollectRequest(code, detailRow.id, reverify);
               } catch {
                 setDetailVoted(false);
               }
