@@ -71,6 +71,15 @@ vi.mock('@/lib/api', () => ({
   ApiError: MockApiError,
 }));
 
+vi.mock('@/lib/useHumanVerification', () => ({
+  useHumanVerification: () => ({
+    state: 'verified',
+    reverify: vi.fn().mockResolvedValue(undefined),
+    ensureVerified: vi.fn().mockResolvedValue(undefined),
+    widgetContainerRef: { current: null },
+  }),
+}));
+
 // Import after mocks
 import JoinEventPage from '../page';
 
@@ -625,7 +634,7 @@ describe('JoinEventPage — vote flow', () => {
     fireEvent.click(voteBtn!);
 
     await waitFor(() => {
-      expect(mockApi.publicVoteRequest).toHaveBeenCalledWith(10);
+      expect(mockApi.publicVoteRequest).toHaveBeenCalledWith(10, expect.any(Function));
     });
   });
 
