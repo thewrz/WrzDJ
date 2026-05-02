@@ -154,3 +154,46 @@ def require_verified_human(
 
     issue_human_cookie(response, guest_id_db)
     return guest_id_db
+
+
+def require_verified_human_soft(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> int | None:
+    """Soft-mode wrapper around require_verified_human.
+
+    Reads SystemSettings.human_verification_enforced. When False (rollout
+    Phase 1), a missing/invalid cookie logs a warning and returns the guest_id
+    (or None) without raising. When True (Phase 2+), behaves identically to
+    require_verified_human and raises 403.
+
+    Apply this dependency to all gated public endpoints during rollout. After
+    Phase 3 cleanup, swap to require_verified_human directly and remove this.
+    """
+    import logging
+
+    from app.core.rate_limit import get_guest_id
+    from app.services.human_verification import issue_human_cookie, verify_human_cookie
+    from app.services.system_settings import get_system_settings
+
+    sys_settings = get_system_settings(db)
+    guest_id_cookie = verify_human_cookie(request)
+    guest_id_db = get_guest_id(request, db)
+
+    if guest_id_cookie is not None and guest_id_db is not None and guest_id_db == guest_id_cookie:
+        issue_human_cookie(response, guest_id_db)
+        return guest_id_db
+
+    if sys_settings.human_verification_enforced:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "human_verification_required"},
+        )
+
+    # Soft-mode: log structured warning, pass through
+    logging.getLogger(__name__).warning(
+        "guest.human_verify action=missing guest_id=%s reason=soft_mode_pass",
+        guest_id_db,
+    )
+    return guest_id_db

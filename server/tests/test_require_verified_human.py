@@ -112,3 +112,89 @@ class TestRequireVerifiedHuman:
             raise AssertionError("Expected HTTPException")
         except HTTPException as exc:
             assert exc.status_code == 403
+
+
+class TestRequireVerifiedHumanSoft:
+    def test_valid_cookies_returns_guest_id(self, db: Session):
+        """Soft-mode passes through to hard behavior when cookies are valid."""
+        from app.api.deps import require_verified_human_soft
+        from app.models.system_settings import SystemSettings
+
+        sys_settings = SystemSettings(id=1, human_verification_enforced=False)
+        db.add(sys_settings)
+        guest = Guest(token="soft-A")
+        db.add(guest)
+        db.commit()
+        cookie_value = _issue_cookie_value(guest.id)
+
+        request = _build_request({"wrzdj_guest": guest.token, COOKIE_NAME: cookie_value})
+        response = Response()
+
+        result = require_verified_human_soft(request, response, db)
+        assert result == guest.id
+
+    def test_missing_cookie_with_enforce_off_logs_and_passes(self, db: Session, caplog):
+        """When enforce=False, missing human cookie logs warning but returns guest_id."""
+        import logging
+
+        from app.api.deps import require_verified_human_soft
+        from app.models.system_settings import SystemSettings
+
+        sys_settings = SystemSettings(id=1, human_verification_enforced=False)
+        db.add(sys_settings)
+        guest = Guest(token="soft-B")
+        db.add(guest)
+        db.commit()
+
+        # No human cookie sent
+        request = _build_request({"wrzdj_guest": guest.token})
+        response = Response()
+
+        with caplog.at_level(logging.WARNING):
+            result = require_verified_human_soft(request, response, db)
+
+        assert result == guest.id
+        assert any(
+            "human_verify" in r.message and "soft_mode_pass" in r.message for r in caplog.records
+        )
+
+    def test_missing_cookie_with_enforce_on_blocks(self, db: Session):
+        """When enforce=True, missing human cookie raises 403."""
+        from app.api.deps import require_verified_human_soft
+        from app.models.system_settings import SystemSettings
+
+        sys_settings = SystemSettings(id=1, human_verification_enforced=True)
+        db.add(sys_settings)
+        guest = Guest(token="soft-C")
+        db.add(guest)
+        db.commit()
+
+        request = _build_request({"wrzdj_guest": guest.token})
+        response = Response()
+
+        try:
+            require_verified_human_soft(request, response, db)
+            raise AssertionError("Expected HTTPException")
+        except HTTPException as exc:
+            assert exc.status_code == 403
+            assert exc.detail["code"] == "human_verification_required"
+
+    def test_no_guest_cookie_with_enforce_off_logs_and_returns_none(self, db: Session, caplog):
+        """When neither cookie present and enforce=False, returns None and logs."""
+        import logging
+
+        from app.api.deps import require_verified_human_soft
+        from app.models.system_settings import SystemSettings
+
+        sys_settings = SystemSettings(id=1, human_verification_enforced=False)
+        db.add(sys_settings)
+        db.commit()
+
+        request = _build_request({})  # no cookies at all
+        response = Response()
+
+        with caplog.at_level(logging.WARNING):
+            result = require_verified_human_soft(request, response, db)
+
+        assert result is None  # No guest_id to return
+        assert any("human_verify" in r.message for r in caplog.records)
