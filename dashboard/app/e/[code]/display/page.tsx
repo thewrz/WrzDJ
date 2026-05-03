@@ -355,6 +355,10 @@ export default function KioskDisplayPage() {
           box-shadow: 0 0 14px ${ACCENT_CYAN};
           animation: kiosk-pulse 1.6s ease-in-out infinite;
         }
+        .kiosk-header-left {
+          flex: 1;
+          min-width: 0;
+        }
         .kiosk-event-name {
           font-size: 76px;
           font-weight: 800;
@@ -366,7 +370,6 @@ export default function KioskDisplayPage() {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          max-width: 75%;
         }
         .kiosk-stats {
           display: flex;
@@ -1087,7 +1090,7 @@ export default function KioskDisplayPage() {
 
         {/* Header */}
         <div className="kiosk-header">
-          <div>
+          <div className="kiosk-header-left">
             <div className="kiosk-live-label">
               <span className="kiosk-live-dot" />
               LIVE &middot; WRZDJ
