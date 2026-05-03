@@ -256,7 +256,7 @@ export default function KioskDisplayPage() {
 
   const bannerAccent = safeColor(display.banner_colors?.[0], '#3b82f6');
   const queue = display.accepted_queue;
-  const maxVotes = queue[0]?.vote_count || 1;
+  const maxVotes = Math.max(1, ...queue.map((r) => r.vote_count));
   const totalVotes = queue.reduce((s, r) => s + r.vote_count, 0);
 
   // Resolve now-playing with sticky behavior
