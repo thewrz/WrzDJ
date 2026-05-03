@@ -30,14 +30,24 @@ _VERSION_TAGS = [
     "dub",
 ]
 
-# Remix/edit/bootleg pattern: "Artist Remix", "Artist Edit", "Artist Bootleg"
-# Captures the last 1-2 words before the remix type keyword.
+# Remix/edit/bootleg keywords. Captures last 1-2 words before keyword as artist.
 # Most DJ names are 1-2 words (e.g., "Maceo Plex", "DJ Snake", "Skrillex").
 _REMIX_TYPES = ("remix", "edit", "bootleg", "rework", "flip")
-_REMIX_ARTIST_PATTERN = re.compile(
-    r"(\S+(?:\s+\S+)?)\s+(remix|edit|bootleg|rework|flip)\s*$",
-    re.IGNORECASE,
-)
+
+
+def _detect_trailing_remix(raw_query: str) -> tuple[str | None, bool]:
+    """Linear-time detection of trailing remix keyword + preceding artist.
+
+    Replaces a backtracking regex to eliminate polynomial ReDoS risk.
+    """
+    tokens = raw_query.strip().split()
+    if len(tokens) < 2:
+        return None, False
+    if tokens[-1].lower() not in _REMIX_TYPES:
+        return None, False
+    preceding = tokens[:-1]
+    artist = " ".join(preceding[-2:]) if len(preceding) >= 2 else preceding[-1]
+    return artist, True
 
 
 @dataclass(frozen=True)
@@ -78,15 +88,10 @@ def parse_intent(raw_query: str) -> IntentContext:
             found_tags.append(tag)
 
     # Detect remix patterns
-    remix_match = _REMIX_ARTIST_PATTERN.search(raw_query)
-    remix_artist: str | None = None
-    wants_remix = False
+    remix_artist, wants_remix = _detect_trailing_remix(raw_query)
 
-    if remix_match:
-        remix_artist = remix_match.group(1).strip()
-        wants_remix = True
-    else:
-        # Check for bare "remix"/"edit"/"bootleg" without artist name
+    if not wants_remix:
+        # Check for bare "remix"/"edit"/"bootleg" anywhere in the query
         for rtype in _REMIX_TYPES:
             if re.search(rf"\b{rtype}\b", query_lower):
                 wants_remix = True
