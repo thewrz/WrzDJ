@@ -51,7 +51,10 @@ ENV HOSTNAME="0.0.0.0"
 EXPOSE 3000
 
 # Health check
+# Use 127.0.0.1 (not "localhost") because BusyBox wget on Alpine resolves
+# "localhost" to IPv6 ::1 first, but Next.js binds IPv4 0.0.0.0 only —
+# causing "connection refused" probe failures even when the app is serving fine.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-3000}/ || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:${PORT:-3000}/ || exit 1
 
 CMD ["node", "server.js"]
