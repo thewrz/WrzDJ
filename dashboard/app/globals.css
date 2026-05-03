@@ -2060,6 +2060,8 @@ h1, .display-heading {
 
 /* ── Identity Bar ────────────────────────────────────── */
 .identity-bar {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: flex-start;
   flex-wrap: wrap;
