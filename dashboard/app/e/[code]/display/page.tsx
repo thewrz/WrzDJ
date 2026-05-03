@@ -16,6 +16,18 @@ function safeColor(c: string | undefined, fallback: string): string {
   return c && HEX_COLOR_RE.test(c) ? c : fallback;
 }
 
+function withAlpha(hex: string, a: number): string {
+  if (!hex || hex[0] !== '#') return hex;
+  const h = hex.slice(1);
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+const ACCENT_CYAN = '#00f0ff';
+const ACCENT_MAGENTA = '#ff2bd6';
+
 export default function KioskDisplayPage() {
   const params = useParams();
   const router = useRouter();
@@ -207,8 +219,7 @@ export default function KioskDisplayPage() {
       if (el.scrollTop + el.clientHeight >= el.scrollHeight - 10) {
         el.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
-        // Scroll by one item height (~73px for a queue-item + gap)
-        el.scrollBy({ top: 73, behavior: 'smooth' });
+        el.scrollBy({ top: 85, behavior: 'smooth' });
       }
     }, AUTO_SCROLL_INTERVAL);
 
@@ -243,6 +254,26 @@ export default function KioskDisplayPage() {
     );
   }
 
+  const bannerAccent = safeColor(display.banner_colors?.[0], '#3b82f6');
+  const queue = display.accepted_queue;
+  const maxVotes = queue[0]?.vote_count || 1;
+  const totalVotes = queue.reduce((s, r) => s + r.vote_count, 0);
+
+  // Resolve now-playing with sticky behavior
+  const isHidden = display.now_playing_hidden;
+  const stickyNowPlaying = lastKnownNowPlaying ?? stagelinqNowPlaying;
+  const nowPlaying = isHidden ? null : (stickyNowPlaying || (display.now_playing ? {
+    title: display.now_playing.title,
+    artist: display.now_playing.artist,
+    album_art_url: display.now_playing.artwork_url,
+    source: 'request',
+  } : null));
+  const isLive = stickyNowPlaying?.source != null && stickyNowPlaying.source !== 'manual' && stickyNowPlaying.source !== 'request';
+
+  // BPM/key from request-based now playing (bridge source doesn't expose these)
+  const nowPlayingBpm = display.now_playing?.bpm;
+  const nowPlayingKey = display.now_playing?.musical_key;
+
   return (
     <>
       <style jsx global>{`
@@ -254,63 +285,118 @@ export default function KioskDisplayPage() {
         }
         body {
           overflow: hidden;
+          margin: 0;
         }
+
+        /* ── Container ── */
         .kiosk-container {
           height: 100vh;
           background: var(--kiosk-bg, linear-gradient(135deg, #1a1a2e 0%, #16213e 100%));
-          padding: 2rem;
+          padding: 40px;
           display: flex;
           flex-direction: column;
           overflow: hidden;
           position: relative;
+          font-family: var(--font-display, 'Plus Jakarta Sans'), system-ui, sans-serif;
+          color: #fff;
         }
+
+        /* ── Banner background with fade ── */
         .kiosk-banner-bg {
           position: absolute;
           top: 0;
           left: 0;
-          width: 100%;
+          right: 0;
+          height: 60%;
           z-index: 0;
           overflow: hidden;
+          pointer-events: none;
         }
         .kiosk-banner-bg img {
           width: 100%;
-          height: auto;
+          height: 100%;
+          object-fit: cover;
           display: block;
+          filter: saturate(0.55) brightness(0.7);
         }
+        .kiosk-banner-fade {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(180deg, transparent 0%, transparent 30%, var(--kiosk-bg, #1a1a2e) 100%);
+        }
+
+        /* ── Header ── */
         .kiosk-header {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          margin-bottom: 2rem;
+          margin-bottom: 32px;
           position: relative;
           z-index: 1;
         }
+        .kiosk-live-label {
+          font-family: var(--font-mono, 'JetBrains Mono'), ui-monospace, monospace;
+          font-size: 16px;
+          letter-spacing: 4px;
+          color: ${withAlpha(ACCENT_CYAN, 0.9)};
+          font-weight: 700;
+          text-transform: uppercase;
+          margin-bottom: 12px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .kiosk-live-dot {
+          display: inline-block;
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: ${ACCENT_CYAN};
+          box-shadow: 0 0 14px ${ACCENT_CYAN};
+          animation: kiosk-pulse 1.6s ease-in-out infinite;
+        }
         .kiosk-event-name {
-          font-size: 3rem;
-          font-weight: bold;
-          color: #fff;
+          font-size: 76px;
+          font-weight: 800;
+          letter-spacing: -2.4px;
+          line-height: 1;
           margin: 0;
+          text-shadow: 0 4px 30px rgba(0,0,0,0.5);
+          font-family: var(--font-display, 'Plus Jakarta Sans'), -apple-system, sans-serif;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          max-width: 100%;
-          font-family: var(--font-display, 'Plus Jakarta Sans'), -apple-system, sans-serif;
+          max-width: 75%;
         }
-        .kiosk-qr {
-          background: #fff;
-          padding: 1rem;
-          border-radius: 1rem;
+        .kiosk-stats {
+          display: flex;
+          gap: 12px;
+          margin-top: 22px;
+        }
+        .kiosk-stat {
+          padding: 10px 18px;
+          border-radius: 10px;
+          border: 1px solid rgba(255,255,255,0.1);
           display: flex;
           flex-direction: column;
-          align-items: center;
+          align-items: flex-start;
+          min-width: 80px;
+          background: rgba(0,0,0,0.2);
         }
-        .kiosk-qr-label {
-          text-align: center;
-          color: #333;
-          font-size: 0.85rem;
+        .kiosk-stat-value {
+          font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+          font-size: 26px;
+          font-weight: 800;
+          line-height: 1;
+          font-variant-numeric: tabular-nums;
+        }
+        .kiosk-stat-label {
+          font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+          font-size: 11px;
+          color: rgba(255,255,255,0.55);
+          letter-spacing: 1.8px;
+          margin-top: 6px;
           font-weight: 600;
-          margin-top: 0.5rem;
-          max-width: 120px;
         }
         .kiosk-closed-banner {
           background: rgba(239, 68, 68, 0.35);
@@ -323,52 +409,72 @@ export default function KioskDisplayPage() {
           text-transform: uppercase;
           letter-spacing: 0.1em;
         }
+        .kiosk-qr {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+        .kiosk-qr-bg {
+          background: #fff;
+          padding: 12px;
+          border-radius: 14px;
+        }
+        .kiosk-qr-label {
+          font-size: 14px;
+          font-weight: 600;
+          color: #fff;
+          margin-top: 10px;
+          text-align: center;
+          max-width: 160px;
+          letter-spacing: 0.2px;
+        }
+
+        /* ── 3-column grid ── */
         .kiosk-main {
           flex: 1;
           display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
-          gap: 2rem;
+          grid-template-columns: 1fr 1.3fr 1fr;
+          gap: 28px;
           min-height: 0;
           position: relative;
           z-index: 1;
         }
         .kiosk-main-single {
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: 1.3fr 1fr;
         }
-        .now-playing-section {
-          background: rgba(255,255,255,0.1);
-          border-radius: 1.5rem;
-          padding: 2rem;
+
+        /* ── Glass panels ── */
+        .kiosk-panel {
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 24px;
+          padding: 26px;
           display: flex;
           flex-direction: column;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          min-height: 0;
+          position: relative;
+          overflow: hidden;
+        }
+        .kiosk-panel-label {
+          font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+          font-size: 14px;
+          font-weight: 700;
+          letter-spacing: 2.4px;
+          text-transform: uppercase;
+          margin-bottom: 18px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        /* ── Now Playing ── */
+        .now-playing-section {
           transition: opacity 1s ease-out;
         }
         .now-playing-section.fading {
           opacity: 0.5;
-        }
-        .now-playing-label {
-          color: #22c55e;
-          font-size: 1.125rem;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          margin-bottom: 1rem;
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-weight: 600;
-        }
-        .live-badge {
-          background: #ef4444;
-          color: #fff;
-          font-size: 0.65rem;
-          padding: 0.2rem 0.5rem;
-          border-radius: 0.25rem;
-          font-weight: bold;
-          animation: pulse-live 2s ease-in-out infinite;
-        }
-        @keyframes pulse-live {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.7; }
         }
         .now-playing-content {
           flex: 1;
@@ -376,144 +482,361 @@ export default function KioskDisplayPage() {
           flex-direction: column;
           align-items: center;
           justify-content: center;
+          gap: 24px;
         }
         .now-playing-art {
-          width: 200px;
-          height: 200px;
-          border-radius: 1rem;
+          width: 240px;
+          height: 240px;
+          border-radius: 16px;
           object-fit: cover;
-          margin-bottom: 1.5rem;
-          box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+          box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+          flex-shrink: 0;
         }
         .now-playing-placeholder {
-          width: 200px;
-          height: 200px;
-          border-radius: 1rem;
-          background: rgba(255,255,255,0.1);
+          width: 240px;
+          height: 240px;
+          border-radius: 16px;
+          background: rgba(255,255,255,0.08);
           display: flex;
           align-items: center;
           justify-content: center;
-          margin-bottom: 1.5rem;
-          font-size: 4rem;
+          flex-shrink: 0;
+          box-shadow: 0 12px 32px rgba(0,0,0,0.45);
         }
         .now-playing-title {
-          font-size: 2rem;
-          font-weight: bold;
-          color: #fff;
+          font-size: 32px;
+          font-weight: 800;
+          letter-spacing: -0.6px;
+          line-height: 1.1;
           text-align: center;
-          margin: 0 0 0.5rem;
-          font-family: var(--font-display, 'Plus Jakarta Sans'), -apple-system, sans-serif;
+          margin: 0;
+          max-width: 320px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
         }
         .now-playing-artist {
-          font-size: 1.375rem;
-          color: #d1d5db;
+          font-size: 22px;
+          color: rgba(255,255,255,0.55);
           text-align: center;
           margin: 0;
         }
-        .spectrum-bars {
+        .now-playing-chips {
           display: flex;
-          gap: 4px;
-          height: 60px;
+          gap: 14px;
+        }
+        .now-playing-chip {
+          padding: 6px 12px;
+          border-radius: 99px;
+          border: 1px solid rgba(255,255,255,0.1);
+          font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 1.2px;
+          color: rgba(255,255,255,0.55);
+        }
+
+        .live-badge {
+          background: #ef4444;
+          color: #fff;
+          font-size: 0.65rem;
+          padding: 0.2rem 0.5rem;
+          border-radius: 0.25rem;
+          font-weight: bold;
+          animation: kiosk-pulse 2s ease-in-out infinite;
+          margin-left: 4px;
+        }
+
+        /* ── EQ Bars ── */
+        .kiosk-eq-bars {
+          display: flex;
           align-items: flex-end;
-          margin-top: 1.5rem;
+          gap: 4px;
+          height: 56px;
         }
-        .spectrum-bar {
-          width: 8px;
-          background: linear-gradient(to top, #22c55e, #4ade80);
-          border-radius: 4px;
-          animation: spectrum 0.5s ease-in-out infinite alternate;
+        .kiosk-eq-bar {
+          width: 6px;
+          height: 40%;
+          border-radius: 3px;
+          background: linear-gradient(to top, ${ACCENT_CYAN}, ${withAlpha(ACCENT_CYAN, 0.6)});
+          transform-origin: bottom;
         }
-        @keyframes spectrum {
-          from { height: 20%; }
-          to { height: 100%; }
-        }
-        .queue-section {
-          background: rgba(255,255,255,0.05);
-          border-radius: 1.5rem;
-          padding: 2rem;
+
+        /* ── Queue ── */
+        .queue-header {
           display: flex;
-          flex-direction: column;
-          min-height: 0;
-          max-height: 100%;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 18px;
         }
-        .queue-label {
-          color: #3b82f6;
-          font-size: 1.125rem;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          margin-bottom: 1rem;
-          flex-shrink: 0;
-          font-weight: 600;
+        .queue-track-count {
+          font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+          font-size: 12px;
+          color: rgba(255,255,255,0.35);
+          letter-spacing: 2px;
         }
         .queue-list {
           display: flex;
           flex-direction: column;
-          gap: 0.75rem;
+          gap: 8px;
           overflow-y: auto;
           flex: 1;
           min-height: 0;
         }
+        .queue-list::-webkit-scrollbar {
+          width: 4px;
+        }
+        .queue-list::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .queue-list::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.15);
+          border-radius: 2px;
+        }
         .queue-item {
+          position: relative;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 14px;
+          padding: 12px 16px;
           display: flex;
           align-items: center;
-          gap: 1rem;
-          background: rgba(255,255,255,0.05);
-          padding: 0.75rem;
-          border-radius: 0.75rem;
+          gap: 14px;
+          overflow: hidden;
         }
-        .queue-item-art {
-          width: 48px;
-          height: 48px;
-          border-radius: 0.5rem;
-          object-fit: cover;
+        .queue-item-top1 {
+          border-color: var(--banner-accent-50, rgba(255,255,255,0.1));
+          box-shadow: 0 0 0 1px var(--banner-accent-30, transparent), 0 8px 32px var(--banner-accent-20, transparent);
         }
-        .queue-item-placeholder {
-          width: 48px;
-          height: 48px;
-          border-radius: 0.5rem;
-          background: rgba(255,255,255,0.1);
+        .queue-item-top-edge {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 1px;
+        }
+        .queue-item-vote-bar {
+          position: absolute;
+          left: 0;
+          top: 0;
+          bottom: 0;
+          pointer-events: none;
+        }
+        .queue-item-rank {
+          position: relative;
+          z-index: 1;
+          width: 42px;
+          height: 42px;
+          flex-shrink: 0;
+          border-radius: 10px;
+          font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+          font-weight: 800;
+          font-size: 18px;
           display: flex;
           align-items: center;
           justify-content: center;
         }
+        .queue-item-art {
+          width: 50px;
+          height: 50px;
+          border-radius: 8px;
+          object-fit: cover;
+          flex-shrink: 0;
+          position: relative;
+          z-index: 1;
+        }
+        .queue-item-placeholder {
+          width: 50px;
+          height: 50px;
+          border-radius: 8px;
+          background: rgba(255,255,255,0.08);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          position: relative;
+          z-index: 1;
+        }
         .queue-item-info {
           flex: 1;
           min-width: 0;
+          position: relative;
+          z-index: 1;
         }
         .queue-item-title {
-          color: #fff;
-          font-size: 1.0625rem;
-          font-weight: 600;
+          font-size: 22px;
+          font-weight: 700;
+          letter-spacing: -0.3px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
         .queue-item-artist {
-          color: #d1d5db;
-          font-size: 0.9375rem;
+          font-size: 17px;
+          color: rgba(255,255,255,0.55);
+          margin-top: 2px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
         .queue-item-nickname {
-          font-size: 0.8125rem;
-          color: #a78bfa;
-          margin-top: 0.125rem;
+          font-size: 12px;
+          color: rgba(255,255,255,0.35);
+          margin-top: 4px;
+          font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+          letter-spacing: 0.5px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .vote-badge {
-          background: rgba(59, 130, 246, 0.2);
-          color: #60a5fa;
-          font-size: 0.75rem;
-          padding: 0.25rem 0.5rem;
-          border-radius: 1rem;
-          white-space: nowrap;
+        .queue-item-votes {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
           flex-shrink: 0;
+        }
+        .queue-item-vote-num {
+          font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+          font-weight: 800;
+          font-size: 28px;
+          line-height: 1;
+          font-variant-numeric: tabular-nums;
+        }
+        .queue-item-vote-label {
+          font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+          font-size: 10px;
+          color: rgba(255,255,255,0.35);
+          letter-spacing: 2px;
+          margin-top: 4px;
         }
         .queue-item-new {
           animation: slide-in-glow 0.8s ease-out;
+        }
+        .queue-empty {
+          color: rgba(255,255,255,0.35);
+          text-align: center;
+          padding: 2rem;
+          font-size: 18px;
+        }
+
+        /* ── History ── */
+        .history-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          overflow-y: auto;
+          flex: 1;
+          min-height: 0;
+        }
+        .history-list::-webkit-scrollbar {
+          width: 4px;
+        }
+        .history-list::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .history-list::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.15);
+          border-radius: 2px;
+        }
+        .history-item {
+          background: rgba(255,255,255,0.06);
+          border-radius: 12px;
+          padding: 10px 12px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .history-item-art {
+          width: 44px;
+          height: 44px;
+          border-radius: 8px;
+          object-fit: cover;
+          flex-shrink: 0;
+        }
+        .history-item-placeholder {
+          width: 44px;
+          height: 44px;
+          border-radius: 8px;
+          background: rgba(255,255,255,0.06);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .history-item-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .history-item-title {
+          font-size: 17px;
+          font-weight: 600;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .history-item-artist {
+          font-size: 14px;
+          color: rgba(255,255,255,0.55);
+          margin-top: 1px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .history-empty {
+          color: rgba(255,255,255,0.35);
+          text-align: center;
+          padding: 2rem;
+        }
+        .requested-badge {
+          background: #22c55e;
+          color: #fff;
+          font-size: 0.65rem;
+          padding: 0.2rem 0.5rem;
+          border-radius: 0.25rem;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+
+        /* ── CTA Button ── */
+        .request-button {
+          margin-top: 28px;
+          align-self: center;
+          flex-shrink: 0;
+          position: relative;
+          z-index: 1;
+          border: none;
+          color: #0a0a0a;
+          font-family: var(--font-display, 'Plus Jakarta Sans'), sans-serif;
+          font-size: 22px;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+          padding: 20px 56px;
+          border-radius: 999px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .request-button:hover {
+          transform: scale(1.05);
+        }
+        .request-button:active {
+          transform: scale(0.98);
+        }
+
+        /* ── Animations ── */
+        @keyframes kiosk-eq {
+          from { height: 18%; }
+          to { height: 100%; }
+        }
+        @keyframes kiosk-pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.4); opacity: 0.7; }
         }
         @keyframes slide-in-glow {
           0% {
@@ -530,116 +853,8 @@ export default function KioskDisplayPage() {
             box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
           }
         }
-        .queue-empty {
-          color: #6b7280;
-          text-align: center;
-          padding: 2rem;
-        }
-        .history-section {
-          background: rgba(255,255,255,0.05);
-          border-radius: 1.5rem;
-          padding: 2rem;
-          display: flex;
-          flex-direction: column;
-          min-height: 0;
-          max-height: 100%;
-        }
-        .history-label {
-          color: #a855f7;
-          font-size: 1.125rem;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          margin-bottom: 1rem;
-          flex-shrink: 0;
-          font-weight: 600;
-        }
-        .history-list {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-          overflow-y: auto;
-          flex: 1;
-          min-height: 0;
-        }
-        .history-empty {
-          color: #6b7280;
-          text-align: center;
-          padding: 2rem;
-        }
-        .history-item {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          background: rgba(255,255,255,0.03);
-          padding: 0.5rem;
-          border-radius: 0.5rem;
-        }
-        .history-item-art {
-          width: 36px;
-          height: 36px;
-          border-radius: 0.375rem;
-          object-fit: cover;
-        }
-        .history-item-placeholder {
-          width: 36px;
-          height: 36px;
-          border-radius: 0.375rem;
-          background: rgba(255,255,255,0.05);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 0.875rem;
-        }
-        .history-item-info {
-          flex: 1;
-          min-width: 0;
-        }
-        .history-item-title {
-          color: #d1d5db;
-          font-size: 0.9375rem;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .history-item-artist {
-          color: #9ca3af;
-          font-size: 0.8125rem;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .requested-badge {
-          background: #22c55e;
-          color: #fff;
-          font-size: 0.6rem;
-          padding: 0.15rem 0.4rem;
-          border-radius: 0.25rem;
-          white-space: nowrap;
-        }
-        .request-button {
-          margin-top: 1.5rem;
-          align-self: center;
-          flex-shrink: 0;
-          position: relative;
-          z-index: 1;
-          background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-          color: #fff;
-          border: none;
-          padding: 1.25rem 2.5rem;
-          font-size: 1.25rem;
-          font-weight: bold;
-          border-radius: 2rem;
-          cursor: pointer;
-          box-shadow: 0 10px 40px rgba(59, 130, 246, 0.4);
-          transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .request-button:hover {
-          transform: scale(1.05);
-          box-shadow: 0 15px 50px rgba(59, 130, 246, 0.5);
-        }
-        .request-button:active {
-          transform: scale(0.98);
-        }
+
+        /* ── Modal styles (used by RequestModal component) ── */
         .modal-overlay {
           position: fixed;
           top: 0;
@@ -855,6 +1070,7 @@ export default function KioskDisplayPage() {
             : `linear-gradient(135deg, ${safeColor(display.banner_colors[0], '#1a1a2e')} 0%, ${safeColor(display.banner_colors[1], '#16213e')} 50%, ${safeColor(display.banner_colors[2], '#0f3460')} 100%)`,
         } as React.CSSProperties : undefined}
       >
+        {/* Banner background with gradient fade */}
         {display.banner_kiosk_url && (
           <div className="kiosk-banner-bg">
             <img
@@ -865,152 +1081,256 @@ export default function KioskDisplayPage() {
                 if (parent) parent.style.display = 'none';
               }}
             />
+            <div className="kiosk-banner-fade" />
           </div>
         )}
 
+        {/* Header */}
         <div className="kiosk-header">
-          <h1 className="kiosk-event-name">{display.event.name}</h1>
+          <div>
+            <div className="kiosk-live-label">
+              <span className="kiosk-live-dot" />
+              LIVE &middot; WRZDJ
+            </div>
+            <h1 className="kiosk-event-name">{display.event.name}</h1>
+            <div className="kiosk-stats">
+              <div className="kiosk-stat">
+                <span className="kiosk-stat-value">{queue.length}</span>
+                <span className="kiosk-stat-label">QUEUE</span>
+              </div>
+              <div className="kiosk-stat">
+                <span className="kiosk-stat-value" style={{ color: bannerAccent }}>{totalVotes}</span>
+                <span className="kiosk-stat-label">VOTES</span>
+              </div>
+            </div>
+          </div>
           {!display.requests_open ? (
             <div className="kiosk-closed-banner">
               Requests Closed
             </div>
           ) : (
             <div className="kiosk-qr">
-              <QRCodeSVG value={display.qr_join_url} size={120} />
+              <div className="kiosk-qr-bg">
+                <QRCodeSVG value={display.qr_join_url} size={140} />
+              </div>
               <p className="kiosk-qr-label">Scan to request from phone</p>
             </div>
           )}
         </div>
 
-        {/* Use StageLinQ now-playing if available, else fall back to request-based now_playing */}
-        {(() => {
-          // Check if now playing should be hidden (manual hide or auto-hide after 60 min)
-          const isHidden = display.now_playing_hidden;
-
-          // Use sticky (lastKnownNowPlaying) instead of raw stagelinqNowPlaying to avoid flickering
-          const stickyNowPlaying = lastKnownNowPlaying ?? stagelinqNowPlaying;
-          const nowPlaying = isHidden ? null : (stickyNowPlaying || (display.now_playing ? {
-            title: display.now_playing.title,
-            artist: display.now_playing.artist,
-            album_art_url: display.now_playing.artwork_url,
-            source: 'request',
-          } : null));
-          const isLive = stickyNowPlaying?.source != null && stickyNowPlaying.source !== 'manual' && stickyNowPlaying.source !== 'request';
-
-          return (
-            <div className={`kiosk-main ${nowPlaying ? '' : 'kiosk-main-single'}`}>
-              {nowPlaying && (
-                <div className={`now-playing-section ${nowPlayingFading ? 'fading' : ''}`}>
-                  <div className="now-playing-label">
-                    Now Playing
-                    {isLive && <span className="live-badge">LIVE</span>}
+        {/* Main 3-column grid */}
+        <div className={`kiosk-main ${nowPlaying ? '' : 'kiosk-main-single'}`}>
+          {/* NOW PLAYING */}
+          {nowPlaying && (
+            <div className={`kiosk-panel now-playing-section ${nowPlayingFading ? 'fading' : ''}`}>
+              <div className="kiosk-panel-label" style={{ color: ACCENT_CYAN }}>
+                <span className="kiosk-live-dot" style={{
+                  width: 7,
+                  height: 7,
+                  background: ACCENT_CYAN,
+                  boxShadow: `0 0 10px ${ACCENT_CYAN}`,
+                }} />
+                NOW PLAYING
+                {isLive && <span className="live-badge">LIVE</span>}
+              </div>
+              <div className="now-playing-content">
+                {nowPlaying.album_art_url ? (
+                  <img
+                    src={nowPlaying.album_art_url}
+                    alt={nowPlaying.title}
+                    className="now-playing-art"
+                  />
+                ) : (
+                  <div className="now-playing-placeholder">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
+                    </svg>
                   </div>
-                  <div className="now-playing-content">
-                    {nowPlaying.album_art_url ? (
-                      <img
-                        src={nowPlaying.album_art_url}
-                        alt={nowPlaying.title}
-                        className="now-playing-art"
+                )}
+                <div style={{ textAlign: 'center', maxWidth: 320 }}>
+                  <h2 className="now-playing-title">{nowPlaying.title}</h2>
+                  <p className="now-playing-artist">{nowPlaying.artist}</p>
+                </div>
+                {(nowPlayingBpm || nowPlayingKey) && (
+                  <div className="now-playing-chips">
+                    {nowPlayingBpm && <span className="now-playing-chip">{nowPlayingBpm} BPM</span>}
+                    {nowPlayingKey && <span className="now-playing-chip">KEY {nowPlayingKey}</span>}
+                  </div>
+                )}
+                <div className="kiosk-eq-bars">
+                  {Array.from({ length: 14 }, (_, i) => (
+                    <div
+                      key={i}
+                      className="kiosk-eq-bar"
+                      style={{
+                        animation: `kiosk-eq ${0.6 + (i % 4) * 0.15}s ${i * 0.07}s infinite alternate ease-in-out`,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* QUEUE (leaderboard) */}
+          <div className="kiosk-panel">
+            <div className="queue-header">
+              <div className="kiosk-panel-label" style={{ color: ACCENT_MAGENTA, marginBottom: 0 }}>
+                QUEUE
+              </div>
+              <div style={{ flex: 1 }} />
+              <span className="queue-track-count">{queue.length} TRACKS</span>
+            </div>
+            {queue.length > 0 ? (
+              <div className="queue-list" ref={queueListRef}>
+                {queue.map((item, i) => {
+                  const pct = maxVotes > 0 ? (item.vote_count / maxVotes) * 100 : 0;
+                  const isTop3 = i < 3;
+                  const rankColor = i === 0
+                    ? bannerAccent
+                    : i === 1
+                      ? '#fff'
+                      : i === 2
+                        ? ACCENT_MAGENTA
+                        : 'rgba(255,255,255,0.35)';
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`queue-item${i === 0 ? ' queue-item-top1' : ''}${newItemIds.has(item.id) ? ' queue-item-new' : ''}`}
+                      style={i === 0 ? {
+                        background: withAlpha(bannerAccent, 0.12),
+                        '--banner-accent-50': withAlpha(bannerAccent, 0.5),
+                        '--banner-accent-30': withAlpha(bannerAccent, 0.3),
+                        '--banner-accent-20': withAlpha(bannerAccent, 0.2),
+                      } as React.CSSProperties : undefined}
+                    >
+                      {/* Vote bar fill */}
+                      <div
+                        className="queue-item-vote-bar"
+                        style={{
+                          width: `${pct}%`,
+                          background: `linear-gradient(90deg, ${withAlpha(isTop3 ? bannerAccent : ACCENT_MAGENTA, 0.18)}, transparent 90%)`,
+                        }}
                       />
+                      {/* Top-edge glow for #1 */}
+                      {i === 0 && (
+                        <div
+                          className="queue-item-top-edge"
+                          style={{
+                            background: `linear-gradient(90deg, transparent, ${bannerAccent}, transparent)`,
+                          }}
+                        />
+                      )}
+
+                      {/* Rank badge */}
+                      <div
+                        className="queue-item-rank"
+                        style={{
+                          background: isTop3 ? rankColor : 'transparent',
+                          color: isTop3 ? '#000' : 'rgba(255,255,255,0.35)',
+                          border: isTop3 ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                          boxShadow: i === 0 ? `0 0 18px ${withAlpha(bannerAccent, 0.6)}` : 'none',
+                        }}
+                      >
+                        {i + 1}
+                      </div>
+
+                      {/* Artwork */}
+                      {item.artwork_url ? (
+                        <img src={item.artwork_url} alt={item.title} className="queue-item-art" />
+                      ) : (
+                        <div className="queue-item-placeholder">
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
+                          </svg>
+                        </div>
+                      )}
+
+                      {/* Track info */}
+                      <div className="queue-item-info">
+                        <div className="queue-item-title">{item.title}</div>
+                        <div className="queue-item-artist">{item.artist}</div>
+                        {item.nickname && (
+                          <div className="queue-item-nickname">@{item.nickname}</div>
+                        )}
+                      </div>
+
+                      {/* Vote count */}
+                      <div className="queue-item-votes">
+                        <span
+                          className="queue-item-vote-num"
+                          style={{
+                            color: isTop3 ? rankColor : '#fff',
+                            textShadow: i === 0 ? `0 0 20px ${withAlpha(bannerAccent, 0.6)}` : 'none',
+                          }}
+                        >
+                          {item.vote_count}
+                        </span>
+                        <span className="queue-item-vote-label">VOTES</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="queue-empty">
+                <p>No songs in queue yet.</p>
+                <p>Be the first to request!</p>
+              </div>
+            )}
+          </div>
+
+          {/* RECENTLY PLAYED */}
+          <div className="kiosk-panel">
+            <div className="kiosk-panel-label" style={{ color: '#a78bfa' }}>
+              RECENTLY PLAYED
+            </div>
+            {playHistory.length > 0 ? (
+              <div className="history-list">
+                {playHistory.map((item) => (
+                  <div key={item.id} className="history-item">
+                    {item.album_art_url ? (
+                      <img src={item.album_art_url} alt={item.title} className="history-item-art" />
                     ) : (
-                      <div className="now-playing-placeholder">
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
+                      <div className="history-item-placeholder">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
                           <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
                         </svg>
                       </div>
                     )}
-                    <h2 className="now-playing-title">{nowPlaying.title}</h2>
-                    <p className="now-playing-artist">{nowPlaying.artist}</p>
-                    <div className="spectrum-bars">
-                      {[...Array(12)].map((_, i) => (
-                        <div
-                          key={i}
-                          className="spectrum-bar"
-                          style={{ animationDelay: `${i * 0.1}s` }}
-                        />
-                      ))}
+                    <div className="history-item-info">
+                      <div className="history-item-title">{item.title}</div>
+                      <div className="history-item-artist">{item.artist}</div>
                     </div>
+                    {item.matched_request_id && (
+                      <span className="requested-badge">Requested</span>
+                    )}
                   </div>
-                </div>
-              )}
-
-              <div className="queue-section">
-                <div className="queue-label">Accepted Requests</div>
-                {display.accepted_queue.length > 0 ? (
-                  <div className="queue-list" ref={queueListRef}>
-                    {display.accepted_queue.map((item) => (
-                      <div key={item.id} className={`queue-item${newItemIds.has(item.id) ? ' queue-item-new' : ''}`}>
-                        {item.artwork_url ? (
-                          <img src={item.artwork_url} alt={item.title} className="queue-item-art" />
-                        ) : (
-                          <div className="queue-item-placeholder">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
-                            </svg>
-                          </div>
-                        )}
-                        <div className="queue-item-info">
-                          <div className="queue-item-title">{item.title}</div>
-                          <div className="queue-item-artist">{item.artist}</div>
-                          {item.nickname && (
-                            <div className="queue-item-nickname">Requested by {item.nickname}</div>
-                          )}
-                        </div>
-                        {item.vote_count > 0 && (
-                          <span className="vote-badge">
-                            {item.vote_count} {item.vote_count === 1 ? 'vote' : 'votes'}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="queue-empty">
-                    <p>No songs in queue.</p>
-                    <p>Request one!</p>
-                  </div>
-                )}
+                ))}
               </div>
-
-              {/* Play History Section - Always visible for consistent 3-column layout */}
-              <div className="history-section">
-                <div className="history-label">Recently Played</div>
-                {playHistory.length > 0 ? (
-                  <div className="history-list">
-                    {playHistory.map((item) => (
-                      <div key={item.id} className="history-item">
-                        {item.album_art_url ? (
-                          <img src={item.album_art_url} alt={item.title} className="history-item-art" />
-                        ) : (
-                          <div className="history-item-placeholder">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M20 4v8.5a3.5 3.5 0 1 1-2-3.163V6l-9 1.5v9a3.5 3.5 0 1 1-2-3.163V5l13-1Z" />
-                            </svg>
-                          </div>
-                        )}
-                        <div className="history-item-info">
-                          <div className="history-item-title">{item.title}</div>
-                          <div className="history-item-artist">{item.artist}</div>
-                        </div>
-                        {item.matched_request_id && (
-                          <span className="requested-badge">Requested</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="history-empty">
-                    <p>No songs played yet.</p>
-                  </div>
-                )}
+            ) : (
+              <div className="history-empty">
+                <p>No songs played yet.</p>
               </div>
-            </div>
-          );
-        })()}
+            )}
+          </div>
+        </div>
 
+        {/* CTA Button */}
         {!display.kiosk_display_only && display.requests_open && (
-          <button className="request-button" onClick={() => setShowRequestModal(true)}>
-            ♪ Request a Song
+          <button
+            className="request-button"
+            onClick={() => setShowRequestModal(true)}
+            style={{
+              background: `linear-gradient(90deg, ${bannerAccent}, ${ACCENT_MAGENTA})`,
+              boxShadow: `0 16px 50px ${withAlpha(bannerAccent, 0.5)}, 0 0 0 1px rgba(255,255,255,0.15) inset`,
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1.5v11M1.5 7h11" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+            </svg>
+            REQUEST A SONG
           </button>
         )}
       </div>

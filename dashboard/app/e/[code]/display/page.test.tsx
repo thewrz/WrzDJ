@@ -123,9 +123,9 @@ describe('KioskDisplayPage', () => {
       await screen.findByText('Test Event');
 
       // All three sections should be present
-      expect(screen.getByText('Now Playing')).toBeInTheDocument();
-      expect(screen.getByText('Accepted Requests')).toBeInTheDocument();
-      expect(screen.getByText('Recently Played')).toBeInTheDocument();
+      expect(screen.getByText(/now playing/i)).toBeInTheDocument();
+      expect(document.querySelector('.kiosk-panel-label')).toBeInTheDocument();
+      expect(screen.getByText(/recently played/i)).toBeInTheDocument();
 
       // Now playing content should show
       expect(screen.getByText('Currently Playing Song')).toBeInTheDocument();
@@ -141,12 +141,13 @@ describe('KioskDisplayPage', () => {
 
       await screen.findByText('Test Event');
 
-      // Now Playing section should NOT be present
-      expect(screen.queryByText('Now Playing')).not.toBeInTheDocument();
+      // Now Playing section should NOT be present (only in panel label)
+      expect(screen.queryByText(/now playing/i)).not.toBeInTheDocument();
 
       // Queue and history should still be present
-      expect(screen.getByText('Accepted Requests')).toBeInTheDocument();
-      expect(screen.getByText('Recently Played')).toBeInTheDocument();
+      const panelLabels = document.querySelectorAll('.kiosk-panel-label');
+      expect(panelLabels.length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText(/recently played/i)).toBeInTheDocument();
     });
 
     it('shows history section as a separate column, not nested in queue', async () => {
@@ -158,20 +159,18 @@ describe('KioskDisplayPage', () => {
 
       await screen.findByText('Test Event');
 
-      // Find the sections by their labels
-      const queueLabel = screen.getByText('Accepted Requests');
-      const historyLabel = screen.getByText('Recently Played');
-
-      // Get their parent section elements
-      const queueSection = queueLabel.closest('.queue-section');
-      const historySection = historyLabel.closest('.history-section');
+      // Find the queue panel (has the queue-header inside it)
+      const queueHeader = document.querySelector('.queue-header');
+      const queuePanel = queueHeader?.closest('.kiosk-panel');
+      const historyLabel = screen.getByText(/recently played/i);
+      const historyPanel = historyLabel.closest('.kiosk-panel');
 
       // History section should NOT be inside queue section
-      expect(queueSection).not.toContainElement(historySection as HTMLElement);
+      expect(queuePanel).not.toContainElement(historyPanel as HTMLElement);
 
       // Both should be direct children of kiosk-main
-      expect(queueSection?.parentElement?.classList.contains('kiosk-main')).toBe(true);
-      expect(historySection?.parentElement?.classList.contains('kiosk-main')).toBe(true);
+      expect(queuePanel?.parentElement?.classList.contains('kiosk-main')).toBe(true);
+      expect(historyPanel?.parentElement?.classList.contains('kiosk-main')).toBe(true);
     });
 
     it('displays accepted requests in the queue section', async () => {
@@ -306,7 +305,7 @@ describe('KioskDisplayPage', () => {
 
       await screen.findByText('Test Event');
 
-      expect(screen.getByText('No songs in queue.')).toBeInTheDocument();
+      expect(screen.getByText('No songs in queue yet.')).toBeInTheDocument();
     });
 
     it('still shows history section when history is empty', async () => {
@@ -319,7 +318,7 @@ describe('KioskDisplayPage', () => {
       await screen.findByText('Test Event');
 
       // History section should still be present (for 3-column layout consistency)
-      expect(screen.getByText('Recently Played')).toBeInTheDocument();
+      expect(screen.getByText(/recently played/i)).toBeInTheDocument();
     });
 
     it('shows empty history message', async () => {
@@ -475,7 +474,7 @@ describe('KioskDisplayPage', () => {
       expect(screen.getByText('Currently Playing Song')).toBeInTheDocument();
 
       // Should have fading class
-      const section = screen.getByText('Now Playing').closest('.now-playing-section');
+      const section = screen.getByText(/now playing/i).closest('.now-playing-section');
       expect(section?.classList.contains('fading')).toBe(true);
     });
 
@@ -497,7 +496,7 @@ describe('KioskDisplayPage', () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(11000); });
 
       expect(screen.queryByText('Currently Playing Song')).not.toBeInTheDocument();
-      expect(screen.queryByText('Now Playing')).not.toBeInTheDocument();
+      expect(screen.queryByText(/now playing/i)).not.toBeInTheDocument();
     });
 
     it('cancels grace timer when new track arrives', async () => {
@@ -522,7 +521,7 @@ describe('KioskDisplayPage', () => {
       expect(screen.getByText('New Artist')).toBeInTheDocument();
 
       // Should not be fading
-      const section = screen.getByText('Now Playing').closest('.now-playing-section');
+      const section = screen.getByText(/now playing/i).closest('.now-playing-section');
       expect(section?.classList.contains('fading')).toBe(false);
     });
   });
@@ -590,7 +589,7 @@ describe('KioskDisplayPage', () => {
   });
 
   describe('Vote badges', () => {
-    it('shows vote count badge for items with votes', async () => {
+    it('shows vote count for items with votes', async () => {
       vi.mocked(api.getKioskDisplay).mockResolvedValue({
         ...mockKioskDisplay,
         accepted_queue: [
@@ -603,10 +602,11 @@ describe('KioskDisplayPage', () => {
       render(<KioskDisplayPage />);
 
       await screen.findByText('Popular Song');
-      expect(screen.getByText('5 votes')).toBeInTheDocument();
+      const voteNum = document.querySelector('.queue-item-vote-num');
+      expect(voteNum?.textContent).toBe('5');
     });
 
-    it('uses singular "vote" for count of 1', async () => {
+    it('shows vote count of 1', async () => {
       vi.mocked(api.getKioskDisplay).mockResolvedValue({
         ...mockKioskDisplay,
         accepted_queue: [
@@ -619,10 +619,11 @@ describe('KioskDisplayPage', () => {
       render(<KioskDisplayPage />);
 
       await screen.findByText('Song');
-      expect(screen.getByText('1 vote')).toBeInTheDocument();
+      const voteNum = document.querySelector('.queue-item-vote-num');
+      expect(voteNum?.textContent).toBe('1');
     });
 
-    it('hides badge for zero votes', async () => {
+    it('shows zero for items with no votes', async () => {
       vi.mocked(api.getKioskDisplay).mockResolvedValue({
         ...mockKioskDisplay,
         accepted_queue: [
@@ -635,7 +636,8 @@ describe('KioskDisplayPage', () => {
       render(<KioskDisplayPage />);
 
       await screen.findByText('Song');
-      expect(screen.queryByText(/vote/)).not.toBeInTheDocument();
+      const voteNum = document.querySelector('.queue-item-vote-num');
+      expect(voteNum?.textContent).toBe('0');
     });
   });
 
@@ -757,7 +759,7 @@ describe('KioskDisplayPage', () => {
   });
 
   describe('Kiosk-specific styling', () => {
-    it('uses musical note symbol on request button', async () => {
+    it('shows plus icon on request button', async () => {
       setupDefaultMocks();
 
       render(<KioskDisplayPage />);
@@ -765,7 +767,7 @@ describe('KioskDisplayPage', () => {
       await screen.findByText('Test Event');
 
       const button = screen.getByRole('button', { name: /request a song/i });
-      expect(button.textContent).toContain('♪');
+      expect(button.querySelector('svg')).toBeInTheDocument();
     });
 
     it('applies cursor:none to global styles', async () => {
@@ -863,7 +865,7 @@ describe('KioskDisplayPage', () => {
       await screen.findByText('Test Event');
 
       expect(screen.queryByText('Hidden Song')).not.toBeInTheDocument();
-      expect(screen.queryByText('Now Playing')).not.toBeInTheDocument();
+      expect(screen.queryByText(/now playing/i)).not.toBeInTheDocument();
     });
   });
 
