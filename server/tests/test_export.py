@@ -258,7 +258,7 @@ class TestExportRequestsToCsv:
         assert "128.0" in data_line
         assert "2A" in data_line
         assert "12" in data_line
-        assert "geo-media.beatport.com" in data_line
+        assert "https://geo-media.beatport.com/image/abc.jpg" in data_line
 
     def test_none_metadata_produces_empty_cells(self):
         """Test that missing enrichment data produces empty CSV cells, not 'None'."""
