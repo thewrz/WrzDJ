@@ -1,0 +1,89 @@
+name: winget-auto-retry
+
+# Auto-recover from Microsoft winget validation infra flakes.
+# Scans open WrzDJ-Bridge submissions in microsoft/winget-pkgs and posts
+# a policy-rerun comment when a PR is stuck on Internal-Error-Dynamic-Scan
+# or other transient failure labels. Caps retries to avoid spamming moderators.
+#
+# Note: this workflow does NOT consume any untrusted inputs (no PR title/body
+# interpolation, no issue webhook payloads). All data comes from the GitHub
+# REST API and is parsed via jq; bash variables hold only integers and
+# bot-controlled label strings.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"  # every 6 hours, off the :00 mark
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find and rerun stuck winget PRs
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_PAT }}
+          STUCK_LABELS: "Internal-Error-Dynamic-Scan,Internal-Error,Validation-HashVerification-Error,Error-Analysis-Timeout"
+          MAX_RETRIES: "3"
+          RERUN_COMMENT: "@microsoft-github-policy-service rerun"
+          MIN_RERUN_GAP_SECONDS: "14400"  # 4 hours
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IFS=',' read -ra STUCK_ARR <<< "$STUCK_LABELS"
+
+          PRS=$(gh api search/issues -X GET \
+            -f q="repo:microsoft/winget-pkgs author:thewrz is:open is:pr" \
+            --jq '.items[] | {n:.number, labels:[.labels[].name]}')
+
+          if [ -z "$PRS" ]; then
+            echo "No open winget PRs."
+            exit 0
+          fi
+
+          echo "$PRS" | jq -c '.' | while read -r pr; do
+            num=$(echo "$pr" | jq -r '.n')
+            labels=$(echo "$pr" | jq -r '.labels | join(",")')
+            echo "PR #$num labels: $labels"
+
+            stuck=false
+            for sl in "${STUCK_ARR[@]}"; do
+              case ",$labels," in
+                *",$sl,"*) stuck=true; echo "  matched: $sl"; break ;;
+              esac
+            done
+
+            if [ "$stuck" = false ]; then
+              echo "  not stuck, skipping"
+              continue
+            fi
+
+            our_reruns=$(gh api "repos/microsoft/winget-pkgs/issues/${num}/comments" \
+              --paginate --jq "[.[] | select(.body == \"$RERUN_COMMENT\")] | length")
+            echo "  prior reruns: $our_reruns"
+
+            if [ "$our_reruns" -ge "$MAX_RETRIES" ]; then
+              echo "  max retries reached, leaving for human triage"
+              continue
+            fi
+
+            last_rerun_iso=$(gh api "repos/microsoft/winget-pkgs/issues/${num}/comments" \
+              --paginate --jq "[.[] | select(.body == \"$RERUN_COMMENT\")] | (last // {}) | .created_at // \"\"")
+            if [ -n "$last_rerun_iso" ]; then
+              last_epoch=$(date -d "$last_rerun_iso" +%s)
+              now_epoch=$(date +%s)
+              age=$(( now_epoch - last_epoch ))
+              if [ "$age" -lt "$MIN_RERUN_GAP_SECONDS" ]; then
+                echo "  last rerun ${age}s ago, waiting"
+                continue
+              fi
+            fi
+
+            echo "  posting rerun comment"
+            gh api "repos/microsoft/winget-pkgs/issues/${num}/comments" \
+              -f body="$RERUN_COMMENT" >/dev/null
+            echo "  done"
+          done
