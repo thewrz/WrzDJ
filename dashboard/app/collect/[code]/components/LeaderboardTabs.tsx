@@ -170,6 +170,7 @@ export default function LeaderboardTabs({ rows, tab, onTabChange, onVote, votedI
                     {r.nickname && (
                       <div className="collect-row-nickname">
                         <em className="nickname-icon">@</em>{r.nickname}
+                        {r.requester_verified && <span style={{ color: '#22c55e', marginLeft: 4, fontStyle: 'normal' }}>✓</span>}
                       </div>
                     )}
                   </div>

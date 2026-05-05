@@ -16,6 +16,7 @@ const rows: CollectLeaderboardRow[] = [
     bpm: null,
     musical_key: null,
     genre: null,
+    requester_verified: true,
   },
   {
     id: 2,
@@ -146,5 +147,20 @@ describe('LeaderboardTabs', () => {
     const voteBtn = screen.getByRole('button', { name: /upvote/i });
     fireEvent.click(voteBtn);
     expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  it('renders verified badge for verified requester', () => {
+    render(
+      <LeaderboardTabs
+        rows={rows}
+        tab="trending"
+        onTabChange={vi.fn()}
+        onVote={vi.fn()}
+        votedIds={new Set()}
+      />,
+    );
+    const badge = screen.getByText('✓');
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveStyle({ color: '#22c55e' });
   });
 });
