@@ -40,6 +40,7 @@ class PublicRequestInfo(BaseModel):
     bpm: int | None = None
     musical_key: str | None = None
     genre: str | None = None
+    requester_verified: bool = False
 
 
 class GuestRequestInfo(PublicRequestInfo):
