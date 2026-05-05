@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db, require_verified_human_soft
 from app.core.rate_limit import get_guest_id, limiter
 from app.models.event import Event
+from app.models.guest import Guest
 from app.models.request import Request as SongRequest
 from app.models.request import RequestStatus
 from app.models.request_vote import RequestVote
@@ -112,7 +113,8 @@ def leaderboard(
     event = _get_event_or_404(db, code)
 
     q = (
-        db.query(SongRequest)
+        db.query(SongRequest, Guest.email_verified_at)
+        .outerjoin(Guest, SongRequest.guest_id == Guest.id)
         .filter(SongRequest.event_id == event.id)
         .filter(SongRequest.submitted_during_collection == True)  # noqa: E712
     )
@@ -140,8 +142,9 @@ def leaderboard(
                 bpm=int(r.bpm) if r.bpm is not None else None,
                 musical_key=r.musical_key,
                 genre=r.genre,
+                requester_verified=email_verified_at is not None,
             )
-            for r in rows
+            for r, email_verified_at in rows
         ],
         total=len(rows),
     )
