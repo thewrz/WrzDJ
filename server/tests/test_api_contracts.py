@@ -168,6 +168,7 @@ PUBLIC_REQUEST_INFO_KEYS = {
     "bpm",
     "musical_key",
     "genre",
+    "requester_verified",
 }
 
 GUEST_REQUEST_INFO_KEYS = PUBLIC_REQUEST_INFO_KEYS | {"status"}
