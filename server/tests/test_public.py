@@ -1,5 +1,7 @@
 """Tests for public/kiosk endpoints."""
 
+from datetime import datetime
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -434,3 +436,71 @@ class TestSubmitRequestNickname:
         assert response.status_code == 200
         data = response.json()
         assert data["nickname"] is None
+
+
+class TestRequesterVerifiedField:
+    """requester_verified field in GET /api/public/events/{code}/requests."""
+
+    def test_verified_guest_shows_badge(self, client: TestClient, test_event: Event, db: Session):
+        from app.models.guest import Guest
+
+        guest = Guest(token="verified_public_test", email_verified_at=datetime(2026, 5, 1))
+        db.add(guest)
+        db.flush()
+        req = Request(
+            event_id=test_event.id,
+            song_title="Badge Song",
+            artist="Badge Artist",
+            source="spotify",
+            status=RequestStatus.NEW.value,
+            dedupe_key="badge_test_001",
+            guest_id=guest.id,
+            nickname="Verified",
+        )
+        db.add(req)
+        db.commit()
+
+        response = client.get(f"/api/public/events/{test_event.code}/requests")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["requests"][0]["requester_verified"] is True
+
+    def test_no_guest_shows_false(self, client: TestClient, test_event: Event, db: Session):
+        req = Request(
+            event_id=test_event.id,
+            song_title="Orphan Song",
+            artist="Orphan Artist",
+            source="spotify",
+            status=RequestStatus.NEW.value,
+            dedupe_key="orphan_test_001",
+        )
+        db.add(req)
+        db.commit()
+
+        response = client.get(f"/api/public/events/{test_event.code}/requests")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["requests"][0]["requester_verified"] is False
+
+    def test_unverified_guest_shows_false(self, client: TestClient, test_event: Event, db: Session):
+        from app.models.guest import Guest
+
+        guest = Guest(token="unverified_public_test", email_verified_at=None)
+        db.add(guest)
+        db.flush()
+        req = Request(
+            event_id=test_event.id,
+            song_title="Unverified Song",
+            artist="Unverified Artist",
+            source="spotify",
+            status=RequestStatus.NEW.value,
+            dedupe_key="unverified_test_001",
+            guest_id=guest.id,
+        )
+        db.add(req)
+        db.commit()
+
+        response = client.get(f"/api/public/events/{test_event.code}/requests")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["requests"][0]["requester_verified"] is False
