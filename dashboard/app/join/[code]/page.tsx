@@ -681,6 +681,7 @@ export default function JoinEventPage() {
                       {req.nickname && (
                         <div style={{ fontSize: 12.1, color: subFg2, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           Requested by {req.nickname}
+                          {req.requester_verified && <span style={{ color: '#22c55e', marginLeft: 4 }}>✓</span>}
                         </div>
                       )}
                     </div>

@@ -22,8 +22,8 @@ type Schemas = components['schemas'];
 
 export type Event = Schemas['EventOut'];
 export type SongRequest = Schemas['RequestOut'];
-export type PublicRequestInfo = Schemas['PublicRequestInfo'];
-export type GuestRequestInfo = Schemas['GuestRequestInfo'];
+export type PublicRequestInfo = Schemas['PublicRequestInfo'] & { requester_verified?: boolean };
+export type GuestRequestInfo = Schemas['GuestRequestInfo'] & { requester_verified?: boolean };
 export type GuestNowPlaying = Schemas['GuestNowPlaying'];
 export type GuestRequestListResponse = Schemas['GuestRequestListResponse'];
 export type MyRequestInfo = Schemas['MyRequestInfo'];

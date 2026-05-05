@@ -1,6 +1,6 @@
 """Tests for the public collect preview and leaderboard endpoints."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -889,3 +889,62 @@ def test_enrich_preview_returns_nulls_when_beatport_raises(client, db, test_even
     assert result["bpm"] is None
     assert result["key"] is None
     assert result["genre"] is None
+
+
+def test_leaderboard_row_requester_verified_true(client, db, test_event: Event):
+    """requester_verified is True when guest has email_verified_at set."""
+    from app.models.guest import Guest
+    from app.models.request import Request, RequestStatus
+
+    _enable_collection(db, test_event)
+    guest = Guest(
+        token="verified_leaderboard_test",
+        email_verified_at=datetime(2026, 5, 1),
+    )
+    db.add(guest)
+    db.flush()
+    req = Request(
+        event_id=test_event.id,
+        song_title="Verified Track",
+        artist="Verified Artist",
+        source="spotify",
+        status=RequestStatus.NEW.value,
+        vote_count=2,
+        dedupe_key="verified_lb_test",
+        submitted_during_collection=True,
+        guest_id=guest.id,
+        nickname="VerifiedUser",
+    )
+    db.add(req)
+    db.commit()
+
+    r = client.get(f"/api/public/collect/{test_event.code}/leaderboard?tab=all")
+    assert r.status_code == 200
+    rows = r.json()["requests"]
+    assert len(rows) == 1
+    assert rows[0]["requester_verified"] is True
+
+
+def test_leaderboard_row_requester_verified_false_no_guest(client, db, test_event: Event):
+    """requester_verified is False when request has no guest_id."""
+    from app.models.request import Request, RequestStatus
+
+    _enable_collection(db, test_event)
+    req = Request(
+        event_id=test_event.id,
+        song_title="Anon Track",
+        artist="Anon Artist",
+        source="spotify",
+        status=RequestStatus.NEW.value,
+        vote_count=1,
+        dedupe_key="anon_lb_test",
+        submitted_during_collection=True,
+    )
+    db.add(req)
+    db.commit()
+
+    r = client.get(f"/api/public/collect/{test_event.code}/leaderboard?tab=all")
+    assert r.status_code == 200
+    rows = r.json()["requests"]
+    assert len(rows) == 1
+    assert rows[0]["requester_verified"] is False

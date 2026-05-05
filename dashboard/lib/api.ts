@@ -125,6 +125,7 @@ export interface CollectLeaderboardRow {
   bpm?: number | null;
   musical_key?: string | null;
   genre?: string | null;
+  requester_verified?: boolean;
 }
 
 export interface CollectLeaderboardResponse {

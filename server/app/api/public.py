@@ -12,14 +12,12 @@ from app.api.deps import get_db
 from app.core.config import get_settings
 from app.core.rate_limit import get_guest_id, limiter
 from app.core.time import utcnow
+from app.models.guest import Guest
 from app.models.request import Request as SongRequest
 from app.models.request import RequestStatus
 from app.services.event import EventLookupResult, get_event_by_code_with_status
 from app.services.now_playing import get_now_playing, is_now_playing_hidden
-from app.services.request import (
-    get_guest_visible_requests,
-    get_requests_by_guest,
-)
+from app.services.request import get_requests_by_guest
 
 router = APIRouter()
 settings = get_settings()
@@ -40,6 +38,7 @@ class PublicRequestInfo(BaseModel):
     bpm: int | None = None
     musical_key: str | None = None
     genre: str | None = None
+    requester_verified: bool = False
 
 
 class GuestRequestInfo(PublicRequestInfo):
@@ -200,7 +199,17 @@ def get_public_requests(
     if lookup_result == EventLookupResult.ARCHIVED:
         raise HTTPException(status_code=410, detail="Event has been archived")
 
-    requests_list = get_guest_visible_requests(db, event)
+    requests_with_verified = (
+        db.query(SongRequest, Guest.email_verified_at)
+        .outerjoin(Guest, SongRequest.guest_id == Guest.id)
+        .filter(
+            SongRequest.event_id == event.id,
+            SongRequest.status.in_([RequestStatus.NEW.value, RequestStatus.ACCEPTED.value]),
+        )
+        .order_by(SongRequest.vote_count.desc(), SongRequest.created_at.desc())
+        .limit(50)
+        .all()
+    )
 
     # Include now-playing if not hidden
     guest_now_playing = None
@@ -230,8 +239,9 @@ def get_public_requests(
                 bpm=int(r.bpm) if r.bpm is not None else None,
                 musical_key=r.musical_key,
                 genre=r.genre,
+                requester_verified=email_verified_at is not None,
             )
-            for r in requests_list
+            for r, email_verified_at in requests_with_verified
         ],
         now_playing=guest_now_playing,
     )
