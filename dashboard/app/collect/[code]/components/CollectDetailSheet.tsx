@@ -1,10 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { CollectLeaderboardRow } from '@/lib/api';
+import type { CollectLeaderboardRow, CollectPreviewResponse } from '@/lib/api';
+import { apiClient } from '@/lib/api';
+import { getEmbedUrl, getPreviewSource } from '@/lib/preview-embed';
 
 interface Props {
   row: CollectLeaderboardRow;
+  code: string;
   rank: number;
   totalCount: number;
   voted: boolean;
@@ -32,7 +35,7 @@ function artGradient(seed: string) {
 }
 
 export default function CollectDetailSheet({
-  row, rank, totalCount, voted, onVote, onClose,
+  row, code, rank, totalCount, voted, onVote, onClose,
 }: Props) {
   const [isWide, setIsWide] = useState<boolean | null>(null);
 
@@ -42,6 +45,16 @@ export default function CollectDetailSheet({
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
+
+  const [preview, setPreview] = useState<CollectPreviewResponse | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiClient.getCollectPreview(code, row.id).then((data) => {
+      if (!cancelled) setPreview(data);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [code, row.id]);
 
   const surface = 'rgba(255,255,255,0.05)';
   const border = 'rgba(255,255,255,0.1)';
@@ -151,6 +164,55 @@ export default function CollectDetailSheet({
     </div>
   );
 
+  const previewSection = (() => {
+    if (!preview || !preview.source_url) return null;
+
+    const previewData = { source: preview.source, sourceUrl: preview.source_url };
+    const embedUrl = getEmbedUrl(previewData);
+    const source = getPreviewSource(previewData);
+
+    if (embedUrl) {
+      return (
+        <div style={{ marginTop: 12 }}>
+          <iframe
+            src={embedUrl + (source === 'tidal' ? '?coverImageStyle=round&tracklist=false' : '')}
+            width="100%"
+            height={152}
+            style={{ borderRadius: 14, border: 'none' }}
+            allow="encrypted-media"
+            loading="lazy"
+          />
+        </div>
+      );
+    }
+
+    if (source === 'beatport') {
+      return (
+        <div style={{ marginTop: 12 }}>
+          <a
+            href={preview.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              width: '100%', height: 44, borderRadius: 12,
+              background: surface, border: `1px solid ${border}`,
+              fontFamily: 'var(--font-mono, monospace)', fontSize: 11, fontWeight: 700,
+              color: 'rgba(255,255,255,0.7)', textDecoration: 'none', letterSpacing: 1,
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>
+            </svg>
+            OPEN IN BEATPORT
+          </a>
+        </div>
+      );
+    }
+
+    return null;
+  })();
+
   if (isWide === null) return null;
 
   /* ── Desktop: centered dialog ─────────────────────────────── */
@@ -200,6 +262,7 @@ export default function CollectDetailSheet({
           <div style={{ padding: '0 16px 16px' }}>
             {statsRow}
             {suggestedBy}
+            {previewSection}
             {voteBtn}
           </div>
         </div>
@@ -244,6 +307,7 @@ export default function CollectDetailSheet({
 
         {statsRow}
         {suggestedBy}
+        {previewSection}
       </div>
 
       {/* Bottom vote CTA */}

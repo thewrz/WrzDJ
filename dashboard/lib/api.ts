@@ -152,6 +152,11 @@ export interface CollectMyPicksResponse {
   voted_request_ids: number[];
 }
 
+export interface CollectPreviewResponse {
+  source: 'spotify' | 'tidal' | 'beatport' | 'manual';
+  source_url: string | null;
+}
+
 export interface CollectionSettingsResponse {
   collection_opens_at: string | null;
   live_starts_at: string | null;
@@ -1248,6 +1253,15 @@ class ApiClient {
     } catch {
       return items.map((i) => ({ title: i.title, artist: i.artist }));
     }
+  }
+
+  async getCollectPreview(code: string, requestId: number): Promise<CollectPreviewResponse> {
+    const res = await fetch(
+      `${getApiUrl()}/api/public/collect/${code}/requests/${requestId}/preview`,
+      { method: 'GET', headers: { 'Content-Type': 'application/json' }, credentials: 'include' },
+    );
+    if (!res.ok) throw new ApiError(`getCollectPreview failed: ${res.status}`, res.status);
+    return res.json();
   }
 
   // ========== Pre-Event Collection (DJ-authenticated) ==========

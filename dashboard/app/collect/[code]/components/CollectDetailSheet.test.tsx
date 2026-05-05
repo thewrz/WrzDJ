@@ -3,6 +3,17 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import CollectDetailSheet from './CollectDetailSheet';
 import type { CollectLeaderboardRow } from '@/lib/api';
 
+vi.mock('@/lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api')>();
+  return {
+    ...actual,
+    apiClient: {
+      ...actual.apiClient,
+      getCollectPreview: vi.fn().mockResolvedValue({ source: 'manual', source_url: null }),
+    },
+  };
+});
+
 const mockRow: CollectLeaderboardRow = {
   id: 1,
   title: 'Levels',
@@ -30,6 +41,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={mockRow}
+        code="TEST"
         rank={3}
         totalCount={10}
         voted={false}
@@ -51,6 +63,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={mockRow}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -68,6 +81,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={mockRow}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -83,6 +97,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={mockRow}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -99,6 +114,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={rowNoPills}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -116,6 +132,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={rowBpmOnly}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -133,6 +150,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={rowKeyOnly}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -150,6 +168,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={rowWithNickname}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -166,6 +185,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={mockRow}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -181,6 +201,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={mockRow}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -196,6 +217,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={mockRow}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={true}
@@ -212,6 +234,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={mockRow}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -229,6 +252,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={mockRow}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -249,6 +273,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={rowWithArt}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -266,6 +291,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={mockRow}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -289,6 +315,7 @@ describe('CollectDetailSheet', () => {
     const { container } = render(
       <CollectDetailSheet
         row={mockRow}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -313,6 +340,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={mockRow}
+        code="TEST"
         rank={1}
         totalCount={5}
         voted={false}
@@ -330,6 +358,7 @@ describe('CollectDetailSheet', () => {
     render(
       <CollectDetailSheet
         row={mockRow}
+        code="TEST"
         rank={2}
         totalCount={20}
         voted={false}

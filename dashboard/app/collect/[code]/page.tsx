@@ -434,6 +434,7 @@ export default function CollectPage() {
       {detailRow && (
         <CollectDetailSheet
           row={detailRow}
+          code={code}
           rank={(leaderboard?.requests ?? []).findIndex((r) => r.id === detailRow.id) + 1 || 1}
           totalCount={leaderboard?.requests.length ?? 0}
           voted={detailVoted || votedIds.has(detailRow.id)}
