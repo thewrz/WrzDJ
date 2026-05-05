@@ -26,6 +26,7 @@ from app.schemas.collect import (
     CollectLeaderboardRow,
     CollectMyPicksItem,
     CollectMyPicksResponse,
+    CollectPreviewResponse,
     CollectProfileRequest,
     CollectProfileResponse,
     CollectSubmitRequest,
@@ -492,3 +493,29 @@ def enrich_preview(
         )
 
     return EnrichPreviewResponse(results=results)
+
+
+@router.get(
+    "/{code}/requests/{request_id}/preview",
+    response_model=CollectPreviewResponse,
+)
+@limiter.limit("10/minute")
+def request_preview(
+    code: str,
+    request_id: int,
+    request: Request,
+    _human: int | None = Depends(require_verified_human_soft),
+    db: Session = Depends(get_db),
+):
+    event = _get_event_or_404(db, code)
+    song_request = (
+        db.query(SongRequest)
+        .filter(SongRequest.id == request_id, SongRequest.event_id == event.id)
+        .one_or_none()
+    )
+    if song_request is None:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return CollectPreviewResponse(
+        source=song_request.source,
+        source_url=song_request.source_url,
+    )

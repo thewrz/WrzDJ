@@ -73,6 +73,11 @@ class CollectLeaderboardRow(BaseModel):
     requester_verified: bool = False
 
 
+class CollectPreviewResponse(BaseModel):
+    source: Literal["spotify", "tidal", "beatport", "manual"]
+    source_url: str | None
+
+
 class CollectLeaderboardResponse(BaseModel):
     requests: list[CollectLeaderboardRow]
     total: int

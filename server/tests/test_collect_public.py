@@ -948,3 +948,52 @@ def test_leaderboard_row_requester_verified_false_no_guest(client, db, test_even
     rows = r.json()["requests"]
     assert len(rows) == 1
     assert rows[0]["requester_verified"] is False
+
+
+# ── Request preview tests ────────────────────────────────────────────────────
+
+
+def test_collect_preview_returns_source_url(client, db, test_event, collection_requests):
+    """Preview endpoint returns source + source_url for a valid request."""
+    _enable_collection(db, test_event)
+    req = collection_requests[0]
+    req.source_url = "https://open.spotify.com/track/abc123"
+    db.commit()
+
+    r = client.get(f"/api/public/collect/{test_event.code}/requests/{req.id}/preview")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source"] == "spotify"
+    assert body["source_url"] == "https://open.spotify.com/track/abc123"
+
+
+def test_collect_preview_null_source_url_for_manual(client, db, test_event, collection_requests):
+    """Preview endpoint returns source_url=null for manual entries."""
+    _enable_collection(db, test_event)
+    req = collection_requests[0]
+    req.source = "manual"
+    req.source_url = None
+    db.commit()
+
+    r = client.get(f"/api/public/collect/{test_event.code}/requests/{req.id}/preview")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source"] == "manual"
+    assert body["source_url"] is None
+
+
+def test_collect_preview_404_wrong_event(client, db, test_event, collection_requests):
+    """Preview endpoint returns 404 when request belongs to a different event."""
+    _enable_collection(db, test_event)
+    req = collection_requests[0]
+
+    r = client.get(f"/api/public/collect/ZZZZZZ/requests/{req.id}/preview")
+    assert r.status_code == 404
+
+
+def test_collect_preview_404_nonexistent_request(client, db, test_event):
+    """Preview endpoint returns 404 for nonexistent request ID."""
+    _enable_collection(db, test_event)
+
+    r = client.get(f"/api/public/collect/{test_event.code}/requests/99999/preview")
+    assert r.status_code == 404
