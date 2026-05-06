@@ -354,6 +354,100 @@ describe('CollectDetailSheet', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('renders Spotify embed iframe when preview has spotify source_url', async () => {
+    const { apiClient } = await import('@/lib/api');
+    vi.mocked(apiClient.getCollectPreview).mockResolvedValueOnce({
+      source: 'spotify',
+      source_url: 'https://open.spotify.com/track/abc123',
+    });
+    render(
+      <CollectDetailSheet
+        row={mockRow}
+        code="TEST"
+        rank={1}
+        totalCount={5}
+        voted={false}
+        onVote={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    await act(async () => {});
+    const iframe = document.querySelector('iframe');
+    expect(iframe).toBeTruthy();
+    expect(iframe!.src).toContain('open.spotify.com/embed/track/abc123');
+    expect(iframe!.title).toBe('Levels by Avicii');
+  });
+
+  it('renders Tidal embed iframe with tidal params', async () => {
+    const { apiClient } = await import('@/lib/api');
+    vi.mocked(apiClient.getCollectPreview).mockResolvedValueOnce({
+      source: 'tidal',
+      source_url: 'https://tidal.com/browse/track/12345',
+    });
+    render(
+      <CollectDetailSheet
+        row={mockRow}
+        code="TEST"
+        rank={1}
+        totalCount={5}
+        voted={false}
+        onVote={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    await act(async () => {});
+    const iframe = document.querySelector('iframe');
+    expect(iframe).toBeTruthy();
+    expect(iframe!.src).toContain('embed.tidal.com/tracks/12345');
+    expect(iframe!.src).toContain('coverImageStyle=round');
+  });
+
+  it('renders Beatport external link when preview source is beatport', async () => {
+    const { apiClient } = await import('@/lib/api');
+    vi.mocked(apiClient.getCollectPreview).mockResolvedValueOnce({
+      source: 'beatport',
+      source_url: 'https://www.beatport.com/track/test/99999',
+    });
+    render(
+      <CollectDetailSheet
+        row={mockRow}
+        code="TEST"
+        rank={1}
+        totalCount={5}
+        voted={false}
+        onVote={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    await act(async () => {});
+    expect(screen.getByText('OPEN IN BEATPORT')).toBeTruthy();
+    const link = screen.getByText('OPEN IN BEATPORT').closest('a');
+    expect(link!.href).toBe('https://www.beatport.com/track/test/99999');
+    expect(link!.target).toBe('_blank');
+  });
+
+  it('renders no preview when source_url is null', async () => {
+    const { apiClient } = await import('@/lib/api');
+    vi.mocked(apiClient.getCollectPreview).mockResolvedValueOnce({
+      source: 'manual',
+      source_url: null,
+    });
+    render(
+      <CollectDetailSheet
+        row={mockRow}
+        code="TEST"
+        rank={1}
+        totalCount={5}
+        voted={false}
+        onVote={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    await act(async () => {});
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(screen.queryByText('OPEN IN BEATPORT')).toBeNull();
+  });
+
   it('displays vote count and rank in stats row', async () => {
     render(
       <CollectDetailSheet

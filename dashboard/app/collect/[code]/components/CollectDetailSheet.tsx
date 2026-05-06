@@ -176,6 +176,7 @@ export default function CollectDetailSheet({
         <div style={{ marginTop: 12 }}>
           <iframe
             src={embedUrl + (source === 'tidal' ? '?coverImageStyle=round&tracklist=false' : '')}
+            title={`${row.title} by ${row.artist}`}
             width="100%"
             height={152}
             style={{ borderRadius: 14, border: 'none' }}
