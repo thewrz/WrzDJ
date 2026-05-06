@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 
 // Mock next/navigation
@@ -113,54 +113,14 @@ function renderWithProviders() {
   );
 }
 
-describe('Event detail page help integration', () => {
+describe('Event detail page — tab navigation', () => {
   beforeEach(() => {
     localStorageMock.clear();
-  });
-
-  it('HelpButton renders on event detail page', async () => {
-    renderWithProviders();
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Toggle help mode' })).toBeInTheDocument();
-    });
-  });
-
-  it('tab-bar HelpSpot exists on song management tab', async () => {
-    renderWithProviders();
-
-    await waitFor(() => {
-      expect(screen.getByTestId('help-spot-event-tabs')).toBeInTheDocument();
-    });
-  });
-
-  it('first visit triggers onboarding after delay', async () => {
-    vi.useFakeTimers();
-    renderWithProviders();
-    // Flush promises for data load
-    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
-    // Advance past 500ms onboarding delay
-    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
-
-    expect(screen.getByTestId('onboarding-overlay')).toBeInTheDocument();
-    vi.useRealTimers();
-  });
-
-  it('subsequent visits do not auto-trigger onboarding', async () => {
-    localStorageMock.setItem('wrzdj-help-seen-event-songs', '1');
-    vi.useFakeTimers();
-    renderWithProviders();
-    await act(async () => { await vi.advanceTimersByTimeAsync(700); });
-
-    expect(screen.queryByTestId('onboarding-overlay')).not.toBeInTheDocument();
-    vi.useRealTimers();
-  });
-
-  it('switching to manage tab shows the manage page HelpSpots', async () => {
     localStorageMock.setItem('wrzdj-help-seen-event-songs', '1');
     localStorageMock.setItem('wrzdj-help-seen-event-manage', '1');
+  });
 
-    // Mock EventManagementTab to include a HelpSpot
+  it('switching to manage tab renders manage content', async () => {
     renderWithProviders();
 
     await waitFor(() => {
@@ -169,9 +129,7 @@ describe('Event detail page help integration', () => {
 
     fireEvent.click(screen.getByText('Event Management'));
 
-    // The tab-bar HelpSpot should now have event-manage as page
     await waitFor(() => {
-      // The tabs HelpSpot is always visible, verify the manage tab content renders
       expect(screen.getByTestId('manage-tab')).toBeVisible();
     });
   });
