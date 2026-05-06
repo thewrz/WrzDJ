@@ -107,6 +107,18 @@ npm test -- --run         # Vitest
 
 ## Testing
 
+### Testing philosophy
+
+Every test must justify itself against four properties:
+1. Protects against real regressions (user-visible behavior)
+2. Resists refactoring (doesn't break on internal restructuring)
+3. Fast enough to actually run
+4. Readable and maintainable
+
+Coverage % is a diagnostic, not a target. Tests at module/API boundaries
+beat tests on internals. Mocks belong at process edges, not everywhere.
+Pin every bug-fix with a regression test referencing the commit SHA.
+
 ### Backend (pytest)
 - Config: `server/pyproject.toml` under `[tool.pytest.ini_options]`
 - Test DB: SQLite in-memory (not PostgreSQL)
