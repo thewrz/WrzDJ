@@ -134,3 +134,26 @@ class TestFindDuplicate:
         db.commit()
         result = find_duplicate(db, test_event.id, "The Killers", "Mr. Brightside")
         assert result is None
+
+    def test_deduplication_has_no_time_window(self, db, test_event):
+        """Regression: 8ba58a2 — dedup must apply across the full event lifetime,
+        not just within a 6-hour window. A request submitted >6h ago must still
+        be detected as a duplicate when a new one arrives."""
+        key = compute_dedupe_key("The Killers", "Mr. Brightside")
+        db.add(
+            SongRequest(
+                event_id=test_event.id,
+                song_title="Mr. Brightside",
+                artist="The Killers",
+                source="spotify",
+                status=RequestStatus.NEW.value,
+                dedupe_key=key,
+                created_at=utcnow() - timedelta(hours=8),
+            )
+        )
+        db.commit()
+        result = find_duplicate(db, test_event.id, "The Killers", "Mr. Brightside")
+        assert result is not None, (
+            "Regression 8ba58a2: duplicate detection must cover the full event "
+            "lifetime with no 6-hour time window"
+        )

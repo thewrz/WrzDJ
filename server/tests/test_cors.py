@@ -26,10 +26,6 @@ class TestCorsConfiguration:
                 f"HTTP {method} is used by API routes but missing from CORS_ALLOW_METHODS"
             )
 
-    def test_cors_methods_include_put(self):
-        """PUT must be allowed — required by Tidal settings endpoint."""
-        assert "PUT" in CORS_ALLOW_METHODS
-
     def test_cors_middleware_is_configured(self):
         """CORSMiddleware must be present in the middleware stack."""
         cors_mw = next(
