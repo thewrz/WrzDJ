@@ -449,6 +449,7 @@ export default function CollectPage() {
             }
           }}
           onClose={() => { setDetailRow(null); setDetailVoted(false); }}
+          reverify={reverify}
         />
       )}
 

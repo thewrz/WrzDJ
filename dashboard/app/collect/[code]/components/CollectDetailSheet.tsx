@@ -13,6 +13,7 @@ interface Props {
   voted: boolean;
   onVote: () => void;
   onClose: () => void;
+  reverify?: () => Promise<void>;
 }
 
 const ACCENT = '#00f0ff';
@@ -35,7 +36,7 @@ function artGradient(seed: string) {
 }
 
 export default function CollectDetailSheet({
-  row, code, rank, totalCount, voted, onVote, onClose,
+  row, code, rank, totalCount, voted, onVote, onClose, reverify,
 }: Props) {
   const [isWide, setIsWide] = useState<boolean | null>(null);
 
@@ -50,7 +51,7 @@ export default function CollectDetailSheet({
 
   useEffect(() => {
     let cancelled = false;
-    apiClient.getCollectPreview(code, row.id).then((data) => {
+    apiClient.getCollectPreview(code, row.id, reverify).then((data) => {
       if (!cancelled) setPreview(data);
     }).catch(() => {});
     return () => { cancelled = true; };
