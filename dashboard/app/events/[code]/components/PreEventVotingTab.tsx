@@ -21,6 +21,23 @@ interface Props {
 
 type ConfirmAction = 'force_collection' | 'force_live' | 'clear';
 
+type BulkReviewAction = Parameters<typeof apiClient.bulkReview>[1]['action'];
+
+const BULK_REVIEW_ACTIONS: readonly BulkReviewAction[] = [
+  'accept_top_n',
+  'accept_threshold',
+  'accept_ids',
+  'reject_ids',
+  'reject_remaining',
+];
+
+function assertBulkReviewAction(action: string): BulkReviewAction {
+  if (!(BULK_REVIEW_ACTIONS as readonly string[]).includes(action)) {
+    throw new Error(`Invalid bulk review action: "${action}"`);
+  }
+  return action as BulkReviewAction;
+}
+
 const CONFIRM_LABEL: Record<ConfirmAction, string> = {
   force_collection: 'Open collection now',
   force_live: 'Start live now',
@@ -89,7 +106,7 @@ export default function PreEventVotingTab({ event, onEventChange }: Props) {
 
   async function bulk(action: string, extras: Record<string, unknown> = {}) {
     await apiClient.bulkReview(event.code, {
-      action: action as Parameters<typeof apiClient.bulkReview>[1]['action'],
+      action: assertBulkReviewAction(action),
       ...extras,
     });
     setSelected(new Set());

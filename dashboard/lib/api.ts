@@ -1255,11 +1255,21 @@ class ApiClient {
     }
   }
 
-  async getCollectPreview(code: string, requestId: number): Promise<CollectPreviewResponse> {
-    const res = await fetch(
-      `${getApiUrl()}/api/public/collect/${code}/requests/${requestId}/preview`,
-      { method: 'GET', headers: { 'Content-Type': 'application/json' }, credentials: 'include' },
-    );
+  async getCollectPreview(
+    code: string,
+    requestId: number,
+    reverify?: () => Promise<void>,
+  ): Promise<CollectPreviewResponse> {
+    const doFetch = () =>
+      fetch(`${getApiUrl()}/api/public/collect/${code}/requests/${requestId}/preview`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+    if (reverify) {
+      return withHumanRetry<CollectPreviewResponse>(doFetch, reverify);
+    }
+    const res = await doFetch();
     if (!res.ok) throw new ApiError(`getCollectPreview failed: ${res.status}`, res.status);
     return res.json();
   }

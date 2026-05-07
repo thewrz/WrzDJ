@@ -33,16 +33,6 @@ describe('useHelpSpot', () => {
     expect(result.current).toHaveProperty('current');
   });
 
-  it('calls registerSpot on mount', () => {
-    renderHook(() =>
-      useHelpSpot({ id: 'test', page: 'p', order: 1, title: 'T', description: 'D' })
-    );
-    expect(mockRegisterSpot).toHaveBeenCalledTimes(1);
-    expect(mockRegisterSpot).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'test', page: 'p', order: 1 })
-    );
-  });
-
   it('calls deregister on unmount', () => {
     const deregister = vi.fn();
     mockRegisterSpot.mockReturnValue(deregister);

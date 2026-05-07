@@ -107,18 +107,34 @@ class TestLockoutManager:
         assert locked is True
 
     def test_cleanup_removes_old_expired_entries(self):
+        # Record 4 failures — one below the lockout threshold of 5.
+        # If the entry survives into the future, a 5th failure will trigger a lockout.
+        # If cleanup erases it, the 5th failure starts a fresh count → no lockout.
         mgr = self._make_manager()
-        mgr.record_failure("1.2.3.4", "alice")
+        for _ in range(4):
+            mgr.record_failure("1.2.3.4", "alice")
 
         now = time.time()
         with patch("app.core.lockout.time") as mock_time:
-            # Jump past cleanup interval (1 hour) + force cleanup by advancing _last_cleanup
-            mock_time.time.return_value = now + 3601
-            mgr._last_cleanup = 0  # Force cleanup to run
-            mgr.is_locked_out("5.6.7.8", "nobody")  # Triggers cleanup
+            # Jump 1 hour + 2 seconds into the future.  Two conditions are now met:
+            # (a) the entry has no active lockout (count=4 never triggered one), so
+            #     lockout_until == 0 < now → expired condition satisfied
+            # (b) now - first_failure > CLEANUP_INTERVAL (1 h) → "old" condition satisfied
+            # (c) now - _last_cleanup >> 60 → cleanup will actually execute
+            # is_locked_out() runs _cleanup_old_entries() internally before checking.
+            future = now + 3602
+            mock_time.time.return_value = future
+            locked, remaining = mgr.is_locked_out("1.2.3.4", "alice")
+            assert locked is False
+            assert remaining == 0
 
-        # The old entry for alice should be cleaned up
-        assert "ip:1.2.3.4" not in mgr._attempts
+            # Now record one more failure.  If cleanup ran and removed the stale entry,
+            # this is the very first failure — count=1, no lockout.
+            # If cleanup did NOT run, count would become 5 and trigger a 5-minute lockout.
+            is_now_locked, lockout_seconds = mgr.record_failure("1.2.3.4", "alice")
+
+        assert is_now_locked is False, "cleanup erased old entry; count must restart at 1"
+        assert lockout_seconds == 0
 
     def test_record_failure_resets_after_lockout_expires(self):
         mgr = self._make_manager()

@@ -108,7 +108,8 @@ def mark_help_page_seen(
 
 
 @router.get("/settings", response_model=PublicSettings)
-def get_public_settings(db: Session = Depends(get_db)) -> PublicSettings:
+@limiter.limit("30/minute")
+def get_public_settings(request: Request, db: Session = Depends(get_db)) -> PublicSettings:
     """Public endpoint returning registration status and Turnstile site key."""
     sys_settings = get_system_settings(db)
     return PublicSettings(
