@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -64,5 +64,15 @@ export function ConfirmEmailContent() {
 }
 
 export default function ConfirmEmailPage() {
-  return <ConfirmEmailContent />;
+  return (
+    <Suspense
+      fallback={
+        <main style={{ padding: '4rem', textAlign: 'center' }}>
+          <p style={{ color: '#aaa' }}>Loading…</p>
+        </main>
+      }
+    >
+      <ConfirmEmailContent />
+    </Suspense>
+  );
 }
