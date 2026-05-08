@@ -2,20 +2,35 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_active_user, get_current_user, get_db
 from app.core.config import get_settings
 from app.core.lockout import lockout_manager
 from app.core.rate_limit import get_client_ip, limiter
 from app.models.user import User, UserRole
 from app.schemas.auth import Token
 from app.schemas.common import StatusMessageResponse
-from app.schemas.user import HelpPageSeenRequest, PublicSettings, RegisterRequest, UserOut
+from app.schemas.user import (
+    ChangePasswordRequest,
+    HelpPageSeenRequest,
+    PublicSettings,
+    RegisterRequest,
+    RequestEmailChangeRequest,
+    UserOut,
+)
+from app.services import account as account_service
+from app.services.account import (
+    EmailTakenError,
+    TokenExpiredError,
+    TokenNotFoundError,
+    TokenUsedError,
+)
 from app.services.auth import (
     authenticate_user,
     create_access_token,
     create_user,
     get_user_by_username,
 )
+from app.services.email_sender import EmailNotConfiguredError, EmailSendError
 from app.services.system_settings import get_system_settings
 from app.services.turnstile import verify_turnstile_token
 
@@ -89,8 +104,72 @@ def logout(
 
 @router.get("/me", response_model=UserOut)
 @limiter.limit("60/minute")
-def get_me(request: Request, current_user: User = Depends(get_current_user)) -> User:
-    return current_user
+def get_me(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    pending = account_service.get_active_pending_email_change(db, current_user.id)
+    data = UserOut.model_validate(current_user).model_dump()
+    data["pending_email"] = pending.new_email if pending else None
+    return data
+
+
+@router.patch("/me/password", response_model=StatusMessageResponse)
+@limiter.limit("5/minute")
+def change_password(
+    request: Request,
+    body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> StatusMessageResponse:
+    try:
+        account_service.change_password(db, current_user, body.current_password, body.new_password)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    return StatusMessageResponse(status="ok", message="Password updated. Please log in again.")
+
+
+@router.post("/me/email/request", response_model=StatusMessageResponse)
+@limiter.limit("3/minute")
+def request_email_change(
+    request: Request,
+    body: RequestEmailChangeRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> StatusMessageResponse:
+    try:
+        account_service.request_email_change(
+            db, current_user, body.current_password, body.new_email
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Incorrect password or email already in use",
+        )
+    except (EmailNotConfiguredError, EmailSendError):
+        raise HTTPException(status_code=422, detail="Email service temporarily unavailable")
+    return StatusMessageResponse(status="ok", message="Confirmation email sent")
+
+
+@router.get("/email/confirm", response_model=StatusMessageResponse)
+@limiter.limit("10/minute")
+def confirm_email_change(
+    request: Request,
+    token: str,
+    db: Session = Depends(get_db),
+) -> StatusMessageResponse:
+    try:
+        account_service.confirm_email_change(db, token)
+    except TokenNotFoundError:
+        raise HTTPException(status_code=400, detail="Invalid confirmation link")
+    except TokenExpiredError:
+        raise HTTPException(status_code=400, detail="Confirmation link has expired")
+    except TokenUsedError:
+        raise HTTPException(status_code=400, detail="Confirmation link has already been used")
+    except EmailTakenError:
+        raise HTTPException(status_code=409, detail="Email address is already in use")
+    return StatusMessageResponse(status="ok", message="Email updated")
 
 
 @router.post("/help-seen", response_model=StatusMessageResponse)

@@ -1,6 +1,7 @@
 """Tests for self-service credential management (password + email change)."""
 
 from datetime import timedelta
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy.orm import Session
@@ -266,3 +267,101 @@ def test_send_email_confirmation_calls_resend() -> None:
         payload = mock_send.call_args[0][0]
         assert payload["to"] == ["user@example.com"]
         assert "confirm-email" in payload["text"]
+
+
+# ── API endpoints ──────────────────────────────────────────────────────────────
+
+
+def test_api_change_password_success(
+    client, auth_headers: dict, db: Session, test_user: User
+) -> None:
+    resp = client.patch(
+        "/api/auth/me/password",
+        json={
+            "current_password": "testpassword123",
+            "new_password": "newpassword456",
+            "confirm_new_password": "newpassword456",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    db.refresh(test_user)
+    assert verify_password("newpassword456", test_user.password_hash)
+
+
+def test_api_change_password_wrong_current(client, auth_headers: dict) -> None:
+    resp = client.patch(
+        "/api/auth/me/password",
+        json={
+            "current_password": "wrongpassword",
+            "new_password": "newpassword456",
+            "confirm_new_password": "newpassword456",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+
+def test_api_pending_role_blocked_password(client, pending_headers: dict) -> None:
+    resp = client.patch(
+        "/api/auth/me/password",
+        json={
+            "current_password": "pendingpassword123",
+            "new_password": "newpassword456",
+            "confirm_new_password": "newpassword456",
+        },
+        headers=pending_headers,
+    )
+    assert resp.status_code == 403
+
+
+def test_api_request_email_change_success(
+    client, auth_headers: dict, db: Session, test_user: User
+) -> None:
+    with patch("app.services.account.send_email_confirmation"):
+        resp = client.post(
+            "/api/auth/me/email/request",
+            json={
+                "current_password": "testpassword123",
+                "new_email": "newemail@example.com",
+            },
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200
+    assert (
+        db.query(PendingEmailChange).filter(PendingEmailChange.user_id == test_user.id).count() == 1
+    )
+
+
+def test_api_confirm_email_change_success(client, db: Session, test_user: User) -> None:
+    token = "k" * 64
+    db.add(
+        PendingEmailChange(
+            user_id=test_user.id,
+            new_email="confirmed@example.com",
+            token=token,
+            expires_at=utcnow() + timedelta(hours=24),
+        )
+    )
+    db.commit()
+    resp = client.get(f"/api/auth/email/confirm?token={token}")
+    assert resp.status_code == 200
+    db.refresh(test_user)
+    assert test_user.email == "confirmed@example.com"
+
+
+def test_api_me_includes_pending_email(
+    client, auth_headers: dict, db: Session, test_user: User
+) -> None:
+    db.add(
+        PendingEmailChange(
+            user_id=test_user.id,
+            new_email="pending@example.com",
+            token="l" * 64,
+            expires_at=utcnow() + timedelta(hours=24),
+        )
+    )
+    db.commit()
+    resp = client.get("/api/auth/me", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["pending_email"] == "pending@example.com"
