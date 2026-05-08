@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -23,6 +23,14 @@ export default function AccountPage() {
   const [emailError, setEmailError] = useState('');
   const [emailPending, setEmailPending] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(false);
+
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current !== null) clearTimeout(redirectTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -51,7 +59,7 @@ export default function AccountPage() {
         confirm_new_password: confirmPassword,
       });
       setPasswordSuccess(true);
-      setTimeout(() => router.push('/login'), 1500);
+      redirectTimerRef.current = setTimeout(() => router.push('/login'), 1500);
     } catch (err: unknown) {
       setPasswordError(err instanceof Error ? err.message : 'Password change failed');
     } finally {
@@ -78,7 +86,7 @@ export default function AccountPage() {
     }
   };
 
-  if (isLoading) return null;
+  if (isLoading || !isAuthenticated) return null;
 
   return (
     <main style={{ maxWidth: '480px', margin: '0 auto', padding: '2rem 1rem' }}>
