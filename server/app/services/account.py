@@ -115,10 +115,8 @@ def request_email_change(db: Session, user: User, current_password: str, new_ema
     send_email_confirmation(new_email, confirmation_url)
 
 
-def get_active_pending_email_change(db: Session, user_id: int) -> "PendingEmailChange | None":
+def get_active_pending_email_change(db: Session, user_id: int) -> PendingEmailChange | None:
     """Get the active (unused, not expired) pending email change for a user.
-
-    Stub for Task 4 (get_active_pending_email_change).
 
     Args:
         db: Database session
@@ -127,7 +125,15 @@ def get_active_pending_email_change(db: Session, user_id: int) -> "PendingEmailC
     Returns:
         PendingEmailChange if one exists and is valid, None otherwise
     """
-    raise NotImplementedError
+    return (
+        db.query(PendingEmailChange)
+        .filter(
+            PendingEmailChange.user_id == user_id,
+            PendingEmailChange.used.is_(False),
+            PendingEmailChange.expires_at > utcnow(),
+        )
+        .first()
+    )
 
 
 def confirm_email_change(db: Session, token: str) -> User:
@@ -135,8 +141,6 @@ def confirm_email_change(db: Session, token: str) -> User:
 
     Validates token exists, is not expired, not already used, then updates the
     user's email and marks the token as used.
-
-    Stub for Task 4 (confirm_email_change).
 
     Args:
         db: Database session
@@ -149,5 +153,22 @@ def confirm_email_change(db: Session, token: str) -> User:
         TokenNotFoundError: If token does not exist
         TokenExpiredError: If token has expired
         TokenUsedError: If token has already been used
+        EmailTakenError: If target email is already in use
     """
-    raise NotImplementedError
+    record = db.query(PendingEmailChange).filter(PendingEmailChange.token == token).first()
+    if record is None:
+        raise TokenNotFoundError("Token not found")
+    if record.used:
+        raise TokenUsedError("Token already used")
+    if record.expires_at <= utcnow():
+        raise TokenExpiredError("Token expired")
+    existing = (
+        db.query(User).filter(User.email == record.new_email, User.id != record.user_id).first()
+    )
+    if existing:
+        raise EmailTakenError("Email already in use")
+    user = db.query(User).filter(User.id == record.user_id).first()
+    user.email = record.new_email
+    record.used = True
+    db.commit()
+    return user

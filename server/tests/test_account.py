@@ -129,3 +129,101 @@ def test_request_email_change_supersedes_previous(db: Session, test_user: User) 
     )
     assert len(active) == 1
     assert active[0].new_email == "second@example.com"
+
+
+# ── helpers ────────────────────────────────────────────────────────────────────
+
+
+def _make_pending(
+    db: Session,
+    user: User,
+    email: str,
+    token: str,
+    *,
+    hours: int = 24,
+    used: bool = False,
+) -> PendingEmailChange:
+    record = PendingEmailChange(
+        user_id=user.id,
+        new_email=email,
+        token=token,
+        expires_at=utcnow() + timedelta(hours=hours),
+        used=used,
+    )
+    db.add(record)
+    db.commit()
+    return record
+
+
+# ── confirm_email_change ───────────────────────────────────────────────────────
+
+
+def test_confirm_email_change_success(db: Session, test_user: User) -> None:
+    _make_pending(db, test_user, "confirmed@example.com", "c" * 64)
+    returned_user = confirm_email_change(db, "c" * 64)
+    db.refresh(test_user)
+    assert test_user.email == "confirmed@example.com"
+    assert returned_user.id == test_user.id
+
+
+def test_confirm_marks_record_used(db: Session, test_user: User) -> None:
+    record = _make_pending(db, test_user, "confirmed@example.com", "d" * 64)
+    confirm_email_change(db, "d" * 64)
+    db.refresh(record)
+    assert record.used is True
+
+
+def test_confirm_email_change_expired(db: Session, test_user: User) -> None:
+    _make_pending(db, test_user, "expired@example.com", "e" * 64, hours=-1)
+    with pytest.raises(TokenExpiredError):
+        confirm_email_change(db, "e" * 64)
+
+
+def test_confirm_email_change_used(db: Session, test_user: User) -> None:
+    _make_pending(db, test_user, "used@example.com", "f" * 64, used=True)
+    with pytest.raises(TokenUsedError):
+        confirm_email_change(db, "f" * 64)
+
+
+def test_confirm_email_change_not_found(db: Session) -> None:
+    with pytest.raises(TokenNotFoundError):
+        confirm_email_change(db, "0" * 64)
+
+
+def test_confirm_email_change_email_race(db: Session, test_user: User) -> None:
+    from app.services.auth import get_password_hash
+
+    other_user = User(
+        username="otheruser",
+        email="other@example.com",
+        password_hash=get_password_hash("otherpassword123"),
+        role="dj",
+    )
+    db.add(other_user)
+    db.commit()
+
+    _make_pending(db, test_user, other_user.email, "g" * 64)
+    with pytest.raises(EmailTakenError):
+        confirm_email_change(db, "g" * 64)
+
+
+# ── get_active_pending_email_change ────────────────────────────────────────────
+
+
+def test_get_active_pending_returns_active(db: Session, test_user: User) -> None:
+    _make_pending(db, test_user, "active@example.com", "h" * 64)
+    result = get_active_pending_email_change(db, test_user.id)
+    assert result is not None
+    assert result.new_email == "active@example.com"
+
+
+def test_get_active_pending_ignores_expired(db: Session, test_user: User) -> None:
+    _make_pending(db, test_user, "expired@example.com", "i" * 64, hours=-1)
+    result = get_active_pending_email_change(db, test_user.id)
+    assert result is None
+
+
+def test_get_active_pending_ignores_used(db: Session, test_user: User) -> None:
+    _make_pending(db, test_user, "used@example.com", "j" * 64, used=True)
+    result = get_active_pending_email_change(db, test_user.id)
+    assert result is None
