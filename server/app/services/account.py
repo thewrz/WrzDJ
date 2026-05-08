@@ -1,10 +1,16 @@
 """Self-service credential management: password change, email change."""
 
+import secrets
+from datetime import timedelta
+
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.core.time import utcnow
 from app.models.pending_email_change import PendingEmailChange
 from app.models.user import User
 from app.services.auth import get_password_hash, verify_password
+from app.services.email_sender import send_email_confirmation
 
 
 class AccountError(Exception):
@@ -74,14 +80,11 @@ def change_password(db: Session, user: User, current_password: str, new_password
     db.commit()
 
 
-# Stubs — implemented in Tasks 3 and 4
 def request_email_change(db: Session, user: User, current_password: str, new_email: str) -> None:
     """Request to change the user's email address.
 
     Verifies password, validates email is not taken, generates confirmation token,
     sends confirmation email with link to `confirm_email_change`.
-
-    Stub for Task 3 (request_email_change).
 
     Args:
         db: Database session
@@ -90,10 +93,26 @@ def request_email_change(db: Session, user: User, current_password: str, new_ema
         new_email: Desired new email address
 
     Raises:
-        ValueError: If current password is incorrect
-        EmailTakenError: If new_email is already in use
+        ValueError: If current password is incorrect or email is already taken
     """
-    raise NotImplementedError
+    if not verify_password(current_password, user.password_hash):
+        raise ValueError("incorrect_or_taken")
+    existing = db.query(User).filter(User.email == new_email, User.id != user.id).first()
+    if existing:
+        raise ValueError("incorrect_or_taken")
+    invalidate_pending_email_changes(db, user.id)
+    token = secrets.token_hex(32)
+    record = PendingEmailChange(
+        user_id=user.id,
+        new_email=new_email,
+        token=token,
+        expires_at=utcnow() + timedelta(hours=24),
+    )
+    db.add(record)
+    db.commit()
+    settings = get_settings()
+    confirmation_url = f"{settings.public_url}/account/confirm-email?token={token}"
+    send_email_confirmation(new_email, confirmation_url)
 
 
 def get_active_pending_email_change(db: Session, user_id: int) -> "PendingEmailChange | None":
