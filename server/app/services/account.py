@@ -168,6 +168,8 @@ def confirm_email_change(db: Session, token: str) -> User:
     if existing:
         raise EmailTakenError("Email already in use")
     user = db.query(User).filter(User.id == record.user_id).first()
+    if user is None:
+        raise TokenNotFoundError("Associated user no longer exists")
     user.email = record.new_email
     record.used = True
     db.commit()

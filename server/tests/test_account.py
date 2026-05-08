@@ -315,6 +315,15 @@ def test_api_pending_role_blocked_password(client, pending_headers: dict) -> Non
     assert resp.status_code == 403
 
 
+def test_api_pending_role_blocked_email_request(client, pending_headers: dict) -> None:
+    resp = client.post(
+        "/api/auth/me/email/request",
+        json={"current_password": "pendingpassword123", "new_email": "x@example.com"},
+        headers=pending_headers,
+    )
+    assert resp.status_code == 403
+
+
 def test_api_request_email_change_success(
     client, auth_headers: dict, db: Session, test_user: User
 ) -> None:
