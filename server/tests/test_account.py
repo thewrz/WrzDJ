@@ -1,5 +1,6 @@
 """Tests for self-service credential management (password + email change)."""
 
+import hashlib
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -147,7 +148,7 @@ def _make_pending(
     record = PendingEmailChange(
         user_id=user.id,
         new_email=email,
-        token=token,
+        token=hashlib.sha256(token.encode()).hexdigest(),
         expires_at=utcnow() + timedelta(hours=hours),
         used=used,
     )
@@ -348,7 +349,7 @@ def test_api_confirm_email_change_success(client, db: Session, test_user: User) 
         PendingEmailChange(
             user_id=test_user.id,
             new_email="confirmed@example.com",
-            token=token,
+            token=hashlib.sha256(token.encode()).hexdigest(),
             expires_at=utcnow() + timedelta(hours=24),
         )
     )

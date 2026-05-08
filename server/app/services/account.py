@@ -1,5 +1,6 @@
 """Self-service credential management: password change, email change."""
 
+import hashlib
 import secrets
 from datetime import timedelta
 
@@ -41,6 +42,10 @@ class EmailTakenError(AccountError):
     """Raised when target email is already in use by another user."""
 
     pass
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def invalidate_pending_email_changes(db: Session, user_id: int) -> None:
@@ -105,7 +110,7 @@ def request_email_change(db: Session, user: User, current_password: str, new_ema
     record = PendingEmailChange(
         user_id=user.id,
         new_email=new_email,
-        token=token,
+        token=_hash_token(token),
         expires_at=utcnow() + timedelta(hours=24),
     )
     db.add(record)
@@ -155,7 +160,8 @@ def confirm_email_change(db: Session, token: str) -> User:
         TokenUsedError: If token has already been used
         EmailTakenError: If target email is already in use
     """
-    record = db.query(PendingEmailChange).filter(PendingEmailChange.token == token).first()
+    token_hash = _hash_token(token)
+    record = db.query(PendingEmailChange).filter(PendingEmailChange.token == token_hash).first()
     if record is None:
         raise TokenNotFoundError("Token not found")
     if record.used:

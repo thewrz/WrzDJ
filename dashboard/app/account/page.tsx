@@ -32,7 +32,7 @@ export default function AccountPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      api.getMe().then(user => setEmailPending(user.pending_email));
+      api.getMe().then(user => setEmailPending(user.pending_email ?? null)).catch(() => {});
     }
   }, [isAuthenticated]);
 
