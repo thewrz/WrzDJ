@@ -7,6 +7,7 @@ a security-required version floor was violated.
 """
 
 import json
+import re
 import subprocess
 import tomllib
 from pathlib import Path
@@ -76,6 +77,18 @@ def test_dockerfile_upgrades_pip_before_install():
         "before installing server dependencies (CVE-2026-6357)."
     )
 
+    # Verify the pinned version is actually >=26.1 (keyword check alone is not enough —
+    # "pip>=25.0" would pass the keyword filter but leave CVE-2026-6357 unpatched).
+    version_match = re.search(r"pip\s*>=\s*(\d+)\.(\d+)", pip_upgrade_lines[0])
+    assert version_match, (
+        f"pip upgrade line must include an explicit version floor (e.g. pip>=26.1). "
+        f"Found: {pip_upgrade_lines[0]!r}"
+    )
+    major, minor = int(version_match.group(1)), int(version_match.group(2))
+    assert (major, minor) >= (26, 1), (
+        f"pip floor must be >=26.1 to patch CVE-2026-6357; found {major}.{minor}"
+    )
+
     # Verify it appears before the main install step
     upgrade_idx = next(i for i, ln in enumerate(lines) if is_pip_upgrade(ln))
     install_idx = next(i for i, ln in enumerate(lines) if "pip install" in ln and "-e ." in ln)
@@ -101,7 +114,19 @@ def test_fast_uri_overridden_to_patched_version_in_bridge_app():
     )
 
     spec = overrides["fast-uri"]
-    # Accept ^3.1.2, >=3.1.2, or 3.1.2 — must not allow <3.1.2
-    assert "3.1.2" in spec or spec.startswith(">=3.1.2"), (
-        f"fast-uri override '{spec}' must resolve to >=3.1.2 to patch both CVEs."
+    # Parse version numerically — substring matching (e.g. "3.1.2" in "<3.1.2") is
+    # incorrect: "<3.1.2" contains the substring but allows vulnerable versions.
+    # Regex strips npm range prefixes (^, >=, ~) then compares the version tuple.
+    version_match = re.match(r"^(?:\^|>=?|~)?(\d+)\.(\d+)\.(\d+)", spec.strip())
+    assert version_match, (
+        f"fast-uri override '{spec}' must be a parseable semver specifier (e.g. ^3.1.2)."
+    )
+    major, minor, patch = (
+        int(version_match.group(1)),
+        int(version_match.group(2)),
+        int(version_match.group(3)),
+    )
+    assert (major, minor, patch) >= (3, 1, 2), (
+        f"fast-uri override '{spec}' resolves to {major}.{minor}.{patch}, "
+        f"which is below the required 3.1.2 floor (Dependabot #97/#98)."
     )
