@@ -54,7 +54,16 @@ def _assert_keys(data: dict, expected_keys: set, context: str = "") -> None:
 
 TOKEN_KEYS = {"access_token", "token_type"}
 
-USER_OUT_KEYS = {"id", "username", "is_active", "role", "created_at", "help_pages_seen"}
+USER_OUT_KEYS = {
+    "id",
+    "username",
+    "is_active",
+    "email",
+    "role",
+    "created_at",
+    "help_pages_seen",
+    "pending_email",
+}
 
 EVENT_OUT_KEYS = {
     "id",

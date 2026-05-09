@@ -209,6 +209,9 @@ export default function EventsPage() {
             >
               Bridge App
             </a>
+            <Link href="/account" className="btn" style={{ background: '#333', textDecoration: 'none', color: '#ededed' }}>
+              Account
+            </Link>
             <button className="btn" style={{ background: '#333' }} onClick={logout}>
               Logout
             </button>

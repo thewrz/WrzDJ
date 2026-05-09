@@ -7,6 +7,7 @@ from app.models.guest_profile import GuestProfile  # noqa: F401
 from app.models.kiosk import Kiosk
 from app.models.mb_artist_cache import MbArtistCache
 from app.models.now_playing import NowPlaying
+from app.models.pending_email_change import PendingEmailChange
 from app.models.play_history import PlayHistory
 from app.models.request import Request
 from app.models.request_vote import RequestVote
@@ -24,6 +25,7 @@ __all__ = [
     "Kiosk",
     "MbArtistCache",
     "NowPlaying",
+    "PendingEmailChange",
     "PlayHistory",
     "Request",
     "RequestVote",

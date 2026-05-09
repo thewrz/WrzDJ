@@ -12,9 +12,11 @@ class UserOut(BaseSchema):
     id: int
     username: str
     is_active: bool
+    email: str | None = None
     role: str
     created_at: datetime
     help_pages_seen: list[str] = []
+    pending_email: str | None = None
 
     @field_validator("help_pages_seen", mode="before")
     @classmethod
@@ -97,6 +99,24 @@ class RegisterRequest(BaseModel):
             msg = "Passwords do not match"
             raise ValueError(msg)
         return v
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+    confirm_new_password: str
+
+    @field_validator("confirm_new_password")
+    @classmethod
+    def passwords_match(cls, v: str, info) -> str:
+        if "new_password" in info.data and v != info.data["new_password"]:
+            raise ValueError("Passwords do not match")
+        return v
+
+
+class RequestEmailChangeRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_email: EmailStr
 
 
 class PublicSettings(BaseModel):
