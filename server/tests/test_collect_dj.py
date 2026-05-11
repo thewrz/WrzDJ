@@ -337,6 +337,87 @@ def test_sync_collection_to_tidal_queues_eligible(
     assert body["queued"] == 2
 
 
+def test_bulk_reject_queues_tidal_removal_for_synced_requests(
+    client, db, auth_headers, test_event, monkeypatch
+):
+    from app.models.request import Request as SongRequest
+    from app.models.request import RequestStatus
+
+    req = SongRequest(
+        event_id=test_event.id,
+        song_title="Gone Track",
+        artist="DJ X",
+        status=RequestStatus.NEW.value,
+        dedupe_key="gone-track",
+        submitted_during_collection=True,
+        tidal_collection_track_id="tid-999",
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    test_event.tidal_sync_enabled = True
+    db.commit()
+
+    calls = []
+
+    def fake_remove(db, user, event, track_ids):
+        calls.append((db, user, event, track_ids))
+
+    import app.api.events as events_module
+
+    monkeypatch.setattr(events_module, "remove_collection_tracks_batch", fake_remove)
+
+    resp = client.post(
+        f"/api/events/{test_event.code}/bulk-review",
+        json={"action": "reject_ids", "request_ids": [req.id]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert len(calls) == 1
+    _, _, _, track_ids = calls[0]
+    assert "tid-999" in track_ids
+
+
+def test_bulk_reject_skips_tidal_removal_when_no_track_id(
+    client, db, auth_headers, test_event, monkeypatch
+):
+    from app.models.request import Request as SongRequest
+    from app.models.request import RequestStatus
+
+    req = SongRequest(
+        event_id=test_event.id,
+        song_title="Unsynced",
+        artist="DJ X",
+        status=RequestStatus.NEW.value,
+        dedupe_key="unsynced",
+        submitted_during_collection=True,
+        tidal_collection_track_id=None,
+    )
+    db.add(req)
+    db.commit()
+
+    test_event.tidal_sync_enabled = True
+    db.commit()
+
+    calls = []
+
+    def fake_remove(db, user, event, track_ids):
+        calls.append((db, user, event, track_ids))
+
+    import app.api.events as events_module
+
+    monkeypatch.setattr(events_module, "remove_collection_tracks_batch", fake_remove)
+
+    resp = client.post(
+        f"/api/events/{test_event.code}/bulk-review",
+        json={"action": "reject_ids", "request_ids": [req.id]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert len(calls) == 0
+
+
 def test_sync_collection_to_tidal_empty_queued_when_all_rejected(
     client, db, auth_headers, test_event, collection_requests
 ):

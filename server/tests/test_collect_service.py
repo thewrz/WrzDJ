@@ -80,3 +80,32 @@ def test_check_and_increment_allows_unlimited_when_cap_zero(db, test_event: Even
         .one()
     )
     assert profile.submission_count == 20
+
+
+def test_execute_bulk_review_returns_rejected_rows(db, test_event):
+    from app.models.request import Request as SongRequest
+    from app.models.request import RequestStatus
+    from app.schemas.collect import BulkReviewRequest
+    from app.services.collect import execute_bulk_review
+
+    req = SongRequest(
+        event_id=test_event.id,
+        song_title="Track",
+        artist="Artist",
+        status=RequestStatus.NEW.value,
+        dedupe_key="track-artist",
+        submitted_during_collection=True,
+        tidal_collection_track_id="tid-1",
+    )
+    db.add(req)
+    db.commit()
+
+    payload = BulkReviewRequest(action="reject_ids", request_ids=[req.id])
+    accepted, rejected, accepted_rows, rejected_rows = execute_bulk_review(
+        db, test_event.id, payload
+    )
+
+    assert accepted == 0
+    assert rejected == 1
+    assert len(rejected_rows) == 1
+    assert rejected_rows[0].id == req.id
