@@ -38,6 +38,7 @@ def collection_settings_payload(event: Event) -> dict:
         "phase": event.phase,
         "tidal_sync_enabled": event.tidal_sync_enabled,
         "tidal_collection_playlist_id": event.tidal_collection_playlist_id,
+        "tidal_collection_bidirectional": event.tidal_collection_bidirectional,
     }
 
 
@@ -60,6 +61,8 @@ def update_collection_settings(
         event.collection_phase_override = payload.collection_phase_override
     if payload.tidal_sync_enabled is not None:
         event.tidal_sync_enabled = payload.tidal_sync_enabled
+    if payload.tidal_collection_bidirectional is not None:
+        event.tidal_collection_bidirectional = payload.tidal_collection_bidirectional
 
     opens = event.collection_opens_at
     live = event.live_starts_at
@@ -91,14 +94,12 @@ def get_pending_review_rows(db: Session, event_id: int, limit: int = 200) -> lis
 
 def execute_bulk_review(
     db: Session, event_id: int, payload: BulkReviewRequest
-) -> tuple[int, int, list[SongRequest]]:
+) -> tuple[int, int, list[SongRequest], list[SongRequest]]:
     """Apply a bulk-review action to collection-phase pending requests.
 
-    Returns (accepted_count, rejected_count, accepted_rows). Caller is expected
-    to pass accepted_rows to sync_requests_batch() as a FastAPI background task
-    so the metadata-enrichment + playlist-sync pipeline runs before the tracks
-    show up in the DJ queue. Guest-collect submissions don't have BPM/key/genre;
-    this is the first chance to fill them in.
+    Returns (accepted_count, rejected_count, accepted_rows, rejected_rows). Caller is expected
+    to pass accepted_rows to sync_requests_batch() and rejected_rows to
+    remove_collection_tracks_batch() as FastAPI background tasks.
 
     Raises HTTPException(400) when the payload parameters are inconsistent with
     the selected action.
@@ -113,6 +114,7 @@ def execute_bulk_review(
     accepted = 0
     rejected = 0
     accepted_rows: list[SongRequest] = []
+    rejected_rows: list[SongRequest] = []
 
     if payload.action == "accept_top_n":
         if payload.n is None:
@@ -149,14 +151,16 @@ def execute_bulk_review(
         for r in rows:
             r.status = "rejected"
             rejected += 1
+            rejected_rows.append(r)
     elif payload.action == "reject_remaining":
         rows = pending_q.all()
         for r in rows:
             r.status = "rejected"
             rejected += 1
+            rejected_rows.append(r)
 
     db.commit()
-    return accepted, rejected, accepted_rows
+    return accepted, rejected, accepted_rows, rejected_rows
 
 
 class SubmissionCapExceeded(Exception):

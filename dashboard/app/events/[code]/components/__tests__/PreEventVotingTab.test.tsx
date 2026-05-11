@@ -13,6 +13,7 @@ const baseEvent = {
   phase: "collection" as const,
   tidal_sync_enabled: false,
   tidal_collection_playlist_id: null,
+  tidal_collection_bidirectional: false,
 };
 
 vi.mock("@/lib/api", () => ({
@@ -27,6 +28,7 @@ vi.mock("@/lib/api", () => ({
       phase: "live",
       tidal_sync_enabled: false,
       tidal_collection_playlist_id: null,
+      tidal_collection_bidirectional: false,
     }),
     getPendingReview: vi.fn().mockResolvedValue({ requests: [], total: 0 }),
     bulkReview: vi.fn().mockResolvedValue({ accepted: 0, rejected: 0, unchanged: 0 }),
@@ -127,6 +129,25 @@ describe("PreEventVotingTab", () => {
     fireEvent.click(screen.getByRole("button", { name: /sync collection to tidal/i }));
     await waitFor(() => {
       expect(apiClient.syncCollectionToTidal).toHaveBeenCalledWith("ABC");
+    });
+  });
+
+  it("patches tidal_collection_bidirectional when checkbox is toggled", async () => {
+    render(
+      <PreEventVotingTab
+        event={{ ...baseEvent, tidal_sync_enabled: true, tidal_collection_bidirectional: false }}
+        tidalConnected={true}
+        tidalIntegrationEnabled={true}
+        onEventChange={vi.fn()}
+      />
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /songs removed from tidal playlist are auto-rejected/i })
+    );
+    await waitFor(() => {
+      expect(apiClient.patchCollectionSettings).toHaveBeenCalledWith("ABC", {
+        tidal_collection_bidirectional: true,
+      });
     });
   });
 });

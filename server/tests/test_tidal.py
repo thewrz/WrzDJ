@@ -726,3 +726,202 @@ class TestCascadeTidalFlow:
         mock_session_fn.return_value = None
         result = search_track(db, tidal_user, "deadmau5", "Strobe")
         assert result is None
+
+
+class TestCollectionSync:
+    """Tests for pre-event collection playlist sync."""
+
+    @patch("app.services.tidal.add_tracks_to_playlist")
+    @patch("app.services.tidal.ensure_collection_playlist")
+    @patch("app.services.tidal.search_tidal_tracks")
+    def test_sync_collection_stores_track_id(
+        self,
+        mock_search: MagicMock,
+        mock_ensure_playlist: MagicMock,
+        mock_add: MagicMock,
+        db: Session,
+        test_event,
+        test_user,
+    ):
+        """Test that sync_collection_requests_batch stores tidal_collection_track_id."""
+        from app.models.request import Request as SongRequest
+        from app.services.tidal import sync_collection_requests_batch
+
+        # Create a test request with collection flag
+        row = SongRequest(
+            event_id=test_event.id,
+            song_title="Acid Rain",
+            artist="Objekt",
+            status=RequestStatus.NEW.value,
+            dedupe_key="objekt-acid-rain",
+            submitted_during_collection=True,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+
+        # Mock search result
+        mock_result = TidalSearchResult(
+            track_id="99887766",
+            title="Acid Rain",
+            artist="Objekt",
+            tidal_url="https://tidal.com/browse/track/99887766",
+        )
+
+        # Setup mock returns
+        mock_search.return_value = [mock_result]
+        mock_ensure_playlist.return_value = "playlist-abc"
+        mock_add.return_value = True
+
+        # Call the function
+        sync_collection_requests_batch(db, test_user, test_event, [row])
+
+        # Refresh and verify
+        db.refresh(row)
+        assert row.tidal_collection_track_id == "99887766"
+
+
+class TestCollectionRemove:
+    """Tests for removing tracks from collection playlists."""
+
+    @patch("app.services.tidal.get_tidal_session")
+    def test_remove_track_from_collection_playlist_success(
+        self, mock_session_fn: MagicMock, test_event, test_user
+    ):
+        """Test successful removal of track from collection playlist."""
+        from app.services.tidal import remove_track_from_collection_playlist
+
+        mock_playlist = MagicMock()
+        mock_playlist.remove_by_id.return_value = True
+        mock_session = MagicMock()
+        mock_session.playlist.return_value = mock_playlist
+        mock_session_fn.return_value = mock_session
+
+        test_event.tidal_collection_playlist_id = "pl-123"
+        db_mock = MagicMock()
+
+        result = remove_track_from_collection_playlist(db_mock, test_user, test_event, "track-456")
+
+        mock_session.playlist.assert_called_once_with("pl-123")
+        mock_playlist.remove_by_id.assert_called_once_with("track-456")
+        assert result is True
+
+    @patch("app.services.tidal.get_tidal_session")
+    def test_remove_track_from_collection_playlist_no_playlist(
+        self, mock_session_fn: MagicMock, test_event, test_user
+    ):
+        """Test removal fails gracefully when no collection playlist exists."""
+        from app.services.tidal import remove_track_from_collection_playlist
+
+        mock_session = MagicMock()
+        mock_session_fn.return_value = mock_session
+        test_event.tidal_collection_playlist_id = None
+        db_mock = MagicMock()
+
+        result = remove_track_from_collection_playlist(db_mock, test_user, test_event, "track-456")
+
+        mock_session.playlist.assert_not_called()
+        assert result is False
+
+    @patch("app.services.tidal.remove_track_from_collection_playlist")
+    def test_remove_collection_tracks_batch_calls_per_track(
+        self, mock_remove: MagicMock, test_event, test_user
+    ):
+        """Test batch removal calls remove function for each track."""
+        from app.services.tidal import remove_collection_tracks_batch
+
+        mock_remove.return_value = True
+        test_event.tidal_collection_playlist_id = "pl-123"
+        db_mock = MagicMock()
+
+        remove_collection_tracks_batch(db_mock, test_user, test_event, ["t1", "t2", "t3"])
+
+        assert mock_remove.call_count == 3
+
+    @patch("app.services.tidal.get_playlist_tracks")
+    def test_poll_tidal_collection_removals_rejects_missing_track(
+        self, mock_get_tracks: MagicMock, db: Session, test_event: Event, test_user: User
+    ):
+        """Test poll detects tracks removed from Tidal playlist and rejects them."""
+        from app.services.tidal import poll_tidal_collection_removals
+
+        test_event.tidal_collection_playlist_id = "pl-xyz"
+        test_event.created_by = test_user
+
+        kept = Request(
+            event_id=test_event.id,
+            song_title="Track A",
+            artist="Artist A",
+            status=RequestStatus.NEW.value,
+            dedupe_key="track-a",
+            submitted_during_collection=True,
+            tidal_collection_track_id="111",
+        )
+        removed = Request(
+            event_id=test_event.id,
+            song_title="Track B",
+            artist="Artist B",
+            status=RequestStatus.NEW.value,
+            dedupe_key="track-b",
+            submitted_during_collection=True,
+            tidal_collection_track_id="222",
+        )
+        db.add_all([kept, removed])
+        db.commit()
+
+        mock_track = MagicMock()
+        mock_track.id = 111  # only "111" still in playlist; "222" was removed
+
+        mock_get_tracks.return_value = [mock_track]
+
+        count = poll_tidal_collection_removals(db, test_event)
+
+        db.refresh(kept)
+        db.refresh(removed)
+
+        assert count == 1
+        assert kept.status == RequestStatus.NEW.value
+        assert removed.status == RequestStatus.REJECTED.value
+
+    @patch("app.services.tidal.get_playlist_tracks")
+    def test_poll_tidal_collection_removals_no_playlist_returns_zero(
+        self, mock_get_tracks: MagicMock, db: Session, test_event: Event, test_user: User
+    ):
+        """Test poll returns 0 when event has no collection playlist."""
+        from app.services.tidal import poll_tidal_collection_removals
+
+        test_event.tidal_collection_playlist_id = None
+        test_event.created_by = test_user
+
+        count = poll_tidal_collection_removals(db, test_event)
+
+        mock_get_tracks.assert_not_called()
+        assert count == 0
+
+    @patch("app.services.tidal.get_playlist_tracks")
+    def test_poll_tidal_collection_removals_skips_already_rejected(
+        self, mock_get_tracks: MagicMock, db: Session, test_event: Event, test_user: User
+    ):
+        """Test poll does not double-count already rejected requests."""
+        from app.services.tidal import poll_tidal_collection_removals
+
+        test_event.tidal_collection_playlist_id = "pl-xyz"
+        test_event.created_by = test_user
+
+        already_rejected = Request(
+            event_id=test_event.id,
+            song_title="Old Track",
+            artist="Artist",
+            status=RequestStatus.REJECTED.value,
+            dedupe_key="old-track",
+            submitted_during_collection=True,
+            tidal_collection_track_id="333",
+        )
+        db.add(already_rejected)
+        db.commit()
+
+        mock_get_tracks.return_value = []
+
+        count = poll_tidal_collection_removals(db, test_event)
+
+        assert count == 0  # already rejected — not double-counted

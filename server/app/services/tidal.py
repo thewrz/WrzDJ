@@ -15,7 +15,7 @@ import tidalapi
 from sqlalchemy.orm import Session
 
 from app.models.event import Event
-from app.models.request import Request, TidalSyncStatus  # TidalSyncStatus used in TidalSyncResult
+from app.models.request import Request, RequestStatus, TidalSyncStatus
 from app.models.user import User
 from app.schemas.tidal import TidalSearchResult, TidalSyncResult
 from app.services.track_normalizer import artist_match_score, primary_artist
@@ -365,7 +365,8 @@ def sync_collection_requests_batch(
 ) -> None:
     """Batch-sync pre-event collection requests to the collection playlist.
 
-    Searches tracks sequentially, then adds all found IDs in one API call.
+    Searches tracks sequentially, adds all found IDs in one API call, and
+    stores the matched Tidal track ID on each request for bidirectional sync.
     Tidal's allow_duplicates=False deduplicates silently at the API layer.
     """
     if not requests:
@@ -376,16 +377,22 @@ def sync_collection_requests_batch(
         return
 
     track_ids: list[str] = []
+    matched: list[tuple] = []  # (request, track_id)
     for req in requests:
         try:
             results = search_tidal_tracks(db, user, f"{req.song_title} {req.artist}")
             if results:
-                track_ids.append(results[0].track_id)
+                track_id = results[0].track_id
+                track_ids.append(track_id)
+                matched.append((req, track_id))
         except Exception as e:
             logger.error(f"Collection sync search failed for '{req.song_title}': {e}")
 
     if track_ids:
-        add_tracks_to_playlist(db, user, playlist_id, track_ids)
+        if add_tracks_to_playlist(db, user, playlist_id, track_ids):
+            for req, track_id in matched:
+                req.tidal_collection_track_id = track_id
+            db.commit()
 
 
 def add_track_to_playlist(
@@ -424,6 +431,87 @@ def add_tracks_to_playlist(
     except Exception as e:
         logger.error(f"Failed to add tracks to playlist: {e}")
         return False
+
+
+def remove_track_from_collection_playlist(
+    db: Session,
+    user: User,
+    event: Event,
+    track_id: str,
+) -> bool:
+    """Remove a single track from the event's Tidal collection playlist.
+
+    Returns True on success, False if the playlist doesn't exist or the API call fails.
+    Failures are logged but not raised — removal is best-effort.
+    """
+    playlist_id = event.tidal_collection_playlist_id
+    if not playlist_id:
+        return False
+
+    session = get_tidal_session(db, user)
+    if not session:
+        return False
+
+    try:
+        playlist = session.playlist(playlist_id)
+        return bool(playlist.remove_by_id(track_id))
+    except Exception as e:
+        logger.error(f"Failed to remove track {track_id} from collection playlist: {e}")
+        return False
+
+
+def remove_collection_tracks_batch(
+    db: Session,
+    user: User,
+    event: Event,
+    track_ids: list[str],
+) -> None:
+    """Remove multiple tracks from the collection playlist, one by one.
+
+    Best-effort: logs failures per track but does not abort on error.
+    """
+    for track_id in track_ids:
+        remove_track_from_collection_playlist(db, user, event, track_id)
+
+
+def poll_tidal_collection_removals(db: Session, event: Event) -> int:
+    """Detect tracks removed from the Tidal collection playlist and reject them in WrzDJ.
+
+    Fetches current playlist contents, finds collection requests whose
+    tidal_collection_track_id is no longer present, and marks them rejected.
+    Only runs when the event has a collection playlist configured.
+
+    Returns the count of newly rejected requests.
+    """
+    if not event.tidal_collection_playlist_id:
+        return 0
+
+    user = event.created_by
+    playlist_tracks = get_playlist_tracks(db, user, event.tidal_collection_playlist_id)
+    current_ids = {str(t.id) for t in playlist_tracks}
+
+    synced = (
+        db.query(Request)
+        .filter(
+            Request.event_id == event.id,
+            Request.submitted_during_collection == True,  # noqa: E712
+            Request.tidal_collection_track_id.isnot(None),
+            Request.status != RequestStatus.REJECTED.value,
+        )
+        .all()
+    )
+
+    count = 0
+    for req in synced:
+        if req.tidal_collection_track_id not in current_ids:
+            req.status = RequestStatus.REJECTED.value
+            count += 1
+
+    if count > 0:
+        db.commit()
+        logger.info("Tidal poll: rejected %d removed track(s) for event %s", count, event.code)
+
+    return count
 
 
 def sync_request_to_tidal(

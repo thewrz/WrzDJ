@@ -706,3 +706,87 @@ class TestSubmitRequestCollectionFlag:
         assert resp.status_code == 200
         row = db.query(Request).filter(Request.id == resp.json()["id"]).one()
         assert row.submitted_during_collection is False
+
+
+class TestPatchRejectionTidalRemoval:
+    """Tests for individual PATCH rejection firing Tidal collection removal."""
+
+    def test_rejecting_synced_collection_request_queues_tidal_removal(
+        self, client: TestClient, db: Session, auth_headers: dict, test_event: Event, monkeypatch
+    ):
+        """Rejecting a synced collection request queues removal from Tidal playlist."""
+        from app.models.request import Request as SongRequest
+        from app.models.request import RequestStatus
+
+        test_event.tidal_sync_enabled = True
+        db.commit()
+
+        req = SongRequest(
+            event_id=test_event.id,
+            song_title="Synced Track",
+            artist="DJ Y",
+            status=RequestStatus.NEW.value,
+            dedupe_key="synced-track-dj-y",
+            submitted_during_collection=True,
+            tidal_collection_track_id="tid-555",
+        )
+        db.add(req)
+        db.commit()
+        db.refresh(req)
+
+        calls = []
+
+        def mock_remove(*args, **kwargs):
+            calls.append(args)
+
+        import app.api.requests as requests_module
+
+        monkeypatch.setattr(requests_module, "remove_track_from_collection_playlist", mock_remove)
+
+        resp = client.patch(
+            f"/api/requests/{req.id}",
+            json={"status": "rejected"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert len(calls) == 1
+
+    def test_rejecting_unsynced_collection_request_skips_tidal(
+        self, client: TestClient, db: Session, auth_headers: dict, test_event: Event, monkeypatch
+    ):
+        """Rejecting a collection request with no tidal_collection_track_id skips removal."""
+        from app.models.request import Request as SongRequest
+        from app.models.request import RequestStatus
+
+        test_event.tidal_sync_enabled = True
+        db.commit()
+
+        req = SongRequest(
+            event_id=test_event.id,
+            song_title="Unsynced Track",
+            artist="DJ Z",
+            status=RequestStatus.NEW.value,
+            dedupe_key="unsynced-track-dj-z",
+            submitted_during_collection=True,
+            tidal_collection_track_id=None,
+        )
+        db.add(req)
+        db.commit()
+        db.refresh(req)
+
+        calls = []
+
+        def mock_remove(*args, **kwargs):
+            calls.append(args)
+
+        import app.api.requests as requests_module
+
+        monkeypatch.setattr(requests_module, "remove_track_from_collection_playlist", mock_remove)
+
+        resp = client.patch(
+            f"/api/requests/{req.id}",
+            json={"status": "rejected"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert len(calls) == 0

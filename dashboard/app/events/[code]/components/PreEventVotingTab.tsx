@@ -14,6 +14,7 @@ interface EventShape {
   phase: 'pre_announce' | 'collection' | 'live' | 'closed';
   tidal_sync_enabled: boolean;
   tidal_collection_playlist_id: string | null;
+  tidal_collection_bidirectional: boolean;
 }
 
 interface Props {
@@ -96,6 +97,7 @@ export default function PreEventVotingTab({
   const [settingsSaved, setSettingsSaved] = useState(false);
 
   const [togglingTidal, setTogglingTidal] = useState(false);
+  const [togglingBidirectional, setTogglingBidirectional] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ queued: number } | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -172,6 +174,23 @@ export default function PreEventVotingTab({
       setSyncError(err instanceof Error ? err.message : 'Failed to update Tidal sync setting');
     } finally {
       setTogglingTidal(false);
+    }
+  }
+
+  async function handleToggleBidirectional(enabled: boolean) {
+    setTogglingBidirectional(true);
+    setSyncError(null);
+    try {
+      const resp = await apiClient.patchCollectionSettings(event.code, {
+        tidal_collection_bidirectional: enabled,
+      });
+      onEventChange(resp);
+    } catch (err) {
+      setSyncError(
+        err instanceof Error ? err.message : 'Failed to update bidirectional sync setting',
+      );
+    } finally {
+      setTogglingBidirectional(false);
     }
   }
 
@@ -326,31 +345,42 @@ export default function PreEventVotingTab({
           </label>
 
           {event.tidal_sync_enabled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="btn btn-sm"
-                style={{ background: '#1db954', color: '#fff' }}
-                disabled={syncing}
-                onClick={handleSyncToTidal}
-              >
-                {syncing ? 'Syncing…' : 'Sync collection to Tidal'}
-              </button>
-              {event.tidal_collection_playlist_id && (
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  Pre-event playlist linked ✓
-                </span>
-              )}
-              {syncResult !== null && (
-                <span style={{ fontSize: '0.875rem', color: '#4ade80' }}>
-                  {syncResult.queued === 0
-                    ? 'All tracks already synced.'
-                    : `Queued ${syncResult.queued} track${syncResult.queued === 1 ? '' : 's'} for sync.`}
-                </span>
-              )}
-              {syncError && (
-                <span style={{ fontSize: '0.875rem', color: '#f87171' }}>{syncError}</span>
-              )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ background: '#1db954', color: '#fff' }}
+                  disabled={syncing}
+                  onClick={handleSyncToTidal}
+                >
+                  {syncing ? 'Syncing…' : 'Sync collection to Tidal'}
+                </button>
+                {event.tidal_collection_playlist_id && (
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Pre-event playlist linked ✓
+                  </span>
+                )}
+                {syncResult !== null && (
+                  <span style={{ fontSize: '0.875rem', color: '#4ade80' }}>
+                    {syncResult.queued === 0
+                      ? 'All tracks already synced.'
+                      : `Queued ${syncResult.queued} track${syncResult.queued === 1 ? '' : 's'} for sync.`}
+                  </span>
+                )}
+                {syncError && (
+                  <span style={{ fontSize: '0.875rem', color: '#f87171' }}>{syncError}</span>
+                )}
+              </div>
+              <label className="collection-fieldset-toggle">
+                <input
+                  type="checkbox"
+                  checked={event.tidal_collection_bidirectional}
+                  disabled={togglingBidirectional}
+                  onChange={(e) => handleToggleBidirectional(e.target.checked)}
+                />
+                Songs removed from Tidal playlist are auto-rejected
+              </label>
             </div>
           )}
         </div>

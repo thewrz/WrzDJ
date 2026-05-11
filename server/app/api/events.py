@@ -96,7 +96,10 @@ from app.services.request import (
 )
 from app.services.sync.orchestrator import enrich_request_metadata, sync_requests_batch
 from app.services.sync.registry import get_connected_adapters
-from app.services.tidal import sync_collection_requests_batch
+from app.services.tidal import (
+    remove_collection_tracks_batch,
+    sync_collection_requests_batch,
+)
 
 router = APIRouter()
 
@@ -1107,7 +1110,7 @@ def bulk_review(
     event: Event = Depends(get_event_for_dj_or_admin),
     db: Session = Depends(get_db),
 ):
-    accepted, rejected, accepted_rows = execute_bulk_review(db, event.id, payload)
+    accepted, rejected, accepted_rows, rejected_rows = execute_bulk_review(db, event.id, payload)
     # Enrich + sync accepted requests. Guest-collect submissions arrive without
     # BPM/key/genre. enrich_request_metadata fills those in directly (Tidal/
     # Beatport/MusicBrainz cascade) — this works regardless of whether the DJ
@@ -1117,6 +1120,21 @@ def bulk_review(
         for row in accepted_rows:
             background_tasks.add_task(enrich_request_metadata, db, row.id)
         background_tasks.add_task(sync_requests_batch, db, accepted_rows)
+
+    # Direction 1: remove rejected+synced tracks from the Tidal collection playlist
+    if event.tidal_sync_enabled:
+        track_ids_to_remove = [
+            r.tidal_collection_track_id for r in rejected_rows if r.tidal_collection_track_id
+        ]
+        if track_ids_to_remove:
+            background_tasks.add_task(
+                remove_collection_tracks_batch,
+                db,
+                event.created_by,
+                event,
+                track_ids_to_remove,
+            )
+
     return BulkReviewResponse(accepted=accepted, rejected=rejected, unchanged=0)
 
 
