@@ -22,6 +22,7 @@ from app.services.request import (
 )
 from app.services.sync.orchestrator import enrich_request_metadata, sync_request_to_services
 from app.services.sync.registry import get_connected_adapters
+from app.services.tidal import remove_track_from_collection_playlist
 
 router = APIRouter()
 
@@ -76,6 +77,21 @@ def update_request(
     if update_data.status == RequestStatus.ACCEPTED:
         if get_connected_adapters(request.event.created_by):
             background_tasks.add_task(sync_request_to_services, db, request)
+
+    # Remove from Tidal collection playlist when a synced collection request is rejected
+    if (
+        update_data.status == RequestStatus.REJECTED
+        and request.submitted_during_collection
+        and request.tidal_collection_track_id
+        and request.event.tidal_sync_enabled
+    ):
+        background_tasks.add_task(
+            remove_track_from_collection_playlist,
+            db,
+            request.event.created_by,
+            request.event,
+            request.tidal_collection_track_id,
+        )
 
     # Auto-set now_playing when a request is set to "playing"
     if update_data.status == RequestStatus.PLAYING:
