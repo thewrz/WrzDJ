@@ -779,3 +779,61 @@ class TestCollectionSync:
         # Refresh and verify
         db.refresh(row)
         assert row.tidal_collection_track_id == "99887766"
+
+
+class TestCollectionRemove:
+    """Tests for removing tracks from collection playlists."""
+
+    @patch("app.services.tidal.get_tidal_session")
+    def test_remove_track_from_collection_playlist_success(
+        self, mock_session_fn: MagicMock, test_event, test_user
+    ):
+        """Test successful removal of track from collection playlist."""
+        from app.services.tidal import remove_track_from_collection_playlist
+
+        mock_playlist = MagicMock()
+        mock_playlist.remove_by_id.return_value = True
+        mock_session = MagicMock()
+        mock_session.playlist.return_value = mock_playlist
+        mock_session_fn.return_value = mock_session
+
+        test_event.tidal_collection_playlist_id = "pl-123"
+        db_mock = MagicMock()
+
+        result = remove_track_from_collection_playlist(db_mock, test_user, test_event, "track-456")
+
+        mock_session.playlist.assert_called_once_with("pl-123")
+        mock_playlist.remove_by_id.assert_called_once_with("track-456")
+        assert result is True
+
+    @patch("app.services.tidal.get_tidal_session")
+    def test_remove_track_from_collection_playlist_no_playlist(
+        self, mock_session_fn: MagicMock, test_event, test_user
+    ):
+        """Test removal fails gracefully when no collection playlist exists."""
+        from app.services.tidal import remove_track_from_collection_playlist
+
+        mock_session = MagicMock()
+        mock_session_fn.return_value = mock_session
+        test_event.tidal_collection_playlist_id = None
+        db_mock = MagicMock()
+
+        result = remove_track_from_collection_playlist(db_mock, test_user, test_event, "track-456")
+
+        mock_session.playlist.assert_not_called()
+        assert result is False
+
+    @patch("app.services.tidal.remove_track_from_collection_playlist")
+    def test_remove_collection_tracks_batch_calls_per_track(
+        self, mock_remove: MagicMock, test_event, test_user
+    ):
+        """Test batch removal calls remove function for each track."""
+        from app.services.tidal import remove_collection_tracks_batch
+
+        mock_remove.return_value = True
+        test_event.tidal_collection_playlist_id = "pl-123"
+        db_mock = MagicMock()
+
+        remove_collection_tracks_batch(db_mock, test_user, test_event, ["t1", "t2", "t3"])
+
+        assert mock_remove.call_count == 3

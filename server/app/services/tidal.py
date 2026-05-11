@@ -433,6 +433,47 @@ def add_tracks_to_playlist(
         return False
 
 
+def remove_track_from_collection_playlist(
+    db: Session,
+    user: User,
+    event: Event,
+    track_id: str,
+) -> bool:
+    """Remove a single track from the event's Tidal collection playlist.
+
+    Returns True on success, False if the playlist doesn't exist or the API call fails.
+    Failures are logged but not raised — removal is best-effort.
+    """
+    playlist_id = event.tidal_collection_playlist_id
+    if not playlist_id:
+        return False
+
+    session = get_tidal_session(db, user)
+    if not session:
+        return False
+
+    try:
+        playlist = session.playlist(playlist_id)
+        return bool(playlist.remove_by_id(track_id))
+    except Exception as e:
+        logger.error(f"Failed to remove track {track_id} from collection playlist: {e}")
+        return False
+
+
+def remove_collection_tracks_batch(
+    db: Session,
+    user: User,
+    event: Event,
+    track_ids: list[str],
+) -> None:
+    """Remove multiple tracks from the collection playlist, one by one.
+
+    Best-effort: logs failures per track but does not abort on error.
+    """
+    for track_id in track_ids:
+        remove_track_from_collection_playlist(db, user, event, track_id)
+
+
 def sync_request_to_tidal(
     db: Session,
     request: Request,
