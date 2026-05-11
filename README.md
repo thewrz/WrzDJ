@@ -38,6 +38,8 @@ A real-time song request system for DJs. Guests scan a QR code to submit request
 - Mandatory nickname gate with profanity filter and letter-padding bypass protection
 - Email verification with one-time codes (Resend API) and cross-device guest profile merge
 - Pre-event song collection (`/collect`) — guests vote on suggestions before the night, DJs bulk-review
+- Inline song preview in the collect detail sheet (Spotify/Tidal embed)
+- Verified badge next to email-verified nicknames in request lists and leaderboard
 - Tower v2 UI on `/join` and `/collect` with banner art, song detail panels, and vibes enrichment
 
 **DJ dashboard**
@@ -52,6 +54,8 @@ A real-time song request system for DJs. Guests scan a QR code to submit request
 - Event banners, play history with source badges, CSV export
 - "Enrich All" advanced action to backfill BPM/key/genre on existing requests in batches
 - Pre-event collection toggle per event (enable guest voting before doors open)
+- Collection suggestions sync to a dedicated pre-event Tidal playlist; bidirectional option auto-rejects requests removed from the playlist
+- Self-service account management: DJs can update their own password and email address
 - Bridge connection status, activity log, contextual help system
 - Cloud provider OAuth (Tidal, Beatport) with per-event playlist sync toggles
 
