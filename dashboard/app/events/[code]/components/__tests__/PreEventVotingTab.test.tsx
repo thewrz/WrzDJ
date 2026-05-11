@@ -12,7 +12,7 @@ const baseEvent = {
   collection_phase_override: null,
   phase: "collection" as const,
   tidal_sync_enabled: false,
-  tidal_playlist_id: null,
+  tidal_collection_playlist_id: null,
 };
 
 vi.mock("@/lib/api", () => ({
@@ -26,7 +26,7 @@ vi.mock("@/lib/api", () => ({
       collection_phase_override: "force_live",
       phase: "live",
       tidal_sync_enabled: false,
-      tidal_playlist_id: null,
+      tidal_collection_playlist_id: null,
     }),
     getPendingReview: vi.fn().mockResolvedValue({ requests: [], total: 0 }),
     bulkReview: vi.fn().mockResolvedValue({ accepted: 0, rejected: 0, unchanged: 0 }),

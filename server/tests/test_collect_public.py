@@ -1000,7 +1000,7 @@ def test_collect_preview_404_nonexistent_request(client, db, test_event):
 
 
 def test_collect_submit_triggers_tidal_sync_when_enabled(client, db, test_event: Event):
-    """Submitting when tidal_sync_enabled=True and tidal_enabled queues sync_request_to_services."""
+    """Submitting when tidal_sync_enabled queues sync_collection_requests_batch."""
     from unittest.mock import patch
 
     from app.services.system_settings import get_system_settings
@@ -1012,7 +1012,7 @@ def test_collect_submit_triggers_tidal_sync_when_enabled(client, db, test_event:
     sys.tidal_enabled = True
     db.commit()
 
-    with patch("app.api.collect.sync_request_to_services") as mock_sync:
+    with patch("app.api.collect.sync_collection_requests_batch") as mock_sync:
         r = client.post(
             f"/api/public/collect/{test_event.code}/requests",
             json={"song_title": "Auto Sync Song", "artist": "DJ Test", "source": "spotify"},
@@ -1023,13 +1023,13 @@ def test_collect_submit_triggers_tidal_sync_when_enabled(client, db, test_event:
 
 
 def test_collect_submit_skips_tidal_sync_when_disabled(client, db, test_event: Event):
-    """Submitting when tidal_sync_enabled=False does not queue sync_request_to_services."""
+    """Submitting when tidal_sync_enabled=False does not queue sync_collection_requests_batch."""
     from unittest.mock import patch
 
     _enable_collection(db, test_event)
     # tidal_sync_enabled defaults to False
 
-    with patch("app.api.collect.sync_request_to_services") as mock_sync:
+    with patch("app.api.collect.sync_collection_requests_batch") as mock_sync:
         r = client.post(
             f"/api/public/collect/{test_event.code}/requests",
             json={"song_title": "No Sync Song", "artist": "DJ Test", "source": "spotify"},

@@ -37,7 +37,7 @@ def collection_settings_payload(event: Event) -> dict:
         "collection_phase_override": event.collection_phase_override,
         "phase": event.phase,
         "tidal_sync_enabled": event.tidal_sync_enabled,
-        "tidal_playlist_id": event.tidal_playlist_id,
+        "tidal_collection_playlist_id": event.tidal_collection_playlist_id,
     }
 
 

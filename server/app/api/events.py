@@ -96,6 +96,7 @@ from app.services.request import (
 )
 from app.services.sync.orchestrator import enrich_request_metadata, sync_requests_batch
 from app.services.sync.registry import get_connected_adapters
+from app.services.tidal import sync_collection_requests_batch
 
 router = APIRouter()
 
@@ -1068,7 +1069,7 @@ def sync_collection_to_tidal(
     ]
 
     if eligible:
-        background_tasks.add_task(sync_requests_batch, db, eligible)
+        background_tasks.add_task(sync_collection_requests_batch, db, user, event, eligible)
 
     return {"queued": len(eligible)}
 

@@ -164,7 +164,7 @@ export interface CollectionSettingsResponse {
   collection_phase_override: 'force_collection' | 'force_live' | null;
   phase: 'pre_announce' | 'collection' | 'live' | 'closed';
   tidal_sync_enabled: boolean;
-  tidal_playlist_id: string | null;
+  tidal_collection_playlist_id: string | null;
 }
 
 export interface CollectionSyncResponse {

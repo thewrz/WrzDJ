@@ -13,7 +13,7 @@ interface EventShape {
   collection_phase_override: 'force_collection' | 'force_live' | null;
   phase: 'pre_announce' | 'collection' | 'live' | 'closed';
   tidal_sync_enabled: boolean;
-  tidal_playlist_id: string | null;
+  tidal_collection_playlist_id: string | null;
 }
 
 interface Props {
@@ -336,9 +336,9 @@ export default function PreEventVotingTab({
               >
                 {syncing ? 'Syncing…' : 'Sync collection to Tidal'}
               </button>
-              {event.tidal_playlist_id && (
+              {event.tidal_collection_playlist_id && (
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  Playlist linked ✓
+                  Pre-event playlist linked ✓
                 </span>
               )}
               {syncResult !== null && (

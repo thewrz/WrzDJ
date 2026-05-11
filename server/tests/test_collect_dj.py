@@ -268,7 +268,7 @@ def test_collection_settings_includes_tidal_fields(client, db, auth_headers, tes
     assert r.status_code == 200
     body = r.json()
     assert "tidal_sync_enabled" in body
-    assert "tidal_playlist_id" in body
+    assert "tidal_collection_playlist_id" in body
     assert body["tidal_sync_enabled"] is True
 
 

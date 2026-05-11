@@ -1122,7 +1122,7 @@ export default function EventQueuePage() {
                 collection_phase_override: collectionSettings.collection_phase_override,
                 phase: collectionSettings.phase,
                 tidal_sync_enabled: collectionSettings.tidal_sync_enabled,
-                tidal_playlist_id: collectionSettings.tidal_playlist_id,
+                tidal_collection_playlist_id: collectionSettings.tidal_collection_playlist_id,
               }}
               tidalConnected={!!tidalStatus?.linked}
               tidalIntegrationEnabled={!!tidalStatus?.integration_enabled}

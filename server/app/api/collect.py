@@ -42,8 +42,9 @@ from app.services.beatport import search_beatport_tracks
 from app.services.collect import NicknameConflictError, upsert_profile
 from app.services.dedup import compute_dedupe_key, find_duplicate
 from app.services.sync.enrichment_pipeline import _find_best_match
-from app.services.sync.orchestrator import enrich_request_metadata, sync_request_to_services
+from app.services.sync.orchestrator import enrich_request_metadata
 from app.services.system_settings import get_system_settings
+from app.services.tidal import sync_collection_requests_batch
 from app.services.vote import add_vote
 
 logger = logging.getLogger(__name__)
@@ -399,7 +400,9 @@ def submit(
     if not (row.genre and row.bpm and row.musical_key):
         background_tasks.add_task(enrich_request_metadata, db, row.id)
     if event.tidal_sync_enabled and get_system_settings(db).tidal_enabled:
-        background_tasks.add_task(sync_request_to_services, db, row)
+        background_tasks.add_task(
+            sync_collection_requests_batch, db, event.created_by, event, [row]
+        )
     log_activity(
         db,
         level="info",
