@@ -675,7 +675,7 @@ def accept_all_requests_endpoint(
     # Trigger batch sync — one background task for all accepted requests
     # Uses sequential search + batch playlist add to avoid API rate limiting
     if accepted and get_connected_adapters(event.created_by):
-        background_tasks.add_task(sync_requests_batch, db, accepted)
+        background_tasks.add_task(_sync_requests_with_fresh_session, [r.id for r in accepted])
 
     if accepted:
         publish_event(
@@ -1068,7 +1068,7 @@ def sync_collection_to_tidal(
     ]
 
     if eligible:
-        background_tasks.add_task(sync_requests_batch, db, eligible)
+        background_tasks.add_task(_sync_requests_with_fresh_session, [r.id for r in eligible])
 
     return {"queued": len(eligible)}
 
@@ -1115,7 +1115,7 @@ def bulk_review(
     if accepted_rows:
         for row in accepted_rows:
             background_tasks.add_task(enrich_request_metadata, db, row.id)
-        background_tasks.add_task(sync_requests_batch, db, accepted_rows)
+        background_tasks.add_task(_sync_requests_with_fresh_session, [r.id for r in accepted_rows])
     return BulkReviewResponse(accepted=accepted, rejected=rejected, unchanged=0)
 
 
@@ -1134,6 +1134,26 @@ def _enrich_with_fresh_session(request_id: int) -> None:
     session = SessionLocal()
     try:
         enrich_request_metadata(session, request_id)
+    finally:
+        session.close()
+
+
+def _sync_requests_with_fresh_session(request_ids: list[int]) -> None:
+    """Run sync_requests_batch in its own DB session.
+
+    Same rationale as _enrich_with_fresh_session: the request-scoped `db` stays
+    open until all background tasks complete; for large collections this exhausts
+    the SQLAlchemy connection pool.  Re-querying by ID inside a fresh session
+    releases the connection as soon as the batch finishes.
+    """
+    from app.db.session import SessionLocal
+    from app.models.request import Request as SongRequest
+
+    session = SessionLocal()
+    try:
+        rows = session.query(SongRequest).filter(SongRequest.id.in_(request_ids)).all()
+        if rows:
+            sync_requests_batch(session, rows)
     finally:
         session.close()
 

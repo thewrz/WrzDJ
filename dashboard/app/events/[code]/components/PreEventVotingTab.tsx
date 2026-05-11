@@ -162,11 +162,14 @@ export default function PreEventVotingTab({
 
   async function handleToggleTidalSync(enabled: boolean) {
     setTogglingTidal(true);
+    setSyncError(null);
     try {
       const resp = await apiClient.patchCollectionSettings(event.code, {
         tidal_sync_enabled: enabled,
       });
       onEventChange(resp);
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : 'Failed to update Tidal sync setting');
     } finally {
       setTogglingTidal(false);
     }

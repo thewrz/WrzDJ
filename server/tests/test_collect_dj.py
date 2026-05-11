@@ -272,6 +272,25 @@ def test_collection_settings_includes_tidal_fields(client, db, auth_headers, tes
     assert body["tidal_sync_enabled"] is True
 
 
+def test_sync_collection_to_tidal_integration_disabled(
+    client, db, auth_headers, test_event, collection_requests
+):
+    from app.services.system_settings import get_system_settings
+
+    sys = get_system_settings(db)
+    sys.tidal_enabled = False
+    test_event.created_by.tidal_access_token = "fake_tidal_token"
+    test_event.tidal_sync_enabled = True
+    db.commit()
+
+    r = client.post(
+        f"/api/events/{test_event.code}/collection/sync-tidal",
+        headers=auth_headers,
+    )
+    assert r.status_code == 503
+    assert "unavailable" in r.json()["detail"]
+
+
 def test_sync_collection_to_tidal_no_tidal_linked(
     client, db, auth_headers, test_event, collection_requests
 ):

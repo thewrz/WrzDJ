@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import PreEventVotingTab from "../PreEventVotingTab";
+import { apiClient } from "@/lib/api";
 
 const baseEvent = {
   code: "ABC",
@@ -112,5 +113,20 @@ describe("PreEventVotingTab", () => {
       />
     );
     expect(screen.queryByRole("button", { name: /sync collection to tidal/i })).not.toBeInTheDocument();
+  });
+
+  it("triggers collection sync when sync button is clicked", async () => {
+    render(
+      <PreEventVotingTab
+        event={{ ...baseEvent, tidal_sync_enabled: true }}
+        tidalConnected={true}
+        tidalIntegrationEnabled={true}
+        onEventChange={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /sync collection to tidal/i }));
+    await waitFor(() => {
+      expect(apiClient.syncCollectionToTidal).toHaveBeenCalledWith("ABC");
+    });
   });
 });
