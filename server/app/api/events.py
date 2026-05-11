@@ -675,7 +675,7 @@ def accept_all_requests_endpoint(
     # Trigger batch sync — one background task for all accepted requests
     # Uses sequential search + batch playlist add to avoid API rate limiting
     if accepted and get_connected_adapters(event.created_by):
-        background_tasks.add_task(_sync_requests_with_fresh_session, [r.id for r in accepted])
+        background_tasks.add_task(sync_requests_batch, db, accepted)
 
     if accepted:
         publish_event(
@@ -1068,7 +1068,7 @@ def sync_collection_to_tidal(
     ]
 
     if eligible:
-        background_tasks.add_task(_sync_requests_with_fresh_session, [r.id for r in eligible])
+        background_tasks.add_task(sync_requests_batch, db, eligible)
 
     return {"queued": len(eligible)}
 
@@ -1115,7 +1115,7 @@ def bulk_review(
     if accepted_rows:
         for row in accepted_rows:
             background_tasks.add_task(enrich_request_metadata, db, row.id)
-        background_tasks.add_task(_sync_requests_with_fresh_session, [r.id for r in accepted_rows])
+        background_tasks.add_task(sync_requests_batch, db, accepted_rows)
     return BulkReviewResponse(accepted=accepted, rejected=rejected, unchanged=0)
 
 
