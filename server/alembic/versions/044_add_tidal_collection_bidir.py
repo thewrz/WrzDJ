@@ -20,6 +20,12 @@ def upgrade() -> None:
         "requests",
         sa.Column("tidal_collection_track_id", sa.String(50), nullable=True),
     )
+    op.create_index(
+        "ix_requests_tidal_collection_track_id",
+        "requests",
+        ["tidal_collection_track_id"],
+        unique=False,
+    )
     op.add_column(
         "events",
         sa.Column(
@@ -32,5 +38,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_index("ix_requests_tidal_collection_track_id", table_name="requests", if_exists=True)
     op.drop_column("requests", "tidal_collection_track_id")
     op.drop_column("events", "tidal_collection_bidirectional")

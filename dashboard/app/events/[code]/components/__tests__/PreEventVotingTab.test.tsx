@@ -131,4 +131,23 @@ describe("PreEventVotingTab", () => {
       expect(apiClient.syncCollectionToTidal).toHaveBeenCalledWith("ABC");
     });
   });
+
+  it("patches tidal_collection_bidirectional when checkbox is toggled", async () => {
+    render(
+      <PreEventVotingTab
+        event={{ ...baseEvent, tidal_sync_enabled: true, tidal_collection_bidirectional: false }}
+        tidalConnected={true}
+        tidalIntegrationEnabled={true}
+        onEventChange={vi.fn()}
+      />
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: /songs removed from tidal playlist are auto-rejected/i })
+    );
+    await waitFor(() => {
+      expect(apiClient.patchCollectionSettings).toHaveBeenCalledWith("ABC", {
+        tidal_collection_bidirectional: true,
+      });
+    });
+  });
 });

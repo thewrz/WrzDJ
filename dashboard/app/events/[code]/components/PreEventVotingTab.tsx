@@ -97,6 +97,7 @@ export default function PreEventVotingTab({
   const [settingsSaved, setSettingsSaved] = useState(false);
 
   const [togglingTidal, setTogglingTidal] = useState(false);
+  const [togglingBidirectional, setTogglingBidirectional] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ queued: number } | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -177,6 +178,7 @@ export default function PreEventVotingTab({
   }
 
   async function handleToggleBidirectional(enabled: boolean) {
+    setTogglingBidirectional(true);
     setSyncError(null);
     try {
       const resp = await apiClient.patchCollectionSettings(event.code, {
@@ -187,6 +189,8 @@ export default function PreEventVotingTab({
       setSyncError(
         err instanceof Error ? err.message : 'Failed to update bidirectional sync setting',
       );
+    } finally {
+      setTogglingBidirectional(false);
     }
   }
 
@@ -372,6 +376,7 @@ export default function PreEventVotingTab({
                 <input
                   type="checkbox"
                   checked={event.tidal_collection_bidirectional}
+                  disabled={togglingBidirectional}
                   onChange={(e) => handleToggleBidirectional(e.target.checked)}
                 />
                 Songs removed from Tidal playlist are auto-rejected

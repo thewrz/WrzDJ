@@ -25,6 +25,7 @@ settings = get_settings()
 # Configure app-level logging so module loggers (enrichment, sync, etc.)
 # emit INFO-level diagnostics instead of being silenced by Python's default WARNING level.
 logging.getLogger("app").setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Explicit CORS methods for non-wildcard origins — must include every HTTP method used by the API
 CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
@@ -93,8 +94,6 @@ app = FastAPI(
 # Rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
-
-logger = logging.getLogger(__name__)
 
 
 @app.exception_handler(Exception)
