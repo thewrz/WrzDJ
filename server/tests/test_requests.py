@@ -758,6 +758,9 @@ class TestPatchRejectionTidalRemoval:
         from app.models.request import Request as SongRequest
         from app.models.request import RequestStatus
 
+        test_event.tidal_sync_enabled = True
+        db.commit()
+
         req = SongRequest(
             event_id=test_event.id,
             song_title="Unsynced Track",
