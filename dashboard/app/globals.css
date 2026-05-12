@@ -85,6 +85,7 @@ a {
   cursor: pointer;
   font-size: 1rem;
   font-weight: 500;
+  color: var(--text);
   transition: background 0.2s;
 }
 
