@@ -6,12 +6,48 @@
 
 /* Theme defaults — overridden by ThemeProvider at runtime */
 :root {
+  /* Tier 1 — surfaces & structure */
   --bg: #0a0a0a;
   --card: #1a1a1a;
+  --surface-raised: #111111;
   --text: #ededed;
   --text-secondary: #9ca3af;
   --text-tertiary: #6b7280;
   --border: #333333;
+  --border-subtle: #222222;
+  --color-overlay: rgba(0,0,0,0.7);
+
+  /* Tier 2 — semantic actions */
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-primary-subtle: rgba(59,130,246,0.12);
+  --color-danger: #ef4444;
+  --color-danger-hover: #dc2626;
+  --color-danger-subtle: rgba(239,68,68,0.12);
+  --color-success: #22c55e;
+  --color-success-hover: #16a34a;
+  --color-success-subtle: rgba(34,197,94,0.12);
+  --color-warning: #f59e0b;
+  --color-warning-hover: #d97706;
+  --color-warning-subtle: rgba(245,158,11,0.12);
+  --color-admin: #6b21a8;
+  --color-admin-subtle: rgba(107,33,168,0.15);
+
+  /* Tier 3 — named UI roles */
+  --color-link: #60a5fa;
+  --color-nickname-accent: #a78bfa;
+  --color-code-accent: #3b82f6;
+  --color-focus-ring: rgba(59,130,246,0.4);
+  --color-scrollbar: #444444;
+  --color-log-info-bg: #1e3a5f;
+  --color-log-info-text: #60a5fa;
+  --color-log-warning-bg: #78350f;
+  --color-log-warning-text: #fbbf24;
+  --color-log-error-bg: #7f1d1d;
+  --color-log-error-text: #f87171;
+  --color-accent-checkbox: #3b82f6;
+  --color-live-badge: #ef4444;
+  --color-status-accepted: #8b5cf6;
 }
 
 html,
@@ -149,8 +185,8 @@ a {
 }
 
 .badge-played {
-  background: #6b7280;
-  color: white;
+  background: var(--text-tertiary);
+  color: var(--bg);
 }
 
 .badge-rejected {
@@ -461,7 +497,7 @@ a {
   padding: 0.75rem;
   background: none;
   border: none;
-  color: var(--foreground);
+  color: var(--text);
   cursor: pointer;
   font-size: 0.875rem;
   font-weight: 600;
@@ -512,8 +548,8 @@ a {
 }
 
 .my-req-badge-played {
-  background: rgba(107, 114, 128, 0.15);
-  color: #9ca3af;
+  background: var(--color-primary-subtle);
+  color: var(--text-secondary);
 }
 
 .my-req-badge-rejected {
@@ -1017,7 +1053,7 @@ a {
   text-decoration: underline;
 }
 .btn-link:hover {
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .btn-check {

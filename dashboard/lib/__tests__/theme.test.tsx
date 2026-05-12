@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { ThemeProvider, useTheme } from '../theme';
+import { getThemeVars } from '../theme-vars';
 
 // Test component that exposes theme context values
 function ThemeConsumer() {
@@ -69,8 +70,8 @@ describe('ThemeProvider', () => {
     window.matchMedia = originalMatchMedia;
     Object.defineProperty(window, 'localStorage', { value: originalLocalStorage, writable: true });
     document.documentElement.removeAttribute('data-theme');
-    for (const prop of ['--bg', '--card', '--text', '--text-secondary', '--text-tertiary', '--border']) {
-      document.documentElement.style.removeProperty(prop);
+    for (const key of Object.keys(getThemeVars('dark'))) {
+      document.documentElement.style.removeProperty(key);
     }
   });
 
