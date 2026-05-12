@@ -14,7 +14,6 @@ import { useHelp } from '@/lib/help/HelpContext';
 import { HelpSpot } from '@/components/help/HelpSpot';
 import { HelpButton } from '@/components/help/HelpButton';
 import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import { useTabTitle } from '@/lib/tab-title';
 import { EventErrorCard } from '@/components/EventErrorCard';
 import { DeleteEventModal } from './components/DeleteEventModal';
@@ -842,7 +841,6 @@ export default function EventQueuePage() {
           <span style={{ fontSize: '0.8rem', lineHeight: 1 }}>{compactMode ? '\u2630' : '\u2637'}</span>
           <span className="theme-toggle-label">{compactMode ? 'Dense' : 'Normal'}</span>
         </button>
-        <ThemeToggle />
         <HelpButton page={helpPageId} inline />
       </div>
       <OnboardingOverlay page={helpPageId} />
