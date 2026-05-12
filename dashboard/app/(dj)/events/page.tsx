@@ -325,7 +325,7 @@ export default function EventsPage() {
                       display: 'flex',
                       alignItems: 'flex-start',
                       gap: '0.75rem',
-                      outline: selectedEvents.has(event.code) ? '2px solid #3b82f6' : 'none',
+                      outline: selectedEvents.has(event.code) ? '2px solid var(--color-primary)' : 'none',
                     }}
                     onClick={() => toggleSelection(event.code)}
                   >

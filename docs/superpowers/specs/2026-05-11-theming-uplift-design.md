@@ -1,5 +1,5 @@
 # Theming Uplift & Consistency — Design Spec
-<!-- self-reviewed 2026-05-11: token counts corrected (36 total, not 37; tier-2 is 14 not 15), collect path corrected -->
+<!-- self-reviewed 2026-05-11: collect path corrected; --color-status-accepted added during planning = 37 total (9+14+14) -->
 
 **Date:** 2026-05-11  
 **Branch:** `feat/theming-uplift-consistency`  
@@ -25,13 +25,13 @@ The dashboard has a `ThemeProvider` with three themes (`dark`, `high-contrast`, 
 |---|---|---|
 | Daylight definition | True light mode (white/cream bg, dark text) | Only meaningful for outdoor/bright-venue use |
 | Scope | DJ + admin pages only | Guest Tower UI, join, display, collect, Camelot wheel excluded — intentional design |
-| Token depth | Full 3-tier design system (~36 vars) | Incomplete tokens leave bugs in light mode; full coverage makes future themes purely additive |
+| Token depth | Full 3-tier design system (~37 vars) | Incomplete tokens leave bugs in light mode; full coverage makes future themes purely additive |
 | ThemeToggle placement | Next.js route group `app/(dj)/layout.tsx` | Auto-applies to all future DJ pages without per-page imports |
 | Migration strategy | 2 PRs (CSS-first, then TSX) | PR1 is zero-visual-change and low-risk; PR2 ships working light mode |
 
 ---
 
-## Token Taxonomy (36 vars, 3 tiers)
+## Token Taxonomy (37 vars, 3 tiers)
 
 ### Naming rule: role, not value
 - Good: `--color-link`, `--color-log-info-bg`, `--color-nickname-accent`
@@ -96,7 +96,7 @@ The dashboard has a `ThemeProvider` with three themes (`dark`, `high-contrast`, 
 
 ### ThemeToggle Placement: Route Group
 
-```
+```text
 app/
   (dj)/
     layout.tsx          ← NEW: ThemeToggle + shared DJ wrapper
