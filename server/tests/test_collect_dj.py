@@ -399,6 +399,7 @@ def test_bulk_reject_skips_tidal_removal_when_no_track_id(
     db.commit()
 
     test_event.tidal_sync_enabled = True
+    test_event.tidal_collection_bidirectional = True
     db.commit()
 
     calls = []

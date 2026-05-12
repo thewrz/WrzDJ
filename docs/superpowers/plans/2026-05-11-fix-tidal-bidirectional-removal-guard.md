@@ -38,11 +38,11 @@ Because `tidal_collection_bidirectional` defaults to `False`, every DJ with Tida
 The new test asserts that with `tidal_sync_enabled=True` but `tidal_collection_bidirectional=False` (the default), rejection does **not** queue Tidal removal. This test will **fail** before the fix is applied (proving the bug exists).
 
 **Files:**
-- Modify: `server/tests/test_requests.py` — insert after line 792 (end of `TestTidalCollectionSync` class)
+- Modify: `server/tests/test_requests.py` — insert after line 792 (end of `TestPatchRejectionTidalRemoval` class)
 
 - [ ] **Step 1: Write the failing test**
 
-Open `server/tests/test_requests.py`. Find the class `TestTidalCollectionSync` and add this test method after the existing `test_rejecting_unsynced_collection_request_skips_tidal` method:
+Open `server/tests/test_requests.py`. Find the class `TestPatchRejectionTidalRemoval` and add this test method after the existing `test_rejecting_unsynced_collection_request_skips_tidal` method:
 
 ```python
 def test_rejecting_synced_request_skips_tidal_when_bidirectional_disabled(
@@ -90,7 +90,7 @@ def test_rejecting_synced_request_skips_tidal_when_bidirectional_disabled(
 - [ ] **Step 2: Run test to verify it fails (bug is confirmed)**
 
 ```bash
-cd server && .venv/bin/pytest tests/test_requests.py::TestTidalCollectionSync::test_rejecting_synced_request_skips_tidal_when_bidirectional_disabled -v
+cd server && .venv/bin/pytest tests/test_requests.py::TestPatchRejectionTidalRemoval::test_rejecting_synced_request_skips_tidal_when_bidirectional_disabled -v
 ```
 
 Expected: **FAIL** — `AssertionError: Tidal removal must not fire when bidirectional sync is disabled` (i.e., `len(calls)` is 1, not 0).
@@ -217,7 +217,7 @@ Replace with:
 - [ ] **Step 3: Run the two new regression tests to verify they now pass**
 
 ```bash
-cd server && .venv/bin/pytest tests/test_requests.py::TestTidalCollectionSync::test_rejecting_synced_request_skips_tidal_when_bidirectional_disabled tests/test_collect_dj.py::test_bulk_reject_skips_tidal_removal_when_bidirectional_disabled -v
+cd server && .venv/bin/pytest tests/test_requests.py::TestPatchRejectionTidalRemoval::test_rejecting_synced_request_skips_tidal_when_bidirectional_disabled tests/test_collect_dj.py::test_bulk_reject_skips_tidal_removal_when_bidirectional_disabled -v
 ```
 
 Expected: **PASS** for both.
@@ -235,7 +235,7 @@ The existing happy-path tests (`test_rejecting_synced_collection_request_queues_
 - [ ] **Step 1: Run the full test class to see which happy-path tests now fail**
 
 ```bash
-cd server && .venv/bin/pytest tests/test_requests.py::TestTidalCollectionSync -v
+cd server && .venv/bin/pytest tests/test_requests.py::TestPatchRejectionTidalRemoval -v
 ```
 
 Expected: `test_rejecting_synced_collection_request_queues_tidal_removal` **FAIL** (calls is 0, expected 1).
@@ -277,7 +277,7 @@ Replace with:
 - [ ] **Step 4: Run all Tidal-related tests to confirm full suite green**
 
 ```bash
-cd server && .venv/bin/pytest tests/test_requests.py::TestTidalCollectionSync tests/test_collect_dj.py -v
+cd server && .venv/bin/pytest tests/test_requests.py::TestPatchRejectionTidalRemoval tests/test_collect_dj.py -v
 ```
 
 Expected: All tests **PASS**.
