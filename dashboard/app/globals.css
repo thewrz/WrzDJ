@@ -299,7 +299,7 @@ a {
   max-height: 680px;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: #444 transparent;
+  scrollbar-color: var(--color-scrollbar) transparent;
 }
 
 .scrollable-list::-webkit-scrollbar {
@@ -311,12 +311,12 @@ a {
 }
 
 .scrollable-list::-webkit-scrollbar-thumb {
-  background: #444;
+  background: var(--color-scrollbar);
   border-radius: 3px;
 }
 
 .scrollable-list::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: var(--color-scrollbar);
 }
 
 /* Fade-out animation for confirmation card */
@@ -712,7 +712,7 @@ a {
 
 .admin-sidebar {
   width: 220px;
-  background: #111;
+  background: var(--surface-raised);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -745,7 +745,7 @@ a {
 }
 
 .admin-sidebar-link:hover {
-  background: #222;
+  background: var(--border-subtle);
   color: var(--text);
 }
 
@@ -838,7 +838,7 @@ a {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--color-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -931,13 +931,13 @@ a {
 }
 
 .badge-status.not-configured {
-  background: #374151;
+  background: var(--border);
   color: var(--text-secondary);
 }
 
 .badge-status.not-implemented {
-  background: #1f2937;
-  color: #6b7280;
+  background: var(--card);
+  color: var(--text-tertiary);
 }
 
 /* Integration table */
@@ -976,7 +976,7 @@ a {
   width: 44px;
   height: 24px;
   border-radius: 12px;
-  background: #374151;
+  background: var(--border);
   border: none;
   cursor: pointer;
   transition: background 0.2s;
@@ -1024,7 +1024,7 @@ a {
   padding: 0.375rem 0.75rem;
   font-size: 0.75rem;
   border-radius: 4px;
-  border: 1px solid #444;
+  border: 1px solid var(--border);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -1032,7 +1032,7 @@ a {
 }
 
 .btn-check:hover {
-  background: #333;
+  background: var(--border);
   color: var(--text);
 }
 
@@ -1062,7 +1062,7 @@ a {
 }
 
 .event-tab:hover {
-  border-color: #555;
+  border-color: var(--border);
   color: var(--text);
 }
 
@@ -1083,7 +1083,7 @@ a {
   gap: 0.75rem;
   align-items: flex-start;
   padding: 0.5rem 0;
-  border-bottom: 1px solid #222;
+  border-bottom: 1px solid var(--border-subtle);
   font-size: 0.875rem;
 }
 
@@ -1130,7 +1130,7 @@ a {
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 500;
-  background: #333;
+  background: var(--border);
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -1189,7 +1189,7 @@ a {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  border: 2px solid #444;
+  border: 2px solid var(--border);
   background: var(--card);
   color: var(--text-secondary);
   font-size: 1.125rem;
@@ -1987,7 +1987,7 @@ h1, .display-heading {
 .email-verify-input h4 {
   font-size: 1rem;
   font-weight: 600;
-  color: var(--text-primary, #ededed);
+  color: var(--text);
 }
 
 .email-verify-code {
@@ -2022,10 +2022,10 @@ h1, .display-heading {
   font-size: 1.5rem;
   font-weight: 600;
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-  background: #1a1a1a;
-  border: 2px solid #333;
+  background: var(--card);
+  border: 2px solid var(--border);
   border-radius: 10px;
-  color: #ededed;
+  color: var(--text);
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
   caret-color: #3b82f6;
@@ -2043,7 +2043,7 @@ h1, .display-heading {
 
 .verify-timer {
   font-size: 0.8rem;
-  color: var(--text-secondary, #888);
+  color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
   min-width: 2.5rem;
 }
@@ -2067,12 +2067,12 @@ h1, .display-heading {
   flex-wrap: wrap;
   gap: 0.5rem 0.75rem;
   padding: 0.5rem 1rem;
-  background: var(--card-bg, #1a1a1a);
-  border-bottom: 1px solid #2a2a2a;
+  background: var(--card);
+  border-bottom: 1px solid var(--border-subtle);
   font-size: 0.875rem;
 }
 .identity-bar-name {
-  color: var(--text-secondary, #a0a0a0);
+  color: var(--text-secondary);
   font-weight: 500;
 }
 .identity-bar-verified {
