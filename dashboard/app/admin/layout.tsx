@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, role, logout } = useAuth();
@@ -58,11 +59,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Link>
           <button
             className="btn btn-sm"
-            style={{ background: '#333', width: '100%' }}
+            style={{ background: 'var(--surface-raised)', width: '100%' }}
             onClick={logout}
           >
             Logout
           </button>
+          <ThemeToggle />
         </div>
       </aside>
       <main className="admin-main">{children}</main>
