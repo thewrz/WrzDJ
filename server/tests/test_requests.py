@@ -719,6 +719,7 @@ class TestPatchRejectionTidalRemoval:
         from app.models.request import RequestStatus
 
         test_event.tidal_sync_enabled = True
+        test_event.tidal_collection_bidirectional = True
         db.commit()
 
         req = SongRequest(

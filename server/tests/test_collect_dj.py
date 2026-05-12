@@ -357,6 +357,7 @@ def test_bulk_reject_queues_tidal_removal_for_synced_requests(
     db.refresh(req)
 
     test_event.tidal_sync_enabled = True
+    test_event.tidal_collection_bidirectional = True
     db.commit()
 
     calls = []
