@@ -14,11 +14,16 @@ def _reset_root_logger(original_handlers, original_level):
 
 @pytest.fixture()
 def clean_root_logger():
+    import app.core.logging_config as logging_config
+
     root = logging.getLogger()
     original_handlers = list(root.handlers)
     original_level = root.level
+    original_configured = logging_config._CONFIGURED
     root.handlers.clear()
+    logging_config._CONFIGURED = False
     yield
+    logging_config._CONFIGURED = original_configured
     _reset_root_logger(original_handlers, original_level)
 
 
@@ -31,7 +36,7 @@ def test_no_file_handler_without_log_dir(clean_root_logger, monkeypatch):
     root = logging.getLogger()
     handler_types = [type(h) for h in root.handlers]
     assert logging.StreamHandler in handler_types
-    assert logging.handlers.RotatingFileHandler not in handler_types
+    assert not any(isinstance(h, logging.handlers.BaseRotatingHandler) for h in root.handlers)
 
 
 def test_file_handler_created_with_log_dir(clean_root_logger, tmp_path, monkeypatch):

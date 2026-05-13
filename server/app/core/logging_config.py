@@ -2,6 +2,8 @@ import logging
 import logging.handlers
 import os
 
+_CONFIGURED = False
+
 
 def configure_logging() -> None:
     """Install dual-handler logging on the root logger.
@@ -11,6 +13,11 @@ def configure_logging() -> None:
 
     Call once at application startup before any loggers emit messages.
     """
+    global _CONFIGURED
+    if _CONFIGURED:
+        return
+    _CONFIGURED = True
+
     from pythonjsonlogger.json import JsonFormatter
 
     log_dir = os.environ.get("LOG_DIR", "")
