@@ -14,6 +14,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api import api_router
 from app.core.config import get_settings
+from app.core.logging_config import configure_logging
 from app.core.rate_limit import limiter, rate_limit_exceeded_handler
 from app.core.security_headers import SecurityHeadersMiddleware
 
@@ -22,9 +23,7 @@ mimetypes.add_type("image/webp", ".webp")
 
 settings = get_settings()
 
-# Configure app-level logging so module loggers (enrichment, sync, etc.)
-# emit INFO-level diagnostics instead of being silenced by Python's default WARNING level.
-logging.getLogger("app").setLevel(logging.INFO)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 # Explicit CORS methods for non-wildcard origins — must include every HTTP method used by the API
@@ -71,6 +70,10 @@ async def _tidal_collection_poll_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+        lg = logging.getLogger(name)
+        lg.handlers.clear()
+        lg.propagate = True
     task = asyncio.create_task(_tidal_collection_poll_loop())
     try:
         yield
