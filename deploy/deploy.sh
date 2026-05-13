@@ -64,7 +64,8 @@ fi
 
 echo "==> Ensuring log directories exist..."
 mkdir -p "$SCRIPT_DIR/logs/api"
-chmod 777 "$SCRIPT_DIR/logs/api"
+chown "$(id -u)":1000 "$SCRIPT_DIR/logs/api"
+chmod 775 "$SCRIPT_DIR/logs/api"
 
 echo "==> Rebuilding and starting stack..."
 docker compose -f "$COMPOSE_FILE" up -d --build

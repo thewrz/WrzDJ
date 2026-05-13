@@ -23,8 +23,11 @@ RUN chmod +x scripts/start.sh
 # Create uploads directory
 RUN mkdir -p /app/uploads/banners
 
-# Create non-root user
-RUN useradd -m appuser && chown -R appuser:appuser /app
+# Create non-root user with fixed UID/GID 1000 so bind-mounted host directories
+# (e.g. deploy/logs/api) can be chown'd to :1000 with chmod 775 instead of 777.
+RUN groupadd -g 1000 appuser \
+    && useradd -u 1000 -g 1000 -m appuser \
+    && chown -R appuser:appuser /app
 USER appuser
 
 # Default port (can be overridden by PaaS via PORT env var)
