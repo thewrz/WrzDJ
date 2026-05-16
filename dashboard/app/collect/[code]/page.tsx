@@ -327,6 +327,7 @@ export default function CollectPage() {
 
       {nickname && (
         <IdentityBar
+          forceDark
           nickname={nickname}
           emailVerified={emailVerified}
           onVerified={() => setEmailVerified(true)}

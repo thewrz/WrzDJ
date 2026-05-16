@@ -8,13 +8,20 @@ interface Props {
   emailVerified: boolean;
   onVerified: () => void;
   picksLabel?: string;
+  forceDark?: boolean;
 }
 
-export function IdentityBar({ nickname, emailVerified, onVerified, picksLabel }: Props) {
+export function IdentityBar({ nickname, emailVerified, onVerified, picksLabel, forceDark }: Props) {
   const [showEmailForm, setShowEmailForm] = useState(false);
 
+  const darkVars = forceDark ? ({
+    '--card': '#1a1a1a',
+    '--border-subtle': 'rgba(255,255,255,0.08)',
+    '--text-secondary': '#9ca3af',
+  } as React.CSSProperties) : undefined;
+
   return (
-    <div className="identity-bar">
+    <div className="identity-bar" style={darkVars}>
       <span className="identity-bar-name">👤 {nickname}</span>
       {emailVerified ? (
         <span className="identity-bar-verified">✓ Verified</span>

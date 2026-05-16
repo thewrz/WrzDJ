@@ -6,11 +6,18 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import type { Event, TidalStatus, BeatportStatus, ActivityLogEntry } from '@/lib/api-types';
+import { useHelp } from '@/lib/help/HelpContext';
+import { HelpSpot } from '@/components/help/HelpSpot';
+import { HelpButton } from '@/components/help/HelpButton';
+import { OnboardingOverlay } from '@/components/help/OnboardingOverlay';
 import { ActivityLogPanel } from './components/ActivityLogPanel';
 import { CollectionFieldset, collectionSchema } from '@/components/CollectionFieldset';
 
+const PAGE_ID = 'dashboard';
+
 export default function DashboardPage() {
   const { isAuthenticated, isLoading, role, logout } = useAuth();
+  const { hasSeenPage, startOnboarding } = useHelp();
   const router = useRouter();
   const [events, setEvents] = useState<Event[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
@@ -25,7 +32,6 @@ export default function DashboardPage() {
   const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
   const [deletingSelected, setDeletingSelected] = useState(false);
 
-  // Pre-event collection state
   const [showCollection, setShowCollection] = useState(false);
   const [collectionOpensAt, setCollectionOpensAt] = useState('');
   const [liveStartsAt, setLiveStartsAt] = useState('');
@@ -46,6 +52,13 @@ export default function DashboardPage() {
     }
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && !loadingEvents && !hasSeenPage(PAGE_ID)) {
+      const timer = setTimeout(() => startOnboarding(PAGE_ID), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, isAuthenticated, loadingEvents, hasSeenPage, startOnboarding]);
+
   const loadData = async () => {
     try {
       const [eventsData, tidalData, beatportData, logData] = await Promise.allSettled([
@@ -55,14 +68,25 @@ export default function DashboardPage() {
         api.getActivityLog(),
       ]);
 
-      if (eventsData.status === 'fulfilled') setEvents(eventsData.value);
+      if (eventsData.status === 'fulfilled') {
+        setEvents(eventsData.value);
+      } else {
+        setErrorMsg('Failed to load dashboard data');
+      }
       if (tidalData.status === 'fulfilled') setTidalStatus(tidalData.value);
       if (beatportData.status === 'fulfilled') setBeatportStatus(beatportData.value);
       if (logData.status === 'fulfilled') setActivityLog(logData.value);
-    } catch {
-      setErrorMsg('Failed to load dashboard data');
     } finally {
       setLoadingEvents(false);
+    }
+  };
+
+  const loadEvents = async () => {
+    try {
+      const data = await api.getEvents();
+      setEvents(data);
+    } catch {
+      setErrorMsg('Failed to load events');
     }
   };
 
@@ -82,8 +106,8 @@ export default function DashboardPage() {
       }
     }
     setCollectionError(null);
-
     setCreating(true);
+
     let createdEvent;
     try {
       createdEvent = await api.createEvent(newEventName);
@@ -93,9 +117,7 @@ export default function DashboardPage() {
       return;
     }
 
-    // Always show the event in the list, even if collection settings fail —
-    // the user can finish setup on the event's Pre-Event Voting tab.
-    setEvents([createdEvent, ...events]);
+    setEvents((prev) => [createdEvent, ...prev]);
 
     if (showCollection && (collectionOpensAt || liveStartsAt || submissionCap > 0)) {
       try {
@@ -156,7 +178,7 @@ export default function DashboardPage() {
     try {
       await api.bulkDeleteEvents([...selectedEvents]);
       setSelectedEvents(new Set());
-      setEvents((prev) => prev.filter((e) => !selectedEvents.has(e.code)));
+      await loadEvents();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to delete events');
     } finally {
@@ -174,37 +196,49 @@ export default function DashboardPage() {
 
   return (
     <div className="container">
+      <HelpButton page={PAGE_ID} />
+      <OnboardingOverlay page={PAGE_ID} />
+
       {errorMsg && (
-        <div style={{ background: '#7f1d1d', color: '#fca5a5', padding: '0.75rem 1rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
+        <div style={{ background: 'var(--color-danger-subtle)', color: 'var(--color-danger)', padding: '0.75rem 1rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem' }}>
           {errorMsg}
         </div>
       )}
 
-      <div className="header">
-        <h1>Dashboard</h1>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {role === 'admin' && (
-            <Link href="/admin">
-              <button className="btn" style={{ background: '#6b21a8' }}>Admin</button>
+      <HelpSpot spotId="events-header" page={PAGE_ID} order={1} title="Your Events" description="This is your events dashboard. All your DJ events appear here.">
+        <div className="header">
+          <h1>Dashboard</h1>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            {role === 'admin' && (
+              <HelpSpot spotId="events-admin" page={PAGE_ID} order={3} title="Admin Panel" description="Access the admin panel to manage users, view all events, and configure integrations.">
+                <Link href="/admin">
+                  <button className="btn" style={{ background: 'var(--color-admin)', color: 'white' }}>Admin</button>
+                </Link>
+              </HelpSpot>
+            )}
+            <HelpSpot spotId="events-create" page={PAGE_ID} order={2} title="Create Event" description="Click to create a new event. Each event gets a unique code and QR that guests scan to submit requests.">
+              <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+                Create Event
+              </button>
+            </HelpSpot>
+            <a
+              href="https://github.com/thewrz/WrzDJ/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-sm"
+              style={{ background: 'var(--surface-raised)', textDecoration: 'none', color: 'var(--text)' }}
+            >
+              Bridge App
+            </a>
+            <Link href="/account" className="btn" style={{ background: 'var(--surface-raised)', textDecoration: 'none', color: 'var(--text)' }}>
+              Account
             </Link>
-          )}
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-            Create Event
-          </button>
-          <a
-            href="https://github.com/thewrz/WrzDJ/releases/latest"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-sm"
-            style={{ background: '#333', textDecoration: 'none', color: '#ededed' }}
-          >
-            Bridge App
-          </a>
-          <button className="btn" style={{ background: '#333' }} onClick={logout}>
-            Logout
-          </button>
+            <button className="btn" style={{ background: 'var(--surface-raised)' }} onClick={logout}>
+              Logout
+            </button>
+          </div>
         </div>
-      </div>
+      </HelpSpot>
 
       {showCreate && (
         <div className="card" style={{ marginBottom: '2rem' }}>
@@ -241,7 +275,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 className="btn"
-                style={{ background: '#333' }}
+                style={{ background: 'var(--surface-raised)' }}
                 onClick={() => setShowCreate(false)}
               >
                 Cancel
@@ -251,52 +285,38 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Cloud Providers Status */}
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <h3 style={{ marginBottom: '1rem' }}>Cloud Providers</h3>
         <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: tidalStatus?.linked ? '#22c55e' : '#6b7280',
-                display: 'inline-block',
-              }}
-            />
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: tidalStatus?.linked ? '#22c55e' : '#6b7280', display: 'inline-block' }} />
             <span style={{ fontWeight: 500 }}>Tidal</span>
-            <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
               {tidalStatus?.linked ? 'Connected' : 'Not connected'}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: beatportStatus?.linked ? '#22c55e' : '#6b7280',
-                display: 'inline-block',
-              }}
-            />
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: beatportStatus?.linked ? '#22c55e' : '#6b7280', display: 'inline-block' }} />
             <span style={{ fontWeight: 500 }}>Beatport</span>
-            <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
               {beatportStatus?.linked ? 'Connected' : 'Not connected'}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Activity Log */}
       <ActivityLogPanel entries={activityLog} />
 
-      {/* Events */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0 }}>My Events</h2>
-        {events.length > 0 && (
-          <>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: '#9ca3af', cursor: 'pointer' }}>
+      {loadingEvents ? (
+        <div className="loading">Loading events...</div>
+      ) : events.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center' }}>
+          <p style={{ color: 'var(--text-secondary)' }}>No events yet. Create your first event!</p>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={selectionMode}
@@ -304,19 +324,19 @@ export default function DashboardPage() {
                   setSelectionMode(e.target.checked);
                   if (!e.target.checked) setSelectedEvents(new Set());
                 }}
-                style={{ accentColor: '#3b82f6' }}
+                style={{ accentColor: 'var(--color-accent-checkbox)' }}
                 aria-label="Advanced"
               />
               Advanced
             </label>
             {selectionMode && (
               <>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: '#9ca3af', cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     checked={selectedEvents.size === events.length && events.length > 0}
                     onChange={toggleSelectAll}
-                    style={{ accentColor: '#3b82f6' }}
+                    style={{ accentColor: 'var(--color-accent-checkbox)' }}
                     aria-label="Select All"
                   />
                   Select All
@@ -332,70 +352,64 @@ export default function DashboardPage() {
                 )}
               </>
             )}
-          </>
-        )}
-      </div>
-      {loadingEvents ? (
-        <div className="loading">Loading events...</div>
-      ) : events.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center' }}>
-          <p style={{ color: '#9ca3af' }}>No events yet. Create your first event!</p>
-        </div>
-      ) : (
-        <div className="event-grid">
-          {events.map((event) => (
-            selectionMode ? (
-              <div
-                key={event.id}
-                className="event-card"
-                style={{
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '0.75rem',
-                  outline: selectedEvents.has(event.code) ? '2px solid #3b82f6' : 'none',
-                }}
-                onClick={() => toggleSelection(event.code)}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedEvents.has(event.code)}
-                  onChange={() => toggleSelection(event.code)}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ accentColor: '#3b82f6', width: '1rem', height: '1rem', marginTop: '0.25rem', flexShrink: 0 }}
-                  aria-label={`Select event ${event.code}`}
-                />
-                <div>
-                  <h3>{event.name}</h3>
-                  <div className="code">{event.code}</div>
-                  <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
-                    Expires: {new Date(event.expires_at).toLocaleString()}
-                  </p>
-                  {!event.is_active && (
-                    <span className="badge badge-rejected" style={{ marginTop: '0.5rem' }}>
-                      Inactive
-                    </span>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <Link key={event.id} href={`/events/${event.code}`}>
-                <div className="event-card" style={{ cursor: 'pointer' }}>
-                  <h3>{event.name}</h3>
-                  <div className="code">{event.code}</div>
-                  <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
-                    Expires: {new Date(event.expires_at).toLocaleString()}
-                  </p>
-                  {!event.is_active && (
-                    <span className="badge badge-rejected" style={{ marginTop: '0.5rem' }}>
-                      Inactive
-                    </span>
-                  )}
-                </div>
-              </Link>
-            )
-          ))}
-        </div>
+          </div>
+          <HelpSpot spotId="events-grid" page={PAGE_ID} order={4} title="Event Cards" description="Your events appear as cards. Click any card to manage its request queue, sync settings, and kiosk controls.">
+            <div className="event-grid">
+              {events.map((event) => (
+                selectionMode ? (
+                  <div
+                    key={event.id}
+                    className="event-card"
+                    style={{
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '0.75rem',
+                      outline: selectedEvents.has(event.code) ? '2px solid var(--color-primary)' : 'none',
+                    }}
+                    onClick={() => toggleSelection(event.code)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedEvents.has(event.code)}
+                      onChange={() => toggleSelection(event.code)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ accentColor: 'var(--color-accent-checkbox)', width: '1rem', height: '1rem', marginTop: '0.25rem', flexShrink: 0 }}
+                      aria-label={`Select event ${event.code}`}
+                    />
+                    <div>
+                      <h3>{event.name}</h3>
+                      <div className="code">{event.code}</div>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                        Expires: {new Date(event.expires_at).toLocaleString()}
+                      </p>
+                      {!event.is_active && (
+                        <span className="badge badge-rejected" style={{ marginTop: '0.5rem' }}>
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <Link key={event.id} href={`/events/${event.code}`}>
+                    <div className="event-card" style={{ cursor: 'pointer' }}>
+                      <h3>{event.name}</h3>
+                      <div className="code">{event.code}</div>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                        Expires: {new Date(event.expires_at).toLocaleString()}
+                      </p>
+                      {!event.is_active && (
+                        <span className="badge badge-rejected" style={{ marginTop: '0.5rem' }}>
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                )
+              ))}
+            </div>
+          </HelpSpot>
+        </>
       )}
     </div>
   );

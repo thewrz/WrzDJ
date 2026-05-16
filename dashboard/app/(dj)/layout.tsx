@@ -10,7 +10,7 @@ export default function DJLayout({ children }: { children: ReactNode }) {
         position: 'fixed',
         top: '1rem',
         right: '4.5rem',
-        zIndex: 50,
+        zIndex: 1050,
       }}>
         <ThemeToggle />
       </div>
