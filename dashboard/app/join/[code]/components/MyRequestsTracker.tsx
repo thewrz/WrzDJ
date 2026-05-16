@@ -85,13 +85,13 @@ export default function MyRequestsTracker({
                   <div
                     className="guest-request-item-art"
                     style={{
-                      background: '#333',
+                      background: 'var(--card)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    <span style={{ fontSize: '1.25rem', color: '#666' }}>&#9835;</span>
+                    <span style={{ fontSize: '1.25rem', color: 'var(--text-secondary)' }}>&#9835;</span>
                   </div>
                 )}
                 <div className="guest-request-item-info">
