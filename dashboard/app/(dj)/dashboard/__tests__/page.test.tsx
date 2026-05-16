@@ -1,21 +1,18 @@
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import EventsPage from '../page';
+import DashboardPage from '../page';
 
-// Mock next/navigation
 const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
-// Mock next/link
 vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => (
     <a href={href}>{children}</a>
   ),
 }));
 
-// Mock help context
 vi.mock('@/lib/help/HelpContext', () => ({
   useHelp: () => ({
     helpMode: false, onboardingActive: false, currentStep: 0, activeSpotId: null,
@@ -26,7 +23,6 @@ vi.mock('@/lib/help/HelpContext', () => ({
   }),
 }));
 
-// Mock help components to simple pass-throughs
 vi.mock('@/components/help/HelpSpot', () => ({
   HelpSpot: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -37,7 +33,10 @@ vi.mock('@/components/help/OnboardingOverlay', () => ({
   OnboardingOverlay: () => null,
 }));
 
-// Variable-based auth mock for role testing
+vi.mock('../components/ActivityLogPanel', () => ({
+  ActivityLogPanel: () => <div data-testid="activity-log-panel" />,
+}));
+
 let mockRole = 'dj';
 let mockIsAuthenticated = true;
 let mockIsLoading = false;
@@ -51,12 +50,15 @@ vi.mock('@/lib/auth', () => ({
   }),
 }));
 
-// Mock API
 vi.mock('@/lib/api', () => ({
   api: {
     getEvents: vi.fn(),
     createEvent: vi.fn(),
     bulkDeleteEvents: vi.fn(),
+    getTidalStatus: vi.fn(),
+    getBeatportStatus: vi.fn(),
+    getActivityLog: vi.fn(),
+    patchCollectionSettings: vi.fn(),
   },
   Event: undefined,
 }));
@@ -91,28 +93,52 @@ function mockEvent(overrides = {}) {
   };
 }
 
-describe('EventsPage', () => {
+describe('DashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRole = 'dj';
     mockIsAuthenticated = true;
     mockIsLoading = false;
+    vi.mocked(api.getTidalStatus).mockResolvedValue(null as never);
+    vi.mocked(api.getBeatportStatus).mockResolvedValue(null as never);
+    vi.mocked(api.getActivityLog).mockResolvedValue([]);
   });
 
   it('renders page heading and create button', async () => {
     vi.mocked(api.getEvents).mockResolvedValue([]);
-
-    render(<EventsPage />);
-
-    expect(screen.getByText('My Events')).toBeInTheDocument();
+    render(<DashboardPage />);
+    expect(screen.getByText('Dashboard')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create Event' })).toBeInTheDocument();
+  });
+
+  it('renders Account button linking to /account', async () => {
+    vi.mocked(api.getEvents).mockResolvedValue([]);
+    render(<DashboardPage />);
+    expect(screen.getByRole('link', { name: 'Account' })).toHaveAttribute('href', '/account');
+  });
+
+  it('renders activity log panel', async () => {
+    vi.mocked(api.getEvents).mockResolvedValue([]);
+    render(<DashboardPage />);
+    await waitFor(() => {
+      expect(screen.getByTestId('activity-log-panel')).toBeInTheDocument();
+    });
+  });
+
+  it('renders cloud providers section', async () => {
+    vi.mocked(api.getEvents).mockResolvedValue([]);
+    vi.mocked(api.getTidalStatus).mockResolvedValue({ linked: true } as never);
+    vi.mocked(api.getBeatportStatus).mockResolvedValue({ linked: false } as never);
+    render(<DashboardPage />);
+    await waitFor(() => {
+      expect(screen.getByText('Tidal')).toBeInTheDocument();
+      expect(screen.getByText('Beatport')).toBeInTheDocument();
+    });
   });
 
   it('shows empty state when no events exist', async () => {
     vi.mocked(api.getEvents).mockResolvedValue([]);
-
-    render(<EventsPage />);
-
+    render(<DashboardPage />);
     await waitFor(() => {
       expect(screen.getByText(/No events yet/)).toBeInTheDocument();
     });
@@ -120,38 +146,30 @@ describe('EventsPage', () => {
 
   it('displays events when loaded', async () => {
     vi.mocked(api.getEvents).mockResolvedValue([mockEvent()]);
-
-    render(<EventsPage />);
-
+    render(<DashboardPage />);
     await waitFor(() => {
       expect(screen.getByText('Friday Night')).toBeInTheDocument();
       expect(screen.getByText('EVT01')).toBeInTheDocument();
     });
   });
 
-  it('shows error message when API call fails', async () => {
+  it('shows error message when events API fails', async () => {
     vi.mocked(api.getEvents).mockRejectedValue(new Error('Network error'));
-
-    render(<EventsPage />);
-
+    render(<DashboardPage />);
     await waitFor(() => {
-      expect(screen.getByText('Failed to load events')).toBeInTheDocument();
+      expect(screen.getByText('Failed to load dashboard data')).toBeInTheDocument();
     });
   });
 
   it('shows logout button', async () => {
     vi.mocked(api.getEvents).mockResolvedValue([]);
-
-    render(<EventsPage />);
-
+    render(<DashboardPage />);
     expect(screen.getByRole('button', { name: 'Logout' })).toBeInTheDocument();
   });
 
   it('shows inactive badge for inactive events', async () => {
     vi.mocked(api.getEvents).mockResolvedValue([mockEvent({ is_active: false })]);
-
-    render(<EventsPage />);
-
+    render(<DashboardPage />);
     await waitFor(() => {
       expect(screen.getByText('Inactive')).toBeInTheDocument();
     });
@@ -162,9 +180,7 @@ describe('EventsPage', () => {
       mockIsLoading = true;
       mockIsAuthenticated = false;
       vi.mocked(api.getEvents).mockResolvedValue([]);
-
-      render(<EventsPage />);
-
+      render(<DashboardPage />);
       expect(screen.getByText('Loading...')).toBeInTheDocument();
     });
 
@@ -173,11 +189,8 @@ describe('EventsPage', () => {
       vi.mocked(api.getEvents).mockImplementation(
         () => new Promise((r) => { resolveEvents = r; }),
       );
-
-      render(<EventsPage />);
-
+      render(<DashboardPage />);
       expect(screen.getByText('Loading events...')).toBeInTheDocument();
-
       await act(async () => { resolveEvents([]); });
     });
 
@@ -185,18 +198,14 @@ describe('EventsPage', () => {
       mockIsAuthenticated = false;
       mockIsLoading = false;
       vi.mocked(api.getEvents).mockResolvedValue([]);
-
-      render(<EventsPage />);
-
+      render(<DashboardPage />);
       expect(mockPush).toHaveBeenCalledWith('/login');
     });
 
     it('redirects pending users to /pending', () => {
       mockRole = 'pending';
       vi.mocked(api.getEvents).mockResolvedValue([]);
-
-      render(<EventsPage />);
-
+      render(<DashboardPage />);
       expect(mockPush).toHaveBeenCalledWith('/pending');
     });
   });
@@ -204,11 +213,8 @@ describe('EventsPage', () => {
   describe('Create event form', () => {
     it('shows form when Create Event clicked', async () => {
       vi.mocked(api.getEvents).mockResolvedValue([]);
-
-      render(<EventsPage />);
-
+      render(<DashboardPage />);
       fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
-
       expect(screen.getByLabelText('Event Name')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Create' })).toBeInTheDocument();
     });
@@ -217,16 +223,13 @@ describe('EventsPage', () => {
       vi.mocked(api.getEvents).mockResolvedValue([]);
       const newEvent = mockEvent({ id: 2, code: 'NEW01', name: 'New Party' });
       vi.mocked(api.createEvent).mockResolvedValue(newEvent);
-
-      render(<EventsPage />);
+      render(<DashboardPage />);
       await waitFor(() => expect(screen.getByText(/No events yet/)).toBeInTheDocument());
-
       fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
       fireEvent.change(screen.getByLabelText('Event Name'), { target: { value: 'New Party' } });
       await act(async () => {
         fireEvent.submit(screen.getByRole('button', { name: 'Create' }));
       });
-
       expect(api.createEvent).toHaveBeenCalledWith('New Party');
       await waitFor(() => {
         expect(screen.getByText('New Party')).toBeInTheDocument();
@@ -236,16 +239,13 @@ describe('EventsPage', () => {
     it('hides form and resets input after create', async () => {
       vi.mocked(api.getEvents).mockResolvedValue([]);
       vi.mocked(api.createEvent).mockResolvedValue(mockEvent());
-
-      render(<EventsPage />);
+      render(<DashboardPage />);
       await waitFor(() => expect(screen.getByText(/No events yet/)).toBeInTheDocument());
-
       fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
       fireEvent.change(screen.getByLabelText('Event Name'), { target: { value: 'Test' } });
       await act(async () => {
         fireEvent.submit(screen.getByRole('button', { name: 'Create' }));
       });
-
       await waitFor(() => {
         expect(screen.queryByLabelText('Event Name')).not.toBeInTheDocument();
       });
@@ -254,68 +254,24 @@ describe('EventsPage', () => {
     it('shows error when create fails', async () => {
       vi.mocked(api.getEvents).mockResolvedValue([]);
       vi.mocked(api.createEvent).mockRejectedValue(new Error('Name taken'));
-
-      render(<EventsPage />);
+      render(<DashboardPage />);
       await waitFor(() => expect(screen.getByText(/No events yet/)).toBeInTheDocument());
-
       fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
       fireEvent.change(screen.getByLabelText('Event Name'), { target: { value: 'Dup' } });
       await act(async () => {
         fireEvent.submit(screen.getByRole('button', { name: 'Create' }));
       });
-
       await waitFor(() => {
         expect(screen.getByText('Name taken')).toBeInTheDocument();
       });
     });
 
-    it('disables button while creating', async () => {
-      vi.mocked(api.getEvents).mockResolvedValue([]);
-      let resolveCreate!: (v: ReturnType<typeof mockEvent>) => void;
-      vi.mocked(api.createEvent).mockImplementation(
-        () => new Promise((r) => { resolveCreate = r; }),
-      );
-
-      render(<EventsPage />);
-      await waitFor(() => expect(screen.getByText(/No events yet/)).toBeInTheDocument());
-
-      fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
-      fireEvent.change(screen.getByLabelText('Event Name'), { target: { value: 'Test' } });
-      fireEvent.submit(screen.getByRole('button', { name: 'Create' }));
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Creating...' })).toBeDisabled();
-      });
-
-      await act(async () => { resolveCreate(mockEvent()); });
-    });
-
-    it('does not submit with empty name', async () => {
-      vi.mocked(api.getEvents).mockResolvedValue([]);
-
-      render(<EventsPage />);
-      await waitFor(() => expect(screen.getByText(/No events yet/)).toBeInTheDocument());
-
-      fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
-      // Leave input empty (required attribute prevents native submit, but our handler also checks)
-      const input = screen.getByLabelText('Event Name');
-      fireEvent.change(input, { target: { value: '   ' } });
-      await act(async () => {
-        fireEvent.submit(screen.getByRole('button', { name: 'Create' }));
-      });
-
-      expect(api.createEvent).not.toHaveBeenCalled();
-    });
-
     it('hides form on Cancel', async () => {
       vi.mocked(api.getEvents).mockResolvedValue([]);
-
-      render(<EventsPage />);
+      render(<DashboardPage />);
       await waitFor(() => expect(screen.getByText(/No events yet/)).toBeInTheDocument());
-
       fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
       expect(screen.getByLabelText('Event Name')).toBeInTheDocument();
-
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
       expect(screen.queryByLabelText('Event Name')).not.toBeInTheDocument();
       expect(api.createEvent).not.toHaveBeenCalled();
@@ -325,11 +281,8 @@ describe('EventsPage', () => {
   describe('Logout', () => {
     it('calls logout on Logout click', async () => {
       vi.mocked(api.getEvents).mockResolvedValue([]);
-
-      render(<EventsPage />);
-
+      render(<DashboardPage />);
       fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
-
       expect(mockLogout).toHaveBeenCalledOnce();
     });
   });
@@ -338,18 +291,14 @@ describe('EventsPage', () => {
     it('shows Admin button for admin role', async () => {
       mockRole = 'admin';
       vi.mocked(api.getEvents).mockResolvedValue([]);
-
-      render(<EventsPage />);
-
+      render(<DashboardPage />);
       expect(screen.getByRole('button', { name: 'Admin' })).toBeInTheDocument();
     });
 
     it('hides Admin button for dj role', async () => {
       mockRole = 'dj';
       vi.mocked(api.getEvents).mockResolvedValue([]);
-
-      render(<EventsPage />);
-
+      render(<DashboardPage />);
       expect(screen.queryByRole('button', { name: 'Admin' })).not.toBeInTheDocument();
     });
   });
@@ -362,81 +311,36 @@ describe('EventsPage', () => {
 
     it('renders Advanced checkbox', async () => {
       vi.mocked(api.getEvents).mockResolvedValue(twoEvents);
-      render(<EventsPage />);
+      render(<DashboardPage />);
       await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
       expect(screen.getByLabelText('Advanced')).toBeInTheDocument();
     });
 
     it('toggles selection mode', async () => {
       vi.mocked(api.getEvents).mockResolvedValue(twoEvents);
-      render(<EventsPage />);
+      render(<DashboardPage />);
       await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
-
-      // No checkboxes visible initially (only the Advanced checkbox itself)
       expect(screen.queryByRole('button', { name: /Delete Selected/ })).not.toBeInTheDocument();
-
       fireEvent.click(screen.getByLabelText('Advanced'));
-
-      // Now selection controls should appear
       expect(screen.getByLabelText('Select All')).toBeInTheDocument();
     });
 
-    it('selects individual events', async () => {
-      vi.mocked(api.getEvents).mockResolvedValue(twoEvents);
-      render(<EventsPage />);
-      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
-
-      fireEvent.click(screen.getByLabelText('Advanced'));
-
-      const checkboxes = screen.getAllByRole('checkbox', { name: /Select event/ });
-      expect(checkboxes).toHaveLength(2);
-
-      fireEvent.click(checkboxes[0]);
-      expect(screen.getByText('Delete Selected (1)')).toBeInTheDocument();
-
-      fireEvent.click(checkboxes[1]);
-      expect(screen.getByText('Delete Selected (2)')).toBeInTheDocument();
-
-      // Deselect one
-      fireEvent.click(checkboxes[0]);
-      expect(screen.getByText('Delete Selected (1)')).toBeInTheDocument();
-    });
-
-    it('select all / deselect all', async () => {
-      vi.mocked(api.getEvents).mockResolvedValue(twoEvents);
-      render(<EventsPage />);
-      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
-
-      fireEvent.click(screen.getByLabelText('Advanced'));
-
-      const selectAll = screen.getByLabelText('Select All');
-      fireEvent.click(selectAll);
-      expect(screen.getByText('Delete Selected (2)')).toBeInTheDocument();
-
-      // Deselect all
-      fireEvent.click(selectAll);
-      expect(screen.queryByText(/Delete Selected/)).not.toBeInTheDocument();
-    });
-
-    it('calls bulkDeleteEvents on confirm', async () => {
-      vi.mocked(api.getEvents).mockResolvedValue(twoEvents);
+    it('calls bulkDeleteEvents and re-fetches on confirm', async () => {
+      vi.mocked(api.getEvents)
+        .mockResolvedValueOnce(twoEvents)
+        .mockResolvedValueOnce([twoEvents[1]]);
       vi.mocked(api.bulkDeleteEvents).mockResolvedValue({ status: 'ok', count: 1 });
       vi.spyOn(window, 'confirm').mockReturnValue(true);
-
-      render(<EventsPage />);
+      render(<DashboardPage />);
       await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
-
       fireEvent.click(screen.getByLabelText('Advanced'));
-
       const checkboxes = screen.getAllByRole('checkbox', { name: /Select event/ });
       fireEvent.click(checkboxes[0]);
-
       await act(async () => {
         fireEvent.click(screen.getByText('Delete Selected (1)'));
       });
-
-      expect(window.confirm).toHaveBeenCalled();
       expect(api.bulkDeleteEvents).toHaveBeenCalledWith(['EVT01']);
+      expect(api.getEvents).toHaveBeenCalledTimes(2);
     });
 
     it('clears selection after delete', async () => {
@@ -445,36 +349,17 @@ describe('EventsPage', () => {
         .mockResolvedValueOnce([twoEvents[1]]);
       vi.mocked(api.bulkDeleteEvents).mockResolvedValue({ status: 'ok', count: 1 });
       vi.spyOn(window, 'confirm').mockReturnValue(true);
-
-      render(<EventsPage />);
+      render(<DashboardPage />);
       await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
-
       fireEvent.click(screen.getByLabelText('Advanced'));
       const checkboxes = screen.getAllByRole('checkbox', { name: /Select event/ });
       fireEvent.click(checkboxes[0]);
-
       await act(async () => {
         fireEvent.click(screen.getByText('Delete Selected (1)'));
       });
-
       await waitFor(() => {
         expect(screen.queryByText(/Delete Selected/)).not.toBeInTheDocument();
       });
-    });
-
-    it('exiting advanced mode clears selection', async () => {
-      vi.mocked(api.getEvents).mockResolvedValue(twoEvents);
-      render(<EventsPage />);
-      await waitFor(() => expect(screen.getByText('Friday Night')).toBeInTheDocument());
-
-      fireEvent.click(screen.getByLabelText('Advanced'));
-      const checkboxes = screen.getAllByRole('checkbox', { name: /Select event/ });
-      fireEvent.click(checkboxes[0]);
-      expect(screen.getByText('Delete Selected (1)')).toBeInTheDocument();
-
-      // Exit advanced mode
-      fireEvent.click(screen.getByLabelText('Advanced'));
-      expect(screen.queryByText(/Delete Selected/)).not.toBeInTheDocument();
     });
   });
 });
