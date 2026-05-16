@@ -15,7 +15,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
     } else if (!isLoading && role !== 'admin') {
-      router.push('/events');
+      router.push('/dashboard');
     }
   }, [isAuthenticated, isLoading, role, router]);
 
@@ -37,37 +37,46 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   return (
-    <div className="admin-layout">
-      <aside className="admin-sidebar">
-        <div className="admin-sidebar-header">
-          <h2>Admin</h2>
-        </div>
-        <nav className="admin-sidebar-nav">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`admin-sidebar-link${pathname === item.href ? ' active' : ''}`}
-            >
-              {item.label}
+    <>
+      <div style={{
+        position: 'fixed',
+        top: '1rem',
+        right: '4.5rem',
+        zIndex: 50,
+      }}>
+        <ThemeToggle />
+      </div>
+      <div className="admin-layout">
+        <aside className="admin-sidebar">
+          <div className="admin-sidebar-header">
+            <h2>Admin</h2>
+          </div>
+          <nav className="admin-sidebar-nav">
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`admin-sidebar-link${pathname === item.href ? ' active' : ''}`}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="admin-sidebar-footer">
+            <Link href="/dashboard" className="admin-sidebar-link">
+              DJ View
             </Link>
-          ))}
-        </nav>
-        <div className="admin-sidebar-footer">
-          <Link href="/dashboard" className="admin-sidebar-link">
-            DJ View
-          </Link>
-          <button
-            className="btn btn-sm"
-            style={{ background: 'var(--surface-raised)', width: '100%' }}
-            onClick={logout}
-          >
-            Logout
-          </button>
-          <ThemeToggle />
-        </div>
-      </aside>
-      <main className="admin-main">{children}</main>
-    </div>
+            <button
+              className="btn btn-sm"
+              style={{ background: 'var(--surface-raised)', width: '100%' }}
+              onClick={logout}
+            >
+              Logout
+            </button>
+          </div>
+        </aside>
+        <main className="admin-main">{children}</main>
+      </div>
+    </>
   );
 }
