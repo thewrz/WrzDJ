@@ -85,4 +85,31 @@ describe('IdentityBar', () => {
       expect(onVerified).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('applies no CSS var overrides by default', () => {
+    const { container } = render(
+      <IdentityBar nickname="DJ" emailVerified={false} onVerified={vi.fn()} />,
+    );
+    const root = container.firstChild as HTMLElement;
+    expect(root.style.getPropertyValue('--card')).toBe('');
+    expect(root.style.getPropertyValue('--text-secondary')).toBe('');
+  });
+
+  it('overrides CSS vars when forceDark=true', () => {
+    const { container } = render(
+      <IdentityBar nickname="DJ" emailVerified={false} onVerified={vi.fn()} forceDark />,
+    );
+    const root = container.firstChild as HTMLElement;
+    expect(root.style.getPropertyValue('--card')).toBe('#1a1a1a');
+    expect(root.style.getPropertyValue('--border-subtle')).toBe('rgba(255,255,255,0.08)');
+    expect(root.style.getPropertyValue('--text-secondary')).toBe('#9ca3af');
+  });
+
+  it('forceDark=false behaves same as omitted', () => {
+    const { container } = render(
+      <IdentityBar nickname="DJ" emailVerified={false} onVerified={vi.fn()} forceDark={false} />,
+    );
+    const root = container.firstChild as HTMLElement;
+    expect(root.style.getPropertyValue('--card')).toBe('');
+  });
 });
