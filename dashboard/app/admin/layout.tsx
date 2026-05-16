@@ -42,7 +42,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         position: 'fixed',
         top: '1rem',
         right: '4.5rem',
-        zIndex: 1100,
+        zIndex: 1050,
       }}>
         <ThemeToggle />
       </div>
