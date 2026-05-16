@@ -56,7 +56,7 @@ export default function PendingPage() {
         </p>
         <button
           className="btn"
-          style={{ background: '#333' }}
+          style={{ background: 'var(--surface-raised)' }}
           onClick={logout}
         >
           Logout
