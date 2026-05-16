@@ -92,10 +92,10 @@ export default function KioskLinkPage() {
                       width: '100%',
                       textAlign: 'left',
                       padding: '0.75rem 1rem',
-                      background: '#1a1a1a',
+                      background: 'var(--surface-raised)',
                       border: '1px solid #333',
                       borderRadius: '8px',
-                      color: '#ededed',
+                      color: 'var(--text)',
                       cursor: 'pointer',
                     }}
                   >
@@ -143,7 +143,7 @@ export default function KioskLinkPage() {
             <button
               onClick={() => setState('picking')}
               className="btn"
-              style={{ background: '#333' }}
+              style={{ background: 'var(--surface-raised)' }}
             >
               Try Again
             </button>

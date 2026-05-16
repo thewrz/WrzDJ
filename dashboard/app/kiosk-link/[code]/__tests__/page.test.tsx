@@ -120,4 +120,28 @@ describe('KioskLinkPage', () => {
       expect(screen.getByText(/expired/i)).toBeInTheDocument();
     });
   });
+
+  it('event selector buttons use theme-safe background and text color', async () => {
+    render(<KioskLinkPage />);
+
+    await waitFor(() => {
+      const btn = screen.getByText('Friday Night').closest('button')!;
+      expect(btn).toHaveAttribute('style', expect.stringContaining('var(--surface-raised)'));
+      expect(btn).toHaveAttribute('style', expect.stringContaining('var(--text)'));
+    });
+  });
+
+  it('try again button uses theme-safe background', async () => {
+    const err = new Error('Test error');
+    mockCompleteKioskPairing.mockRejectedValue(err);
+    render(<KioskLinkPage />);
+
+    await waitFor(() => screen.getByText('Friday Night'));
+    fireEvent.click(screen.getByText('Friday Night').closest('button')!);
+
+    await waitFor(() => {
+      const tryAgainBtn = screen.getByRole('button', { name: /try again/i });
+      expect(tryAgainBtn).toHaveAttribute('style', expect.stringContaining('var(--surface-raised)'));
+    });
+  });
 });
