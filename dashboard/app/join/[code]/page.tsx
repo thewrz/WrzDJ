@@ -427,7 +427,7 @@ export default function JoinEventPage() {
       <div className="guest-tower">
         {event.banner_url && <BannerBg url={event.banner_url} />}
         {nickname && (
-          <IdentityBar nickname={nickname} emailVerified={emailVerified} onVerified={() => setEmailVerified(true)} />
+          <IdentityBar nickname={nickname} emailVerified={emailVerified} onVerified={() => setEmailVerified(true)} forceDark />
         )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100dvh', padding: '2rem' }}>
           <div style={{ textAlign: 'center', maxWidth: 360 }}>
@@ -482,7 +482,7 @@ export default function JoinEventPage() {
 
       {/* Identity bar */}
       {nickname && (
-        <IdentityBar nickname={nickname} emailVerified={emailVerified} onVerified={() => setEmailVerified(true)} />
+        <IdentityBar nickname={nickname} emailVerified={emailVerified} onVerified={() => setEmailVerified(true)} forceDark />
       )}
 
       {/* Hidden tracker for my-request IDs + SSE updates */}
