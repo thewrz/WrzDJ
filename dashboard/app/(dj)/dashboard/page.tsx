@@ -117,7 +117,7 @@ export default function DashboardPage() {
       return;
     }
 
-    setEvents([createdEvent, ...events]);
+    setEvents((prev) => [createdEvent, ...prev]);
 
     if (showCollection && (collectionOpensAt || liveStartsAt || submissionCap > 0)) {
       try {
@@ -315,46 +315,44 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {events.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={selectionMode}
-                  onChange={(e) => {
-                    setSelectionMode(e.target.checked);
-                    if (!e.target.checked) setSelectedEvents(new Set());
-                  }}
-                  style={{ accentColor: 'var(--color-accent-checkbox)' }}
-                  aria-label="Advanced"
-                />
-                Advanced
-              </label>
-              {selectionMode && (
-                <>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedEvents.size === events.length && events.length > 0}
-                      onChange={toggleSelectAll}
-                      style={{ accentColor: 'var(--color-accent-checkbox)' }}
-                      aria-label="Select All"
-                    />
-                    Select All
-                  </label>
-                  {selectedEvents.size > 0 && (
-                    <button
-                      className="btn btn-sm btn-danger"
-                      onClick={handleBulkDelete}
-                      disabled={deletingSelected}
-                    >
-                      {deletingSelected ? 'Deleting...' : `Delete Selected (${selectedEvents.size})`}
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={selectionMode}
+                onChange={(e) => {
+                  setSelectionMode(e.target.checked);
+                  if (!e.target.checked) setSelectedEvents(new Set());
+                }}
+                style={{ accentColor: 'var(--color-accent-checkbox)' }}
+                aria-label="Advanced"
+              />
+              Advanced
+            </label>
+            {selectionMode && (
+              <>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedEvents.size === events.length && events.length > 0}
+                    onChange={toggleSelectAll}
+                    style={{ accentColor: 'var(--color-accent-checkbox)' }}
+                    aria-label="Select All"
+                  />
+                  Select All
+                </label>
+                {selectedEvents.size > 0 && (
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={handleBulkDelete}
+                    disabled={deletingSelected}
+                  >
+                    {deletingSelected ? 'Deleting...' : `Delete Selected (${selectedEvents.size})`}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
           <HelpSpot spotId="events-grid" page={PAGE_ID} order={4} title="Event Cards" description="Your events appear as cards. Click any card to manage its request queue, sync settings, and kiosk controls.">
             <div className="event-grid">
               {events.map((event) => (
