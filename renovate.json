@@ -7,6 +7,7 @@
     {
       "description": "DJ protocol libs - manual review only",
       "matchPackageNames": ["alphatheta-connect", "stagelinq"],
+      "automerge": false,
       "labels": ["dependency", "protocol-critical"]
     },
     {
