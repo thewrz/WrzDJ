@@ -28,6 +28,31 @@ WRZDJ_VERSION="$VERSION" docker compose -f "$COMPOSE_FILE" pull api web
 echo "==> Stopping existing containers..."
 docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>/dev/null || true
 
+# Mirror deploy.sh: kill any non-Docker process (or Docker proxy) holding the
+# service ports between `down` and `up`. docker compose down alone does not
+# always release these — see MEMORY.md "Production Deploy (VPS)" notes.
+PORT_FRONTEND="${PORT_FRONTEND:-3000}"
+echo "==> Checking for processes holding ports $PORT_API and $PORT_FRONTEND..."
+for PORT in $PORT_API $PORT_FRONTEND; do
+  PIDS=$(ss -tlnp 2>/dev/null | grep ":${PORT}" | grep -oP 'pid=\K[0-9]+' | sort -u || true)
+  if [ -n "${PIDS:-}" ]; then
+    for PID in $PIDS; do
+      PROC=$(ps -p "$PID" -o comm= 2>/dev/null || echo "unknown")
+      echo "    Port $PORT held by PID $PID ($PROC) — killing"
+      kill "$PID" 2>/dev/null || true
+    done
+    sleep 1
+    for PID in $PIDS; do
+      if kill -0 "$PID" 2>/dev/null; then
+        echo "    PID $PID still alive — sending SIGKILL"
+        kill -9 "$PID" 2>/dev/null || true
+      fi
+    done
+  else
+    echo "    Port $PORT is free"
+  fi
+done
+
 echo "==> Ensuring log directories exist..."
 mkdir -p "$SCRIPT_DIR/logs/api"
 
